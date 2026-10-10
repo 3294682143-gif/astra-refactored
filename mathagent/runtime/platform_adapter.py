@@ -167,7 +167,7 @@ class PlatformAdapter:
         R4 callers retain ACTION parsing and never enter the new Controller.
         """
         coord = self.coordinator
-        if protocol not in {"l3", "r4"}:
+        if protocol not in {"l3", "r4", "lite"}:
             raise ValueError("explicit delivery protocol required")
         if (
             not isinstance(packet, list)
@@ -331,6 +331,10 @@ class PlatformAdapter:
             from .r4_protocol import parse_r4_delivery
 
             parser = parse_r4_delivery
+        elif protocol == "lite":
+            from ..lite.protocol import parse_lite_delivery
+
+            parser = parse_lite_delivery
         parsed = parser(
             text,
             finish_reason=finish,

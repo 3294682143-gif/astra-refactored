@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astra-mathagent-s2"
-version = "0.9.8"
-description = "Controller-owned Intern S2 mathematics runtime"
+version = "0.10.0a1"
+description = "Astra mathematics runtime with an experimental lightweight typed-action path"
 requires-python = ">=3.10"
 dependencies = ["sympy>=1.12,<2", "numpy>=1.24,<3", "scipy>=1.10,<2", "requests>=2.28,<3"]
 
@@ -17,12 +17,16 @@ include = ["mathagent*", "math_families*"]
 exclude = ["tests*", "math_families.tests*"]
 
 [tool.setuptools.package-data]
-mathagent = ["resources/*.json", "resources/skills/*.md"]
+mathagent = [
+    "resources/*.json",
+    "resources/skills/*.md",
+    "resources/general_v11/SOURCE.json",
+    "resources/general_v11/SKILL.md",
+    "resources/general_v11/references/*.md",
+    "resources/general_v11/data/*.json",
+    "resources/general_v11/scripts/*.py",
+]
 math_families = ["catalog.json", "skills/*.md", "README.md"]
-
-[tool.setuptools.data-files]
-"." = ["pyproject.toml", "requirements.txt"]
-"scripts" = ["scripts/score_reference_judge.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

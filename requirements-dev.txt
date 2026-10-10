@@ -1,0 +1,3 @@
+# Offline development and test dependencies for the refactored Astra source tree.
+# Runtime dependencies are declared in pyproject.toml / requirements.txt.
+pytest>=7.4,<9

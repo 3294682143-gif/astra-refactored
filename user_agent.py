@@ -16,13 +16,43 @@ if Path(_package.__file__).resolve().parent != (_ROOT / "mathagent").resolve():
         "foreign mathagent module cached; load the submission in its own process"
     )
 
-from mathagent.entrypoint import ReasoningAgent as _ReasoningAgent
+from mathagent.entrypoint import ReasoningAgent as _LegacyReasoningAgent
+from mathagent.lite.runtime import LiteRuntime
+
+_ENGINES = {"lite", "legacy"}
 
 
-class ReasoningAgent(_ReasoningAgent):
+class ReasoningAgent:
+    """Public entry point with an explicit engine switch.
+
+    The default experimental engine is the lightweight typed-action path. The
+    original Controller remains reachable with engine='legacy' and is otherwise
+    untouched. Unknown engines and unsupported parameters are rejected rather
+    than silently ignored.
+    """
+
     def __init__(self, client, *args, **kwargs):
-        kwargs.setdefault("_entry_load_started", _LOAD_STARTED)
-        super().__init__(client, *args, **kwargs)
+        engine = kwargs.pop("engine", "lite")
+        if engine not in _ENGINES:
+            raise ValueError("unknown engine")
+        self.engine = engine
+        if engine == "legacy":
+            kwargs.setdefault("_entry_load_started", _LOAD_STARTED)
+            self._impl = _LegacyReasoningAgent(client, *args, **kwargs)
+            return
+        if args:
+            raise TypeError("lite engine accepts keyword arguments only")
+        allowed = {"policy", "load_started", "executor", "max_steps", "problem_seconds"}
+        unknown = set(kwargs) - allowed
+        if unknown:
+            raise TypeError("unsupported lite parameter")
+        # The lite path deliberately does not inherit the module import time. A
+        # fresh instance must not be charged an old global load timestamp; only an
+        # explicit caller-supplied load_started constrains the first solve.
+        self._impl = LiteRuntime(client, **kwargs)
+
+    def solve(self, problem, metadata=None):
+        return self._impl.solve(problem, metadata)
 
 
 __all__ = ["ReasoningAgent"]
