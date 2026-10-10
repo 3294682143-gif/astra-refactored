@@ -1,4 +1,14 @@
-# Astra mathagent 0.10.0a2 (source repository)
+# Astra — TypeScript five-module migration (P0 development branch)
+
+This branch follows the approved five-module design. It currently implements
+the P0 protocol and local Python↔Node capability probe, not the five mathematical
+business modules. The Python 0.10.0a2 solver and official entry point below are
+unchanged. No default-engine switch or mathematical-quality claim is made.
+
+Start with the [P0 runbook](docs/P0_RUNBOOK.md),
+[capability/acceptance matrix](docs/P0_CAPABILITY_MATRIX.md), and
+[five-module boundaries](docs/adr/ADR-001-five-module-boundaries.md).
+The official Node/subprocess deployment gate remains **TARGET_UNVERIFIED**.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

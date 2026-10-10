@@ -1,0 +1,201 @@
+{
+  "format": "astra-p0-protocol-manifest-v1",
+  "schemaDialect": "astra-p0-schema-subset-v1",
+  "title": "Astra P0 stdio JSON-RPC 2.0 protocol manifest",
+  "description": "Single normative field specification for the P0 Host<->Node NDJSON channel. This file is a protocol manifest, not a JSON Schema document: the root carries the protocol version, the frame limits and the envelope/method field nodes. Both sides consume the same manifest with the same generic validator subset. Protocol version is fixed to 1.0-p0.",
+  "protocolVersion": "1.0-p0",
+  "limits": {
+    "maxFrameBytes": 65536,
+    "maxFramesPerSession": 64,
+    "maxDepth": 24,
+    "maxSafeInteger": 9007199254740991,
+    "maxIdChars": 128,
+    "maxSessionIdChars": 128
+  },
+  "envelopes": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "type": "string", "const": "2.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "method": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "params": { "type": "object" }
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "type": "string", "const": "2.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "result": { "type": "object" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "error"],
+      "properties": {
+        "jsonrpc": { "type": "string", "const": "2.0" },
+        "id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+            "message": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        }
+      }
+    }
+  },
+  "methods": {
+    "runtime.initialize": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "clientCapabilities"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "clientCapabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["modelGenerate", "toolExecute", "methodCatalog", "maxTokens"],
+            "properties": {
+              "modelGenerate": { "type": "string", "enum": ["UNAVAILABLE", "UNKNOWN"] },
+              "toolExecute": { "type": "string", "enum": ["UNAVAILABLE", "UNKNOWN"] },
+              "methodCatalog": { "type": "string", "enum": ["AVAILABLE", "UNAVAILABLE", "UNKNOWN"] },
+              "maxTokens": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["configured", "verified"],
+                "properties": {
+                  "configured": { "type": "integer", "const": 8192 },
+                  "verified": { "type": "boolean", "const": false }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "nodeCapabilities"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nodeCapabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mathModelCalls", "publicOutputLimit", "wasi", "nativeToolCalls"],
+            "properties": {
+              "mathModelCalls": { "type": "string", "enum": ["UNAVAILABLE"] },
+              "publicOutputLimit": { "type": "string", "enum": ["UNVERIFIED"] },
+              "wasi": { "type": "string", "enum": ["DISABLED"] },
+              "nativeToolCalls": { "type": "string", "enum": ["UNAVAILABLE"] }
+            }
+          }
+        }
+      }
+    },
+    "runtime.probe": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "nonce"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nonce": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "nonce", "catalogCount", "catalogAcknowledged"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nonce": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "catalogCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "catalogAcknowledged": { "type": "boolean" }
+        }
+      }
+    },
+    "method.catalog": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "entries"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "entries": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "title"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "title": { "type": "string", "minLength": 1, "maxLength": 256 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "session.stop": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "stopped"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.0-p0" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "stopped": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "rejectedMethods": [
+    "model.generate",
+    "tool.execute",
+    "session.solve",
+    "method.load",
+    "session.event"
+  ]
+}

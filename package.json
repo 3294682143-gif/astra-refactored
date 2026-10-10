@@ -1,0 +1,23 @@
+{
+  "name": "astra-refactored-workspace",
+  "version": "0.0.0-p0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "24.7.0"
+  },
+  "description": "P0 local feasibility workspace for the Astra TS five-module rewrite. Development probe only; not a published package.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test:ts": "pnpm build && node --test packages/protocol/dist/tests/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "22.20.0"
+  }
+}
