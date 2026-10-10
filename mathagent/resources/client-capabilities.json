@@ -1,0 +1,12 @@
+{
+  "evidence": "Default disabled: supply explicit public request and terminal-response or cancellation lifecycle evidence",
+  "confirmed": false,
+  "offline_simulation": false,
+  "thinking_parameter": "thinking_mode",
+  "timeout_parameter": "timeout",
+  "cancellation_parameter": "cancellation",
+  "stream": true,
+  "prefill": true,
+  "cancellation_confirms_end": false,
+  "terminal_response_confirms_end": false
+}

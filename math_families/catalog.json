@@ -1,0 +1,715 @@
+{
+  "version": "1.0.0",
+  "phase": "F6",
+  "contract": "core.evidence.Evidence",
+  "families": [
+    {
+      "family": "constrained_tiling",
+      "module": "constrained_tiling",
+      "tool_role": "assist_partial",
+      "structure_tags": [
+        "tiling",
+        "constraint",
+        "counting"
+      ],
+      "params": {
+        "rows": "int",
+        "cols": "int",
+        "tile_area": "int",
+        "constraint": "structured-spec | None"
+      },
+      "complexity": "O(branching^(cells/tile)) worst case; 可行性护栏先行",
+      "status": "implemented"
+    },
+    {
+      "family": "digit_dp",
+      "module": "digit_dp",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "digits",
+        "counting",
+        "dp"
+      ],
+      "params": {
+        "count_by_digit_property": {
+          "digit_set": "set[int]",
+          "max_digits": "int",
+          "modulus": "int",
+          "residue": "int",
+          "include_zero": "bool"
+        },
+        "digit_sum_window_search": {
+          "window": "int",
+          "modulus": "int(prime)",
+          "max_n": "int"
+        },
+        "deletion_divisible_largest": {
+          "distinct_digits": "bool",
+          "max_digits": "int"
+        }
+      },
+      "complexity": "O(digits * states * modulus)",
+      "status": "implemented"
+    },
+    {
+      "family": "transfer_matrix",
+      "module": "transfer_matrix",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "states",
+        "counting",
+        "recurrence"
+      ],
+      "params": {
+        "transition_count": {
+          "length": "int",
+          "num_states": "int",
+          "transitions": "set[(int,int)]",
+          "starts": "set[int]",
+          "ends": "set[int]"
+        },
+        "independence_polynomial_chain": {
+          "n": "int"
+        },
+        "hamiltonian_paths_grid": {
+          "width": "int",
+          "height": "int",
+          "vertical": "bool",
+          "right": "bool",
+          "wrap": "bool",
+          "start_rows": "set[int]",
+          "end_rows": "set[int]"
+        }
+      },
+      "complexity": "O(length * states^2)",
+      "status": "implemented"
+    },
+    {
+      "family": "minimax_dp",
+      "module": "minimax_dp",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "game",
+        "dp",
+        "bitmask"
+      ],
+      "params": {
+        "win_draw_loss": {
+          "initial": "hashable",
+          "moves": "callable",
+          "terminal_value": "callable",
+          "state_budget": "int"
+        },
+        "minimax_value": {
+          "initial": "hashable",
+          "moves": "callable",
+          "terminal_value": "callable",
+          "is_maximizer": "callable",
+          "state_budget": "int"
+        },
+        "outcome_scan": {
+          "ns": "iterable[int]",
+          "make_game": "callable"
+        },
+        "gap_subsequence_discrepancy": {
+          "length": "int",
+          "max_gap": "int"
+        }
+      },
+      "complexity": "O(3^n) bitmask 或 O(states)",
+      "status": "implemented"
+    },
+    {
+      "family": "game_strategy_proof",
+      "module": "game_strategy_proof",
+      "tool_role": "assist",
+      "structure_tags": [
+        "game",
+        "strategy",
+        "invariant"
+      ],
+      "params": {
+        "pairing_strategy_verify": {
+          "elements": "iterable",
+          "partner": "mapping|callable",
+          "threat_sets": "iterable"
+        },
+        "independent_reply_certificate": {
+          "elements": "iterable",
+          "conflicts": "iterable"
+        },
+        "potential_function_check": {
+          "initial": "hashable",
+          "moves": "callable",
+          "phi": "callable"
+        },
+        "small_board_scan": {
+          "sizes": "iterable",
+          "make_game": "callable"
+        }
+      },
+      "complexity": "证书验证多项式；猜想搜索指数",
+      "status": "implemented"
+    },
+    {
+      "family": "lattice_counting",
+      "module": "lattice_counting",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "lattice",
+        "geometry",
+        "enumeration"
+      ],
+      "params": {
+        "hexagon_lattice_points": {
+          "n": "int"
+        },
+        "count_lattice_hexagons": {
+          "n": "int"
+        },
+        "lattice_points_in_polygon": {
+          "vertices": "list[(int,int)]"
+        }
+      },
+      "complexity": "O(n^3) 取向分类",
+      "status": "implemented"
+    },
+    {
+      "family": "graph_extremal",
+      "module": "graph_extremal",
+      "tool_role": "assist",
+      "structure_tags": [
+        "graph",
+        "extremal",
+        "matching"
+      ],
+      "params": {
+        "count_complete_bipartite_subgraphs": {
+          "n": "int",
+          "edges": "list[(int,int)]",
+          "s": "int",
+          "t": "int",
+          "injective": "bool"
+        },
+        "has_perfect_matching": {
+          "n": "int",
+          "edges": "list[(int,int)]"
+        },
+        "tutte_violation": {
+          "n": "int",
+          "edges": "list[(int,int)]",
+          "max_subsets": "int"
+        },
+        "triangle_free_check": {
+          "n": "int",
+          "edges": "list[(int,int)]"
+        },
+        "verify_perfect_matching": {
+          "n": "int",
+          "edges": "list[(int,int)]",
+          "matching": "list[(int,int)]"
+        }
+      },
+      "complexity": "实例规模小，可暴力",
+      "status": "implemented",
+      "verification": {
+        "property_tests": 74,
+        "seed_status": "engine_consistent_reference_conflict",
+        "limitations": "construction and bounded graph checks are verified; global extremal lower bounds remain assist-level"
+      }
+    },
+    {
+      "family": "symbolic_algebra",
+      "module": "symbolic_algebra",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "symbolic",
+        "polynomial",
+        "field"
+      ],
+      "params": {
+        "real_root_count": {
+          "poly": "expr",
+          "var": "symbol",
+          "timeout_ms": "int"
+        },
+        "splitting_field_degree": {
+          "poly": "expr",
+          "var": "symbol",
+          "timeout_ms": "int"
+        },
+        "solve_system_guarded": {
+          "equations": "list[expr]",
+          "variables": "list[symbol]",
+          "timeout_ms": "int"
+        },
+        "polynomial_expand_coefficients": {"expression":"bounded rational AST", "variables":"ordered main symbols", "parameters":"ordered coefficient symbols"},
+        "linear_system_solution_set": {"matrix":"rational matrix", "rhs":"rational vector", "variables":"ordered symbols", "domain":"RATIONAL|REAL"},
+        "substitution_invariant_check": {
+          "forward_map": "dict[symbol,expr]",
+          "target_map": "dict[symbol,expr]",
+          "invariants": "list[expr]",
+          "variables": "list[symbol]",
+          "max_degree": "int"
+        },
+        "wronskian_root_identity": {
+          "g": "expr",
+          "var": "symbol",
+          "roots": "list"
+        },
+        "algebraic_polynomial_relation": {
+          "modulus": "irreducible rational polynomial, degree 2..6",
+          "generator": "symbol",
+          "argument": "expr in generator",
+          "target": "expr in generator",
+          "expression": "rational polynomial",
+          "variable": "symbol"
+        }
+      },
+      "complexity": "依赖符号后端；带超时护栏",
+      "status": "partial",
+      "verification": {
+        "property_tests": 88,
+        "seed_status": "partial_with_conflicts",
+        "limitations": "root counts, field-degree checks and invariant checks are exact; nonlinear system fallback is numerical and completeness is not certified"
+      }
+    },
+    {
+      "family": "diophantine",
+      "module": "diophantine",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "number_theory",
+        "diophantine"
+      ],
+      "params": {
+        "solve_quadratic_diophantine": {
+          "a": "int",
+          "b": "int",
+          "c": "int",
+          "d": "int",
+          "e": "int",
+          "f": "int",
+          "y_bound": "int | None"
+        },
+        "solve_quadratic_discriminant_family": {
+          "c2": "int",
+          "c1": "list[int]",
+          "c0": "list[int]",
+          "x_lo": "int",
+          "x_hi": "int"
+        },
+        "symbolic_diophantine_with_timeout": {
+          "lhs": "str(expr)",
+          "rhs": "str(expr)",
+          "variables": "list[str]",
+          "timeout_ms": "int"
+        },
+        "verify_quadratic_solutions": {
+          "a": "int",
+          "b": "int",
+          "c": "int",
+          "d": "int",
+          "e": "int",
+          "f": "int",
+          "points": "list[(int,int)]"
+        }
+      },
+      "complexity": "依赖符号后端；带超时护栏",
+      "status": "partial",
+      "verification": {
+        "property_tests": 279,
+        "seed_status": "bounded_exact_and_guarded_symbolic",
+        "limitations": "quadratic and bounded discriminant families are certified; unbounded Pell/Thue classes require explicit bounds or remain unsupported"
+      }
+    },
+    {
+      "family": "number_theory_structure",
+      "module": "number_theory_structure",
+      "tool_role": "assist_partial",
+      "structure_tags": [
+        "number_theory",
+        "enumeration",
+        "structure"
+      ],
+      "params": {
+        "odd_part": {
+          "n": "int"
+        },
+        "odd_part_table": {
+          "limit": "int",
+          "modulus": "int"
+        },
+        "window_congruence_search": {
+          "seq": "callable",
+          "u_range": "range",
+          "v_max": "int",
+          "modulus": "int"
+        },
+        "frobenius_semigroup": {
+          "generators": "list[int]",
+          "limit": "int"
+        },
+        "p_adic_filter": {
+          "ns": "list[int]",
+          "p": "int",
+          "valuation_predicate": "callable"
+        }
+      },
+      "complexity": "枚举段线性；刻画段人工",
+      "status": "implemented"
+    },
+    {
+      "family": "functional_equation",
+      "module": "functional_equation",
+      "tool_role": "assist",
+      "structure_tags": [
+        "functional_equation",
+        "probe"
+      ],
+      "params": {
+        "substitution_probe": {
+          "constraint": "callable",
+          "points": "iterable",
+          "candidates": "mapping"
+        },
+        "finite_domain_solve": {
+          "domain": "seq",
+          "codomain": "seq",
+          "constraints": "list"
+        },
+        "constraint_propagation_2coloring": {
+          "points": "iterable",
+          "edges": "iterable",
+          "fixed": "mapping"
+        }
+      },
+      "complexity": "探针多项式；分类人工",
+      "status": "implemented"
+    },
+    {
+      "family": "inequality_extremum",
+      "module": "inequality_extremum",
+      "tool_role": "assist_partial",
+      "structure_tags": [
+        "inequality",
+        "optimization",
+        "extremum"
+      ],
+      "params": {
+        "numeric_extremum_search": {
+          "objective": "callable",
+          "dim": "int",
+          "bounds": "list"
+        },
+        "certificate_check": {
+          "margin": "callable",
+          "sampler": "callable"
+        },
+        "closed_form_conjecture": {
+          "value": "float"
+        },
+        "subset_gap_worst_case": {
+          "bound": "int",
+          "target": "int",
+          "n_terms": "int"
+        }
+      },
+      "complexity": "猜想搜索依赖维度",
+      "status": "implemented"
+    },
+    {
+      "family": "extremal_construction",
+      "module": "extremal_construction",
+      "tool_role": "assist",
+      "structure_tags": [
+        "construction",
+        "invariant",
+        "extremal"
+      ],
+      "params": {
+        "small_case_search": {
+          "sizes": "iterable",
+          "enumerate_instances": "callable",
+          "evaluate": "callable"
+        },
+        "invariant_certificate_check": {
+          "initial": "hashable",
+          "moves": "callable",
+          "invariant": "callable"
+        },
+        "double_counting_bound": {
+          "count_a": "int",
+          "count_b": "int"
+        }
+      },
+      "complexity": "搜索指数；证书多项式",
+      "status": "implemented"
+    },
+    {
+      "family": "classical_geometry_compute",
+      "module": "classical_geometry_compute",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "geometry",
+        "symbolic",
+        "trigonometry"
+      ],
+      "params": {
+        "line_through / line_line_intersection / radical_axis / polar_line": "exact primitives",
+        "circle_circle_intersections": "numeric",
+        "count_angle_ratio_locus": {
+          "p": "point",
+          "q": "point",
+          "r": "point",
+          "ratio": "int"
+        },
+        "identify_constant": {
+          "value": "float",
+          "basis": "tuple"
+        }
+      },
+      "complexity": "O(1) 符号推导",
+      "status": "partial"
+    },
+    {
+      "family": "combinatorial_geometry",
+      "module": "combinatorial_geometry",
+      "tool_role": "assist",
+      "structure_tags": [
+        "geometry",
+        "extremal",
+        "configuration"
+      ],
+      "params": {
+        "line_cover_number": {
+          "points": "list",
+          "max_lines": "int"
+        },
+        "line_separation_number": {
+          "points": "list",
+          "colors": "list[0|1]"
+        },
+        "verify_separation_certificate": {
+          "points": "list",
+          "colors": "list",
+          "splits": "list"
+        },
+        "worst_configuration_search": {
+          "objective": "str"
+        },
+        "area_bisection_coverage": {
+          "vertices": "list"
+        }
+      },
+      "complexity": "构形搜索指数",
+      "status": "implemented"
+    },
+    {
+      "family": "inclusion_exclusion_counting",
+      "module": "inclusion_exclusion_counting",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "counting",
+        "inclusion_exclusion"
+      ],
+      "params": {
+        "rook_numbers": {
+          "n": "int",
+          "forbidden": "set[(int,int)]"
+        },
+        "count_avoiding_permutations": {
+          "n": "int",
+          "forbidden": "set[(int,int)]"
+        },
+        "count_with_predicate_small": {
+          "n": "int",
+          "predicate": "callable",
+          "max_n": "int"
+        }
+      },
+      "complexity": "O(n 2^n) 棋阵",
+      "status": "implemented"
+    },
+    {
+      "family": "linear_algebra_game",
+      "module": "linear_algebra_game",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "linear_algebra",
+        "game",
+        "gf2"
+      ],
+      "params": {
+        "gf2_rank": {
+          "rows": "list[int]"
+        },
+        "gf2_nullspace": {
+          "rows": "list[int]",
+          "width": "int"
+        },
+        "deck_game_outcome": {
+          "d": "int (<=3)"
+        }
+      },
+      "complexity": "O(n^3) 高斯消元",
+      "status": "implemented"
+    },
+    {
+      "family": "probabilistic_model",
+      "module": "probabilistic_model",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "probability",
+        "approximation"
+      ],
+      "params": {
+        "normal_overflow_seats": {
+          "total": "int",
+          "groups": "int",
+          "overflow_bound": "float",
+          "continuity_correction": "bool"
+        },
+        "cover_time_complete_graph": {
+          "num_vertices": "int"
+        },
+        "markov_expected_steps": {
+          "transition": "list[list[float]]",
+          "start": "int",
+          "targets": "set[int]"
+        }
+      },
+      "complexity": "O(n) 或闭式",
+      "status": "implemented",
+      "verification": {
+        "property_tests": 54,
+        "seed_status": "exact_match_2_of_2",
+        "limitations": "normal-overflow results are approximations with a two-group exact cross-check; Markov systems are budget guarded"
+      }
+    },
+    {
+      "family": "symbolic_calculus",
+      "module": "symbolic_calculus",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "calculus",
+        "symbolic",
+        "transform"
+      ],
+      "params": {
+        "fourier_exp_abs_shifted": {
+          "a": "positive",
+          "shift": "real",
+          "xi": "symbol"
+        },
+        "fourier_inverse_quadratic": {
+          "c": "positive",
+          "xi": "symbol"
+        },
+        "planar_laplacian": {
+          "f": "expr",
+          "variables": "list"
+        },
+        "circle_laplacian": {
+          "f_theta": "expr",
+          "theta": "symbol"
+        },
+        "formal_adjoint": {
+          "a": "matrix",
+          "bvec": "list",
+          "c": "expr",
+          "variables": "list"
+        }
+      },
+      "complexity": "依赖符号后端",
+      "status": "implemented"
+    },
+    {
+      "family": "numerical_methods",
+      "module": "numerical_methods",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "numerical",
+        "finite_difference"
+      ],
+      "params": {
+        "finite_difference_derivative": {
+          "f": "expr in x (safe-parsed)",
+          "x": "float",
+          "h": "float",
+          "method": "str"
+        },
+        "richardson_extrapolate": {
+          "f": "expr in x (safe-parsed)",
+          "x": "float",
+          "h": "float",
+          "method": "str",
+          "order": "int | None"
+        },
+        "verify_fd_certificate": {
+          "f": "expr in x (safe-parsed)",
+          "x": "float",
+          "h": "float",
+          "method": "str",
+          "certificate": "str"
+        }
+      },
+      "complexity": "O(grid)",
+      "status": "implemented",
+      "verification": {
+        "property_tests": 64,
+        "seed_status": "reference_conflict_preserved",
+        "limitations": "finite-difference certificates are verified; one supplied seed uses a different stencil convention"
+      }
+    },
+    {
+      "family": "algorithm_simulation",
+      "module": "algorithm_simulation",
+      "tool_role": "full_solve",
+      "structure_tags": [
+        "simulation",
+        "coding"
+      ],
+      "params": {
+        "lz78_encode": {
+          "message": "str"
+        },
+        "lz78_decode": {
+          "phrases": "list[(int, str)]"
+        },
+        "verify_phrases": {
+          "phrases": "list[(int, str)]",
+          "message": "str"
+        },
+        "lz78_bit_string": {
+          "phrases": "list[(int, str)]",
+          "symbol_code": "dict[str, str]",
+          "index_bits": "int"
+        },
+        "format_phrases": {
+          "phrases": "list[(int, str)]",
+          "style": "str"
+        }
+      },
+      "complexity": "O(n)",
+      "status": "implemented",
+      "verification": {
+        "property_tests": 111,
+        "seed_status": "engine_consistent_reference_conflict",
+        "limitations": "encode/decode and rendering certificates pass; the supplied comparison format is not decodable"
+      }
+    },
+    {
+      "family": "concept_recall",
+      "module": "concept_recall",
+      "tool_role": "none",
+      "structure_tags": [
+        "concept"
+      ],
+      "params": {},
+      "complexity": "无",
+      "status": "none_by_design"
+    }
+  ],
+  "note": "F6 后最终状态：22 族全闭环 + bridge 适配层（61 描述符 / 64 分发面）。"
+}

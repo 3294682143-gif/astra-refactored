@@ -1,0 +1,546 @@
+"""Independent, bounded output checks for explicitly documented registered tools.
+
+These receipts certify a result for frozen tool arguments, NOT the mapping from
+the original problem and NOT an arbitrary proof printed by the producer.
+"""
+
+from __future__ import annotations
+
+import itertools
+import json
+from dataclasses import dataclass
+
+from . import output_checks
+from .runtime.config import fingerprint
+
+AUDIT_VERSION = "tool-independent-output-v4"
+CONTRACTS = {
+    "odd_part": ("odd part of a positive integer", "1 <= n <= 10^9"),
+    "odd_part_table": (
+        "odd-part residues for every integer 1..limit",
+        "1 <= limit <= 128; 2 <= modulus <= 64",
+    ),
+    "gf2_rank": ("rank over GF(2)", "at most 8 nonnegative rows, each at most 8 bits"),
+    "gf2_nullspace": (
+        "a full independent GF(2) kernel basis",
+        "at most 8 rows; 1 <= width <= 8; rows fit width",
+    ),
+    "rook_numbers": (
+        "all rook numbers on the explicit forbidden board",
+        "1 <= n <= 5; at most 10 distinct forbidden cells",
+    ),
+    "count_avoiding_permutations": (
+        "permutations avoiding the explicit forbidden cells",
+        "1 <= n <= 6",
+    ),
+    "count_by_digit_property": (
+        "finite digit-constrained residue count",
+        "max_digits <= 3; modulus <= 64; zero is a separate include_zero addend",
+    ),
+    "transition_count": (
+        "count of vertex sequences satisfying explicit transitions",
+        "length <= 6; num_states <= 4; transitions are a set",
+    ),
+    "lz78_encode": (
+        "canonical greedy LZ78 phrase sequence",
+        "at most 128 Unicode scalar characters; final empty-symbol tail allowed",
+    ),
+    "lz78_decode": (
+        "decoded text under the unique-word dictionary convention",
+        "at most 64 phrases; valid back-references; noncanonical streams allowed",
+    ),
+    "verify_phrases": (
+        "whether the phrase stream decodes to the supplied message, not canonicality",
+        "at most 64 phrases and 4096 message characters; bad references evaluate false",
+    ),
+    "triangle_free_check": (
+        "absence of triangles in the explicit simple undirected graph",
+        "1 <= n <= 10; at most 128 input edges; loops forbidden",
+    ),
+    "has_perfect_matching": (
+        "existence of a perfect matching in the explicit graph",
+        "1 <= n <= 8; at most 128 input edges; loops forbidden",
+    ),
+    "verify_perfect_matching": (
+        "whether the supplied witness covers every vertex exactly once using graph edges",
+        "1 <= n <= 8; at most 128 graph edges and 64 witness pairs; witness duplicates retained",
+    ),
+    "count_complete_bipartite_subgraphs": (
+        "ordered K_s,t homomorphism count, or injective count when explicitly requested",
+        "1 <= n <= 6; 1 <= s,t <= 3; at most 128 input edges; simple graph",
+    ),
+    "independence_polynomial_chain": (
+        "all independent-set counts of the path P_n, highest coefficient first",
+        "0 <= n <= 16; complete subset enumeration",
+    ),
+}
+
+
+class InvalidToolInput(ValueError):
+    pass
+
+
+class OutsideAuditScope(ValueError):
+    pass
+
+
+class InvalidToolOutput(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ToolAudit:
+    status: str
+    tool: str
+    checker: str
+    checker_version: str
+    input_hash: str
+    result_hash: str
+    property: str
+    scope: str
+    normalized_inputs: str
+    detail: str = ""
+    original_problem_mapping_verified: bool = False
+    certificate_hash: str = ""
+
+
+def _int(value, minimum=0):
+    if type(value) is not int or (minimum is not None and value < minimum):
+        raise InvalidToolInput(
+            "integer type/domain violation; no bool/string/float coercion"
+        )
+    return value
+
+
+def _ints(value, minimum=0):
+    if not isinstance(value, list):
+        raise InvalidToolInput("JSON integer array required")
+    return [_int(x, minimum) for x in value]
+
+
+def _cells(value, bound):
+    if not isinstance(value, list):
+        raise InvalidToolInput("explicit pair array required")
+    pairs = set()
+    for cell in value:
+        if not isinstance(cell, list) or len(cell) != 2:
+            raise InvalidToolInput("pair shape required")
+        a, b = (_int(v) for v in cell)
+        if not a < bound or not b < bound:
+            raise InvalidToolInput("coordinate outside declared finite domain")
+        pairs.add((a, b))
+    return sorted(pairs)
+
+
+def _string(value):
+    if not isinstance(value, str) or any(0xD800 <= ord(c) <= 0xDFFF for c in value):
+        raise InvalidToolInput("Unicode scalar string required; no implicit conversion")
+    return value
+
+
+def _phrases(value):
+    if not isinstance(value, list):
+        raise InvalidToolInput("JSON phrase array required")
+    phrases = []
+    for pair in value:
+        if not isinstance(pair, list) or len(pair) != 2:
+            raise InvalidToolInput("phrase must be [integer index, string symbol]")
+        index, symbol = _int(pair[0]), _string(pair[1])
+        if len(symbol) > 1:
+            raise InvalidToolInput("phrase symbol must be empty or one character")
+        phrases.append([index, symbol])
+    if len(phrases) > 64:
+        raise OutsideAuditScope("phrase reconstruction audit bound")
+    return phrases
+
+
+def _decoded_symbols(phrases):
+    # Reconstruct code-point tuples independently of the producer's string engine.
+    # Only NEW words enter the dictionary; duplicate phrases do not shift indices.
+    words, seen, output = [()], {()}, []
+    for index, symbol in phrases:
+        if index >= len(words):
+            return None
+        word = words[index] + tuple(map(ord, symbol))
+        output.extend(word)
+        if word not in seen:
+            seen.add(word)
+            words.append(word)
+    return "".join(map(chr, output))
+
+
+def _greedy_trie_phrases(message):
+    # Streaming trie traversal, not producer longest-substring probing or roundtrip.
+    children, node, output = [{}], 0, []
+    for symbol in message:
+        if symbol in children[node]:
+            node = children[node][symbol]
+        else:
+            output.append([node, symbol])
+            children[node][symbol] = len(children)
+            children.append({})
+            node = 0
+    if node:
+        output.append([node, ""])
+    return output
+
+
+_GRAPH_TOOLS = {
+    "triangle_free_check",
+    "has_perfect_matching",
+    "verify_perfect_matching",
+    "count_complete_bipartite_subgraphs",
+}
+
+
+def _graph_inputs(name, args):
+    n = _int(args["n"], 1)
+    edges = _cells(args["edges"], n)
+    if any(a == b for a, b in edges):
+        raise InvalidToolInput("simple undirected graph: self-loops are forbidden")
+    result = {"n": n, "edges": sorted({tuple(sorted(e)) for e in edges})}
+    if name == "verify_perfect_matching":
+        matching = args["matching"]
+        if not isinstance(matching, list):
+            raise InvalidToolInput("explicit matching witness array required")
+        pairs = []
+        for pair in matching:
+            if not isinstance(pair, list) or len(pair) != 2:
+                raise InvalidToolInput("witness pair shape")
+            # Bad coordinates are a false witness, not a new graph or a coerced edge.
+            pairs.append([_int(x, None) for x in pair])
+        if len(pairs) > 64:
+            raise OutsideAuditScope("matching witness audit bound")
+        result["matching"] = pairs
+    if name == "count_complete_bipartite_subgraphs":
+        s, t = _int(args["s"], 1), _int(args["t"], 1)
+        injective = args.get("injective", False)
+        if type(injective) is not bool:
+            raise InvalidToolInput("injective must be a JSON boolean")
+        if s > 3 or t > 3:
+            raise OutsideAuditScope("ordered tuple audit bound")
+        result.update(s=s, t=t, injective=injective)
+    bound = (
+        10
+        if name == "triangle_free_check"
+        else 6
+        if name == "count_complete_bipartite_subgraphs"
+        else 8
+    )
+    if n > bound or len(args["edges"]) > 128:
+        raise OutsideAuditScope("finite graph audit bound")
+    return result
+
+
+def normalize_inputs(name, args):
+    """Validate source input semantics, then restrict independent audit work."""
+    if name in EXTENDED_CONTRACTS:
+        return output_checks.normalize(name, args)
+    if name in _GRAPH_TOOLS:
+        return _graph_inputs(name, args)
+    if name == "independence_polynomial_chain":
+        n = _int(args["n"])
+        if n > 16:
+            raise OutsideAuditScope("path subset audit bound")
+        return {"n": n}
+    if name in {"lz78_encode", "lz78_decode", "verify_phrases"}:
+        result = {}
+        if name != "lz78_decode":
+            message = _string(args["message"])
+            result["message"] = message
+        if name != "lz78_encode":
+            result["phrases"] = _phrases(args["phrases"])
+            if name == "lz78_decode" and _decoded_symbols(result["phrases"]) is None:
+                raise InvalidToolInput(
+                    "decode requires valid dictionary back-references"
+                )
+            result["dictionary_rule"] = (
+                "insert unique words only; decoding does not assert canonicality"
+            )
+        if name != "lz78_decode" and len(result["message"]) > (
+            128 if name == "lz78_encode" else 4096
+        ):
+            raise OutsideAuditScope("message audit bound")
+        return result
+    if name == "odd_part":
+        n = _int(args["n"], 1)
+        if n > 10**9:
+            raise OutsideAuditScope("n exceeds exact-audit bound")
+        return {"n": n}
+    if name == "odd_part_table":
+        limit = _int(args["limit"], 1)
+        modulus = _int(args.get("modulus", 4), 2)
+        if limit > 128 or modulus > 64:
+            raise OutsideAuditScope("table exceeds exact-audit bound")
+        return {"limit": limit, "modulus": modulus}
+    if name in {"gf2_rank", "gf2_nullspace"}:
+        rows = _ints(args["rows"])
+        width = (
+            _int(args["width"], 1)
+            if name == "gf2_nullspace"
+            else max((x.bit_length() for x in rows), default=0)
+        )
+        if any(x.bit_length() > width for x in rows):
+            raise InvalidToolInput("row does not fit width")
+        if len(rows) > 8 or width > 8:
+            raise OutsideAuditScope("GF(2) span enumeration bound")
+        return {"rows": rows, "width": width}
+    if name in {"rook_numbers", "count_avoiding_permutations"}:
+        n = _int(args["n"], 1)
+        forbidden = _cells(args["forbidden"], n)
+        if n > (5 if name == "rook_numbers" else 6) or (
+            name == "rook_numbers" and len(forbidden) > 10
+        ):
+            raise OutsideAuditScope("finite board audit bound")
+        return {"n": n, "forbidden": forbidden}
+    if name == "count_by_digit_property":
+        digits = _ints(args["digit_set"])
+        length = _int(args["max_digits"], 1)
+        modulus = _int(args.get("modulus", 1), 1)
+        residue = _int(args.get("residue", 0))
+        zero = args.get("include_zero", False)
+        if (
+            not digits
+            or any(d > 9 for d in digits)
+            or residue >= modulus
+            or type(zero) is not bool
+        ):
+            raise InvalidToolInput("digit/residue/zero contract")
+        if length > 3 or modulus > 64:
+            raise OutsideAuditScope("digit enumeration audit bound")
+        return {
+            "digit_set": sorted(set(digits)),
+            "max_digits": length,
+            "modulus": modulus,
+            "residue": residue,
+            "include_zero": zero,
+            "zero_rule": "separate addend; digit_set need not contain zero",
+        }
+    if name == "transition_count":
+        length = _int(args["length"], 1)
+        states = _int(args["num_states"], 1)
+        edges = _cells(args["transitions"], states)
+        if any(key in args and args[key] is None for key in ("starts", "ends")):
+            raise InvalidToolInput(
+                "omit default endpoints rather than passing null through the JSON bridge"
+            )
+        starts = None if args.get("starts") is None else _ints(args["starts"])
+        ends = None if args.get("ends") is None else _ints(args["ends"])
+        if any(x >= states for x in (starts or []) + (ends or [])):
+            raise InvalidToolInput("endpoint state out of range")
+        if length > 6 or states > 4:
+            raise OutsideAuditScope("sequence enumeration audit bound")
+        starts = list(range(states)) if starts is None else starts
+        ends = list(range(states)) if ends is None else ends
+        return {
+            "length": length,
+            "num_states": states,
+            "transitions": edges,
+            "starts": sorted(set(starts)),
+            "ends": sorted(set(ends)),
+            "length_rule": "number of vertices, not edges",
+        }
+    raise OutsideAuditScope("no independent contract registered")
+
+
+def _span(rows):
+    values = {0}
+    for row in rows:
+        values |= {x ^ row for x in tuple(values)}
+    return values
+
+
+def _expected(name, p):
+    if name == "lz78_encode":
+        return _greedy_trie_phrases(p["message"])
+    if name == "lz78_decode":
+        return _decoded_symbols(p["phrases"])
+    if name == "verify_phrases":
+        decoded = _decoded_symbols(p["phrases"])
+        return decoded is not None and decoded == p["message"]
+    if name == "independence_polynomial_chain":
+        counts = [0] * ((p["n"] + 1) // 2 + 1)
+        for mask in range(1 << p["n"]):
+            if not mask & (mask << 1):
+                counts[mask.bit_count()] += 1
+        return counts[::-1]
+    if name in _GRAPH_TOOLS:
+        return _graph_expected(name, p)
+    if name == "odd_part":
+        return p["n"] // (p["n"] & -p["n"])
+    if name == "odd_part_table":
+        return [(n // (n & -n)) % p["modulus"] for n in range(1, p["limit"] + 1)]
+    if name == "gf2_rank":
+        return len(_span(p["rows"])).bit_length() - 1
+    if name in {"rook_numbers", "count_avoiding_permutations"}:
+        n = p["n"]
+        forbidden = set(map(tuple, p["forbidden"]))
+        if name == "count_avoiding_permutations":
+            return sum(
+                all((i, pi[i]) not in forbidden for i in range(n))
+                for pi in itertools.permutations(range(n))
+            )
+        counts = [0] * (n + 1)
+        for k in range(min(n, len(forbidden)) + 1):
+            counts[k] = sum(
+                len({r for r, _ in cells}) == k and len({c for _, c in cells}) == k
+                for cells in itertools.combinations(forbidden, k)
+            )
+        return counts
+    if name == "count_by_digit_property":
+        digits = {str(x) for x in p["digit_set"]}
+        total = sum(
+            set(str(n)) <= digits and n % p["modulus"] == p["residue"]
+            for n in range(1, 10 ** p["max_digits"])
+        )
+        return total + int(p["include_zero"] and p["residue"] == 0)
+    if name == "transition_count":
+        edges = set(map(tuple, p["transitions"]))
+        starts = set(p["starts"])
+        ends = set(p["ends"])
+        return sum(
+            seq[0] in starts
+            and seq[-1] in ends
+            and all(edge in edges for edge in itertools.pairwise(seq))
+            for seq in itertools.product(range(p["num_states"]), repeat=p["length"])
+        )
+    raise ValueError("not a scalar/vector evaluator")
+
+
+def _graph_expected(name, p):
+    n, edges = p["n"], set(map(tuple, p["edges"]))
+    if name == "triangle_free_check":
+        return not any(
+            all(edge in edges for edge in itertools.combinations(vertices, 2))
+            for vertices in itertools.combinations(range(n), 3)
+        )
+    if name == "verify_perfect_matching":
+        pairs = p["matching"]
+        endpoints = [v for pair in pairs for v in pair]
+        return sorted(endpoints) == list(range(n)) and all(
+            tuple(sorted(pair)) in edges for pair in pairs
+        )
+    if name == "has_perfect_matching":
+
+        def pairable(remaining):
+            if not remaining:
+                return True
+            first, *rest = remaining
+            return any(
+                (first, partner) in edges
+                and pairable(tuple(v for v in rest if v != partner))
+                for partner in rest
+            )
+
+        return n % 2 == 0 and pairable(tuple(range(n)))
+    if name == "count_complete_bipartite_subgraphs":
+        size, split = p["s"] + p["t"], p["s"]
+        return sum(
+            (not p["injective"] or len(set(vertices)) == size)
+            and all(
+                tuple(sorted((a, b))) in edges
+                for a in vertices[:split]
+                for b in vertices[split:]
+            )
+            for vertices in itertools.product(range(n), repeat=size)
+        )
+    raise ValueError("unknown graph property")
+
+
+def _exact_json_equal(result, expected):
+    # bool is not int, a numeric string is not a count, and no nested coercion is allowed.
+    if type(expected) in {bool, int, str}:
+        return type(result) is type(expected) and result == expected
+    if isinstance(expected, list):
+        return (
+            type(result) is list
+            and len(result) == len(expected)
+            and all(_exact_json_equal(a, b) for a, b in zip(result, expected))
+        )
+    return False
+
+
+def audit_output(name, args, result, *, execution_status="ok", certificate=None):
+    input_hash = result_hash = ""
+    certificate_hash = ""
+    property, scope = CONTRACTS.get(
+        name, ("not independently checked", "unregistered scope")
+    )
+    status = "NOT_CHECKED"
+    detail = ""
+    normalized = ""
+    try:
+        input_hash = fingerprint((name, args))
+        try:
+            result_hash = fingerprint(result)
+            certificate_hash = fingerprint(certificate)
+        except (TypeError, ValueError, OverflowError, RecursionError) as exc:
+            raise InvalidToolOutput("producer output is not finite JSON") from exc
+        if name not in CONTRACTS:
+            raise OutsideAuditScope("no independent contract registered")
+        p = normalize_inputs(name, args)
+        normalized = json.dumps(p, sort_keys=True, ensure_ascii=False)
+        if execution_status not in {"ok", "partial"}:
+            status = "NOT_CHECKED"
+            detail = "producer did not complete the registered execution"
+        elif name in EXTENDED_CONTRACTS:
+            valid, mode = output_checks.check(name, p, result, certificate=certificate)
+            status = (
+                (
+                    "VERIFIED_FOR_INPUT"
+                    if mode == "EXACT"
+                    else f"CHECKED_{mode}_FOR_INPUT"
+                )
+                if valid
+                else "MISMATCH"
+            )
+        elif name == "gf2_nullspace":
+            width = p["width"]
+            rows = p["rows"]
+            valid = (
+                isinstance(result, list)
+                and len(result) <= width
+                and all(type(v) is int and 0 < v < 2**width for v in result)
+            )
+            if valid:
+                span = _span(result)
+                kernel = {
+                    v
+                    for v in range(2**width)
+                    if all((v & r).bit_count() % 2 == 0 for r in rows)
+                }
+                valid = len(span) == 2 ** len(result) and span == kernel
+            status = "VERIFIED_FOR_INPUT" if valid else "MISMATCH"
+        else:
+            expected = _expected(name, p)
+            valid = _exact_json_equal(result, expected)
+            status = "VERIFIED_FOR_INPUT" if valid else "MISMATCH"
+    except InvalidToolOutput as exc:
+        status = "MISMATCH"
+        detail = str(exc)
+    except InvalidToolInput as exc:
+        status = "INVALID_INPUT"
+        detail = str(exc)
+    except OutsideAuditScope as exc:
+        status = "OUT_OF_SCOPE" if name in CONTRACTS else "NOT_CHECKED"
+        detail = str(exc)
+    except (KeyError, TypeError, ValueError, OverflowError, RecursionError) as exc:
+        status = "INVALID_INPUT"
+        detail = type(exc).__name__
+    return ToolAudit(
+        status,
+        name,
+        "independent_registered_output_checker",
+        AUDIT_VERSION,
+        input_hash,
+        result_hash,
+        property,
+        scope,
+        normalized,
+        detail,
+        certificate_hash=certificate_hash,
+    )
+
+
+EXTENDED_CONTRACTS = output_checks.CONTRACTS
+CONTRACTS.update(EXTENDED_CONTRACTS)

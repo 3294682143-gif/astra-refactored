@@ -1,0 +1,423 @@
+{
+  "schema_version": "1.0",
+  "description": "Skill Mapping Manifest: 22 math families → Claude Skills → tools → runtime → Evidence → tests",
+  "families": [
+    {
+      "family_id": "algorithm_simulation",
+      "skill_name": "math-algorithm-simulation",
+      "skill_path": "skills/math-algorithm-simulation/SKILL.md",
+      "source_skill": "math_families/skills/algorithm_simulation.md",
+      "runtime_module": "math_families.families.algorithm_simulation",
+      "schema_path": "references/schemas/algorithm-simulation.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "format_phrases",
+        "lz78_bit_string",
+        "lz78_decode",
+        "lz78_encode",
+        "verify_phrases"
+      ],
+      "tests": [
+        "math_families/tests/property/test_algorithm_simulation.py"
+      ]
+    },
+    {
+      "family_id": "classical_geometry_compute",
+      "skill_name": "math-classical-geometry-compute",
+      "skill_path": "skills/math-classical-geometry-compute/SKILL.md",
+      "source_skill": "math_families/skills/classical_geometry_compute.md",
+      "runtime_module": "math_families.families.classical_geometry_compute",
+      "schema_path": "references/schemas/classical-geometry-compute.json",
+      "tool_role": "full_solve",
+      "catalog_status": "partial",
+      "implementation_status": "partial",
+      "tools": [
+        "angle_at_vertex",
+        "count_angle_ratio_locus",
+        "identify_constant",
+        "line_through"
+      ],
+      "tests": [
+        "math_families/tests/property/test_classical_geometry_compute.py"
+      ]
+    },
+    {
+      "family_id": "combinatorial_geometry",
+      "skill_name": "math-combinatorial-geometry",
+      "skill_path": "skills/math-combinatorial-geometry/SKILL.md",
+      "source_skill": "math_families/skills/combinatorial_geometry.md",
+      "runtime_module": "math_families.families.combinatorial_geometry",
+      "schema_path": "references/schemas/combinatorial-geometry.json",
+      "tool_role": "assist",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "area_bisection_coverage",
+        "line_cover_number",
+        "line_separation_number",
+        "worst_configuration_search"
+      ],
+      "tests": [
+        "math_families/tests/property/test_combinatorial_geometry.py"
+      ]
+    },
+    {
+      "family_id": "concept_recall",
+      "skill_name": "math-concept-recall",
+      "skill_path": "skills/math-concept-recall/SKILL.md",
+      "source_skill": "math_families/skills/concept_recall.md",
+      "runtime_module": "math_families.families.concept_recall",
+      "schema_path": "references/schemas/concept-recall.json",
+      "tool_role": "none",
+      "catalog_status": "none_by_design",
+      "implementation_status": "none_by_design",
+      "tools": [],
+      "tests": []
+    },
+    {
+      "family_id": "constrained_tiling",
+      "skill_name": "math-constrained-tiling",
+      "skill_path": "skills/math-constrained-tiling/SKILL.md",
+      "source_skill": "math_families/skills/constrained_tiling.md",
+      "runtime_module": "math_families.families.constrained_tiling",
+      "schema_path": "references/schemas/constrained-tiling.json",
+      "tool_role": "assist_partial",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "check_tiling_certificate",
+        "coloring_bound",
+        "count_tilings",
+        "min_tiles_cover",
+        "unique_tiling_check"
+      ],
+      "tests": [
+        "math_families/tests/property/test_constrained_tiling.py"
+      ]
+    },
+    {
+      "family_id": "digit_dp",
+      "skill_name": "math-digit-dp",
+      "skill_path": "skills/math-digit-dp/SKILL.md",
+      "source_skill": "math_families/skills/digit_dp.md",
+      "runtime_module": "math_families.families.digit_dp",
+      "schema_path": "references/schemas/digit-dp.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "count_by_digit_property",
+        "deletion_divisible_largest",
+        "digit_sum_window_search"
+      ],
+      "tests": [
+        "math_families/tests/property/test_digit_dp.py"
+      ]
+    },
+    {
+      "family_id": "diophantine",
+      "skill_name": "math-diophantine",
+      "skill_path": "skills/math-diophantine/SKILL.md",
+      "source_skill": "math_families/skills/diophantine.md",
+      "runtime_module": "math_families.families.diophantine",
+      "schema_path": "references/schemas/diophantine.json",
+      "tool_role": "full_solve",
+      "catalog_status": "partial",
+      "implementation_status": "partial",
+      "tools": [
+        "solve_quadratic_diophantine",
+        "solve_quadratic_discriminant_family",
+        "symbolic_diophantine_with_timeout"
+      ],
+      "tests": [
+        "math_families/tests/property/test_diophantine.py"
+      ]
+    },
+    {
+      "family_id": "extremal_construction",
+      "skill_name": "math-extremal-construction",
+      "skill_path": "skills/math-extremal-construction/SKILL.md",
+      "source_skill": "math_families/skills/extremal_construction.md",
+      "runtime_module": "math_families.families.extremal_construction",
+      "schema_path": "references/schemas/extremal-construction.json",
+      "tool_role": "assist",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "double_counting_bound"
+      ],
+      "tests": [
+        "math_families/tests/property/test_extremal_construction.py"
+      ]
+    },
+    {
+      "family_id": "functional_equation",
+      "skill_name": "math-functional-equation",
+      "skill_path": "skills/math-functional-equation/SKILL.md",
+      "source_skill": "math_families/skills/functional_equation.md",
+      "runtime_module": "math_families.families.functional_equation",
+      "schema_path": "references/schemas/functional-equation.json",
+      "tool_role": "assist",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": ["polynomial_function_check", "constraint_propagation_2coloring"],
+      "tests": [
+        "math_families/tests/property/test_functional_equation.py"
+      ]
+    },
+    {
+      "family_id": "game_strategy_proof",
+      "skill_name": "math-game-strategy-proof",
+      "skill_path": "skills/math-game-strategy-proof/SKILL.md",
+      "source_skill": "math_families/skills/game_strategy_proof.md",
+      "runtime_module": "math_families.families.game_strategy_proof",
+      "schema_path": "references/schemas/game-strategy-proof.json",
+      "tool_role": "assist",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "independent_reply_certificate",
+        "pairing_strategy_verify"
+      ],
+      "tests": [
+        "math_families/tests/property/test_game_strategy_proof.py"
+      ]
+    },
+    {
+      "family_id": "graph_extremal",
+      "skill_name": "math-graph-extremal",
+      "skill_path": "skills/math-graph-extremal/SKILL.md",
+      "source_skill": "math_families/skills/graph_extremal.md",
+      "runtime_module": "math_families.families.graph_extremal",
+      "schema_path": "references/schemas/graph-extremal.json",
+      "tool_role": "assist",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "count_complete_bipartite_subgraphs",
+        "has_perfect_matching",
+        "triangle_free_check",
+        "tutte_violation",
+        "verify_perfect_matching"
+      ],
+      "tests": [
+        "math_families/tests/property/test_graph_extremal.py"
+      ]
+    },
+    {
+      "family_id": "inclusion_exclusion_counting",
+      "skill_name": "math-inclusion-exclusion-counting",
+      "skill_path": "skills/math-inclusion-exclusion-counting/SKILL.md",
+      "source_skill": "math_families/skills/inclusion_exclusion_counting.md",
+      "runtime_module": "math_families.families.inclusion_exclusion_counting",
+      "schema_path": "references/schemas/inclusion-exclusion-counting.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "count_avoiding_permutations",
+        "rook_numbers"
+      ],
+      "tests": [
+        "math_families/tests/property/test_inclusion_exclusion_counting.py"
+      ]
+    },
+    {
+      "family_id": "inequality_extremum",
+      "skill_name": "math-inequality-extremum",
+      "skill_path": "skills/math-inequality-extremum/SKILL.md",
+      "source_skill": "math_families/skills/inequality_extremum.md",
+      "runtime_module": "math_families.families.inequality_extremum",
+      "schema_path": "references/schemas/inequality-extremum.json",
+      "tool_role": "assist_partial",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "certificate_check_expr",
+        "closed_form_conjecture",
+        "numeric_extremum_search_expr",
+        "subset_gap_worst_case"
+      ],
+      "tests": [
+        "math_families/tests/property/test_inequality_extremum.py"
+      ]
+    },
+    {
+      "family_id": "lattice_counting",
+      "skill_name": "math-lattice-counting",
+      "skill_path": "skills/math-lattice-counting/SKILL.md",
+      "source_skill": "math_families/skills/lattice_counting.md",
+      "runtime_module": "math_families.families.lattice_counting",
+      "schema_path": "references/schemas/lattice-counting.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "count_lattice_hexagons",
+        "hexagon_lattice_points",
+        "lattice_points_in_polygon"
+      ],
+      "tests": [
+        "math_families/tests/property/test_lattice_counting.py"
+      ]
+    },
+    {
+      "family_id": "linear_algebra_game",
+      "skill_name": "math-linear-algebra-game",
+      "skill_path": "skills/math-linear-algebra-game/SKILL.md",
+      "source_skill": "math_families/skills/linear_algebra_game.md",
+      "runtime_module": "math_families.families.linear_algebra_game",
+      "schema_path": "references/schemas/linear-algebra-game.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "deck_game_outcome",
+        "gf2_nullspace",
+        "gf2_rank"
+      ],
+      "tests": [
+        "math_families/tests/property/test_linear_algebra_game.py"
+      ]
+    },
+    {
+      "family_id": "minimax_dp",
+      "skill_name": "math-minimax-dp",
+      "skill_path": "skills/math-minimax-dp/SKILL.md",
+      "source_skill": "math_families/skills/minimax_dp.md",
+      "runtime_module": "math_families.families.minimax_dp",
+      "schema_path": "references/schemas/minimax-dp.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "gap_subsequence_discrepancy",
+        "minimax_value_graph",
+        "win_draw_loss_graph"
+      ],
+      "tests": [
+        "math_families/tests/property/test_minimax_dp.py"
+      ]
+    },
+    {
+      "family_id": "number_theory_structure",
+      "skill_name": "math-number-theory-structure",
+      "skill_path": "skills/math-number-theory-structure/SKILL.md",
+      "source_skill": "math_families/skills/number_theory_structure.md",
+      "runtime_module": "math_families.families.number_theory_structure",
+      "schema_path": "references/schemas/number-theory-structure.json",
+      "tool_role": "assist_partial",
+      "catalog_status": "implemented",
+      "implementation_status": "partial",
+      "tools": [
+        "frobenius_semigroup",
+        "odd_part",
+        "odd_part_table"
+      ],
+      "tests": [
+        "math_families/tests/property/test_number_theory_structure.py"
+      ]
+    },
+    {
+      "family_id": "numerical_methods",
+      "skill_name": "math-numerical-methods",
+      "skill_path": "skills/math-numerical-methods/SKILL.md",
+      "source_skill": "math_families/skills/numerical_methods.md",
+      "runtime_module": "math_families.families.numerical_methods",
+      "schema_path": "references/schemas/numerical-methods.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "finite_difference_derivative",
+        "richardson_extrapolate",
+        "verify_fd_certificate"
+      ],
+      "tests": [
+        "math_families/tests/property/test_numerical_methods.py"
+      ]
+    },
+    {
+      "family_id": "probabilistic_model",
+      "skill_name": "math-probabilistic-model",
+      "skill_path": "skills/math-probabilistic-model/SKILL.md",
+      "source_skill": "math_families/skills/probabilistic_model.md",
+      "runtime_module": "math_families.families.probabilistic_model",
+      "schema_path": "references/schemas/probabilistic-model.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "cover_time_complete_graph",
+        "markov_expected_steps",
+        "normal_overflow_seats"
+      ],
+      "tests": [
+        "math_families/tests/property/test_probabilistic_model.py"
+      ]
+    },
+    {
+      "family_id": "symbolic_algebra",
+      "skill_name": "math-symbolic-algebra",
+      "skill_path": "skills/math-symbolic-algebra/SKILL.md",
+      "source_skill": "math_families/skills/symbolic_algebra.md",
+      "runtime_module": "math_families.families.symbolic_algebra",
+      "schema_path": "references/schemas/symbolic-algebra.json",
+      "tool_role": "full_solve",
+      "catalog_status": "partial",
+      "implementation_status": "partial",
+      "tools": [
+        "real_root_count_expr",
+        "polynomial_expand_coefficients",
+        "linear_system_solution_set",
+        "solve_system_guarded_expr",
+        "splitting_field_degree_expr",
+        "polynomial_invariant_check",
+        "algebraic_polynomial_check",
+        "wronskian_root_identity_expr"
+      ],
+      "tests": [
+        "math_families/tests/property/test_symbolic_algebra.py"
+      ]
+    },
+    {
+      "family_id": "symbolic_calculus",
+      "skill_name": "math-symbolic-calculus",
+      "skill_path": "skills/math-symbolic-calculus/SKILL.md",
+      "source_skill": "math_families/skills/symbolic_calculus.md",
+      "runtime_module": "math_families.families.symbolic_calculus",
+      "schema_path": "references/schemas/symbolic-calculus.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "circle_laplacian_expr",
+        "planar_laplacian_expr"
+      ],
+      "tests": [
+        "math_families/tests/property/test_symbolic_calculus.py"
+      ]
+    },
+    {
+      "family_id": "transfer_matrix",
+      "skill_name": "math-transfer-matrix",
+      "skill_path": "skills/math-transfer-matrix/SKILL.md",
+      "source_skill": "math_families/skills/transfer_matrix.md",
+      "runtime_module": "math_families.families.transfer_matrix",
+      "schema_path": "references/schemas/transfer-matrix.json",
+      "tool_role": "full_solve",
+      "catalog_status": "implemented",
+      "implementation_status": "available",
+      "tools": [
+        "hamiltonian_paths_grid",
+        "independence_polynomial_chain",
+        "transition_count"
+      ],
+      "tests": [
+        "math_families/tests/property/test_transfer_matrix.py"
+      ]
+    }
+  ]
+}

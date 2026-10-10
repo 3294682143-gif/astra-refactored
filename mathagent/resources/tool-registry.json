@@ -1,0 +1,1296 @@
+{
+  "version": "tool-registry-v1",
+  "description": "按实际实现状态开放工具的注册表",
+  "tools": {
+    "polynomial_expand_coefficients": {
+      "family": "symbolic_algebra", "skill_status": "implemented", "implementation_status": "available",
+      "declared_scope": "Complete exact coefficient table for supplied bounded rational polynomial and ordered variables/parameters",
+      "evidence_type": "independent sparse Fraction polynomial arithmetic",
+      "required_params": ["expression", "variables", "parameters"], "optional_params": [],
+      "input_schema": {"expression": "rational polynomial AST", "variables": "1..3 ordered identifiers", "parameters": "ordered identifiers; total symbols <=6"},
+      "limits": ["degree<=8; AST<=256; text<=2000; terms<=512; 256-bit rational intermediates; no source mapping proof"], "aliases": []
+    },
+    "linear_system_solution_set": {
+      "family": "symbolic_algebra", "skill_status": "implemented", "implementation_status": "available",
+      "declared_scope": "Exact affine/unique/empty solution set of the explicitly supplied rational linear system",
+      "evidence_type": "independent elimination, substitution, rank/nullspace and inconsistency witness",
+      "required_params": ["matrix", "rhs", "variables", "domain"], "optional_params": [],
+      "input_schema": {"matrix": "1..12 rows, 1..6 columns; exact integers or rational strings", "rhs": "one exact rational per row", "variables": "ordered identifiers", "domain": "RATIONAL or REAL"},
+      "limits": ["input numerator/denominator<=1000000; 256-bit intermediates; explicit free variables and parameter domain"], "aliases": []
+    },
+    "lz78_encode": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "LZ78编码message为短语序列",
+      "evidence_type": "decode∘encode往返恒等",
+      "required_params": [
+        "message"
+      ],
+      "optional_params": [],
+      "limits": [
+        "certificate = decode∘encode 往返恒等"
+      ],
+      "aliases": [
+        "family_lz78_encode"
+      ]
+    },
+    "lz78_decode": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "LZ78解码短语回message",
+      "evidence_type": "编码往返验证",
+      "required_params": [
+        "phrases"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_lz78_decode"
+      ]
+    },
+    "verify_phrases": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "验证decode(phrases)==message",
+      "evidence_type": "直接比对",
+      "required_params": [
+        "phrases",
+        "message"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_verify_phrases"
+      ]
+    },
+    "lz78_bit_string": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "短语渲染为位串",
+      "evidence_type": "位串+编码表对照",
+      "required_params": [
+        "phrases",
+        "symbol_code",
+        "index_bits"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_lz78_bit_string"
+      ]
+    },
+    "format_phrases": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "短语人类可读/LaTeX渲染",
+      "evidence_type": "格式化输出",
+      "required_params": [
+        "phrases"
+      ],
+      "optional_params": [
+        "style",
+        "sep",
+        "latex",
+        "with_words",
+        "pair"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_format_phrases"
+      ]
+    },
+    "line_through": {
+      "family": "classical_geometry_compute",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "过两点直线方程",
+      "evidence_type": "系数代入验证",
+      "required_params": [
+        "p",
+        "q"
+      ],
+      "optional_params": [],
+      "limits": [
+        "有理输入精确"
+      ],
+      "aliases": [
+        "family_line_through"
+      ]
+    },
+    "angle_at_vertex": {
+      "family": "classical_geometry_compute",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "顶点角计算(atan2)",
+      "evidence_type": "数值结果+精度标注",
+      "required_params": [
+        "p",
+        "v",
+        "q"
+      ],
+      "optional_params": [],
+      "limits": [
+        "数值结果,标注为 assist 级证据"
+      ],
+      "aliases": [
+        "family_angle_at_vertex"
+      ]
+    },
+    "count_angle_ratio_locus": {
+      "family": "classical_geometry_compute",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "角度比 locus 计数(网格采样)",
+      "evidence_type": "采样点+角度验证",
+      "required_params": [
+        "p",
+        "q",
+        "r"
+      ],
+      "optional_params": [
+        "ratio",
+        "n_samples"
+      ],
+      "limits": [
+        "采样证据,非完备分类"
+      ],
+      "aliases": [
+        "family_count_angle_ratio_locus"
+      ]
+    },
+    "identify_constant": {
+      "family": "classical_geometry_compute",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "数值值→闭式常数猜想",
+      "evidence_type": "基展开+误差界",
+      "required_params": [
+        "value"
+      ],
+      "optional_params": [
+        "basis"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_identify_constant"
+      ]
+    },
+    "line_cover_number": {
+      "family": "combinatorial_geometry",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "覆盖点集最小直线数",
+      "evidence_type": "直线枚举+覆盖验证",
+      "required_params": [
+        "points",
+        "max_lines"
+      ],
+      "optional_params": [],
+      "limits": [
+        "点数≤64"
+      ],
+      "aliases": [
+        "family_line_cover_number"
+      ]
+    },
+    "line_separation_number": {
+      "family": "combinatorial_geometry",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "分离双色点集最小直线数",
+      "evidence_type": "直线枚举+分离验证",
+      "required_params": [
+        "points",
+        "colors"
+      ],
+      "optional_params": [],
+      "limits": [
+        "点数≤12"
+      ],
+      "aliases": [
+        "family_line_separation_number"
+      ]
+    },
+    "area_bisection_coverage": {
+      "family": "combinatorial_geometry",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "凸n边形面积平分弦命中边数",
+      "evidence_type": "弦枚举+面积验证",
+      "required_params": [
+        "vertices"
+      ],
+      "optional_params": [],
+      "limits": [
+        "边数≤400;严格凸;退化实例被拒绝"
+      ],
+      "aliases": [
+        "family_area_bisection_coverage"
+      ]
+    },
+    "worst_configuration_search": {
+      "family": "combinatorial_geometry",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "小构型最坏情况搜索",
+      "evidence_type": "构型枚举+目标值",
+      "required_params": [
+        "objective"
+      ],
+      "optional_params": [
+        "red",
+        "blue",
+        "line_budget",
+        "grid",
+        "samples",
+        "seed"
+      ],
+      "limits": [
+        "covering_critical 在 grid 上精确;separation 为启发下界"
+      ],
+      "aliases": [
+        "family_worst_configuration_search"
+      ]
+    },
+    "count_tilings": {
+      "family": "constrained_tiling",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "带约束铺砌计数",
+      "evidence_type": "铺砌方案列表或转移矩阵",
+      "required_params": [
+        "rows",
+        "cols"
+      ],
+      "optional_params": [
+        "tile_shape_spec",
+        "constraint_spec",
+        "tile_area",
+        "max_nodes"
+      ],
+      "limits": [
+        "全覆盖有静态可行性守卫;部分模式≤256空格"
+      ],
+      "aliases": [
+        "family_count_tilings"
+      ]
+    },
+    "coloring_bound": {
+      "family": "constrained_tiling",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "颜色不变量下界",
+      "evidence_type": "着色方案+不变量值",
+      "required_params": [
+        "board_spec",
+        "tile_shape_spec",
+        "coloring_spec"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_coloring_bound"
+      ]
+    },
+    "min_tiles_cover": {
+      "family": "constrained_tiling",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "覆盖目标格集最小tile数",
+      "evidence_type": "分支定界搜索树",
+      "required_params": [
+        "rows",
+        "cols",
+        "tile_shape_spec",
+        "target_spec"
+      ],
+      "optional_params": [],
+      "limits": [
+        "棋盘≤64格"
+      ],
+      "aliases": [
+        "family_min_tiles_cover"
+      ]
+    },
+    "unique_tiling_check": {
+      "family": "constrained_tiling",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "唯一铺砌检查",
+      "evidence_type": "方案枚举+唯一性验证",
+      "required_params": [
+        "rows",
+        "cols",
+        "marked_cells"
+      ],
+      "optional_params": [
+        "tile_shape_spec",
+        "tile_area",
+        "max_nodes"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_unique_tiling_check"
+      ]
+    },
+    "check_tiling_certificate": {
+      "family": "constrained_tiling",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "独立验证铺砌证书",
+      "evidence_type": "覆盖检查+约束验证",
+      "required_params": [
+        "rows",
+        "cols",
+        "placements"
+      ],
+      "optional_params": [
+        "tile_shape_spec",
+        "tile_area",
+        "constraint_spec"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_check_tiling_certificate"
+      ]
+    },
+    "count_by_digit_property": {
+      "family": "digit_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "按digit_set/max_digits/modulus计数满足条件的整数",
+      "evidence_type": "按长度计数表+小规模暴力验证",
+      "required_params": [
+        "digit_set",
+        "max_digits"
+      ],
+      "optional_params": [
+        "modulus",
+        "residue",
+        "include_zero"
+      ],
+      "limits": [
+        "max_digits 上限 30"
+      ],
+      "aliases": [
+        "family_count_by_digit_property"
+      ]
+    },
+    "digit_sum_window_search": {
+      "family": "digit_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "在素数模下搜索数字和窗口性质",
+      "evidence_type": "窗口数字和(O(window)可重验证)",
+      "required_params": [
+        "window",
+        "modulus"
+      ],
+      "optional_params": [
+        "max_n"
+      ],
+      "limits": [
+        "模数必须为素数"
+      ],
+      "aliases": [
+        "family_digit_sum_window_search"
+      ]
+    },
+    "deletion_divisible_largest": {
+      "family": "digit_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "求最大删除整除链",
+      "evidence_type": "完整删除链",
+      "required_params": [],
+      "optional_params": [
+        "distinct_digits",
+        "max_digits"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_deletion_divisible_largest"
+      ]
+    },
+    "solve_quadratic_diophantine": {
+      "family": "diophantine",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "二次六项Diophantine方程求解",
+      "evidence_type": "解族参数化+代入验证",
+      "required_params": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+      ],
+      "optional_params": [
+        "y_bound"
+      ],
+      "limits": [
+        "省略 y_bound 则可能返回 partial"
+      ],
+      "aliases": [
+        "family_solve_quadratic_diophantine"
+      ]
+    },
+    "solve_quadratic_discriminant_family": {
+      "family": "diophantine",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "判别式参数化二次族求解",
+      "evidence_type": "族成员解+判别式验证",
+      "required_params": [
+        "c2",
+        "c1",
+        "c0",
+        "x_lo",
+        "x_hi"
+      ],
+      "optional_params": [],
+      "limits": [
+        "c1 和 c0 长度一致"
+      ],
+      "aliases": [
+        "family_solve_quadratic_discriminant_family"
+      ]
+    },
+    "symbolic_diophantine_with_timeout": {
+      "family": "diophantine",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "符号Diophantine求解(带超时)",
+      "evidence_type": "SymPy解+代入验证",
+      "required_params": [
+        "lhs"
+      ],
+      "optional_params": [
+        "rhs",
+        "variables",
+        "timeout_ms"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_symbolic_diophantine_with_timeout"
+      ]
+    },
+    "double_counting_bound": {
+      "family": "extremal_construction",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "双计数推导不等式界",
+      "evidence_type": "两种计数+界推导",
+      "required_params": [
+        "count_a",
+        "count_b"
+      ],
+      "optional_params": [
+        "description"
+      ],
+      "limits": [
+        "返回界+计数见证"
+      ],
+      "aliases": [
+        "family_double_counting_bound"
+      ]
+    },
+    "pairing_strategy_verify": {
+      "family": "game_strategy_proof",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "验证配对策略证书",
+      "evidence_type": "对合验证+威胁集覆盖检查",
+      "required_params": [
+        "elements",
+        "partner"
+      ],
+      "optional_params": [
+        "threat_sets",
+        "max_elements",
+        "max_threats"
+      ],
+      "limits": [
+        "partner 必须是固定点自由对合"
+      ],
+      "aliases": [
+        "family_pairing_strategy_verify"
+      ]
+    },
+    "independent_reply_certificate": {
+      "family": "game_strategy_proof",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "验证无冲突对+交替下界",
+      "evidence_type": "冲突图独立集验证",
+      "required_params": [
+        "elements",
+        "conflicts"
+      ],
+      "optional_params": [
+        "max_elements",
+        "max_conflicts"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_independent_reply_certificate"
+      ]
+    },
+    "count_complete_bipartite_subgraphs": {
+      "family": "graph_extremal",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "K_{s,t}有序副本计数",
+      "evidence_type": "枚举见证",
+      "required_params": [
+        "n",
+        "edges",
+        "s",
+        "t"
+      ],
+      "optional_params": [
+        "injective"
+      ],
+      "limits": [
+        "n^s 扫描预算~5e6"
+      ],
+      "aliases": [
+        "family_count_complete_bipartite_subgraphs"
+      ]
+    },
+    "has_perfect_matching": {
+      "family": "graph_extremal",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "完美匹配判定(Edmonds)",
+      "evidence_type": "匹配本身或最大匹配+暴露顶点",
+      "required_params": [
+        "n",
+        "edges"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_has_perfect_matching"
+      ]
+    },
+    "tutte_violation": {
+      "family": "graph_extremal",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "找Tutte集S使odd(G-S)>|S|",
+      "evidence_type": "Tutte集+奇分量枚举",
+      "required_params": [
+        "n",
+        "edges"
+      ],
+      "optional_params": [
+        "max_subsets"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_tutte_violation"
+      ]
+    },
+    "triangle_free_check": {
+      "family": "graph_extremal",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "三角无关性判定",
+      "evidence_type": "三角形或全扫描重计",
+      "required_params": [
+        "n",
+        "edges"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_triangle_free_check"
+      ]
+    },
+    "verify_perfect_matching": {
+      "family": "graph_extremal",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "独立验证完美匹配证书",
+      "evidence_type": "匹配边覆盖检查",
+      "required_params": [
+        "n",
+        "edges",
+        "matching"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_verify_perfect_matching"
+      ]
+    },
+    "rook_numbers": {
+      "family": "inclusion_exclusion_counting",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "禁位棋盘的rook数序列",
+      "evidence_type": "rook数序列r_0..r_k",
+      "required_params": [
+        "n",
+        "forbidden"
+      ],
+      "optional_params": [],
+      "limits": [
+        "公式: Σ(-1)^k r_k (n-k)!"
+      ],
+      "aliases": [
+        "family_rook_numbers"
+      ]
+    },
+    "count_avoiding_permutations": {
+      "family": "inclusion_exclusion_counting",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "避免禁位的排列计数",
+      "evidence_type": "rook多项式展开",
+      "required_params": [
+        "n",
+        "forbidden"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_count_avoiding_permutations"
+      ]
+    },
+    "closed_form_conjecture": {
+      "family": "inequality_extremum",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "十进制值→闭式猜想",
+      "evidence_type": "猜想表达式(非证明)",
+      "required_params": [
+        "value"
+      ],
+      "optional_params": [],
+      "limits": [
+        "返回猜想,非证明"
+      ],
+      "aliases": [
+        "family_closed_form_conjecture"
+      ]
+    },
+    "subset_gap_worst_case": {
+      "family": "inequality_extremum",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "子集和距离maximin",
+      "evidence_type": "最优子集+间隙值",
+      "required_params": [
+        "bound",
+        "target",
+        "n_terms"
+      ],
+      "optional_params": [],
+      "limits": [
+        "返回数值下界"
+      ],
+      "aliases": [
+        "family_subset_gap_worst_case"
+      ]
+    },
+    "numeric_extremum_search_expr": {
+      "family": "inequality_extremum",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "表达式数值极值搜索",
+      "evidence_type": "极值点+目标值(数值猜想)",
+      "required_params": [
+        "expression",
+        "variables",
+        "bounds"
+      ],
+      "optional_params": [
+        "maximize"
+      ],
+      "limits": [
+        "返回数值猜想(partial),非证明最优"
+      ],
+      "aliases": [
+        "family_numeric_extremum_search_expr"
+      ]
+    },
+    "certificate_check_expr": {
+      "family": "inequality_extremum",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "margin表达式采样校验",
+      "evidence_type": "违例计数+最小裕度",
+      "required_params": [
+        "expression",
+        "variables",
+        "bounds"
+      ],
+      "optional_params": [
+        "n_samples",
+        "seed"
+      ],
+      "limits": [
+        "返回违例计数+最小裕度"
+      ],
+      "aliases": [
+        "family_certificate_check_expr"
+      ]
+    },
+    "hexagon_lattice_points": {
+      "family": "lattice_counting",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "六边形格区域格点计数",
+      "evidence_type": "Pick定理+边界枚举",
+      "required_params": [
+        "n"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_hexagon_lattice_points"
+      ]
+    },
+    "count_lattice_hexagons": {
+      "family": "lattice_counting",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "按方向分类计数格上六边形",
+      "evidence_type": "方向分类枚举",
+      "required_params": [
+        "n"
+      ],
+      "optional_params": [],
+      "limits": [
+        "n>600 返回 infeasible"
+      ],
+      "aliases": [
+        "family_count_lattice_hexagons"
+      ]
+    },
+    "lattice_points_in_polygon": {
+      "family": "lattice_counting",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "多边形内格点计数",
+      "evidence_type": "Pick定理+边界枚举",
+      "required_params": [
+        "vertices"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_lattice_points_in_polygon"
+      ]
+    },
+    "gf2_rank": {
+      "family": "linear_algebra_game",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "GF(2)矩阵的秩",
+      "evidence_type": "主元位置",
+      "required_params": [
+        "rows"
+      ],
+      "optional_params": [],
+      "limits": [
+        "certificate = 主元位置"
+      ],
+      "aliases": [
+        "family_gf2_rank"
+      ]
+    },
+    "gf2_nullspace": {
+      "family": "linear_algebra_game",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "GF(2)零空间基",
+      "evidence_type": "基向量列表",
+      "required_params": [
+        "rows",
+        "width"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_gf2_nullspace"
+      ]
+    },
+    "deck_game_outcome": {
+      "family": "linear_algebra_game",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "2^d张牌牌组博弈结局",
+      "evidence_type": "完整博弈树状态计数",
+      "required_params": [
+        "d"
+      ],
+      "optional_params": [],
+      "limits": [
+        "d>3 返回 infeasible;certificate = 完整博弈树状态计数"
+      ],
+      "aliases": [
+        "family_deck_game_outcome"
+      ]
+    },
+    "win_draw_loss_graph": {
+      "family": "minimax_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "显式状态图WIN/DRAW/LOSS求解",
+      "evidence_type": "状态标注表",
+      "required_params": [
+        "spec"
+      ],
+      "optional_params": [
+        "spec.initial",
+        "state_budget"
+      ],
+      "limits": [
+        "terminal 值∈{-1,0,1};状态图必须无环"
+      ],
+      "aliases": [
+        "family_win_draw_loss_graph"
+      ]
+    },
+    "minimax_value_graph": {
+      "family": "minimax_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "显式状态图数值minimax",
+      "evidence_type": "状态值表",
+      "required_params": [
+        "spec"
+      ],
+      "optional_params": [
+        "spec.maximizer_states",
+        "spec.initial",
+        "state_budget"
+      ],
+      "limits": [
+        "terminal 值为数值;maximizer_states 必须是 states 子集"
+      ],
+      "aliases": [
+        "family_minimax_value_graph"
+      ]
+    },
+    "gap_subsequence_discrepancy": {
+      "family": "minimax_dp",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "±1序列间隙约束偏差",
+      "evidence_type": "完整枚举+约束验证",
+      "required_params": [
+        "spec"
+      ],
+      "optional_params": [
+        "spec.max_gap"
+      ],
+      "limits": [
+        "length≤24(超过返回 infeasible)"
+      ],
+      "aliases": [
+        "family_gap_subsequence_discrepancy"
+      ]
+    },
+    "odd_part": {
+      "family": "number_theory_structure",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "计算n/2^v2(n)",
+      "evidence_type": "直接计算",
+      "required_params": [
+        "n"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_odd_part"
+      ]
+    },
+    "odd_part_table": {
+      "family": "number_theory_structure",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "odd_part(n)mod m表",
+      "evidence_type": "完整表格",
+      "required_params": [
+        "limit"
+      ],
+      "optional_params": [
+        "modulus"
+      ],
+      "limits": [],
+      "aliases": [
+        "family_odd_part_table"
+      ]
+    },
+    "frobenius_semigroup": {
+      "family": "number_theory_structure",
+      "skill_status": "implemented",
+      "implementation_status": "partial",
+      "declared_scope": "数值半群不可表示数",
+      "evidence_type": "Apéry集+GAP验证",
+      "required_params": [
+        "generators",
+        "limit"
+      ],
+      "optional_params": [],
+      "limits": [
+        "生成元必须为正"
+      ],
+      "aliases": [
+        "family_frobenius_semigroup"
+      ]
+    },
+    "finite_difference_derivative": {
+      "family": "numerical_methods",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "有限差分法估计导数",
+      "evidence_type": "共享采样表+半步收敛比",
+      "required_params": [
+        "f",
+        "x",
+        "h"
+      ],
+      "optional_params": [
+        "method"
+      ],
+      "limits": [
+        "certificate = 共享采样表+半步收敛比"
+      ],
+      "aliases": [
+        "family_finite_difference_derivative"
+      ]
+    },
+    "richardson_extrapolate": {
+      "family": "numerical_methods",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Richardson外推提高精度",
+      "evidence_type": "两层外推值及改进量",
+      "required_params": [
+        "f",
+        "x",
+        "h"
+      ],
+      "optional_params": [
+        "method",
+        "order"
+      ],
+      "limits": [
+        "certificate = 两层外推值及改进量"
+      ],
+      "aliases": [
+        "family_richardson_extrapolate"
+      ]
+    },
+    "verify_fd_certificate": {
+      "family": "numerical_methods",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "独立复核差分证书",
+      "evidence_type": "重新采样+重新推导",
+      "required_params": [
+        "f",
+        "x",
+        "h",
+        "method",
+        "certificate"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_verify_fd_certificate"
+      ]
+    },
+    "normal_overflow_seats": {
+      "family": "probabilistic_model",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "最小容量使溢出概率≤界",
+      "evidence_type": "正态CDF值+二项交叉验证",
+      "required_params": [
+        "total",
+        "groups",
+        "overflow_bound"
+      ],
+      "optional_params": [
+        "continuity_correction"
+      ],
+      "limits": [
+        "正态近似域;两组时用精确二项交叉验证"
+      ],
+      "aliases": [
+        "family_normal_overflow_seats"
+      ]
+    },
+    "cover_time_complete_graph": {
+      "family": "probabilistic_model",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "K_N随机游走期望覆盖时间",
+      "evidence_type": "(N-1)*H_{N-1}精确分数",
+      "required_params": [
+        "num_vertices"
+      ],
+      "optional_params": [],
+      "limits": [
+        "N≤2000 精确分数,≤5e6 浮点求和,更大用渐近展开"
+      ],
+      "aliases": [
+        "family_cover_time_complete_graph"
+      ]
+    },
+    "markov_expected_steps": {
+      "family": "probabilistic_model",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "马尔可夫链期望步数",
+      "evidence_type": "线性方程组解",
+      "required_params": [
+        "transition",
+        "start",
+        "targets"
+      ],
+      "optional_params": [],
+      "limits": [
+        "暂态数受预算约束;不可达返回 infeasible"
+      ],
+      "aliases": [
+        "family_markov_expected_steps"
+      ]
+    },
+    "real_root_count_expr": {
+      "family": "symbolic_algebra",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "Sturm定理精确计数实根",
+      "evidence_type": "Sturm序列",
+      "required_params": [
+        "expression"
+      ],
+      "optional_params": [
+        "variable",
+        "timeout_ms"
+      ],
+      "limits": [
+        "certificate = Sturm 序列;精确完备"
+      ],
+      "aliases": [
+        "family_real_root_count_expr"
+      ]
+    },
+    "splitting_field_degree_expr": {
+      "family": "symbolic_algebra",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "分裂域次数(本原元法)",
+      "evidence_type": "本原元极小多项式",
+      "required_params": [
+        "expression"
+      ],
+      "optional_params": [
+        "variable",
+        "timeout_ms"
+      ],
+      "limits": [
+        "certificate = 本原元极小多项式;超时返回 partial"
+      ],
+      "aliases": [
+        "family_splitting_field_degree_expr"
+      ]
+    },
+    "solve_system_guarded_expr": {
+      "family": "symbolic_algebra",
+      "skill_status": "partial",
+      "implementation_status": "partial",
+      "declared_scope": "多项式方程组求解(符号优先)",
+      "evidence_type": "符号解或数值解+精度标注",
+      "required_params": [
+        "expressions",
+        "variables"
+      ],
+      "optional_params": [
+        "timeout_ms",
+        "n_starts",
+        "seed"
+      ],
+      "limits": [
+        "数值回退路径标注 partial"
+      ],
+      "aliases": [
+        "family_solve_system_guarded_expr"
+      ]
+    },
+    "planar_laplacian_expr": {
+      "family": "symbolic_calculus",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "符号平面Laplacian=二阶偏导之和",
+      "evidence_type": "符号结果",
+      "required_params": [
+        "expression",
+        "variables"
+      ],
+      "optional_params": [],
+      "limits": [
+        "certificate = 符号结果"
+      ],
+      "aliases": [
+        "family_planar_laplacian_expr"
+      ]
+    },
+    "circle_laplacian_expr": {
+      "family": "symbolic_calculus",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "圆上Laplacian=对theta二阶导",
+      "evidence_type": "符号结果",
+      "required_params": [
+        "expression"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_circle_laplacian_expr"
+      ]
+    },
+    "transition_count": {
+      "family": "transfer_matrix",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "按转移矩阵计数长度为length的序列",
+      "evidence_type": "矩阵幂+路径枚举",
+      "required_params": [
+        "length",
+        "num_states",
+        "transitions"
+      ],
+      "optional_params": [
+        "starts",
+        "ends"
+      ],
+      "limits": [
+        "状态为 0-based"
+      ],
+      "aliases": [
+        "family_transition_count"
+      ]
+    },
+    "independence_polynomial_chain": {
+      "family": "transfer_matrix",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "路径图P_n独立集多项式",
+      "evidence_type": "递推关系+特征多项式",
+      "required_params": [
+        "n"
+      ],
+      "optional_params": [],
+      "limits": [],
+      "aliases": [
+        "family_independence_polynomial_chain"
+      ]
+    },
+    "hamiltonian_paths_grid": {
+      "family": "transfer_matrix",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "网格Hamiltonian路径计数",
+      "evidence_type": "转移矩阵+状态枚举",
+      "required_params": [
+        "width",
+        "height"
+      ],
+      "optional_params": [
+        "vertical",
+        "right",
+        "wrap",
+        "start_rows",
+        "end_rows"
+      ],
+      "limits": [
+        "height>8 返回 infeasible"
+      ],
+      "aliases": [
+        "family_hamiltonian_paths_grid"
+      ]
+    },
+    "polynomial_function_check": {
+      "family": "functional_equation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Check one rational polynomial candidate against a declared universal functional equality; not classify all functions",
+      "evidence_type": "independent exact residual coefficients and counterexample substitution",
+      "required_params": ["equation", "function", "argument", "variables", "expression"],
+      "optional_params": [],
+      "input_schema": {"equation":"one equality containing the named unary function", "function":"function identifier", "argument":"candidate variable identifier", "variables":"1..3 distinct variable names", "expression":"rational polynomial in argument"},
+      "limits": ["degree<=12; <=128 AST nodes; integer literals or rational fractions; no variable denominators"],
+      "aliases": []
+    },
+    "polynomial_invariant_check": {
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Individual polynomial invariance under simultaneous substitutions; not complete invariant-ring classification",
+      "evidence_type": "independent exact composed polynomial residuals",
+      "required_params": ["base_variables", "variables", "forward", "target", "invariants"],
+      "optional_params": [],
+      "input_schema": {"base_variables":"two distinct symbols", "variables":"1..3 input symbols", "forward":"two polynomial expressions in variables", "target":"two polynomial expressions in variables", "invariants":"1..4 polynomials in base_variables"},
+      "limits": ["composed degree<=12; rational coefficients; simultaneous maps"],
+      "aliases": []
+    },
+    "algebraic_polynomial_check": {
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Polynomial value and minimum degree for an explicit rational number-field relation",
+      "evidence_type": "independent quotient reduction and coefficient ranks",
+      "required_params": ["minimal_polynomial", "generator", "argument", "target", "expression", "variable"],
+      "optional_params": [],
+      "input_schema": {"minimal_polynomial":"irreducible rational polynomial in generator", "generator":"field symbol", "argument":"polynomial in generator", "target":"polynomial in generator", "expression":"polynomial in variable", "variable":"symbol distinct from generator"},
+      "limits": ["field degree 2..6; modulus coefficient numerator/denominator<=128; rational polynomial AST"],
+      "aliases": []
+    },
+    "wronskian_root_identity_expr": {
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Wronskian identity and squarefreeness for an explicitly supplied polynomial and rational roots",
+      "evidence_type": "independent product coefficients and polynomial gcd",
+      "required_params": ["expression", "variable", "roots"],
+      "optional_params": [],
+      "input_schema": {"expression":"rational polynomial", "variable":"polynomial symbol", "roots":"rational expression strings; one per degree"},
+      "limits": ["degree 1..6; no claimed generic root list or original-problem mapping"],
+      "aliases": []
+    },
+    "constraint_propagation_2coloring": {
+      "family": "functional_equation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Color propagation and contradictions in explicitly pinned finite graph components",
+      "evidence_type": "independent GF(2) constraint elimination and assignment audit",
+      "required_params": ["points", "edges", "fixed"],
+      "optional_params": [],
+      "input_schema": {"points":"distinct nonnegative integer vertex IDs", "edges":"integer vertex pairs, endpoints must differ", "fixed":"canonical string vertex IDs mapped to integer 0 or 1"},
+      "limits": ["<=64 vertices; <=256 edges; unpinned components remain unclassified"],
+      "aliases": []
+    }
+  },
+  "summary": {
+    "total_tools": 71,
+    "available": 71,
+    "pending": 0,
+    "unavailable_by_design": 0
+  }
+}
