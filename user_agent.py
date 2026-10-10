@@ -42,7 +42,16 @@ class ReasoningAgent:
             return
         if args:
             raise TypeError("lite engine accepts keyword arguments only")
-        allowed = {"policy", "load_started", "executor", "max_steps", "problem_seconds"}
+        allowed = {
+            "policy",
+            "load_started",
+            "executor",
+            "max_steps",
+            "problem_seconds",
+            "max_methods",
+            "max_method_chars",
+            "method_catalog",
+        }
         unknown = set(kwargs) - allowed
         if unknown:
             raise TypeError("unsupported lite parameter")

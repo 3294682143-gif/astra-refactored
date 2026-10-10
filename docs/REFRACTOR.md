@@ -1,6 +1,6 @@
-# Astra refactor: lightweight typed-action slice
+# Astra refactor: lightweight typed-action slices (0.10.0a2)
 
-This document describes the first implemented slice of the Astra refactor. It
+This document describes the first two implemented slices of the Astra refactor. It
 records what exists, what does not, and which claims are deliberately withheld.
 
 ## Scope of this slice
@@ -21,11 +21,27 @@ Implemented:
   and the existing admission path.
 - Offline tests for the protocol, the runtime loop, the public entry point and
   the registered operators.
+- On-demand `method(id)` reading through `mathagent/lite/methods.py`. The
+  existing General Math v1.1 registry and requested body are checked against
+  `SOURCE.json`; the registry must contain 20 unique canonical IDs and canonical
+  `references/{id}.md` paths. The model cannot choose arbitrary file paths or
+  recursively load linked files. Catalog construction reads metadata only.
+- Per-problem method limits and context checks: requested bodies are included
+  whole or rejected, with room left for a closeout note. Optional catalog text
+  is omitted if it would crowd out otherwise valid direct reasoning. No original
+  problem conditions are truncated to fit a card.
+- Exact-request deduplication for methods and computations. Repeated method IDs
+  do not inject the body again; repeated tool names plus sorted-key JSON arguments
+  do not rerun the subprocess. Only complete size-checked observations are cached,
+  and their reuse is not new verification under changed scope wording. A repeat
+  can force an early final/unsolved turn inside the original budget.
 
 Not implemented / not claimed:
 
 - No arbitrary model-authored Python execution on the host.
 - No new tools beyond the two existing registered operators.
+- No full-corpus method injection, targeted question cards or additional
+  computational backend. Method cards are advisory text, not executable tools.
 - No automatic upgrade of the legacy Controller and no budget reallocation.
 - No mathematical verification of the original problem. `candidate_verified`
   stays `False`; a local operator check never promotes the whole problem.
@@ -39,7 +55,11 @@ ReasoningAgent(client, *args, **kwargs).solve(problem, metadata=None)
 ```
 
 Lite keyword arguments: `policy`, `load_started`, `executor`, `max_steps`,
-`problem_seconds`. Anything else raises `TypeError`. An unknown `engine` raises
+`problem_seconds`, `max_methods`, `max_method_chars`, `method_catalog`.
+`max_methods` is an integer in 0..3 (default 2); zero disables method loading.
+`max_method_chars` is an integer in 1..24000 (default 12000). Booleans and
+non-integers are refused. `method_catalog` is a trusted `MethodCatalog`
+injection point, never a model parameter. Anything else raises `TypeError`. An unknown `engine` raises
 `ValueError`. The lite path does not inherit the module import timestamp; only
 an explicit `load_started` constrains the first solve.
 
@@ -81,6 +101,7 @@ for this repository.
 ## Verification status
 
 Offline tests cover the protocol, the loop, the entry point and the registered
-operators. Passing them demonstrates source-level behaviour only. It is not a
+operators, resource integrity and duplicate-step controls. Passing them demonstrates source-level behaviour only. It is not a
 mathematical accuracy result, not a formal-target acceptance and not evidence
-of improved model quality.
+of improved model quality. `docs/VALIDATION.md` remains the a1 historical record;
+the supervising assistant records a2 acceptance separately.

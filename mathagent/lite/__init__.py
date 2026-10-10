@@ -11,9 +11,11 @@ from .protocol import (
     parse_lite_delivery,
     parse_action,
     FinalAction,
+    MethodAction,
     ToolAction,
     UnsolvedAction,
 )
+from .methods import MethodCatalog, MethodCatalogError, MethodLoad
 from .runtime import LiteRuntime
 
 __all__ = [
@@ -21,7 +23,11 @@ __all__ = [
     "parse_lite_delivery",
     "parse_action",
     "FinalAction",
+    "MethodAction",
     "ToolAction",
     "UnsolvedAction",
+    "MethodCatalog",
+    "MethodCatalogError",
+    "MethodLoad",
     "LiteRuntime",
 ]

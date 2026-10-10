@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astra-mathagent-s2"
-version = "0.10.0a1"
+version = "0.10.0a2"
 description = "Astra mathematics runtime with an experimental lightweight typed-action path"
 requires-python = ">=3.10"
 dependencies = ["sympy>=1.12,<2", "numpy>=1.24,<3", "scipy>=1.10,<2", "requests>=2.28,<3"]

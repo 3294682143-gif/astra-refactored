@@ -10,17 +10,21 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 
 __all__ = [
     "LiteProtocolError",
     "FinalAction",
+    "MethodAction",
     "ToolAction",
     "UnsolvedAction",
     "parse_action",
     "parse_lite_delivery",
     "TOOL_WHITELIST",
     "MAX_ACTION_CHARS",
+    "METHOD_ID_RE",
+    "MAX_METHOD_ID_CHARS",
 ]
 
 # Only these two existing registered operators may be requested. The runtime
@@ -31,6 +35,12 @@ MAX_ACTION_CHARS = 20000
 _MAX_UNRESOLVED = 32
 _MAX_STRING = 8000
 _MAX_DEPTH = 24
+
+# A method request carries only a short canonical id: lowercase letters, digits
+# and single hyphens. Paths, slashes, whitespace and overlong values are refused
+# before any catalog lookup, so the model can never name a file.
+MAX_METHOD_ID_CHARS = 64
+METHOD_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 class LiteProtocolError(ValueError):
@@ -46,6 +56,11 @@ class ToolAction:
     name: str
     args: dict
     scope: str
+
+
+@dataclass(frozen=True)
+class MethodAction:
+    method_id: str
 
 
 @dataclass(frozen=True)
@@ -153,6 +168,17 @@ def parse_action(text):
             raise LiteProtocolError("tool_args_not_object")
         scope = _bounded_str(payload["scope"], "invalid_scope")
         return ToolAction(name, args, scope)
+    if action == "method":
+        if set(payload) != {"action", "id"}:
+            raise LiteProtocolError("unexpected_fields")
+        method_id = payload["id"]
+        if not isinstance(method_id, str):
+            raise LiteProtocolError("invalid_method_id")
+        if len(method_id) > MAX_METHOD_ID_CHARS:
+            raise LiteProtocolError("invalid_method_id")
+        if not METHOD_ID_RE.fullmatch(method_id):
+            raise LiteProtocolError("invalid_method_id")
+        return MethodAction(method_id)
     if action == "final":
         if set(payload) != {"action", "answer", "complete", "unresolved"}:
             raise LiteProtocolError("unexpected_fields")
