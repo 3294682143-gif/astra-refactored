@@ -1,4 +1,4 @@
-# Astra — TypeScript five-module migration (P1 offline prototype)
+# Astra — TypeScript five-module migration (offline development)
 
 This branch follows the approved five-module design. It contains the P0 protocol
 probe and the P1 offline prototype: five independent TypeScript mathematical
@@ -19,6 +19,11 @@ use the Python solver behind the scenes. M4 review is explicitly skipped, all
 candidates remain unverified, and complete R0/R1/R2 and S1/S2/S3 are deferred.
 Use the direct Node build/test commands in the runbook; do not treat this source
 development branch as a packaged competition submission.
+
+The next increment is the [P2-A M1 compiler/ledger slice](docs/P2_M1_LEDGER.md):
+scoped obligations, dependency-aware task delivery, guarded mock acceptance and
+ordinary goal revision. This slice is tested, but **P2 and the P2 M3 migration
+are not complete**. The P1 executable and default entry remain unchanged.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

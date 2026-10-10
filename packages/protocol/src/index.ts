@@ -1093,3 +1093,4 @@ export function validateAgainstSchema(
 }
 
 export * from "./p1.js";
+export * from "./p2.js";

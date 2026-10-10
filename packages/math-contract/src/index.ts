@@ -19,6 +19,9 @@ import {
 export const MATH_CONTRACT_VERSION = "0.0.0-p1" as const;
 export const CONTRACT_VERSION = 1 as const;
 
+export * from "./p2-compiler.js";
+export * from "./p2-ledger.js";
+
 /** The single obligation this phase records; it stays OPEN. */
 export const ANSWER_REQUEST_OBLIGATION: P1Obligation = Object.freeze({
   obligationId: "obligation-1",
