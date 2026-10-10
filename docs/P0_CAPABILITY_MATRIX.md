@@ -72,6 +72,19 @@ Limits: local Host uses POSIX pipe selectors; portability to other OS/runtime
 policies is not established. The standalone pnpm binary's internal Node engine
 warning is documented in P0_RUNBOOK; probe/tests use Node 24.7.0.
 
+Clean-checkout caveat: the first temporary checkout resolved a different pnpm
+store, failed offline installation, and its subsequent pnpm test command
+automatically downloaded the three locked developer dependencies. The automated
+install path was stopped and the runbook changed to direct Node build/test
+commands. That checkout's passing tests are not evidence of an offline clean
+install. A second clean checkout of source commit `af3e195` was independently
+tested with the original pre-provisioned store selected explicitly: three
+packages reused, zero downloaded; direct Node compilation and all 16 TS / 143
+Python tests passed (24 WASI skipped), and the real probe succeeded. Only these
+documentation clarifications changed after that source commit. This is clean
+local source-checkout reproduction, not a clean official deployment package.
+No new package version, runtime dependency or math API was introduced.
+
 P0 official deployment gate remains TARGET_UNVERIFIED. P1–P7, mathematical API
 evaluation, default-engine switching, and platform submission have not been
 executed. Publishing a development branch does not pass any of those gates.
