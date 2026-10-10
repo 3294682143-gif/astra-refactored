@@ -11,7 +11,8 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
-    "./schema/p0.schema.json": "./schema/p0.schema.json"
+    "./schema/p0.schema.json": "./schema/p0.schema.json",
+    "./schema/p1.schema.json": "./schema/p1.schema.json"
   },
   "files": [
     "dist/src",

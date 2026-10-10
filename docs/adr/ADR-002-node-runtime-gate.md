@@ -25,6 +25,8 @@ not install this P0 workspace.
 
 Do not switch the default engine or silently call the old Python solver when
 Node is unavailable. Official target evidence and stage approval are required
-before entering P1. If Node/subprocess is prohibited, stop the deployment path
+for target P1 acceptance. A subsequent user-approved development-only exception
+allows the MOCK_ONLY P1 prototype described in ADR-005; it does not pass this
+deployment gate. If Node/subprocess is prohibited, stop the deployment path
 and present a separately reviewed runtime ADR; do not assume an alternative
 runtime or bundled binary is permitted.

@@ -17,11 +17,65 @@ importers:
 
   apps/stdio-runtime:
     dependencies:
+      '@astra/math-audit':
+        specifier: workspace:*
+        version: link:../../packages/math-audit
+      '@astra/math-contract':
+        specifier: workspace:*
+        version: link:../../packages/math-contract
+      '@astra/math-gateway':
+        specifier: workspace:*
+        version: link:../../packages/math-gateway
+      '@astra/math-review':
+        specifier: workspace:*
+        version: link:../../packages/math-review
+      '@astra/math-workunit':
+        specifier: workspace:*
+        version: link:../../packages/math-workunit
       '@astra/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@astra/runtime-core':
+        specifier: workspace:*
+        version: link:../../packages/runtime-core
+
+  packages/math-audit:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/math-contract:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/math-gateway:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/math-review:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/math-workunit:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/protocol: {}
+
+  packages/runtime-core:
+    dependencies:
+      '@astra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
 packages:
 

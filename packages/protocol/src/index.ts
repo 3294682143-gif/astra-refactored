@@ -576,7 +576,7 @@ export function decodeFrame(bytes: Uint8Array): ParseResult<string> {
 /** Full strict parse of one frame: UTF-8, size, duplicate keys, numbers, JSON. */
 export function parseFrame(
   bytes: Uint8Array,
-  manifest: ProtocolManifest,
+  manifest: Pick<ProtocolManifest, "envelopes">,
 ): ParseResult<JsonRpcMessage> {
   const decoded = decodeFrame(bytes);
   if (!decoded.ok) {
@@ -654,7 +654,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 export function validateMessage(
   raw: unknown,
-  manifest: ProtocolManifest,
+  manifest: Pick<ProtocolManifest, "envelopes">,
 ): ParseResult<JsonRpcMessage> {
   if (!isPlainObject(raw)) {
     return { ok: false, code: ERROR_CODES.FIELD_TYPE, detail: "envelope" };
@@ -1091,3 +1091,5 @@ export function validateAgainstSchema(
   }
   return { ok: true, value: null };
 }
+
+export * from "./p1.js";

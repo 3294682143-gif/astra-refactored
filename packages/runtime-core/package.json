@@ -1,0 +1,24 @@
+{
+  "name": "@astra/runtime-core",
+  "version": "0.0.0-p1",
+  "private": true,
+  "type": "module",
+  "description": "P1 offline runtime core: bounded append-only session events, root deadline and model-call admission, private context records with a public projection. No I/O, no network, no persistence.",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astra/protocol": "workspace:*"
+  }
+}

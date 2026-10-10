@@ -1,9 +1,9 @@
 {
   "name": "@astra/stdio-runtime",
-  "version": "0.0.0-p0",
+  "version": "0.0.0-p1",
   "private": true,
   "type": "module",
-  "description": "P0 Node stdio probe: strict NDJSON reader, single-reader state machine, read-only method.catalog callback. Local feasibility probe only; no model, tool or math call.",
+  "description": "P1 offline stdio composition root. Mock-only local prototype; no real provider, no network, no tool execution.",
   "main": "./dist/src/main.js",
   "types": "./dist/src/main.d.ts",
   "exports": {
@@ -19,6 +19,12 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astra/protocol": "workspace:*"
+    "@astra/protocol": "workspace:*",
+    "@astra/runtime-core": "workspace:*",
+    "@astra/math-contract": "workspace:*",
+    "@astra/math-gateway": "workspace:*",
+    "@astra/math-workunit": "workspace:*",
+    "@astra/math-review": "workspace:*",
+    "@astra/math-audit": "workspace:*"
   }
 }

@@ -3,6 +3,10 @@
 Scope: five-module TS plan, local P0 only. Date: 2026-10-10.
 Supervisor acceptance is separate from executor-authored implementation.
 
+Historical P0 acceptance record at `ea25042`. Subsequent P1 offline development
+is separately scoped by [ADR-005](adr/ADR-005-p1-offline-prototype.md); it does not
+upgrade any TARGET_UNVERIFIED entry below.
+
 Evidence labels:
 
 - LOCAL_VERIFIED: an actual local check was run; not official-platform evidence.

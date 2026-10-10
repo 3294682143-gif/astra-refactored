@@ -1,14 +1,24 @@
-# Astra — TypeScript five-module migration (P0 development branch)
+# Astra — TypeScript five-module migration (P1 offline prototype)
 
-This branch follows the approved five-module design. It currently implements
-the P0 protocol and local Python↔Node capability probe, not the five mathematical
-business modules. The Python 0.10.0a2 solver and official entry point below are
-unchanged. No default-engine switch or mathematical-quality claim is made.
+This branch follows the approved five-module design. It contains the P0 protocol
+probe and the P1 offline prototype: five independent TypeScript mathematical
+packages, runtime-core, a Node composition root and a Python mock-client Host.
+The modules implement only the minimum candidate/unsolved control loop, not
+their complete mathematical functionality. The Python 0.10.0a2 solver and
+official entry point below are unchanged. No default-engine switch or
+mathematical-quality claim is made.
 
-Start with the [P0 runbook](docs/P0_RUNBOOK.md),
+Start with the [P1 offline runbook and scope](docs/P1_OFFLINE.md),
+[P0 runbook](docs/P0_RUNBOOK.md),
 [capability/acceptance matrix](docs/P0_CAPABILITY_MATRIX.md), and
 [five-module boundaries](docs/adr/ADR-001-five-module-boundaries.md).
 The official Node/subprocess deployment gate remains **TARGET_UNVERIFIED**.
+
+P1 accepts only an in-memory simulated client. It does not call a real model or
+use the Python solver behind the scenes. M4 review is explicitly skipped, all
+candidates remain unverified, and complete R0/R1/R2 and S1/S2/S3 are deferred.
+Use the direct Node build/test commands in the runbook; do not treat this source
+development branch as a packaged competition submission.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
