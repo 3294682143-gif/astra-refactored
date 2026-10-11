@@ -23,6 +23,8 @@ import {
   type AgentTraceCode,
   type P2Artifact,
   type P2ArtifactRef,
+  type P2MethodAsset,
+  type P2MethodCatalog,
   type P2Task,
   type P3Action,
   type P3EffectReceipt,
@@ -39,10 +41,10 @@ import {
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate } from "@astra/math-audit";
-import { AgentSession } from "@astra/runtime-core";
+import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
-import { captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
+import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
 const ROUTE = {
   routeId: "route-1",
@@ -104,6 +106,10 @@ export async function runAgentLoop(
 
   let workUnits = 0;
   let reviewCalls = 0;
+  let catalogCalls = 0;
+  let methodLoads = 0;
+  let catalog: P2MethodCatalog | null = null;
+  let methodAssets: P2MethodAsset[] = [];
   let stop: AgentTraceCode = "NO_CANDIDATE";
   let target: P4Target | null = null;
   let review: P4ReviewSession | null = null;
@@ -112,6 +118,35 @@ export async function runAgentLoop(
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
   const reserve = (): number => (target !== null && opts.maxReviews > 0 ? 1 : 0);
+
+  const methodsEnabled =
+    opts.maxMethodLoads === 1 &&
+    captured.effect !== null &&
+    captured.catalog !== null &&
+    opts.maxEffects > 0 &&
+    opts.maxModelCalls >= 2 + opts.maxReviews;
+  if (methodsEnabled && root.remainingMs() > MIN_MS) {
+    const readRemaining = root.remainingMs();
+    let raw: unknown = null;
+    try {
+      raw = await boundedAwait(() => {
+        catalogCalls += 1;
+        return captured.catalog!.read(readRemaining);
+      }, readRemaining);
+    } catch {
+      raw = null;
+    }
+    if (raw !== null) {
+      try {
+        catalog = p3MethodCatalog(p2Snapshot(raw));
+      } catch {
+        catalog = null;
+      }
+    }
+    if (catalog === null || catalog.entries.length === 0) {
+      catalog = null;
+    }
+  }
 
   try {
     while (workUnits < opts.maxWorkUnits && !root.stopped()) {
@@ -171,7 +206,25 @@ export async function runAgentLoop(
           stop = "CONTROL_REJECTED";
           break;
         }
-        const allowTools = callsLeft() >= 2 + opts.maxReviews && subGate !== null;
+        const cachedTool = observations.some(
+          (item) => item.source === "PROGRAM_OBSERVATION",
+        );
+        const cachedMethod = observations.some(
+          (item) => item.source === "METHOD_REFERENCE",
+        );
+        // The model reserve is never lowered by a cache hit: a later WORK and
+        // the R2 review must still fit. A cache hit only keeps an action
+        // advertised when the root effect room is already spent.
+        const allowTools =
+          subGate !== null &&
+          callsLeft() >= 2 + opts.maxReviews &&
+          (root.effectCalls() < opts.maxEffects || cachedTool);
+        const allowMethods =
+          catalog !== null &&
+          subGate !== null &&
+          callsLeft() >= 2 + opts.maxReviews &&
+          ((methodLoads < opts.maxMethodLoads && root.effectCalls() < opts.maxEffects) ||
+            cachedMethod);
         const requestId = root.nextModelId();
         if (requestId === null) {
           stop = "BUDGET_EXHAUSTED";
@@ -187,6 +240,9 @@ export async function runAgentLoop(
             inputs,
             toolObservations: observations,
             allowTools,
+            allowMethods,
+            catalog,
+            methodAssets,
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -216,18 +272,33 @@ export async function runAgentLoop(
         } catch {
           action = null;
         }
-        if (action !== null && action.action === "tool") {
-          if (!allowTools || subGate === null || callsLeft() < 1 + opts.maxReviews) {
+        if (action !== null && (action.action === "tool" || action.action === "method")) {
+          const isMethod = action.action === "method";
+          const methodId = action.action === "method" ? action.id : null;
+          if (isMethod && (!allowMethods || catalog === null || methodId === null)) {
             stop = "CONTROL_REJECTED";
             break;
           }
+          if (!(isMethod ? allowMethods : allowTools) || subGate === null || callsLeft() < 1 + opts.maxReviews) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          if (isMethod && !catalog!.entries.some((entry) => entry.id === methodId)) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const effectsBefore = root.effectCalls();
           const receipt = await calls.effect(
             running,
             outcome.requestId,
             action,
             subGate,
             callsLeft(),
+            catalog ?? undefined,
           );
+          if (isMethod && root.effectCalls() > effectsBefore) {
+            methodLoads += 1;
+          }
           if (receipt.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
             stop = receipt.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
             break;
@@ -235,13 +306,42 @@ export async function runAgentLoop(
           if (!observations.some((item) => item.effectId === receipt.effectId)) {
             observations.push(receipt);
           }
+          if (
+            isMethod &&
+            methodId !== null &&
+            receipt.status === "COMPLETE" &&
+            receipt.source === "METHOD_REFERENCE" &&
+            catalog !== null &&
+            !methodAssets.some((asset) => asset.id === methodId)
+          ) {
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(receipt.observation);
+            } catch {
+              parsed = null;
+            }
+            const title = catalog.entries.find((entry) => entry.id === methodId)?.title;
+            if (parsed !== null && title !== undefined) {
+              try {
+                const asset = readAsset(
+                  (parsed as Record<string, unknown>)["asset"],
+                  methodId,
+                  title,
+                );
+                methodAssets = [...methodAssets, asset];
+              } catch {
+                stop = "CONTROL_REJECTED";
+                break;
+              }
+            }
+          }
           continue;
         }
         if (action !== null && action.action === "unsolved") {
           stop = "NO_CANDIDATE";
           break;
         }
-        if (action !== null && (action.action === "method" || action.action === "final")) {
+        if (action !== null && action.action === "final") {
           stop = "CONTROL_REJECTED";
           break;
         }
@@ -425,6 +525,8 @@ export async function runAgentLoop(
     effectCalls: root.effectCalls(),
     workUnits,
     reviewCalls,
+    catalogCalls,
+    methodLoads,
     stopReason: stop,
   }) as AgentLoopSummary;
   const privateState = p2Snapshot({
@@ -437,6 +539,7 @@ export async function runAgentLoop(
     review: review === null ? null : review.snapshot(),
     decision,
     session: root.snapshot(),
+    catalog,
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }

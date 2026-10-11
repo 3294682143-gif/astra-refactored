@@ -15,7 +15,8 @@
     "./schema/p1.schema.json": "./schema/p1.schema.json",
     "./schema/p2-host.schema.json": "./schema/p2-host.schema.json",
     "./schema/p3-host.schema.json": "./schema/p3-host.schema.json",
-    "./schema/agent-host.schema.json": "./schema/agent-host.schema.json"
+    "./schema/agent-host.schema.json": "./schema/agent-host.schema.json",
+    "./schema/agent-host-v13.schema.json": "./schema/agent-host-v13.schema.json"
   },
   "files": [
     "dist/src",

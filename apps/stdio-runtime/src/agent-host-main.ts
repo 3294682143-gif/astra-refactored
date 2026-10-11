@@ -21,7 +21,7 @@ import { AgentHostFlow } from "./agent-host-flow.js";
 
 function loadManifest(): AgentHostManifest {
   const MANIFEST_URL = new URL(
-    import.meta.resolve("@astra/protocol/schema/agent-host.schema.json"),
+    import.meta.resolve("@astra/protocol/schema/agent-host-v13.schema.json"),
   );
   const raw = JSON.parse(readFileSync(MANIFEST_URL, "utf8")) as unknown;
   return validateAgentHostManifest(raw);

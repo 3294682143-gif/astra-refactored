@@ -19,18 +19,33 @@ import {
   type ManifestMethod,
 } from "./index.js";
 
-export const AGENT_HOST_VERSION = "1.2-agent-loop-preview";
+export const AGENT_HOST_VERSION = "1.3-agent-loop-preview";
 export type AgentHostVersion = typeof AGENT_HOST_VERSION;
 
-/** The five methods of this local Host slice, in fixed order. */
+/** The frozen 1.2 preview version, kept for read-only legacy replay only. */
+export const AGENT_HOST_LEGACY_VERSION = "1.2-agent-loop-preview" as const;
+
+/** The seven methods of this local Host slice, in fixed order. */
 export const AGENT_HOST_METHODS = Object.freeze([
   "runtime.initialize",
   "session.solve",
   "session.stop",
   "model.generate",
   "tool.execute",
+  "method.catalog",
+  "method.load",
 ] as const);
 export type AgentHostMethod = (typeof AGENT_HOST_METHODS)[number];
+
+/** The five methods of the frozen 1.2 preview, in fixed order. */
+export const AGENT_HOST_LEGACY_METHODS = Object.freeze([
+  "runtime.initialize",
+  "session.solve",
+  "session.stop",
+  "model.generate",
+  "tool.execute",
+] as const);
+export type AgentHostLegacyMethod = (typeof AGENT_HOST_LEGACY_METHODS)[number];
 
 export interface AgentHostManifest {
   readonly format: "astra-agent-host-manifest-v1";
@@ -41,13 +56,32 @@ export interface AgentHostManifest {
   readonly methods: Readonly<Record<AgentHostMethod, ManifestMethod>>;
 }
 
+/**
+ * Frozen 1.2 legacy manifest shape. It is a distinct type so a legacy
+ * document can never be mistaken for the active 1.3 manifest: the version is
+ * the literal 1.2 string and only the five legacy methods exist.
+ */
+export interface AgentHostLegacyManifest {
+  readonly format: "astra-agent-host-manifest-v1";
+  readonly schemaDialect: "astra-p0-schema-subset-v1";
+  readonly protocolVersion: typeof AGENT_HOST_LEGACY_VERSION;
+  readonly limits: typeof LIMITS;
+  readonly envelopes: ManifestEnvelopes;
+  readonly methods: Readonly<Record<AgentHostLegacyMethod, ManifestMethod>>;
+}
+
+/** Either manifest profile; the shared validator returns this union. */
+export type AgentHostAnyManifest = AgentHostManifest | AgentHostLegacyManifest;
+
 const HOST_FORMAT = "astra-agent-host-manifest-v1";
-const HOST_DIRECTION: Readonly<Record<AgentHostMethod, "host-to-node" | "node-to-host">> = {
+const HOST_DIRECTION: Readonly<Record<string, "host-to-node" | "node-to-host">> = {
   "runtime.initialize": "host-to-node",
   "session.solve": "host-to-node",
   "session.stop": "host-to-node",
   "model.generate": "node-to-host",
   "tool.execute": "node-to-host",
+  "method.catalog": "node-to-host",
+  "method.load": "node-to-host",
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -67,15 +101,18 @@ function sameLimits(raw: unknown): boolean {
 }
 
 /**
- * Validate a loaded Agent Host manifest against the compiled-in constants.
- *
- * Only the fixed codes `MANIFEST_INVALID` and `VERSION_MISMATCH` escape; raw
- * input is never echoed. An empty or widened `methods` map is invalid, and
- * every envelope/params/result node must pass the shared schema subset check.
+ * Shared manifest validator. `version` and `methods` are the only parameters:
+ * the active 1.3 profile and the frozen 1.2 legacy profile use this one body
+ * instead of two copied modules. Only the fixed codes `MANIFEST_INVALID` and
+ * `VERSION_MISMATCH` escape; raw input is never echoed.
  */
-export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
+function validateManifest(
+  raw: unknown,
+  version: string,
+  expected: readonly string[],
+): AgentHostAnyManifest {
   if (!isPlainObject(raw)) throw new Error("MANIFEST_INVALID");
-  if (raw["protocolVersion"] !== AGENT_HOST_VERSION) throw new Error("VERSION_MISMATCH");
+  if (raw["protocolVersion"] !== version) throw new Error("VERSION_MISMATCH");
   if (raw["format"] !== HOST_FORMAT) throw new Error("MANIFEST_INVALID");
   if (raw["schemaDialect"] !== SCHEMA_DIALECT) throw new Error("MANIFEST_INVALID");
   if (MANIFEST_FORMAT !== "astra-p0-protocol-manifest-v1") throw new Error("MANIFEST_INVALID");
@@ -91,12 +128,12 @@ export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
     if (!assertSupportedSchema(node).ok) throw new Error("MANIFEST_INVALID");
   }
 
-  const methods = raw["methods"];
-  if (!isPlainObject(methods)) throw new Error("MANIFEST_INVALID");
-  if (Object.keys(methods).length !== AGENT_HOST_METHODS.length) throw new Error("MANIFEST_INVALID");
-  for (const method of AGENT_HOST_METHODS) {
-    if (!Object.prototype.hasOwnProperty.call(methods, method)) throw new Error("MANIFEST_INVALID");
-    const entry = methods[method];
+  const declared = raw["methods"];
+  if (!isPlainObject(declared)) throw new Error("MANIFEST_INVALID");
+  if (Object.keys(declared).length !== expected.length) throw new Error("MANIFEST_INVALID");
+  for (const method of expected) {
+    if (!Object.prototype.hasOwnProperty.call(declared, method)) throw new Error("MANIFEST_INVALID");
+    const entry = declared[method];
     if (!isPlainObject(entry)) throw new Error("MANIFEST_INVALID");
     if (entry["direction"] !== HOST_DIRECTION[method]) throw new Error("MANIFEST_INVALID");
     if (entry["kind"] !== "request") throw new Error("MANIFEST_INVALID");
@@ -104,7 +141,27 @@ export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
     if (!assertSupportedSchema(entry["result"]).ok) throw new Error("MANIFEST_INVALID");
   }
 
-  return p2Snapshot(raw as unknown as AgentHostManifest);
+  return p2Snapshot(raw as unknown as AgentHostAnyManifest);
+}
+
+/**
+ * Validate a loaded active Agent Host manifest (1.3). This is the default
+ * entry point; a 1.2 document is refused here with `VERSION_MISMATCH`.
+ */
+export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
+  return validateManifest(raw, AGENT_HOST_VERSION, AGENT_HOST_METHODS) as AgentHostManifest;
+}
+
+/**
+ * Validate a frozen 1.2 legacy manifest for read-only replay. The result is
+ * never accepted by the live Node flow, which requires the active version.
+ */
+export function validateLegacyAgentHostManifest(raw: unknown): AgentHostLegacyManifest {
+  return validateManifest(
+    raw,
+    AGENT_HOST_LEGACY_VERSION,
+    AGENT_HOST_LEGACY_METHODS,
+  ) as AgentHostLegacyManifest;
 }
 
 /**
@@ -112,21 +169,25 @@ export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
  *
  * The manifest is the only field specification. A failure throws the fixed
  * shared `code`; `sessionId`, when supplied, must match exactly (no trim).
+ * The version check follows the manifest's own `protocolVersion`, so a legacy
+ * manifest can only be replayed against legacy payloads.
  */
 export function agentHostPayload(
-  manifest: AgentHostManifest,
+  manifest: AgentHostAnyManifest,
   method: AgentHostMethod,
   side: "params" | "result",
   value: unknown,
   sessionId?: string,
 ): void {
-  if (!AGENT_HOST_METHODS.includes(method)) throw new Error("UNKNOWN_METHOD");
-  const entry = manifest.methods[method];
+  const declared = manifest.methods as Readonly<Record<string, ManifestMethod | undefined>>;
+  if (!Object.prototype.hasOwnProperty.call(declared, method)) throw new Error("UNKNOWN_METHOD");
+  const entry = declared[method];
+  if (entry === undefined) throw new Error("UNKNOWN_METHOD");
   const node = side === "params" ? entry.params : entry.result;
   const checked = validateAgainstSchema(value, node);
   if (!checked.ok) throw new Error(checked.code);
   if (!isPlainObject(value)) throw new Error("FIELD_TYPE");
-  if (value["protocolVersion"] !== AGENT_HOST_VERSION) throw new Error("VERSION_MISMATCH");
+  if (value["protocolVersion"] !== manifest.protocolVersion) throw new Error("VERSION_MISMATCH");
   if (sessionId !== undefined && value["sessionId"] !== sessionId) {
     throw new Error("SESSION_MISMATCH");
   }

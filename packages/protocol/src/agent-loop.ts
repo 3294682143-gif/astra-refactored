@@ -10,6 +10,7 @@
  */
 
 import type { P2Artifact, P2Contract, P2Event, P2GoalSpec, P2TransportStatus } from "./p2.js";
+import type { P2MethodCatalog } from "./p2-methods.js";
 import type { P3EffectReceipt, P3EffectRequest } from "./p3.js";
 import type { P4DeliveryPolicy, P4FinalDecision, P4ReviewSnapshot } from "./p4.js";
 
@@ -70,10 +71,21 @@ export interface AgentEffectPort {
   execute(request: P3EffectRequest): Promise<P3EffectReceipt>;
 }
 
+/**
+ * Injected async method-catalog port. `read` returns the trusted catalog view
+ * for the current remaining window; an empty `entries` list is the explicit
+ * "catalog unavailable" view. `null` means no catalog read is available and
+ * every method action must be refused rather than simulated.
+ */
+export interface AgentCatalogPort {
+  read(remainingMs: number): Promise<P2MethodCatalog>;
+}
+
 /** The two injected ports of one AgentLoop run. */
 export interface AgentPorts {
   readonly model: AgentModelPort;
   readonly effect: AgentEffectPort | null;
+  readonly catalog?: AgentCatalogPort | null;
 }
 
 /**
@@ -85,6 +97,7 @@ export interface AgentLoopOptions {
   readonly maxWorkUnits?: number;
   readonly maxEffects?: number;
   readonly maxReviews?: number;
+  readonly maxMethodLoads?: number;
   readonly remainingMs: number;
   readonly policy?: P4DeliveryPolicy;
   readonly now?: () => number;
@@ -172,6 +185,8 @@ export interface AgentLoopSummary {
   readonly effectCalls: number;
   readonly workUnits: number;
   readonly reviewCalls: number;
+  readonly catalogCalls: number;
+  readonly methodLoads: number;
   readonly stopReason: AgentTraceCode;
 }
 
@@ -189,6 +204,7 @@ export interface AgentLoopPrivateState {
   readonly review: P4ReviewSnapshot | null;
   readonly decision: P4FinalDecision;
   readonly session: AgentSessionSnapshot;
+  readonly catalog?: P2MethodCatalog | null;
 }
 
 /** Frozen result of one unified AgentLoop run. */

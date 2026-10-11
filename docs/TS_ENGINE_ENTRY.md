@@ -1,4 +1,4 @@
-# Explicit TS entry — v4 G1 / PR2
+# Explicit TS entry — v4 G1 / PR2 and G2A method bridge
 
 `ReasoningAgent(client=client, engine="ts").solve(problem, metadata)` now
 launches the existing TypeScript AgentLoop through the single Node entry
@@ -21,15 +21,17 @@ the frozen Controller nor LiteRuntime is instantiated by the TS branch.
 
 The Host reuses the P0 strict parser/selector pump and process cleanup. Node
 reuses P2HostChannel. While `session.solve` is pending, the same reader serves
-model/tool callbacks without a second parser or parallel solver. The shared
-`agent-host.schema.json` defines version `1.2-agent-loop-preview`, session IDs,
-exact fields, five allowed methods and bounded frames. P0 remains the no-argument
-profile of main.js and its probe behavior is unchanged.
+model/tool/method callbacks without a second parser or parallel solver. The active
+`agent-host-v13.schema.json` defines version `1.3-agent-loop-preview`, session IDs,
+exact fields, seven allowed methods and bounded frames. The frozen 1.2
+`agent-host.schema.json` remains byte-identical for read-only replay; live Host
+and Node reject that legacy profile. P0 remains the no-argument profile of
+main.js and its probe behavior is unchanged.
 
-Initialization declares `math-agent-preview-v1` and explicit capabilities:
-injected model access, optional two-tool execution, no methods yet, no generated
-Python, 8192 configured output tokens with verification false, in-memory journal
-only, and an explicit-finish requirement for tools. Method bridging is G2 work.
+Initialization declares `math-agent-preview-v2` and explicit capabilities:
+injected model access, optional two-tool execution, opt-in read-only methods,
+no generated Python, 8192 configured output tokens with verification false,
+in-memory journal only, and an explicit-finish requirement for effects.
 
 ## Limits and completion signals
 
@@ -41,6 +43,7 @@ TS preview options are keyword-only:
 | max_work_units | 2 | 1..3 |
 | max_effects | 1 | 0..2 |
 | max_reviews | 1 | 0..1 |
+| max_method_loads | 0 | 0..1 |
 | problem_seconds | 5 | greater than 0 through 5 |
 | policy | BEST_EFFORT | BEST_EFFORT or STRICT |
 | node | node | trusted executable name/path |
@@ -63,7 +66,7 @@ remote call or permit retry. Late completion cannot rewrite the settled journal.
 This is process-local responsibility only, not durable exactly-once recovery.
 
 Metrics distinguish actual client method calls, Node logical attempts, effects,
-work units and reviews. Known HTTP attempts stay null when the public client
+work units, reviews, catalog calls and method loads. Known HTTP attempts stay null when the public client
 does not expose them. Public usage totals are aggregated by request; missing
 usage stays unknown, not zero. Failure after a spent call preserves those counts.
 Children are reaped and streams closed before the return's childReaped status
@@ -84,6 +87,25 @@ model/review reserve, and calls the existing registered executor with the root
 deadline. Tool completion remains a program observation, not proof. No arbitrary
 model-generated Python, shell or network action is permitted.
 
+With `max_method_loads=1`, sufficient follow-up/review capacity and a nonzero
+effect allowance, the Host reads the existing General v1.1 method catalog once
+before model requests. This metadata read consumes root time but no model or
+effect slot. One explicit `method` action can load one catalog ID using the
+existing read-only MethodCatalog. The load consumes the SAME global effect
+allowance as registered tools, plus the method-specific cap of one; neither
+tasks nor cache hits create a fresh budget. A failed attempt still spends its
+slot. Default or insufficient-budget paths do not touch the reader.
+
+WORK context v2 contains the complete validated catalog and loaded asset body,
+title, version and integrity hash through the existing M3 preparation interface.
+Only same-task receipts enter toolObservations; method text may persist across
+tasks as advisory material, never a mathematical premise or verification.
+Same-task identical requests reuse the original receipt without a new load or
+fabricated binding. A new solve has no inherited cache. R2 receives no method
+assets or catalog. Invalid assets stop as UNKNOWN; ordinary ERROR observations
+can be consumed without loading an asset. Oversized contexts are refused, not
+silently truncated or stripped of the catalog.
+
 M5 remains the mathematical final selector. Host only verifies the returned
 answer's provenance and policy: it must equal the actual eligible candidate
 packet, not an arbitrary new string. STRICT withholds unverified candidates;
@@ -100,15 +122,19 @@ PYTHONDONTWRITEBYTECODE=1 python -m pytest -q tests/e2e
 PYTHONDONTWRITEBYTECODE=1 python -m pytest -q
 ```
 
-Supervisor results: 244 Node tests, 406 Python tests and 24 original optional
-WASI skips. The 20 public-entry E2E tests include nested RPC, real registered
+G1 baseline: 244 Node tests, 406 Python tests and 24 original optional
+WASI skips. The original 20 public-entry E2E tests include nested RPC, real registered
 polynomial execution with observation consumption, two/three work units,
 dependency refs, distinct sessions, strict/cap-zero paths, disabled legacy
 solvers, missing Node/dist, length/unknown barriers, timeout/late return,
 tampered requests/tools/answer, invalid frames and child crash with spent-call
 accounting. No live mathematical model API was used.
 
-Remaining: G2 dynamic routes/methods/progress, G3 grounded candidate repair,
+G2A adds direct TS method tests and 24 public-entry E2E cases, including the
+real method reader and existing polynomial executor. See G2_METHOD_BRIDGE.md
+for the acceptance scope and current supervisor verification record.
+
+Remaining: G2 dynamic routes/tasks/version transitions/progress/final, G3 grounded candidate repair,
 G4 event-source replay and lifecycle hardening, authorized real-model/target
 evaluation, release packaging, and L2 source-capability closure. G1 does not
 remove those gates or approve a default-engine switch.

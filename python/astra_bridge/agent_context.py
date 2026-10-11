@@ -15,6 +15,7 @@ import json
 from .agent_client import _validate_request
 from .p0_probe import ProbeError
 from .p2_host_fixture import _exact_keys, _parse_inner, _strict_utf8
+from .p3_host_methods import checked_catalog
 from .p3_host_context import same_json
 
 __all__ = ["canonical_scope", "candidate_packet", "check_inputs", "validate_context"]
@@ -39,7 +40,7 @@ _SCOPE_FIELDS = (
     "branchConditions", "referenceablePremises",
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
-_CONTEXT_SCHEMA_VERSION = "agent-work-context-v1"
+_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
 _R2_SCHEMA_VERSION = "p4-r2-context-v1"
 _TASK_FIELDS = (
@@ -349,14 +350,15 @@ def _ordinal(request_id):
     return int(suffix)
 
 
-def _check_work(body, request_id, problem, session_id, problem_hash, history, effects):
+def _check_work(body, request_id, problem, session_id, problem_hash, history, effects,
+                catalog=None, method_assets=None):
     """Validate one WORK context body against the Host request and records."""
     keys = set(body.keys())
     required = (
         "schemaVersion", "promptVersion", "problemFullText", "problemHash",
         "sessionId", "contractVersion", "task", "scope", "obligations",
         "route", "sourceRequestId", "inputArtifacts", "methodAssets",
-        "allowTools", "toolObservations",
+        "allowTools", "allowMethods", "toolObservations",
     )
     if not set(required) <= keys or not keys <= set(required) | {"methodCatalog"}:
         _fail()
@@ -419,11 +421,21 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         found = True
     if not found:
         _fail()
-    if body["methodAssets"] != []:
+    entries = [] if catalog is None else checked_catalog(catalog)["entries"]
+    if "methodCatalog" not in body:
         _fail()
-    if body.get("methodCatalog", []) != []:
+    if not same_json(body["methodCatalog"], entries):
+        _fail()
+    assets = [] if method_assets is None else method_assets
+    if not same_json(body["methodAssets"], assets):
         _fail()
     if not isinstance(body["allowTools"], bool):
+        _fail()
+    if not isinstance(body["allowMethods"], bool):
+        _fail()
+    if body["allowMethods"] and catalog is None:
+        _fail()
+    if body["allowMethods"] and not entries:
         _fail()
     check_inputs(body, history, request_id)
     expected = [
@@ -515,7 +527,8 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
         _fail()
 
 
-def validate_context(request, problem, session_id, problem_hash, history, effects):
+def validate_context(request, problem, session_id, problem_hash, history, effects,
+                     catalog=None, method_assets=None):
     """Validate one Host-built model request against its own records.
 
     The outer request shape, message bytes and context hash are checked by
@@ -536,7 +549,10 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             _fail()
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
-        _check_work(body, request_id, problem, session_id, problem_hash, history, effects)
+        _check_work(
+            body, request_id, problem, session_id, problem_hash, history, effects,
+            catalog, method_assets,
+        )
     elif request["phase"] == "R2":
         target = body.get("target")
         if not isinstance(target, dict):

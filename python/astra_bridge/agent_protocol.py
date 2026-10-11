@@ -21,22 +21,37 @@ from .p0_protocol import (
 
 __all__ = [
     "AGENT_HOST_VERSION",
+    "AGENT_HOST_LEGACY_VERSION",
     "AGENT_HOST_MANIFEST_FORMAT",
     "AGENT_HOST_SCHEMA_DIALECT",
     "AGENT_HOST_METHODS",
+    "AGENT_HOST_LEGACY_METHODS",
     "AGENT_HOST_METHOD_DIRECTION",
     "load_manifest",
+    "load_legacy_manifest",
     "validate_manifest",
+    "validate_legacy_manifest",
     "parse_frame",
     "payload",
     "classify_method",
 ]
 
-AGENT_HOST_VERSION = "1.2-agent-loop-preview"
+AGENT_HOST_VERSION = "1.3-agent-loop-preview"
+AGENT_HOST_LEGACY_VERSION = "1.2-agent-loop-preview"
 AGENT_HOST_MANIFEST_FORMAT = "astra-agent-host-manifest-v1"
 AGENT_HOST_SCHEMA_DIALECT = "astra-p0-schema-subset-v1"
 
 AGENT_HOST_METHODS = (
+    "runtime.initialize",
+    "session.solve",
+    "session.stop",
+    "model.generate",
+    "tool.execute",
+    "method.catalog",
+    "method.load",
+)
+
+AGENT_HOST_LEGACY_METHODS = (
     "runtime.initialize",
     "session.solve",
     "session.stop",
@@ -50,6 +65,8 @@ AGENT_HOST_METHOD_DIRECTION = {
     "session.stop": "host-to-node",
     "model.generate": "node-to-host",
     "tool.execute": "node-to-host",
+    "method.catalog": "node-to-host",
+    "method.load": "node-to-host",
 }
 
 
@@ -63,14 +80,23 @@ def _default_path():
         / "packages"
         / "protocol"
         / "schema"
+        / "agent-host-v13.schema.json"
+    )
+
+
+def _legacy_path():
+    return (
+        Path(__file__).resolve().parents[2]
+        / "packages"
+        / "protocol"
+        / "schema"
         / "agent-host.schema.json"
     )
 
 
-def load_manifest(path=None):
-    """Load and cross-check the Agent Host manifest relative to this file."""
+def _read_manifest(path):
     if path is None:
-        path = _default_path()
+        _fail("MANIFEST_INVALID")
     try:
         raw = Path(path).read_bytes()
     except OSError:
@@ -83,7 +109,17 @@ def load_manifest(path=None):
         manifest = json.loads(text)
     except ValueError:
         _fail("MANIFEST_INVALID")
-    return validate_manifest(manifest)
+    return manifest
+
+
+def load_manifest(path=None):
+    """Load and cross-check the active 1.3 Agent Host manifest."""
+    return validate_manifest(_read_manifest(path if path is not None else _default_path()))
+
+
+def load_legacy_manifest(path=None):
+    """Load the frozen 1.2 manifest for read-only replay; never live."""
+    return validate_legacy_manifest(_read_manifest(path if path is not None else _legacy_path()))
 
 
 def _same_limits(raw):
@@ -102,14 +138,14 @@ def _same_limits(raw):
     return True
 
 
-def validate_manifest(raw):
+def _validate(raw, version, methods):
     if not isinstance(raw, dict):
         _fail("MANIFEST_INVALID")
     if raw.get("format") != AGENT_HOST_MANIFEST_FORMAT:
         _fail("MANIFEST_INVALID")
     if raw.get("schemaDialect") != AGENT_HOST_SCHEMA_DIALECT:
         _fail("MANIFEST_INVALID")
-    if raw.get("protocolVersion") != AGENT_HOST_VERSION:
+    if raw.get("protocolVersion") != version:
         _fail("VERSION_MISMATCH")
     if not _same_limits(raw.get("limits")):
         _fail("MANIFEST_INVALID")
@@ -123,16 +159,16 @@ def validate_manifest(raw):
         if not isinstance(node, dict):
             _fail("MANIFEST_INVALID")
         assert_supported_schema(node)
-    methods = raw.get("methods")
-    if not isinstance(methods, dict):
+    declared = raw.get("methods")
+    if not isinstance(declared, dict):
         _fail("MANIFEST_INVALID")
-    if len(methods) != len(AGENT_HOST_METHODS):
+    if len(declared) != len(methods):
         _fail("MANIFEST_INVALID")
-    for name in methods:
-        if name not in AGENT_HOST_METHODS:
+    for name in declared:
+        if name not in methods:
             _fail("MANIFEST_INVALID")
-    for name in AGENT_HOST_METHODS:
-        entry = methods.get(name)
+    for name in methods:
+        entry = declared.get(name)
         if not isinstance(entry, dict):
             _fail("MANIFEST_INVALID")
         if entry.get("direction") != AGENT_HOST_METHOD_DIRECTION[name]:
@@ -145,6 +181,16 @@ def validate_manifest(raw):
                 _fail("MANIFEST_INVALID")
             assert_supported_schema(node)
     return copy.deepcopy(raw)
+
+
+def validate_manifest(raw):
+    """Validate the active 1.3 manifest; a 1.2 document is refused."""
+    return _validate(raw, AGENT_HOST_VERSION, AGENT_HOST_METHODS)
+
+
+def validate_legacy_manifest(raw):
+    """Validate the frozen 1.2 manifest for read-only replay only."""
+    return _validate(raw, AGENT_HOST_LEGACY_VERSION, AGENT_HOST_LEGACY_METHODS)
 
 
 def classify_method(method):
@@ -167,7 +213,8 @@ def payload(manifest, method, side, value, session_id=None):
     validate_against_schema(value, node)
     if not isinstance(value, dict):
         _fail("FIELD_TYPE")
-    if value.get("protocolVersion") != AGENT_HOST_VERSION:
+    declared = manifest.get("protocolVersion")
+    if value.get("protocolVersion") != declared:
         _fail("VERSION_MISMATCH")
     if session_id is not None and value.get("sessionId") != session_id:
         _fail("SESSION_MISMATCH")

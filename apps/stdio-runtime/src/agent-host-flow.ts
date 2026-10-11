@@ -24,23 +24,27 @@ import {
   type AgentModelRequest,
   type AgentPorts,
   type JsonRpcMessage,
+  type P2MethodCatalog,
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
 import { p3EffectReceipt } from "@astra/math-gateway";
+import { p3MethodCatalog } from "@astra/runtime-core";
 import { runAgentLoop } from "./agent-loop.js";
 
 const MIN_REMAINING_MS = 25;
 const HOST_INIT_ID = "host-1";
 const HOST_SOLVE_ID = "host-2";
 const HOST_STOP_ID = "host-3";
-const PROFILE_ID = "math-agent-preview-v1";
+const PROFILE_ID = "math-agent-preview-v2";
 const MAX_MODEL_CALLS = 4;
 const MAX_WORK_UNITS = 3;
 const MAX_EFFECTS = 2;
 const MAX_REVIEWS = 1;
+const MAX_METHOD_LOADS = 1;
 const MAX_REMAINING_MS = 5000;
 const HASH = /^[0-9a-f]{64}$/u;
+const CATALOG_FRAME_ID = "node-catalog-1";
 
 type Phase = "INIT" | "READY" | "SOLVING" | "DONE" | "STOP";
 
@@ -55,7 +59,7 @@ export interface AgentHostIo {
 
 interface Pending {
   readonly id: string;
-  readonly method: "model.generate" | "tool.execute";
+  readonly method: "model.generate" | "tool.execute" | "method.catalog" | "method.load";
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: unknown) => void;
   readonly requestId?: string;
@@ -89,6 +93,7 @@ interface FrozenOptions {
   readonly maxWorkUnits: number;
   readonly maxEffects: number;
   readonly maxReviews: number;
+  readonly maxMethodLoads: number;
   readonly policy: "BEST_EFFORT" | "STRICT";
 }
 
@@ -99,11 +104,17 @@ export class AgentHostFlow {
   private sessionId: string | null = null;
   private pending: Pending | null = null;
   private effectAvailable = false;
+  private methodAvailable = false;
   private solveStarted = false;
   private stopSent = false;
+  private catalogRead = false;
+  private modelStarted = false;
   private options: FrozenOptions | null = null;
 
   constructor(manifest: AgentHostManifest, io: AgentHostIo) {
+    if (manifest.protocolVersion !== AGENT_HOST_VERSION) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
     this.manifest = manifest;
     this.io = io;
   }
@@ -168,6 +179,10 @@ export class AgentHostFlow {
     if (this.phase !== "SOLVING") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
+    if (pending.method === "method.catalog") {
+      this.settleCatalog(pending, result);
+      return;
+    }
     this.settleEffect(pending, result);
   }
 
@@ -182,6 +197,7 @@ export class AgentHostFlow {
     const maxModelCalls = safeInt(params["maxModelCalls"], 0, MAX_MODEL_CALLS);
     const maxWorkUnits = safeInt(params["maxWorkUnits"], 1, MAX_WORK_UNITS);
     const maxReviews = safeInt(params["maxReviews"], 0, MAX_REVIEWS);
+    const maxMethodLoads = safeInt(params["maxMethodLoads"], 0, MAX_METHOD_LOADS);
     const remainingMs = safeInt(params["remainingMs"], 1, MAX_REMAINING_MS);
     if (params["profileId"] !== PROFILE_ID) {
       fail(ERROR_CODES.FIELD_VALUE);
@@ -189,7 +205,7 @@ export class AgentHostFlow {
     if (capabilities["modelGenerate"] !== "AVAILABLE") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
-    if (capabilities["methodLoad"] !== "UNAVAILABLE" || capabilities["generatedPython"] !== "UNAVAILABLE") {
+    if (capabilities["generatedPython"] !== "UNAVAILABLE") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
     if (capabilities["maxTokens"] !== 8192 || capabilities["maxTokensVerified"] !== false) {
@@ -205,16 +221,23 @@ export class AgentHostFlow {
     if (toolExecute !== "AVAILABLE" && toolExecute !== "UNAVAILABLE") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
+    const methodLoad = capabilities["methodLoad"];
+    if (methodLoad !== "AVAILABLE" && methodLoad !== "UNAVAILABLE") {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
     const policy = params["policy"];
     if (policy !== "BEST_EFFORT" && policy !== "STRICT") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
     this.effectAvailable = toolExecute === "AVAILABLE" && maxEffects > 0;
+    this.methodAvailable =
+      methodLoad === "AVAILABLE" && maxMethodLoads === 1 && this.effectAvailable;
     this.options = Object.freeze({
       maxModelCalls,
       maxWorkUnits,
       maxEffects: this.effectAvailable ? maxEffects : 0,
       maxReviews,
+      maxMethodLoads: this.methodAvailable ? maxMethodLoads : 0,
       policy,
     });
     this.sessionId = sessionId;
@@ -272,6 +295,7 @@ export class AgentHostFlow {
       effect: this.effectAvailable
         ? { execute: (request: P3EffectRequest) => this.callEffect(request) }
         : null,
+      catalog: this.methodAvailable ? { read: (remainingMs: number) => this.callCatalog(remainingMs) } : null,
     };
     let result: Awaited<ReturnType<typeof runAgentLoop>>;
     try {
@@ -280,6 +304,7 @@ export class AgentHostFlow {
         maxWorkUnits: options.maxWorkUnits,
         maxEffects: options.maxEffects,
         maxReviews: options.maxReviews,
+        maxMethodLoads: options.maxMethodLoads,
         remainingMs: budget,
         policy: options.policy,
         now,
@@ -344,6 +369,7 @@ export class AgentHostFlow {
     if (remainingMs <= MIN_REMAINING_MS) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
+    this.modelStarted = true;
     return new Promise<AgentModelReceipt>((resolve, reject) => {
       this.pending = { id, method: "model.generate", resolve: resolve as (value: unknown) => void, reject, requestId: request.requestId };
       try {
@@ -374,7 +400,9 @@ export class AgentHostFlow {
     if (this.io.remainingMs() <= MIN_REMAINING_MS) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
+    const isMethod = request.action.action === "method";
     const id = `node-${request.effectId}`;
+    const method = isMethod ? "method.load" : "tool.execute";
     const remainingMs = Math.min(request.remainingMs, this.io.remainingMs());
     if (remainingMs <= MIN_REMAINING_MS) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
@@ -383,7 +411,7 @@ export class AgentHostFlow {
     return new Promise<P3EffectReceipt>((resolve, reject) => {
       this.pending = {
         id,
-        method: "tool.execute",
+        method,
         resolve: resolve as (value: unknown) => void,
         reject,
         effectRequest: sent,
@@ -393,14 +421,57 @@ export class AgentHostFlow {
           {
             jsonrpc: "2.0",
             id,
-            method: "tool.execute",
+            method,
             params: {
               protocolVersion: AGENT_HOST_VERSION,
               sessionId: this.sessionId,
               request: sent,
             },
           },
-          "tool.execute",
+          method,
+        );
+      } catch (error) {
+        this.pending = null;
+        reject(error);
+      }
+    });
+  }
+
+  private callCatalog(remainingMs: number): Promise<P2MethodCatalog> {
+    if (this.pending !== null) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    if (!this.methodAvailable || this.catalogRead || this.modelStarted || this.phase !== "SOLVING") {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    if (this.io.remainingMs() <= MIN_REMAINING_MS) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    const window = Math.min(remainingMs, this.io.remainingMs());
+    if (window <= MIN_REMAINING_MS) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    this.catalogRead = true;
+    return new Promise<P2MethodCatalog>((resolve, reject) => {
+      this.pending = {
+        id: CATALOG_FRAME_ID,
+        method: "method.catalog",
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      };
+      try {
+        this.io.send(
+          {
+            jsonrpc: "2.0",
+            id: CATALOG_FRAME_ID,
+            method: "method.catalog",
+            params: {
+              protocolVersion: AGENT_HOST_VERSION,
+              sessionId: this.sessionId,
+              remainingMs: window,
+            },
+          },
+          "method.catalog",
         );
       } catch (error) {
         this.pending = null;
@@ -440,7 +511,7 @@ export class AgentHostFlow {
   }
 
   private settleEffect(pending: Pending, result: Record<string, unknown>): void {
-    agentHostPayload(this.manifest, "tool.execute", "result", result, this.sessionId ?? undefined);
+    agentHostPayload(this.manifest, pending.method, "result", result, this.sessionId ?? undefined);
     const receipt = result["receipt"];
     if (!isPlainObject(receipt)) {
       fail(ERROR_CODES.FIELD_TYPE);
@@ -452,6 +523,21 @@ export class AgentHostFlow {
     let checked: P3EffectReceipt;
     try {
       checked = p3EffectReceipt(receipt, effectRequest);
+    } catch {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    const remainingMs = safeInt(result["remainingMs"], 0, MAX_REMAINING_MS);
+    this.pending = null;
+    this.io.tighten(remainingMs);
+    pending.resolve(checked);
+  }
+
+  private settleCatalog(pending: Pending, result: Record<string, unknown>): void {
+    agentHostPayload(this.manifest, "method.catalog", "result", result, this.sessionId ?? undefined);
+    const catalog = result["catalog"];
+    let checked: P2MethodCatalog;
+    try {
+      checked = p3MethodCatalog(catalog);
     } catch {
       fail(ERROR_CODES.FIELD_VALUE);
     }

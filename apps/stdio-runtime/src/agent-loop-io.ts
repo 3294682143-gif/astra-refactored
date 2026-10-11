@@ -15,6 +15,7 @@ import {
   type AgentLoopOptions,
   type AgentModelReceipt,
   type AgentPorts,
+  type P2MethodCatalog,
   type P2GoalSpec,
   type P2TransportStatus,
 } from "@astra/protocol";
@@ -31,12 +32,13 @@ const OPTION_FIELDS = [
   "maxWorkUnits",
   "maxEffects",
   "maxReviews",
+  "maxMethodLoads",
   "remainingMs",
   "policy",
   "now",
   "goalSpecs",
 ] as const;
-const PORT_FIELDS = ["model", "effect"] as const;
+const PORT_FIELDS = ["model", "effect", "catalog"] as const;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
@@ -153,6 +155,7 @@ export interface CapturedAgentOptions {
   readonly maxWorkUnits: number;
   readonly maxEffects: number;
   readonly maxReviews: number;
+  readonly maxMethodLoads: number;
   readonly remainingMs: number;
   readonly policy: "BEST_EFFORT" | "STRICT";
   readonly goalSpecs: readonly P2GoalSpec[];
@@ -178,6 +181,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const rawMaxWorkUnits = source.maxWorkUnits;
   const rawMaxEffects = source.maxEffects;
   const rawMaxReviews = source.maxReviews;
+  const rawMaxMethodLoads = source.maxMethodLoads;
   const rawRemainingMs = source.remainingMs;
   const rawPolicy = source.policy;
   const rawNow = source.now;
@@ -188,6 +192,8 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     rawMaxWorkUnits === undefined ? 2 : boundedInt(rawMaxWorkUnits, 1, 3);
   const maxEffects = rawMaxEffects === undefined ? 1 : boundedInt(rawMaxEffects, 0, 2);
   const maxReviews = rawMaxReviews === undefined ? 1 : boundedInt(rawMaxReviews, 0, 1);
+  const maxMethodLoads =
+    rawMaxMethodLoads === undefined ? 0 : boundedInt(rawMaxMethodLoads, 0, 1);
   const remainingMs = boundedInt(rawRemainingMs, 1, AGENT_IO_MAX_REMAINING_MS);
   const policy = rawPolicy === undefined ? "BEST_EFFORT" : rawPolicy;
   if (policy !== "BEST_EFFORT" && policy !== "STRICT") {
@@ -206,6 +212,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     maxWorkUnits,
     maxEffects,
     maxReviews,
+    maxMethodLoads,
     remainingMs,
     policy,
     goalSpecs: p2Snapshot(goalSpecs) as readonly P2GoalSpec[],
@@ -216,6 +223,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
 export interface CapturedAgentPorts {
   readonly model: { generate: (request: unknown) => Promise<unknown> };
   readonly effect: { execute: (request: unknown) => Promise<unknown> } | null;
+  readonly catalog: { read: (remainingMs: number) => Promise<unknown> } | null;
 }
 
 /**
@@ -235,6 +243,7 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
   }
   const rawModel = source.model;
   const rawEffect = source.effect;
+  const rawCatalog = source.catalog;
   if (!isPlainObject(rawModel)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -243,8 +252,20 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   const generate = rawGenerate.bind(rawModel) as (request: unknown) => Promise<unknown>;
+  let catalog: { read: (remainingMs: number) => Promise<unknown> } | null = null;
+  if (rawCatalog !== null && rawCatalog !== undefined) {
+    if (!isPlainObject(rawCatalog)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const rawRead = (rawCatalog as Record<string, unknown>).read;
+    if (typeof rawRead !== "function") {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const read = rawRead.bind(rawCatalog) as (remainingMs: number) => Promise<unknown>;
+    catalog = Object.freeze({ read });
+  }
   if (rawEffect === null || rawEffect === undefined) {
-    return Object.freeze({ model: Object.freeze({ generate }), effect: null });
+    return Object.freeze({ model: Object.freeze({ generate }), effect: null, catalog });
   }
   if (!isPlainObject(rawEffect)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
@@ -257,5 +278,6 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
   return Object.freeze({
     model: Object.freeze({ generate }),
     effect: Object.freeze({ execute }),
+    catalog,
   });
 }

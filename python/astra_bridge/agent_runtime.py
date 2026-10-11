@@ -32,7 +32,7 @@ _REAP_SECONDS = 1.0
 _MAX_PROBLEM_CHARS = 8192
 _MAX_TOKENS = 8192
 _HOST_IDS = ("host-1", "host-2", "host-3")
-_PROFILE_ID = "math-agent-preview-v1"
+_PROFILE_ID = "math-agent-preview-v2"
 _POLICIES = ("BEST_EFFORT", "STRICT")
 _UNSOLVED = "Unsolved."
 _DEPLOYMENT_CODES = ("CHILD_FAILED", "SPAWN_FAILED")
@@ -87,6 +87,7 @@ class AgentRuntime:
         max_work_units=2,
         max_effects=1,
         max_reviews=1,
+        max_method_loads=0,
         problem_seconds=5,
         policy="BEST_EFFORT",
         node="node",
@@ -99,6 +100,8 @@ class AgentRuntime:
             raise ValueError("invalid max_effects")
         if not _is_int(max_reviews) or not 0 <= max_reviews <= 1:
             raise ValueError("invalid max_reviews")
+        if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 1:
+            raise ValueError("invalid max_method_loads")
         if isinstance(problem_seconds, bool) or not isinstance(problem_seconds, (int, float)):
             raise ValueError("invalid problem_seconds")
         if not math.isfinite(problem_seconds) or not 0 < problem_seconds <= _MAX_TIMEOUT:
@@ -111,6 +114,7 @@ class AgentRuntime:
         self.max_work_units = max_work_units
         self.max_effects = max_effects
         self.max_reviews = max_reviews
+        self.max_method_loads = max_method_loads
         self.problem_seconds = float(problem_seconds)
         self.policy = policy
         self.node = node
@@ -143,6 +147,7 @@ class AgentRuntime:
                 "maxWorkUnits": self.max_work_units,
                 "maxEffects": self.max_effects,
                 "maxReviews": self.max_reviews,
+                "maxMethodLoads": self.max_method_loads,
                 "policy": self.policy,
                 "problemSeconds": self.problem_seconds,
                 "node": self.node,
@@ -173,6 +178,7 @@ class AgentRuntime:
             "maxWorkUnits": options["maxWorkUnits"],
             "maxEffects": options["maxEffects"],
             "maxReviews": options["maxReviews"],
+            "maxMethodLoads": options["maxMethodLoads"],
             "policy": options["policy"],
         }
         host = AgentHost(
@@ -192,7 +198,11 @@ class AgentRuntime:
                 "capabilities": {
                     "modelGenerate": "AVAILABLE",
                     "toolExecute": "AVAILABLE" if options["maxEffects"] > 0 else "UNAVAILABLE",
-                    "methodLoad": "UNAVAILABLE",
+                    "methodLoad": (
+                        "AVAILABLE"
+                        if options["maxMethodLoads"] == 1 and options["maxEffects"] > 0
+                        else "UNAVAILABLE"
+                    ),
                     "generatedPython": "UNAVAILABLE",
                     "maxTokens": _MAX_TOKENS,
                     "maxTokensVerified": False,
@@ -204,6 +214,7 @@ class AgentRuntime:
                 "maxWorkUnits": options["maxWorkUnits"],
                 "maxEffects": options["maxEffects"],
                 "maxReviews": options["maxReviews"],
+                "maxMethodLoads": options["maxMethodLoads"],
                 "policy": options["policy"],
             }
             solve = {
@@ -340,6 +351,8 @@ class AgentRuntime:
             "logical_model_calls": None,
             "effect_calls": host.effect_calls,
             "review_calls": host.review_calls,
+            "catalog_calls": host.catalog_calls,
+            "method_loads": host.method_loads,
             "work_units": None,
             "frames": host.frames,
             "remote_outcome_unknown": self.client.blocked,
@@ -404,6 +417,8 @@ class AgentRuntime:
                 "logical_model_calls": 0,
                 "effect_calls": 0,
                 "review_calls": 0,
+                "catalog_calls": 0,
+                "method_loads": 0,
                 "work_units": 0,
                 "frames": 0,
                 "remote_outcome_unknown": self.client.blocked,

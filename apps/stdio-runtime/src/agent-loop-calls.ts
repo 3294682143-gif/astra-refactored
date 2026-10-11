@@ -17,13 +17,20 @@ import {
   type AgentModelReceipt,
   type AgentModelRequest,
   type AgentTraceCode,
+  type P2MethodCatalog,
   type P2Task,
   type P3Action,
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
-import { P3EffectGate, p3EffectFailure, p3EffectReceipt, p3EffectRequest } from "@astra/math-gateway";
+import {
+  P3EffectGate,
+  p3EffectFailure,
+  p3EffectReceipt,
+  p3EffectRequest,
+} from "@astra/math-gateway";
 import type { P4RecheckModelGate } from "@astra/math-gateway";
+import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import type { AgentSession } from "@astra/runtime-core";
 import {
   AGENT_IO_MIN_REMAINING_MS,
@@ -215,14 +222,29 @@ export class AgentCalls {
   async effect(
     task: P2Task,
     sourceRequestId: string,
-    action: Extract<P3Action, { action: "tool" }>,
+    action: Extract<P3Action, { action: "tool" | "method" }>,
     effectGate: P3EffectGate,
     remainingModelCalls: number,
+    catalog?: P2MethodCatalog,
   ): Promise<P3EffectReceipt> {
     const frozenTask = p2Snapshot(task) as P2Task;
     const port = this.ports.effect;
     if (port === null) {
       fail(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    let frozenCatalog: P2MethodCatalog | null = null;
+    if (action.action === "method") {
+      if (catalog === undefined) {
+        fail(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      try {
+        frozenCatalog = p3MethodCatalog(p2Snapshot(catalog));
+      } catch {
+        fail(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (!frozenCatalog.entries.some((entry) => entry.id === action.id)) {
+        fail(P2_ERROR_CODES.PACKET_BINDING);
+      }
     }
     const turns = Math.min(3, Math.max(1, remainingModelCalls + 1));
     const admitted = effectGate.admit(
@@ -263,6 +285,13 @@ export class AgentCalls {
       receipt = p3EffectReceipt(raw, request);
     } catch {
       return this.settleEffectUnknown(request, effectGate);
+    }
+    if (request.action.action === "method" && frozenCatalog !== null) {
+      try {
+        p3MethodObservation(receipt, request, frozenCatalog);
+      } catch {
+        return this.settleEffectUnknown(request, effectGate);
+      }
     }
     effectGate.settle(receipt);
     this.root.settleEffect(request.effectId, receipt.status);

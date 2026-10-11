@@ -26,6 +26,8 @@ from .p3_effects import perform_effect
 from .p3_host_context import parse_action, same_json
 from .p3_host_protocol import payload as p3_payload
 from .agent_protocol import AGENT_HOST_VERSION, payload
+from .p2_methods import fixture_catalog
+from .p3_host_methods import checked_catalog
 
 __all__ = ["AgentHost"]
 
@@ -35,10 +37,11 @@ _MAX_MODEL_CALLS = 4
 _MAX_WORK_UNITS = 3
 _MAX_EFFECTS = 2
 _MAX_REVIEWS = 1
+_MAX_METHOD_LOADS = 1
 _MAX_TOKENS = 8192
 _HOST_SOLVE_ID = "host-2"
 _HOST_STOP_ID = "host-3"
-_PROFILE_ID = "math-agent-preview-v1"
+_PROFILE_ID = "math-agent-preview-v2"
 _ENGINE = "ts"
 _MODE = "TS_PREVIEW"
 _POLICIES = ("BEST_EFFORT", "STRICT")
@@ -60,7 +63,8 @@ _CONTROL_TRACE_IDS = ("control",)
 _SUMMARY_FIELDS = (
     "mode", "targetEnvironment", "sessionId", "status", "finalResponse",
     "candidateVerified", "strictAcceptance", "policy", "reason", "modelCalls",
-    "effectCalls", "workUnits", "reviewCalls", "stopReason",
+    "effectCalls", "workUnits", "reviewCalls", "catalogCalls", "methodLoads",
+    "stopReason",
 )
 _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
 
@@ -108,6 +112,8 @@ class AgentHost(_Host):
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
                  options, client):
+        if manifest.get("protocolVersion") != AGENT_HOST_VERSION:
+            _fail()
         super().__init__(manifest, session_id, None, deadline)
         if not isinstance(problem, str) or not problem.strip():
             _fail()
@@ -119,12 +125,16 @@ class AgentHost(_Host):
             _fail()
         _exact_keys(
             options,
-            ("maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews", "policy"),
+            (
+                "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
+                "maxMethodLoads", "policy",
+            ),
         )
         self.max_model_calls = _bounded_int(options["maxModelCalls"], 0, _MAX_MODEL_CALLS)
         self.max_work_units = _bounded_int(options["maxWorkUnits"], 1, _MAX_WORK_UNITS)
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
         self.max_reviews = _bounded_int(options["maxReviews"], 0, _MAX_REVIEWS)
+        self.max_method_loads = _bounded_int(options["maxMethodLoads"], 0, _MAX_METHOD_LOADS)
         if options["policy"] not in _POLICIES:
             _fail()
         self.policy = options["policy"]
@@ -137,6 +147,11 @@ class AgentHost(_Host):
         self.model_requests = 0
         self.effect_calls = 0
         self.review_calls = 0
+        self.catalog_calls = 0
+        self.method_loads = 0
+        self.catalog = None
+        self.method_assets = []
+        self.method_catalog = None
         self.initial_client_calls = client.calls
         self.initial_client_records = len(client.snapshot())
         self.stopped = False
@@ -182,7 +197,7 @@ class AgentHost(_Host):
 
     def on_request(self, message):
         method = message["method"]
-        if method not in ("model.generate", "tool.execute"):
+        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load"):
             _fail()
         if self.expected is None or self.expected != (_HOST_SOLVE_ID, "session.solve"):
             _fail()
@@ -195,12 +210,72 @@ class AgentHost(_Host):
         if method == "model.generate":
             self.on_model(message["id"], params)
             return
+        if method == "method.catalog":
+            self.on_catalog(message["id"], params)
+            return
+        if method == "method.load":
+            self.on_effect(message["id"], params, "method.load")
+            return
         self.on_tool(message["id"], params)
+
+    def _methods_enabled(self):
+        return (
+            self.max_method_loads == 1
+            and self.max_effects > 0
+            and self.max_model_calls >= 2 + self.max_reviews
+        )
+
+    def on_catalog(self, frame_id, params):
+        if not self._methods_enabled():
+            _fail()
+        if self.catalog_calls != 0 or self.model_requests != 0:
+            _fail()
+        if frame_id != "node-catalog-1":
+            _fail()
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            _fail()
+        remaining = params["remainingMs"]
+        if not _is_int(remaining) or remaining < _MIN_REMAINING_MS + 1 or remaining > _MAX_REMAINING_MS:
+            _fail()
+        now = time.monotonic()
+        if min(self.deadline, now + remaining / 1000.0) <= now:
+            _fail()
+        self.deadline = min(self.deadline, now + remaining / 1000.0)
+        self.catalog_calls = 1
+        try:
+            from mathagent.lite.methods import MethodCatalog
+
+            self.method_catalog = MethodCatalog()
+            catalog = checked_catalog(fixture_catalog(self.method_catalog))
+        except Exception:  # noqa: BLE001 - an unavailable catalog is not a failure
+            self.method_catalog = None
+            catalog = {"version": "1.1.0", "entries": []}
+        self.catalog = copy.deepcopy(catalog)
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            self.stopped = True
+        self.callback_done = False
+        self.send(
+            self.proc,
+            {
+                "jsonrpc": "2.0",
+                "id": frame_id,
+                "result": {
+                    **self._common(),
+                    "remainingMs": self.remaining_ms(),
+                    "catalog": copy.deepcopy(catalog),
+                },
+            },
+            "method.catalog",
+        )
+        self.pending_is_callback = True
 
     def on_model(self, frame_id, params):
         ordinal = self.model_requests + 1
         if ordinal > self.max_model_calls:
             _fail()
+        if self.model_requests == 0 and self._methods_enabled():
+            if self.catalog_calls != 1 or not self.callback_done:
+                _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail()
         request = params["request"]
@@ -227,8 +302,44 @@ class AgentHost(_Host):
             _fail()
         body = validate_context(
             request, self.problem, self.session_id, self.problem_hash,
-            self.history, self.effects,
+            self.history, self.effects, self.catalog, self.method_assets,
         )
+        if request["phase"] == "WORK":
+            reserve_ok = self.max_model_calls - self.model_requests >= 2 + self.max_reviews
+            task_id = request["taskId"]
+            cached_tool = any(
+                isinstance(entry, dict)
+                and isinstance(entry.get("request"), dict)
+                and isinstance(entry["request"].get("binding"), dict)
+                and entry["request"]["binding"].get("taskId") == task_id
+                and entry["request"].get("action", {}).get("action") == "tool"
+                for entry in self.effects
+            )
+            cached_method = any(
+                isinstance(entry, dict)
+                and isinstance(entry.get("request"), dict)
+                and isinstance(entry["request"].get("binding"), dict)
+                and entry["request"]["binding"].get("taskId") == task_id
+                and entry["request"].get("action", {}).get("action") == "method"
+                for entry in self.effects
+            )
+            allow_tools = reserve_ok and (
+                self.effect_calls < self._effect_budget() or cached_tool
+            )
+            allow_methods = (
+                reserve_ok
+                and self.catalog is not None
+                and bool(self.catalog["entries"])
+                and (
+                    (self.method_loads < self.max_method_loads
+                     and self.effect_calls < self._effect_budget())
+                    or cached_method
+                )
+            )
+            if body["allowTools"] is not allow_tools:
+                _fail()
+            if body["allowMethods"] is not allow_methods:
+                _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail()
         deadline = min(self.deadline, time.monotonic() + request["remainingMs"] / 1000.0)
@@ -275,6 +386,9 @@ class AgentHost(_Host):
         self.pending_is_callback = True
 
     def on_tool(self, frame_id, params):
+        self.on_effect(frame_id, params, "tool.execute")
+
+    def on_effect(self, frame_id, params, wire_method):
         record = self._last_model()
         if record is None:
             _fail()
@@ -292,12 +406,23 @@ class AgentHost(_Host):
         body = _parse_inner(record["request"]["messages"][1]["content"])
         if not isinstance(body, dict):
             _fail()
-        if body.get("allowTools") is not True:
-            _fail()
         binding = self._binding(self.last_model_id)
         action = parse_action(record["receipt"]["text"], binding)
-        if action["action"] != "tool":
+        expected_kind = "method" if wire_method == "method.load" else "tool"
+        if action["action"] != expected_kind:
             _fail()
+        if expected_kind == "method":
+            if body.get("allowMethods") is not True:
+                _fail()
+            if self.max_method_loads != 1 or self.method_loads >= _MAX_METHOD_LOADS:
+                _fail()
+            if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
+                _fail()
+            if not any(entry["id"] == action["id"] for entry in self.catalog["entries"]):
+                _fail()
+        else:
+            if body.get("allowTools") is not True:
+                _fail()
         effect_request = validate_request(params["request"])
         if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
             _fail()
@@ -307,13 +432,29 @@ class AgentHost(_Host):
             _fail()
         if not same_json(effect_request["action"], action):
             _fail()
+        source_id = effect_request["binding"]["sourceRequestId"]
+        for entry in self.effects:
+            if (
+                isinstance(entry, dict)
+                and isinstance(entry.get("request"), dict)
+                and isinstance(entry["request"].get("binding"), dict)
+                and entry["request"]["binding"].get("sourceRequestId") == source_id
+            ):
+                _fail()
         bound = copy.deepcopy(effect_request)
         bound["remainingMs"] = min(effect_request["remainingMs"], self.remaining_ms())
         if bound["remainingMs"] < _MIN_REMAINING_MS + 1:
             _fail()
         self.effect_calls += 1
+        if expected_kind == "method":
+            self.method_loads += 1
         try:
-            result = perform_effect(bound, root_deadline=self.deadline)
+            if expected_kind == "method":
+                result = perform_effect(
+                    bound, root_deadline=self.deadline, catalog=self.method_catalog,
+                )
+            else:
+                result = perform_effect(bound, root_deadline=self.deadline)
         except Exception:  # noqa: BLE001 - an unknown outcome is never a proof
             result = failure_receipt(bound, "UNKNOWN", "UNKNOWN_OUTCOME")
         try:
@@ -325,6 +466,18 @@ class AgentHost(_Host):
         if self.remaining_ms() <= _MIN_REMAINING_MS and checked["status"] != "UNKNOWN":
             checked = failure_receipt(bound, "ERROR", "DEADLINE_EXCEEDED")
         self.effects.append({"request": copy.deepcopy(bound), "receipt": copy.deepcopy(checked)})
+        if (
+            expected_kind == "method"
+            and checked["status"] == "COMPLETE"
+            and checked["source"] == "METHOD_REFERENCE"
+            and self.catalog is not None
+        ):
+            asset = self._method_asset(checked, action["id"])
+            if asset is None:
+                checked = failure_receipt(bound, "UNKNOWN", "UNKNOWN_OUTCOME")
+                self.effects[-1]["receipt"] = copy.deepcopy(checked)
+            elif not any(item["id"] == asset["id"] for item in self.method_assets):
+                self.method_assets.append(asset)
         if checked["status"] == "UNKNOWN":
             self.stopped = True
             self.client.blocked = True
@@ -340,9 +493,62 @@ class AgentHost(_Host):
                     "remainingMs": self.remaining_ms(),
                 },
             },
-            "tool.execute",
+            wire_method,
         )
         self.pending_is_callback = True
+
+    def _method_asset(self, checked, method_id):
+        """Strictly re-check one METHOD_REFERENCE observation; None on failure."""
+        try:
+            observation = _parse_inner(checked["observation"])
+            if not isinstance(observation, dict):
+                return None
+            if set(observation.keys()) != {"method", "asset", "interpretation"}:
+                return None
+            if observation["method"] != method_id:
+                return None
+            if observation["interpretation"] != "ADVISORY_NOT_PROOF":
+                return None
+            asset = observation["asset"]
+            if not isinstance(asset, dict):
+                return None
+            if set(asset.keys()) != {
+                "id", "title", "version", "body", "bodySha256", "bodyChars",
+            }:
+                return None
+            if asset["id"] != method_id:
+                return None
+            title = None
+            for entry in self.catalog["entries"]:
+                if entry["id"] == method_id:
+                    title = entry["title"]
+                    break
+            if title is None or asset["title"] != title:
+                return None
+            if asset["version"] != self.catalog["version"]:
+                return None
+            body = asset["body"]
+            if not isinstance(body, str) or not body.strip():
+                return None
+            try:
+                body.encode("utf-8", errors="strict")
+            except UnicodeEncodeError:
+                return None
+            if not _is_int(asset["bodyChars"]) or asset["bodyChars"] != len(body):
+                return None
+            digest = asset["bodySha256"]
+            if not isinstance(digest, str) or len(digest) != 64:
+                return None
+            for ch in digest:
+                if ch not in "0123456789abcdef":
+                    return None
+            import hashlib
+
+            if hashlib.sha256(body.encode("utf-8")).hexdigest() != digest:
+                return None
+            return copy.deepcopy(asset)
+        except Exception:  # noqa: BLE001 - a malformed asset is never cached
+            return None
 
     # -- outbound results -------------------------------------------------
 
@@ -413,6 +619,12 @@ class AgentHost(_Host):
         if not _is_int(summary["reviewCalls"]) or summary["reviewCalls"] != self.review_calls:
             _fail()
         if summary["reviewCalls"] > self.max_reviews:
+            _fail()
+        if not _is_int(summary["catalogCalls"]) or summary["catalogCalls"] != self.catalog_calls:
+            _fail()
+        if not _is_int(summary["methodLoads"]) or summary["methodLoads"] != self.method_loads:
+            _fail()
+        if summary["methodLoads"] > self.max_method_loads:
             _fail()
         if not isinstance(summary["finalResponse"], str) or not summary["finalResponse"]:
             _fail()

@@ -10,6 +10,8 @@ import {
   p4Hash,
   type AgentModelReceipt,
   type AgentModelRequest,
+  type P2MethodAsset,
+  type P2MethodCatalog,
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
@@ -26,6 +28,53 @@ export interface ReactivePorts {
   readonly effect: { execute(request: P3EffectRequest): Promise<P3EffectReceipt> };
   readonly requests: AgentModelRequest[];
   readonly effects: P3EffectRequest[];
+}
+
+/** One synthetic 20-entry catalog with legal ids `method-0`..`method-19`. */
+export function syntheticCatalog(): P2MethodCatalog {
+  const entries = Array.from({ length: 20 }, (_unused, index) => ({
+    id: `method-${index}`,
+    title: `Method ${index}`,
+  }));
+  return { version: "1.1.0", entries };
+}
+
+/** One synthetic asset whose body/hash/chars are internally consistent. */
+export function syntheticAsset(id: string, title: string, body = "asset advisory"): P2MethodAsset {
+  return {
+    id,
+    title,
+    version: "1.1.0",
+    body,
+    bodySha256: p4Hash(body),
+    bodyChars: [...body].length,
+  };
+}
+
+/** One complete METHOD_REFERENCE receipt bound to the request it answers. */
+export function methodEffect(
+  request: P3EffectRequest,
+  catalog: P2MethodCatalog,
+  asset?: P2MethodAsset,
+): P3EffectReceipt {
+  const id = request.action.action === "method" ? request.action.id : "";
+  const title = catalog.entries.find((entry) => entry.id === id)?.title ?? "";
+  const body = asset ?? syntheticAsset(id, title);
+  const observation = JSON.stringify({
+    method: id,
+    asset: body,
+    interpretation: "ADVISORY_NOT_PROOF",
+  });
+  return {
+    effectId: request.effectId,
+    binding: request.binding,
+    status: "COMPLETE",
+    source: "METHOD_REFERENCE",
+    observation,
+    observationHash: p4Hash(observation),
+    level: "PROVISIONAL",
+    checkResult: "UNKNOWN",
+  };
 }
 
 interface WorkBody {
