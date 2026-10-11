@@ -119,8 +119,17 @@ export function parseP4ReviewReport(
   requestId: string,
   target: P4Target,
   contract: P2Contract,
+  firstRequestOrdinal = 2,
 ): P4ReviewReport {
   try {
+    if (
+      typeof firstRequestOrdinal !== "number" ||
+      !Number.isSafeInteger(firstRequestOrdinal) ||
+      firstRequestOrdinal < 2 ||
+      firstRequestOrdinal > 4
+    ) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
     if (typeof rawtext !== "string" || !detectLoneSurrogates(rawtext).ok) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
@@ -161,7 +170,15 @@ export function parseP4ReviewReport(
     if (report.stage !== "R2") {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
-    if (requestId !== "model-2" && requestId !== "model-3") {
+    const lastAllowed = Math.min(firstRequestOrdinal + 1, 4);
+    let ordinalOk = false;
+    for (let ordinal = firstRequestOrdinal; ordinal <= lastAllowed; ordinal += 1) {
+      if (requestId === `model-${ordinal}`) {
+        ordinalOk = true;
+        break;
+      }
+    }
+    if (!ordinalOk) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (report.requestId !== requestId) {

@@ -73,13 +73,18 @@ function boundedInt(value: unknown, min: number, max: number): number {
 export class P3EffectGate {
   private readonly base: Omit<P3Binding, "sourceRequestId">;
   private readonly maxEffects: number;
+  private readonly firstEffectOrdinal: number;
   private readonly records: P3EffectRecord[] = [];
   private readonly cache = new Map<string, P3EffectReceipt>();
   private readonly usedSources = new Set<string>();
   private methodAttempts = 0;
   private unknown = false;
 
-  constructor(base: Omit<P3Binding, "sourceRequestId">, maxEffects: number = P3_MAX_EFFECTS) {
+  constructor(
+    base: Omit<P3Binding, "sourceRequestId">,
+    maxEffects: number = P3_MAX_EFFECTS,
+    firstEffectOrdinal: number = 1,
+  ) {
     const bound = p3Binding({ ...p2Snapshot(base), sourceRequestId: "model-1" });
     this.base = p2Snapshot({
       sessionId: bound.sessionId,
@@ -89,6 +94,11 @@ export class P3EffectGate {
       scopeId: bound.scopeId,
     }) as Omit<P3Binding, "sourceRequestId">;
     this.maxEffects = boundedInt(maxEffects, 0, P3_MAX_EFFECTS);
+    const first = boundedInt(firstEffectOrdinal, 1, P3_MAX_EFFECTS);
+    if (first + this.maxEffects - 1 > P3_MAX_EFFECTS) {
+      fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+    this.firstEffectOrdinal = first;
   }
 
   private bindingOf(sourceRequestId: string): P3Binding {
@@ -152,7 +162,7 @@ export class P3EffectGate {
         fail(P2_ERROR_CODES.BUDGET_EXHAUSTED);
       }
     }
-    const effectId = `effect-${this.records.length + 1}`;
+    const effectId = `effect-${this.firstEffectOrdinal + this.records.length}`;
     const request = p3EffectRequest({
       effectId,
       binding: this.bindingOf(bound.sourceRequestId),

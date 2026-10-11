@@ -86,8 +86,20 @@ export class P4RecheckModelGate {
   /**
    * Admit one call for a RUNNING task. The task snapshot must be fully bound to
    * this gate; its input refs are carried, never interpreted.
+   *
+   * `phase` defaults to `WORK`, which keeps the original RUNNING-only rule. An
+   * explicit `R2` admits a real DELIVERED task as well, so a review of an
+   * already delivered artifact never has to be faked as RUNNING.
    */
-  admit(task: P2Task, requestId: string, remainingMs: number): P2ModelPermit {
+  admit(
+    task: P2Task,
+    requestId: string,
+    remainingMs: number,
+    phase: "WORK" | "R2" = "WORK",
+  ): P2ModelPermit {
+    if (phase !== "WORK" && phase !== "R2") {
+      throw new P2Error("PACKET_BINDING");
+    }
     if (typeof task !== "object" || task === null) {
       throw new P2Error("PACKET_BINDING");
     }
@@ -124,8 +136,12 @@ export class P4RecheckModelGate {
       }
     }
 
+    const deliveryOk =
+      phase === "R2"
+        ? frozen.delivery === "RUNNING" || frozen.delivery === "DELIVERED"
+        : frozen.delivery === "RUNNING";
     if (
-      frozen.delivery !== "RUNNING" ||
+      !deliveryOk ||
       envelope.sourceModule !== "M1" ||
       envelope.sessionId !== this.sessionId ||
       envelope.problemHash !== this.problemHash ||
