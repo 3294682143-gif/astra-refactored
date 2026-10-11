@@ -59,8 +59,9 @@ availability to STALE, never REFUTED, and preserves its historical identity.
 
 A subsequent [post-repair review library](P4_REPAIR_RECHECK.md) consumes
 these records without mutating them. Its model opinion cannot resolve the
-original challenge or replace the protected parent, and its fourth-call
-workflow composition has not yet been accepted.
+original challenge or replace the protected parent. A separate
+[shared-root workflow](P4_RECHECK_WORKFLOW.md) now supports an explicitly
+enabled fourth call in offline fixtures; this three-step fixture is unchanged.
 
 `P4RepairSession` requires an ACTIVE parent and an actual ACTIVE/CHALLENGED R2
 challenge supplied by the controller. It rechecks version/hash/scope binding,

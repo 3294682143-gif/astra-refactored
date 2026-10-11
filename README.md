@@ -83,9 +83,11 @@ default entry are unchanged; formal integration remains pending.
 
 The [S2 post-repair review libraries](docs/P4_REPAIR_RECHECK.md) bind a
 three-dimensional model opinion to the original challenge and exact parent/
-child repair records. They preserve the protected parent and unresolved
-challenge. Fourth-call workflow integration and mathematical verification
-remain pending; the existing three-call cap is unchanged.
+child repair records. The [shared-root offline workflow](docs/P4_RECHECK_WORKFLOW.md)
+now supports an explicitly enabled fourth review call while preserving the
+protected parent and unresolved challenge. Its defaults remain three calls
+and no recheck; the old gate and Host budgets are unchanged. Mathematical
+verification and formal-client integration remain pending.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

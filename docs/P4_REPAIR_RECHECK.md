@@ -1,5 +1,10 @@
 # P4 S2 post-repair model review — independent libraries
 
+Historical library-slice record: a subsequent
+[shared-root offline four-step workflow](P4_RECHECK_WORKFLOW.md) is now
+accepted with explicit opt-in. The old gate and existing workflows are
+unchanged; formal-client integration and mathematical verification are absent.
+
 This increment adds a strict report protocol, material validator, parser and
 single-review session for a repair proposal. It does not add a fourth call
 to an existing workflow. P2ModelGate still caps model calls at three, and all

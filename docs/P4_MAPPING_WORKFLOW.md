@@ -82,8 +82,8 @@ ran verification. The historical withheld draft remains preserved outside
 the repository. Its incorrect output-field assertions, clock expectations
 and non-JSON handling are not treated as passing historical results.
 
-The [S2 post-repair review libraries](P4_REPAIR_RECHECK.md) are independently
-accepted; next is their shared-budget workflow composition.
+The [S2 post-repair review libraries](P4_REPAIR_RECHECK.md) and their
+[shared-budget offline workflow](P4_RECHECK_WORKFLOW.md) are accepted.
 R0/R1, semantic verification, authorized
 candidate replacement, dependency reopening, Host/formal-client integration,
 durable responsibility and target/default-switch acceptance remain pending.
