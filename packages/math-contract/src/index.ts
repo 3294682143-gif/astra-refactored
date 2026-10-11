@@ -24,6 +24,7 @@ export * from "./p2-ledger.js";
 export * from "./p4-r0.js";
 export * from "./p4-r0-revision-report.js";
 export * from "./p4-r0-revision-session.js";
+export * from "./p4-r0-recheck.js";
 
 /** The single obligation this phase records; it stays OPEN. */
 export const ANSWER_REQUEST_OBLIGATION: P1Obligation = Object.freeze({

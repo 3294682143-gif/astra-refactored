@@ -101,7 +101,14 @@ one restricted leaf goal-kind change report to an actual ISSUES review and
 apply it only to a private M1 ledger. The child preserves REOPENED obligations
 and requires new review; it cannot activate or inherit its parent's opinion.
 These libraries are not wired into the existing workflow or its planning
-allowance. Revised-plan review and shared-root revision/fallback remain pending.
+allowance. The follow-up review libraries are described below; shared-root
+revision/fallback remains pending.
+
+The [revised-plan review libraries](docs/P4_R0_REVISED_REVIEW.md) now add M1
+replay-bound preparation and an isolated M4 model-3 review of the actual child,
+including its REOPENED states. Even NO_ISSUE cannot activate the plan or satisfy
+obligations. Shared-root revision/recheck/work and fallback integration remain
+pending; this is an offline library increment, not a default-engine change.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

@@ -1106,3 +1106,4 @@ export * from "./p4-mapping.js";
 export * from "./p4-recheck.js";
 export * from "./p4-r0.js";
 export * from "./p4-r0-revision.js";
+export * from "./p4-r0-recheck.js";

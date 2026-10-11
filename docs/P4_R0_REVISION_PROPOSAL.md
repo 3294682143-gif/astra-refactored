@@ -1,5 +1,9 @@
 # P4 R0 bounded goal-kind revision proposal libraries
 
+Historical proposal-slice record: the subsequent
+[revised-plan review libraries](P4_R0_REVISED_REVIEW.md) are now available.
+Shared-root revision/recheck/work and fallback integration remain pending.
+
 This library slice follows the [R0/work offline workflow](P4_R0_WORKFLOW.md).
 It does not connect revision to that workflow or any Host/client. Existing
 runtime budgets, defaults, Python entry, dependencies and resources are unchanged.
