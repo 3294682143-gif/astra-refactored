@@ -74,9 +74,10 @@ def run_p2_host(
         raise ProbeError("FIELD_VALUE")
     if not math.isfinite(timeout) or not 0 < timeout <= _MAX_TIMEOUT:
         raise ProbeError("FIELD_VALUE")
-    for value in (max_model_calls, max_method_loads):
-        if isinstance(value, bool) or not isinstance(value, int) or value not in (0, 1):
-            raise ProbeError("FIELD_VALUE")
+    if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or not 0 <= max_model_calls <= 3:
+        raise ProbeError("FIELD_VALUE")
+    if isinstance(max_method_loads, bool) or not isinstance(max_method_loads, int) or not 0 <= max_method_loads <= 1:
+        raise ProbeError("FIELD_VALUE")
     method_id = _canonical_method_id(method_id)
     if script is None:
         script = _default_script()
@@ -89,7 +90,7 @@ def run_p2_host(
         manifest = load_manifest()
     except ProtocolError as exc:
         raise ProbeError(exc.code)
-    client = OfflineP2Client(reply, delivery_status)
+    client = OfflineP2Client(reply, delivery_status, max_calls=max_model_calls)
     problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
     session_id = uuid.uuid4().hex
     host = P2HostCallback(

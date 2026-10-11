@@ -9,6 +9,7 @@
 import type { P1AdmissionDecision } from "@astra/protocol";
 
 export const MATH_GATEWAY_VERSION = "0.0.0-p1" as const;
+export * from "./p2-gate.js";
 
 /** Below this remaining time the call is refused rather than started. */
 export const MIN_REMAINING_MS = 25 as const;

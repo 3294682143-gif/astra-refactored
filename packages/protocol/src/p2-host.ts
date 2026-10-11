@@ -19,7 +19,7 @@ import {
   type ManifestMethod,
 } from "./index.js";
 
-export const P2_HOST_VERSION = "1.0-p2-host-local";
+export const P2_HOST_VERSION = "1.1-p2-host-local";
 export type P2HostVersion = typeof P2_HOST_VERSION;
 
 /** The six methods of this local Host slice, in fixed order. */

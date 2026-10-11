@@ -165,7 +165,7 @@ def test_invalid_timeout_rejected_before_spawn(tracker, timeout):
 @pytest.mark.parametrize("kwargs", [
     {"max_model_calls": 1.0},
     {"max_model_calls": True},
-    {"max_model_calls": 2},
+    {"max_model_calls": 4},
     {"max_method_loads": 1.0},
     {"max_method_loads": 2},
 ])

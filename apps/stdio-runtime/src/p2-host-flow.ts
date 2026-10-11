@@ -7,13 +7,16 @@
  */
 import {
   P2Error,
+  P2_HOST_VERSION,
   p2HostPayload,
+  parseP2HostFrame,
   type JsonRpcMessage,
   type P2HostManifest,
   type P2HostMethod,
   type P2MethodCatalog,
   type P2MethodLoad,
 } from "@astra/protocol";
+import { P2ModelGate } from "@astra/math-gateway";
 import { P2HostWork } from "./p2-host-work.js";
 
 const INIT_ID = "host-1";
@@ -21,8 +24,6 @@ const SOLVE_ID = "host-2";
 const STOP_ID = "host-3";
 const CATALOG_ID = "node-catalog-1";
 const METHOD_ID = "node-method-1";
-const MODEL_ID = "node-model-1";
-const REQUEST_ID = "model-1";
 const RESERVE_MS = 25;
 const MAX_TOKENS = 8192;
 const TEMPERATURE = "0.2";
@@ -54,6 +55,9 @@ export class P2HostFlow {
   private maxMethodLoads = 0;
   private methodId: string | null = null;
   private work: P2HostWork | null = null;
+  private gate: P2ModelGate | null = null;
+  private pendingRequestId: string | null = null;
+  private lastContextHash: string | null = null;
   private modelCalls = 0;
   private methodLoads = 0;
 
@@ -117,7 +121,7 @@ export class P2HostFlow {
       case "load":
         return METHOD_ID;
       case "model":
-        return MODEL_ID;
+        return `node-${this.pendingRequestId ?? ""}`;
       default:
         return STOP_ID;
     }
@@ -147,7 +151,7 @@ export class P2HostFlow {
         jsonrpc: "2.0",
         id,
         result: {
-          protocolVersion: "1.0-p2-host-local",
+          protocolVersion: P2_HOST_VERSION,
           sessionId,
           mode: "MOCK_ONLY",
           targetEnvironment: "TARGET_UNVERIFIED",
@@ -172,6 +176,7 @@ export class P2HostFlow {
     }
     this.methodId = methodId;
     this.work = new P2HostWork(problem, sessionId, problemHash);
+    this.gate = new P2ModelGate(sessionId, problemHash, 1, this.maxModelCalls);
     if (this.io.remainingMs() <= RESERVE_MS || this.maxModelCalls === 0) {
       this.finish(id);
       return;
@@ -183,7 +188,7 @@ export class P2HostFlow {
           jsonrpc: "2.0",
           id: CATALOG_ID,
           method: "method.catalog",
-          params: { protocolVersion: "1.0-p2-host-local", sessionId },
+          params: { protocolVersion: P2_HOST_VERSION, sessionId },
         },
         "method.catalog",
       );
@@ -217,7 +222,7 @@ export class P2HostFlow {
           id: METHOD_ID,
           method: "method.load",
           params: {
-            protocolVersion: "1.0-p2-host-local",
+            protocolVersion: P2_HOST_VERSION,
             sessionId: this.sessionId,
             methodId,
           },
@@ -259,9 +264,10 @@ export class P2HostFlow {
       this.finish(SOLVE_ID);
       return;
     }
+    const id = `model-${this.modelCalls + 1}`;
     let prepared;
     try {
-      prepared = work.prepare();
+      prepared = work.prepare(id);
     } catch (error) {
       if (error instanceof P2Error) {
         this.finish(SOLVE_ID);
@@ -273,29 +279,55 @@ export class P2HostFlow {
       this.finish(SOLVE_ID);
       return;
     }
-    this.modelCalls += 1;
-    this.phase = "model";
-    this.io.send(
-      {
-        jsonrpc: "2.0",
-        id: MODEL_ID,
-        method: "model.generate",
-        params: {
-          protocolVersion: "1.0-p2-host-local",
-          sessionId: this.sessionId,
-          requestId: REQUEST_ID,
-          problemHash: work.contract.problemHash,
-          contractVersion: work.contract.contractVersion,
-          taskId: work.task.taskId,
-          scopeId: work.task.scopeId,
-          contextHash: prepared.contextHash,
-          maxTokens: MAX_TOKENS,
-          temperature: TEMPERATURE,
-          messages: prepared.messages,
-        },
+    const frame: JsonRpcMessage = {
+      jsonrpc: "2.0",
+      id: `node-${id}`,
+      method: "model.generate",
+      params: {
+        protocolVersion: P2_HOST_VERSION,
+        sessionId: this.sessionId,
+        requestId: id,
+        problemHash: work.contract.problemHash,
+        contractVersion: work.contract.contractVersion,
+        taskId: work.task.taskId,
+        scopeId: work.task.scopeId,
+        contextHash: prepared.contextHash,
+        maxTokens: MAX_TOKENS,
+        temperature: TEMPERATURE,
+        messages: prepared.messages,
       },
-      "model.generate",
-    );
+    };
+    try {
+      this.bound("model.generate", "params", frame.params);
+      parseP2HostFrame(Buffer.from(JSON.stringify(frame), "utf8"), this.manifest);
+    } catch (error) {
+      if (
+        error instanceof P2Error ||
+        (error instanceof Error &&
+          ["FRAME_TOO_LARGE", "DEPTH_EXCEEDED", "BOUND_EXCEEDED"].includes(error.message))
+      ) {
+        this.finish(SOLVE_ID);
+        return;
+      }
+      throw error;
+    }
+    const gate = this.gate;
+    if (gate === null) fail("FIELD_VALUE");
+    try {
+      gate.admit(work.task, id, this.io.remainingMs());
+      gate.markDispatched(id);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        this.finish(SOLVE_ID);
+        return;
+      }
+      throw error;
+    }
+    this.modelCalls += 1;
+    this.pendingRequestId = id;
+    this.lastContextHash = prepared.contextHash;
+    this.phase = "model";
+    this.io.send(frame, "model.generate");
   }
 
   private onModel(id: string, params: Record<string, unknown>): void {
@@ -304,17 +336,17 @@ export class P2HostFlow {
     const work = this.work;
     if (work === null) fail("FIELD_VALUE");
     const remainingMs = params["remainingMs"];
+    const requestId = params["requestId"];
     const deliveryStatus = params["deliveryStatus"];
     const text = params["text"];
+    if (typeof requestId !== "string") fail("FIELD_VALUE");
+    if (requestId !== this.pendingRequestId) fail("ID_MISMATCH");
     if (typeof remainingMs !== "number" || typeof deliveryStatus !== "string") fail("FIELD_VALUE");
     if (typeof text !== "string") fail("FIELD_VALUE");
-    this.io.tighten(remainingMs);
-    if (this.io.remainingMs() <= RESERVE_MS) {
-      this.finish(SOLVE_ID);
-      return;
-    }
+    const gate = this.gate;
+    if (gate === null) fail("FIELD_VALUE");
     try {
-      work.accept(deliveryStatus as never, text);
+      gate.settle(requestId, deliveryStatus as never);
     } catch (error) {
       if (error instanceof P2Error) {
         this.finish(SOLVE_ID);
@@ -322,7 +354,35 @@ export class P2HostFlow {
       }
       throw error;
     }
-    if (this.io.remainingMs() <= RESERVE_MS) work.invalidateLatest();
+    this.pendingRequestId = null;
+    this.io.tighten(remainingMs);
+    if (this.io.remainingMs() <= RESERVE_MS) {
+      this.finish(SOLVE_ID);
+      return;
+    }
+    try {
+      work.accept(deliveryStatus as never, text, requestId);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        this.finish(SOLVE_ID);
+        return;
+      }
+      throw error;
+    }
+    if (this.io.remainingMs() <= RESERVE_MS) {
+      work.invalidateLatest();
+      this.finish(SOLVE_ID);
+      return;
+    }
+    if (
+      deliveryStatus === "COMPLETE" &&
+      work.deliveryStatus === "COMPLETE" &&
+      this.modelCalls < this.maxModelCalls &&
+      work.advance()
+    ) {
+      this.model();
+      return;
+    }
     this.finish(SOLVE_ID);
   }
 
@@ -335,9 +395,10 @@ export class P2HostFlow {
         jsonrpc: "2.0",
         id,
         result: {
-          protocolVersion: "1.0-p2-host-local",
+          protocolVersion: P2_HOST_VERSION,
           sessionId: this.sessionId,
           ...work.summary(this.modelCalls, this.methodLoads),
+          contextHash: this.lastContextHash,
         },
       },
       "session.solve",
@@ -351,7 +412,12 @@ export class P2HostFlow {
     this.io.stop({
       jsonrpc: "2.0",
       id,
-      result: { protocolVersion: "1.0-p2-host-local", sessionId: this.sessionId, stopped: true },
+      result: { protocolVersion: P2_HOST_VERSION, sessionId: this.sessionId, stopped: true },
     });
+  }
+
+  /** Frozen gate record view for pure flow tests; never sent on the wire. */
+  gateSnapshot(): readonly unknown[] {
+    return this.gate === null ? [] : this.gate.snapshot();
   }
 }

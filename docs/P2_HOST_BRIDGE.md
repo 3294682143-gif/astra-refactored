@@ -1,4 +1,10 @@
-# P2 local Host bridge: one work unit, optional method card
+# P2 local Host bridge
+
+The original single-unit acceptance milestone is recorded below. The current
+[multi-unit increment](P2_MULTI_WORKUNIT.md) upgrades the local protocol to
+`1.1-p2-host-local`, allows 0..3 sequential mock calls (default 1), and adds
+`candidateRequestId`. All single-call examples still work with matching current
+Host/Node versions; old 1.0 frames are rejected rather than silently widened.
 
 This opt-in slice connects a real Python Host to a real Node child process.
 It does not enable a production model provider, competition client, arbitrary

@@ -94,7 +94,7 @@ def _exact_keys(value, keys):
         _fail()
 
 
-def strict_context(messages, params, problem, session_id, problem_hash, allowed_asset=None):
+def strict_context(messages, params, problem, session_id, problem_hash, allowed_asset=None, history=None):
     """Validate the two-message fixture context against the Host request.
 
     The inner user JSON is parsed with the shared P0 strict helpers; the
@@ -154,9 +154,11 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
     version = inner["contractVersion"]
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         _fail()
-    if params.get("contractVersion") != 1:
+    if isinstance(params.get("contractVersion"), bool) or params.get("contractVersion") != 1:
         _fail()
-    if inner["sourceRequestId"] != _REQUEST_ID:
+    if inner["sourceRequestId"] != params.get("requestId"):
+        _fail()
+    if params.get("requestId") not in ("model-1", "model-2", "model-3"):
         _fail()
     task = inner["task"]
     _exact_keys(
@@ -180,7 +182,7 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
         _fail()
     if task["delivery"] != "RUNNING":
         _fail()
-    if not isinstance(task["inputArtifactRefs"], list) or task["inputArtifactRefs"]:
+    if not isinstance(task["inputArtifactRefs"], list):
         _fail()
     if not isinstance(task["dependencyTaskIds"], list):
         _fail()
@@ -195,7 +197,7 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
         _fail()
     if envelope.get("problemHash") != problem_hash:
         _fail()
-    if envelope.get("contractVersion") != version:
+    if isinstance(envelope.get("contractVersion"), bool) or envelope.get("contractVersion") != version:
         _fail()
     if envelope.get("scopeId") != task["scopeId"]:
         _fail()
@@ -215,7 +217,7 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
         _fail()
     if scope.get("scopeId") != envelope.get("scopeId"):
         _fail()
-    if not isinstance(inner["inputArtifacts"], list) or inner["inputArtifacts"]:
+    if not isinstance(inner["inputArtifacts"], list):
         _fail()
     if not isinstance(inner["obligations"], list):
         _fail()
@@ -241,13 +243,16 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
             _fail()
         if asset["bodyChars"] != len(body):
             _fail()
+    from .p2_host_dependencies import validate_inputs
+
+    validate_inputs(inner, {} if history is None else history, params["requestId"])
     return inner
 
 
 class OfflineP2Client:
     """Pure data fixture client. No sleep, no network, no thread, no tool."""
 
-    def __init__(self, reply, delivery_status="COMPLETE"):
+    def __init__(self, reply, delivery_status="COMPLETE", max_calls=1):
         if not isinstance(reply, str):
             _fail()
         length = _code_points(reply)
@@ -256,8 +261,11 @@ class OfflineP2Client:
         _strict_utf8(reply)
         if delivery_status not in _DELIVERY_STATUS:
             _fail()
+        if isinstance(max_calls, bool) or not isinstance(max_calls, int) or not 0 <= max_calls <= 3:
+            _fail()
         self._reply = reply
         self._delivery_status = delivery_status
+        self.max_calls = max_calls
         self.calls = 0
 
     @property
@@ -269,7 +277,7 @@ class OfflineP2Client:
         return self._reply
 
     def chat(self, messages, temperature=0.2, max_tokens=8192):
-        if self.calls >= 1:
+        if self.calls >= self.max_calls:
             _fail()
         if not isinstance(messages, list) or len(messages) != 2:
             _fail()
@@ -277,6 +285,8 @@ class OfflineP2Client:
         if not isinstance(user, dict) or not isinstance(user.get("content"), str):
             _fail()
         inner = _parse_inner(user["content"])
+        if inner.get("sourceRequestId") != "model-" + str(self.calls + 1):
+            _fail()
         task = inner.get("task")
         route = inner.get("route")
         scope = inner.get("scope")
@@ -296,7 +306,7 @@ class OfflineP2Client:
             "claim": "Offline fixture claim",
             "derivation": "Synthetic fixture, not a proof",
             "assumptions": [],
-            "dependencies": [],
+            "dependencies": task.get("inputArtifactRefs"),
             "pendingObligations": [],
             "suggestedChecks": [],
             "deliveryStatus": "COMPLETE",

@@ -31,7 +31,7 @@ __all__ = [
     "classify_method",
 ]
 
-P2_HOST_VERSION = "1.0-p2-host-local"
+P2_HOST_VERSION = "1.1-p2-host-local"
 P2_HOST_MANIFEST_FORMAT = "astra-p2-host-manifest-v1"
 P2_HOST_SCHEMA_DIALECT = "astra-p0-schema-subset-v1"
 

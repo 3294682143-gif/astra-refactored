@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 from .p0_probe import ProbeError, _Host
-from .p2_host_fixture import OfflineP2Client, strict_context
+from .p2_host_fixture import OfflineP2Client, _parse_inner, strict_context
 from .p2_host_protocol import P2_HOST_VERSION, payload
 
 __all__ = ["P2HostCallback"]
 
 _CATALOG_ID = "node-catalog-1"
 _METHOD_ID = "node-method-1"
-_MODEL_ID = "node-model-1"
-_REQUEST_ID = "model-1"
 _MAX_TOKENS = 8192
 _RESERVE_MS = 25
 _MAX_FRAME_BYTES = 65536
 _DELIVERY = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
+_CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 
 
 class P2HostCallback(_Host):
@@ -38,6 +38,8 @@ class P2HostCallback(_Host):
         self.catalog_entries = None
         self.solve_result = None
         self.seen = set()
+        self.history = {}
+        self.last_complete = True
 
     def public_data(self):
         return {"protocolVersion": P2_HOST_VERSION, "sessionId": self.session_id}
@@ -129,7 +131,8 @@ class P2HostCallback(_Host):
             self.send(self.proc, {"jsonrpc": "2.0", "id": _METHOD_ID, "result": result}, "method.load")
             self.pending_is_callback = True
             return
-        if message["id"] != _MODEL_ID or method in self.seen:
+        request_id = "model-" + str(self.model_calls + 1)
+        if message["id"] != "node-" + request_id:
             raise ProbeError("ID_MISMATCH")
         if self.method_id is not None and self.max_loads == 1:
             if "method.catalog" not in self.seen:
@@ -140,19 +143,23 @@ class P2HostCallback(_Host):
             if any(entry.get("id") == self.method_id for entry in entries):
                 if "method.load" not in self.seen:
                     raise ProbeError("FIELD_VALUE")
-        if self.model_calls >= self.max_calls or self.model_calls >= 1:
+        if not self.last_complete:
+            raise ProbeError("FIELD_VALUE")
+        if self.model_calls >= min(self.max_calls, 3):
             raise ProbeError("FIELD_VALUE")
         if not self._budget():
             raise ProbeError("TIMEOUT")
-        if params["requestId"] != _REQUEST_ID or params["problemHash"] != self.problem_hash:
+        if params["requestId"] != request_id or params["problemHash"] != self.problem_hash:
+            raise ProbeError("FIELD_VALUE")
+        if request_id in self.history:
             raise ProbeError("FIELD_VALUE")
         if params["contractVersion"] != 1 or params["maxTokens"] != _MAX_TOKENS:
             raise ProbeError("FIELD_VALUE")
         messages = params["messages"]
-        inner = strict_context(messages, params, self.problem, self.session_id, self.problem_hash, self.allowed_asset)
-        self.seen.add(method)
-        self.context_hash = params["contextHash"]
-        self.context_method_loaded = bool(inner["methodAssets"])
+        inner = strict_context(
+            messages, params, self.problem, self.session_id, self.problem_hash,
+            self.allowed_asset, self.history,
+        )
         self.model_calls += 1
         receipt = self.client.chat(messages, temperature=0.2, max_tokens=_MAX_TOKENS)
         if not isinstance(receipt, dict) or receipt.get("deliveryStatus") not in _DELIVERY:
@@ -160,9 +167,23 @@ class P2HostCallback(_Host):
         text = receipt.get("text")
         if not isinstance(text, str):
             raise ProbeError("FIELD_VALUE")
+        self.history[request_id] = {
+            "params": copy.deepcopy(params),
+            "receipt": copy.deepcopy(receipt),
+        }
+        self.context_hash = params["contextHash"]
+        self.context_method_loaded = bool(inner["methodAssets"])
+        self.last_complete = False
+        if receipt["deliveryStatus"] == "COMPLETE":
+            try:
+                packet = _parse_inner(text)
+            except ProbeError:
+                packet = None
+            if isinstance(packet, dict) and packet.get("deliveryStatus") == "COMPLETE":
+                self.last_complete = True
         result = {
             **self.public_data(),
-            "requestId": _REQUEST_ID,
+            "requestId": request_id,
             "mode": "MOCK_ONLY",
             "deliveryStatus": receipt["deliveryStatus"],
             "text": text,
@@ -170,7 +191,7 @@ class P2HostCallback(_Host):
         }
         payload(self.manifest, "model.generate", "result", result, self.session_id)
         self.callback_done = False
-        self.send(self.proc, {"jsonrpc": "2.0", "id": _MODEL_ID, "result": result}, "model.generate")
+        self.send(self.proc, {"jsonrpc": "2.0", "id": "node-" + request_id, "result": result}, "model.generate")
         self.pending_is_callback = True
 
     def on_result(self, message):
@@ -200,13 +221,13 @@ class P2HostCallback(_Host):
             raise ProbeError("FIELD_VALUE")
         if result["modelCalls"] != self.model_calls or result["methodLoads"] != self.method_loads:
             raise ProbeError("FIELD_VALUE")
-        if result["methodStatus"] == "LOADED" and self.allowed_asset is None:
+        if self.model_calls > 0 and result["methodStatus"] == "LOADED" and self.allowed_asset is None:
             raise ProbeError("FIELD_VALUE")
-        if self.model_calls == 1 and result["methodStatus"] == "LOADED" and not self.context_method_loaded:
+        if self.model_calls > 0 and result["methodStatus"] == "LOADED" and not self.context_method_loaded:
             raise ProbeError("FIELD_VALUE")
         if self.model_calls == 0 and result["status"] != "unsolved":
             raise ProbeError("FIELD_VALUE")
-        if self.model_calls == 1 and not self.callback_done:
+        if self.model_calls > 0 and not self.callback_done:
             raise ProbeError("FIELD_VALUE")
         if self.model_calls == 0:
             context_hash = result["contextHash"]
@@ -217,11 +238,53 @@ class P2HostCallback(_Host):
         elif result["contextHash"] != self.context_hash:
             raise ProbeError("FIELD_VALUE")
         if result["status"] == "candidate":
-            if self.client.delivery_status != "COMPLETE" or self.model_calls != 1:
+            candidate_id = result["candidateRequestId"]
+            if not isinstance(candidate_id, str) or candidate_id not in self.history:
                 raise ProbeError("FIELD_VALUE")
-            if result["artifactCount"] != 1 or result["deliveryStatus"] != "COMPLETE":
+            row = self.history[candidate_id]
+            row_params = row["params"]
+            row_receipt = row["receipt"]
+            if row_receipt.get("deliveryStatus") != "COMPLETE":
                 raise ProbeError("FIELD_VALUE")
-            if not self.client.reply.strip() or result["finalResponse"] != self.client.reply:
+            try:
+                packet = _parse_inner(row_receipt["text"])
+            except ProbeError:
                 raise ProbeError("FIELD_VALUE")
+            if not isinstance(packet, dict) or packet.get("deliveryStatus") != "COMPLETE":
+                raise ProbeError("FIELD_VALUE")
+            proposal = packet.get("candidateProposal")
+            if not isinstance(proposal, str) or not proposal.strip():
+                raise ProbeError("FIELD_VALUE")
+            if proposal != result["finalResponse"]:
+                raise ProbeError("FIELD_VALUE")
+            if packet.get("sourceRequestId") != candidate_id:
+                raise ProbeError("FIELD_VALUE")
+            if packet.get("sessionId") != self.session_id or packet.get("problemHash") != self.problem_hash:
+                raise ProbeError("FIELD_VALUE")
+            if packet.get("contractVersion") != 1:
+                raise ProbeError("FIELD_VALUE")
+            if packet.get("taskId") != row_params.get("taskId") or packet.get("scopeId") != row_params.get("scopeId"):
+                raise ProbeError("FIELD_VALUE")
+            try:
+                inner = _parse_inner(row_params["messages"][1]["content"])
+            except (ProbeError, KeyError, IndexError, TypeError):
+                raise ProbeError("FIELD_VALUE")
+            if not isinstance(inner, dict):
+                raise ProbeError("FIELD_VALUE")
+            task = inner.get("task")
+            obligations = inner.get("obligations")
+            if not isinstance(task, dict) or not isinstance(obligations, list):
+                raise ProbeError("FIELD_VALUE")
+            kinds = {
+                entry.get("kind")
+                for entry in obligations
+                if isinstance(entry, dict) and entry.get("obligationId") == task.get("obligationId")
+            }
+            if not kinds & set(_CANDIDATE_KINDS):
+                raise ProbeError("FIELD_VALUE")
+            if result["artifactCount"] < 1 or result["artifactCount"] > self.model_calls:
+                raise ProbeError("FIELD_VALUE")
+        elif result["candidateRequestId"] is not None:
+            raise ProbeError("FIELD_VALUE")
         self.solve_result = result
         self.expected = None
