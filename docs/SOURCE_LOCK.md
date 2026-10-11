@@ -80,3 +80,10 @@ source files or evidence status. Supervisor checks passed five tests using real
 temporary Git repos, including Unicode/tab paths, seed validation, conflicts,
 ref-option rejection and conservative evidence state. No test result implies
 that the mapped mathematics is already migrated.
+
+G1 evidence overlay: the `user_agent.py` / EXPLICIT_TS_ENTRY rows now cite the
+public-entry tests and target implementation commit
+`f55dc1ec3656b6c252f810123ca236751a4c58ed`. Their status remains REVIEW_REQUIRED:
+local entry progress is not full mathematical/target parity or L2 closure.
+The command above reproduces the initial G0 mapping, not this curated evidence
+overlay; never regenerate over independently recorded evidence silently.

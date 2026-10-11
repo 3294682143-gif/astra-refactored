@@ -11,5 +11,5 @@ BUDGET_TRANSPORT_RESPONSIBILITY,mathagent/runtime/.*,HOST_AUTHORITY_AND_TS_RUNTI
 VERSIONED_PROMPT_CONTEXT,mathagent/prompts/.*,M3_PROMPT_REGISTRY,apps/stdio-runtime/src/agent-loop-context.ts,L1,TS_REPLACED,REVIEW_REQUIRED,GAP,,
 WORKFLOW_RESPONSIBILITY,mathagent/workflows/.*,TS_COMPOSITION_AND_M1_M5,apps/stdio-runtime/src/agent-loop.ts,L1+L2,SPLIT,REVIEW_REQUIRED,GAP,,
 TOP_LEVEL_MATH_CONTROL,mathagent/[^/]+\.py,M1_M5_AND_HOST_SPLIT_REVIEW,apps/stdio-runtime/src/agent-loop.ts,L1+L2,SPLIT,REVIEW_REQUIRED,GAP,,
-EXPLICIT_TS_ENTRY,user_agent\.py,PYTHON_ENTRY_TS_BOOTSTRAP,user_agent.py,L1,SPLIT,REVIEW_REQUIRED,GAP,,
+EXPLICIT_TS_ENTRY,user_agent\.py,PYTHON_ENTRY_TS_BOOTSTRAP,user_agent.py,L1,SPLIT,REVIEW_REQUIRED,LOCAL_ENTRY_PASS_MATH_PARITY_GAP,tests/e2e/test_ts_entry.py;tests/e2e/test_ts_entry_safety.py,G1 local E2E PASS; target f55dc1ec3656b6c252f810123ca236751a4c58ed; formal target UNVERIFIED; no L2 closure
 A2_SAFE_SHORT_PATH,mathagent/lite/.*,M2_M3_AND_HOST_A2_INCREMENTS,apps/stdio-runtime/src/agent-loop.ts,L1,SPLIT,REVIEW_REQUIRED,GAP,,
