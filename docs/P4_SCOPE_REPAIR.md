@@ -57,6 +57,11 @@ availability to STALE, never REFUTED, and preserves its historical identity.
 
 ## S2: one explicitly unverified child proposal
 
+A subsequent [post-repair review library](P4_REPAIR_RECHECK.md) consumes
+these records without mutating them. Its model opinion cannot resolve the
+original challenge or replace the protected parent, and its fourth-call
+workflow composition has not yet been accepted.
+
 `P4RepairSession` requires an ACTIVE parent and an actual ACTIVE/CHALLENGED R2
 challenge supplied by the controller. It rechecks version/hash/scope binding,
 the codepoint quote, issue kind, obligation references and model-2 provenance.

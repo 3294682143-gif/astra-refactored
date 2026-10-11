@@ -81,6 +81,12 @@ review and a diagnostic call with protected-candidate handling for invalid
 receipts and a re-tightened dispatch window. Existing Host workflows and the
 default entry are unchanged; formal integration remains pending.
 
+The [S2 post-repair review libraries](docs/P4_REPAIR_RECHECK.md) bind a
+three-dimensional model opinion to the original challenge and exact parent/
+child repair records. They preserve the protected parent and unresolved
+challenge. Fourth-call workflow integration and mathematical verification
+remain pending; the existing three-call cap is unchanged.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.
