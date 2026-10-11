@@ -24,8 +24,11 @@ The [P2-A M1 compiler/ledger slice](docs/P2_M1_LEDGER.md) adds
 scoped obligations, dependency-aware task delivery, guarded mock acceptance and
 ordinary goal revision. The next [M3 offline library slice](docs/P2_M3_WORKUNITS.md)
 adds versioned artifacts, dependency invalidation and bounded route identities.
-**P2 and the full M3 migration are not complete.** These libraries are not yet
-wired into the P1 executable; the executable and default entry remain unchanged.
+The [P2 offline composition](docs/P2_OFFLINE_COMPOSITION.md) now joins M1 task
+delivery, M3 context/artifacts and bounded on-demand method loading, with real
+Python resource-reader integration tests. **P2 and the full M3 migration are
+not complete.** This is a separate synthetic fixture runner, not a real model
+client or new RPC stack. The P1 executable and default entry remain unchanged.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

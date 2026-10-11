@@ -14,6 +14,11 @@ Its implementation imports only the shared protocol and Node standard library,
 not another mathematical module. Composition tests use real M1/M3 public APIs.
 All P1 exports remain compatible.
 
+The later [offline composition slice](P2_OFFLINE_COMPOSITION.md) also exports
+`prepareP2Context` / `P2PreparedContext` from M3 and connects these APIs to M1 and
+the bounded method session. The acceptance figures below describe the earlier
+M3 storage milestone, not that later increment.
+
 Construct a store from a trusted M1 contract snapshot after adding its tasks.
 The snapshot and contract version are fixed for that store. Pass a trusted
 RUNNING task from M1, register a route, then accept its bounded raw receipt.
@@ -62,9 +67,10 @@ refused. Input IDs are not silently trimmed or rewritten.
 
 ## Deliberate limits
 
-No P2 scheduler/stdio integration, method-card bridge, a2 behaviour alignment,
-contract-version migration, production M5 gate or full R0/R1/R2/S1/S2/S3 is
-implemented here. Raw partial material can be inspected but automatic partial
+The later offline composition adds a bounded fixture workflow and method port,
+not a production P2 scheduler/stdio integration. a2 behaviour alignment,
+contract-version migration, production M5 gates and full R0/R1/R2/S1/S2/S3 are
+still deferred. Raw partial material can be inspected but automatic partial
 resumption is deferred. Route caps are not a root call-budget policy; there is
 no route-priority manager or dynamic route replacement. A store is in-memory,
 not an event journal, persisted recovery mechanism or authenticated service.

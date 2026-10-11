@@ -23,6 +23,7 @@ import {
 } from "@astra/protocol";
 
 export const RUNTIME_CORE_VERSION = "0.0.0-p1" as const;
+export * from "./p2-methods.js";
 
 /** Fixed admission reasons. Arbitrary text is never a reason. */
 export const ADMISSION_REASON = ["ADMITTED", "BUDGET_EXHAUSTED"] as const;

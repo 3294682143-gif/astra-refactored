@@ -66,8 +66,9 @@ contracts, not injected already-satisfied state.
   forward contracts. The subsequent [M3 library slice](P2_M3_WORKUNITS.md)
   implements versioned storage, dependency invalidation and route identities;
   it does not integrate them into the executable yet.
-- P2 fixture composition, method-card runtime bridge and a2 behaviour alignment
-  remain unfinished. Complete R0/R1/R2 and S1/S2/S3 also remain deferred.
+- The subsequent [P2 offline composition](P2_OFFLINE_COMPOSITION.md) joins the
+  public M1/M3 APIs and an on-demand method port. Formal Host RPC integration,
+  a2 behaviour alignment and full R0/R1/R2/S1/S2/S3 remain deferred.
 
 ## Actual acceptance evidence
 
