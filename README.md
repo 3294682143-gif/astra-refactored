@@ -60,6 +60,13 @@ catalog callback and on-demand card loading with `--max-method-loads 1`.
 Method loading defaults to off; enabled methods and tools share one effect
 budget and root deadline. P3 peers now use protocol `1.1-p3-host-local`.
 
+The [P4 R2/S3 offline slice](docs/P4_REVIEW_AUDIT.md) adds version-bound review
+reports, deduplicated challenges and a conservative protected-candidate gate.
+Its fixture composition uses real M1/M2/M3 components with one work receipt
+and up to two review receipts under one budget. Model approval never verifies
+a candidate or closes mathematical obligations. P3 Host and the default entry
+are unchanged; full P4 review, checking and repair remain unfinished.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

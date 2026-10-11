@@ -19,6 +19,7 @@ import {
 } from "@astra/protocol";
 
 export const MATH_AUDIT_VERSION = "0.0.0-p1" as const;
+export * from "./p4-candidate.js";
 
 /** Fixed, non-empty explanation used whenever no candidate is available. */
 export const UNSOLVED_RESPONSE =
