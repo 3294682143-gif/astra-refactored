@@ -1,5 +1,9 @@
 # Unified TS AgentLoop — integration PR 1
 
+Historical PR1 record. [PR2's explicit TS engine entry](TS_ENGINE_ENTRY.md)
+now connects this same loop through the real Python Host and Node main profile.
+The remaining v4 gates are tracked in [GATEBOARD.md](GATEBOARD.md).
+
 The integration phase freezes new independent P4 fixtures, R1 expansion and
 additional R0 revision/review rounds. Existing safety checks and test suites
 remain in place. This PR adds an actual async composition API, not another

@@ -19,7 +19,7 @@ if Path(_package.__file__).resolve().parent != (_ROOT / "mathagent").resolve():
 from mathagent.entrypoint import ReasoningAgent as _LegacyReasoningAgent
 from mathagent.lite.runtime import LiteRuntime
 
-_ENGINES = {"lite", "legacy"}
+_ENGINES = {"lite", "legacy", "ts"}
 
 
 class ReasoningAgent:
@@ -36,6 +36,13 @@ class ReasoningAgent:
         if engine not in _ENGINES:
             raise ValueError("unknown engine")
         self.engine = engine
+        if engine == "ts":
+            if args:
+                raise TypeError("ts engine accepts keyword arguments only")
+            from python.astra_bridge.agent_runtime import AgentRuntime
+
+            self._impl = AgentRuntime(client, **kwargs)
+            return
         if engine == "legacy":
             kwargs.setdefault("_entry_load_started", _LOAD_STARTED)
             self._impl = _LegacyReasoningAgent(client, *args, **kwargs)
