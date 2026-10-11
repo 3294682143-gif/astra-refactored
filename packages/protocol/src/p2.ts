@@ -44,6 +44,10 @@ export type P2StrictAcceptance = typeof P2_STRICT_ACCEPTANCE;
 export const P2_WORK_PACKET_SCHEMA_VERSION = "p2a-work-v1" as const;
 export type P2WorkPacketSchemaVersion = typeof P2_WORK_PACKET_SCHEMA_VERSION;
 
+/** Second WorkPacket schema version: adds one untrusted route proposal. */
+export const P2_WORK_PACKET_SCHEMA_VERSION_V2 = "p2a-work-v2" as const;
+export type P2WorkPacketSchemaVersionV2 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V2;
+
 /** Bounds for this phase. All are safe integers. */
 export const P2_LIMITS = {
   maxGoals: 8,
@@ -262,6 +266,38 @@ export interface P2WorkPacket {
   readonly candidateProposal: string | null;
 }
 
+/**
+ * One untrusted route suggestion carried by a v2 WorkPacket. It is model
+ * data only: no routeId, taskId, scope, dependency or budget field exists
+ * here, and the control side derives all of those itself.
+ */
+export interface P2WorkflowProposal {
+  readonly kind: "NEW_ROUTE";
+  readonly obligationId: string;
+  readonly mechanism: P2WorkflowMechanism;
+  readonly rationale: string;
+}
+
+/** The four mathematical-mechanism fields of a proposed route. */
+export interface P2WorkflowMechanism {
+  readonly representation: string;
+  readonly operation: string;
+  readonly lemmas: readonly string[];
+  readonly construction: string;
+}
+
+/**
+ * Strict v2 WorkPacket: every v1 field with the same meaning, plus a required
+ * `workflowProposal` that is either `null` or one NEW_ROUTE suggestion.
+ */
+export interface P2WorkPacketV2 extends Omit<P2WorkPacket, "schemaVersion"> {
+  readonly schemaVersion: P2WorkPacketSchemaVersionV2;
+  readonly workflowProposal: P2WorkflowProposal | null;
+}
+
+/** Any accepted WorkPacket version. Both keep their own raw identity. */
+export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2;
+
 export const P2_ARTIFACT_AVAILABILITY = ["ACTIVE", "STALE"] as const;
 export type P2ArtifactAvailability = (typeof P2_ARTIFACT_AVAILABILITY)[number];
 
@@ -275,7 +311,7 @@ export interface P2Artifact {
   readonly rawResponseHash: string;
   readonly rawResponseRef: string;
   readonly rawResponseText: string;
-  readonly packet: P2WorkPacket | null;
+  readonly packet: P2AcceptedWorkPacket | null;
   readonly transportStatus: P2TransportStatus;
   readonly deliveryStatus: P2PacketDelivery;
   readonly level: "PROVISIONAL";
@@ -680,15 +716,71 @@ const WORK_PACKET_SCHEMA = {
  */
 export const P2_WORK_PACKET_SCHEMA = p2Snapshot(WORK_PACKET_SCHEMA);
 
+const PROPOSAL_MECHANISM_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["representation", "operation", "lemmas", "construction"],
+  properties: {
+    representation: SHORT,
+    operation: SHORT,
+    lemmas: SHORT_LIST,
+    construction: SHORT,
+  },
+} as const;
+
+const WORKFLOW_PROPOSAL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "obligationId", "mechanism", "rationale"],
+  properties: {
+    kind: { const: "NEW_ROUTE" },
+    obligationId: SHORT,
+    mechanism: PROPOSAL_MECHANISM_SCHEMA,
+    rationale: TEXT,
+  },
+} as const;
+
 /**
- * Strict parse of one WorkPacket from raw text.
- *
- * Order: lone-surrogate scan of the input string, UTF-8 decode with the shared
- * frame bound, duplicate keys, non-finite tokens, unsafe numbers, JSON.parse,
- * then the single normative schema. Only a fixed `P2Error.code` escapes; raw
- * input and JSON exception messages are never exposed.
+ * v2 schema: a shallow copy of the v1 property set with `schemaVersion`
+ * replaced and `workflowProposal` added. Built lazily so no top-level read of
+ * a re-exported `index` binding can hit a TDZ hazard.
  */
-export function parseP2WorkPacket(text: string): P2WorkPacket {
+function buildWorkPacketSchemaV2(): unknown {
+  const properties: Record<string, unknown> = { ...WORK_PACKET_SCHEMA.properties };
+  properties.schemaVersion = { const: P2_WORK_PACKET_SCHEMA_VERSION_V2 };
+  properties.workflowProposal = {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: ["kind", "obligationId", "mechanism", "rationale"],
+    properties: WORKFLOW_PROPOSAL_SCHEMA.properties,
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [...WORK_PACKET_SCHEMA.required, "workflowProposal"],
+    properties,
+  };
+}
+
+let cachedWorkPacketSchemaV2: unknown = null;
+
+/** The normative v2 WorkPacket schema, deep-frozen on first use. */
+export function p2WorkPacketSchemaV2(): unknown {
+  if (cachedWorkPacketSchemaV2 === null) {
+    cachedWorkPacketSchemaV2 = p2Snapshot(buildWorkPacketSchemaV2());
+  }
+  return cachedWorkPacketSchemaV2;
+}
+
+/**
+ * Shared strict parse core: surrogate scan, UTF-8 decode, duplicate keys,
+ * non-finite tokens, unsafe numbers, JSON.parse, parsed-surrogate scan, then
+ * one schema check. Only a fixed `P2Error.code` escapes.
+ */
+function parseStrictJson(
+  text: string,
+  schema: unknown | ((parsed: unknown) => unknown),
+): unknown {
   if (typeof text !== "string") {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
@@ -723,11 +815,47 @@ export function parseP2WorkPacket(text: string): P2WorkPacket {
   if (!parsedSurrogates.ok) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  const checked = validateAgainstSchema(parsed, P2_WORK_PACKET_SCHEMA);
+  const resolved = typeof schema === "function" ? schema(parsed) : schema;
+  const checked = validateAgainstSchema(parsed, resolved);
   if (!checked.ok) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
+  return parsed;
+}
+
+/**
+ * Strict parse of one WorkPacket from raw text.
+ *
+ * Order: lone-surrogate scan of the input string, UTF-8 decode with the shared
+ * frame bound, duplicate keys, non-finite tokens, unsafe numbers, JSON.parse,
+ * then the single normative schema. Only a fixed `P2Error.code` escapes; raw
+ * input and JSON exception messages are never exposed.
+ */
+export function parseP2WorkPacket(text: string): P2WorkPacket {
+  const parsed = parseStrictJson(text, P2_WORK_PACKET_SCHEMA);
   return p2Snapshot(parsed as P2WorkPacket);
+}
+
+/**
+ * Strict parse of one WorkPacket of either accepted version. The raw text is
+ * parsed once with the shared core; a v2 packet keeps its full proposal and
+ * is never rewritten into a v1 shape.
+ */
+export function parseP2WorkPacketAny(text: string): P2AcceptedWorkPacket {
+  const parsed = parseStrictJson(text, (candidate: unknown): unknown => {
+    const version =
+      typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)
+        ? (candidate as Record<string, unknown>).schemaVersion
+        : undefined;
+    if (version === P2_WORK_PACKET_SCHEMA_VERSION) {
+      return P2_WORK_PACKET_SCHEMA;
+    }
+    if (version === P2_WORK_PACKET_SCHEMA_VERSION_V2) {
+      return p2WorkPacketSchemaV2();
+    }
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  });
+  return p2Snapshot(parsed as P2AcceptedWorkPacket);
 }
 
 /** Map a shared parse failure onto a fixed P2 code without echoing detail. */

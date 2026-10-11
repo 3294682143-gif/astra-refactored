@@ -77,7 +77,7 @@ function guardContract(contract: P2Contract): number {
 }
 
 export class P2WorkunitStore {
-  private readonly contract: P2Contract;
+  private contract: P2Contract;
   private readonly routes = new P2RouteRegistry();
   private readonly entries = new Map<string, P2ArtifactEntry>();
   private readonly latest = new Map<string, number>();
@@ -92,6 +92,231 @@ export class P2WorkunitStore {
 
   registerRoute(input: P2RouteInput): P2RouteSpec {
     return this.routes.register(input);
+  }
+
+  /**
+   * Pure pre-check of one prospective contract snapshot that only appends
+   * tasks. Session, problem hash, contract version, problem text, goals and
+   * obligation identity must be unchanged; every already-owned task must keep
+   * its immutable definition (delivery and input refs are ledger runtime state
+   * and may differ); every added task must be READY with no inputs, fully
+   * bound, uniquely identified and part of a legal DAG. Nothing is mutated.
+   */
+  validateAddedTasks(snapshot: P2Contract): void {
+    const next = p2Snapshot(snapshot) as P2Contract;
+    if (typeof next !== "object" || next === null || Array.isArray(next)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const current = this.contract;
+    if (
+      typeof next.envelope !== "object" ||
+      next.envelope === null ||
+      Array.isArray(next.envelope) ||
+      !Array.isArray(next.goals) ||
+      !Array.isArray(next.obligations) ||
+      !Array.isArray(next.tasks)
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (next.envelope.sessionId !== current.envelope.sessionId) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (next.problemHash !== current.problemHash) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (next.problemFullText !== current.problemFullText) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (next.contractVersion !== current.contractVersion) {
+      throw new P2Error(P2_ERROR_CODES.VERSION_MISMATCH);
+    }
+    if (next.envelope.contractVersion !== current.envelope.contractVersion) {
+      throw new P2Error(P2_ERROR_CODES.VERSION_MISMATCH);
+    }
+    if (next.envelope.problemHash !== current.envelope.problemHash) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (next.envelope.sourceModule !== "M1") {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    // The master envelope is immutable through a task sync: a control class
+    // must not be able to rewrite recordId, eventSeq or any other envelope
+    // field by appending tasks. `ledger.snapshot()` keeps this value stable.
+    if (JSON.stringify(next.envelope) !== JSON.stringify(current.envelope)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (JSON.stringify(next.goals) !== JSON.stringify(current.goals)) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    // Shape guards run before any member is read, so a malformed row can never
+    // be dereferenced while building the id map.
+    for (const row of next.obligations) {
+      if (typeof row !== "object" || row === null || Array.isArray(row)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (typeof row.envelope !== "object" || row.envelope === null || Array.isArray(row.envelope)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (typeof row.obligationId !== "string" || row.obligationId.length === 0) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+    }
+    const nextObligations = new Map(next.obligations.map((row) => [row.obligationId, row]));
+    if (nextObligations.size !== next.obligations.length) {
+      throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+    }
+    if (nextObligations.size !== current.obligations.length) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    for (const obligation of current.obligations) {
+      const candidate = nextObligations.get(obligation.obligationId);
+      if (candidate === undefined) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (
+        candidate.goalId !== obligation.goalId ||
+        candidate.kind !== obligation.kind ||
+        JSON.stringify(candidate.envelope) !== JSON.stringify(obligation.envelope)
+      ) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (JSON.stringify(candidate.acceptance) !== JSON.stringify(obligation.acceptance)) {
+        throw new P2Error(P2_ERROR_CODES.UNTRUSTED_ACCEPTANCE);
+      }
+      if (obligation.status !== "SATISFIED" && candidate.status === "SATISFIED") {
+        throw new P2Error(P2_ERROR_CODES.UNTRUSTED_ACCEPTANCE);
+      }
+    }
+    // Same ordering rule for tasks: shape first, id map second.
+    for (const row of next.tasks) {
+      if (typeof row !== "object" || row === null || Array.isArray(row)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (typeof row.envelope !== "object" || row.envelope === null || Array.isArray(row.envelope)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (typeof row.taskId !== "string" || row.taskId.length === 0) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+    }
+    const nextTasks = new Map(next.tasks.map((row) => [row.taskId, row]));
+    if (nextTasks.size !== next.tasks.length) {
+      throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+    }
+    if (next.tasks.length > MAX_TASKS) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+    for (const task of current.tasks) {
+      const candidate = nextTasks.get(task.taskId);
+      if (candidate === undefined) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (
+        candidate.goalId !== task.goalId ||
+        candidate.obligationId !== task.obligationId ||
+        candidate.scopeId !== task.scopeId ||
+        candidate.expectedResult !== task.expectedResult ||
+        candidate.acceptanceCriteria !== task.acceptanceCriteria ||
+        JSON.stringify(candidate.envelope) !== JSON.stringify(task.envelope) ||
+        JSON.stringify(candidate.dependencyTaskIds) !== JSON.stringify(task.dependencyTaskIds)
+      ) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+    }
+    const owned = new Set(current.tasks.map((task) => task.taskId));
+    for (const task of next.tasks) {
+      if (owned.has(task.taskId)) {
+        continue;
+      }
+      if (task.delivery !== "READY") {
+        throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+      if (!Array.isArray(task.inputArtifactRefs) || task.inputArtifactRefs.length !== 0) {
+        throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+      if (
+        !Array.isArray(task.dependencyTaskIds) ||
+        task.dependencyTaskIds.length > P2_LIMITS.maxArrayItems ||
+        !task.dependencyTaskIds.every((dependency: unknown): boolean => {
+          if (typeof dependency !== "string") {
+            return false;
+          }
+          return dependency.length > 0 && [...dependency].length <= P2_LIMITS.maxShortStringChars;
+        })
+      ) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+      }
+      if (new Set(task.dependencyTaskIds).size !== task.dependencyTaskIds.length) {
+        throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+      }
+      const obligation = nextObligations.get(task.obligationId);
+      if (obligation === undefined) {
+        throw new P2Error(P2_ERROR_CODES.DANGLING_REFERENCE);
+      }
+      if (obligation.goalId !== task.goalId) {
+        throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+      }
+      if (obligation.envelope.scopeId !== task.scopeId) {
+        throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+      }
+      if (
+        task.envelope.sourceModule !== "M1" ||
+        task.envelope.sessionId !== current.envelope.sessionId ||
+        task.envelope.problemHash !== current.problemHash ||
+        task.envelope.contractVersion !== current.contractVersion ||
+        task.envelope.taskId !== task.taskId ||
+        task.envelope.scopeId !== task.scopeId
+      ) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      for (const dependency of task.dependencyTaskIds) {
+        if (!nextTasks.has(dependency)) {
+          throw new P2Error(P2_ERROR_CODES.DANGLING_REFERENCE);
+        }
+        if (dependency === task.taskId) {
+          throw new P2Error(P2_ERROR_CODES.DEPENDENCY_CYCLE);
+        }
+      }
+    }
+    const marks = new Map<string, number>();
+    const visit = (taskId: string): void => {
+      const mark = marks.get(taskId) ?? 0;
+      if (mark === 1) {
+        throw new P2Error(P2_ERROR_CODES.DEPENDENCY_CYCLE);
+      }
+      if (mark === 2) {
+        return;
+      }
+      marks.set(taskId, 1);
+      const task = nextTasks.get(taskId);
+      for (const dependency of task?.dependencyTaskIds ?? []) {
+        visit(dependency);
+      }
+      marks.set(taskId, 2);
+    };
+    for (const task of next.tasks) {
+      visit(task.taskId);
+    }
+    guardContract(next);
+    const running = { ...next, tasks: next.tasks.map((task) => ({ ...task, delivery: "RUNNING" as const })) };
+    for (const task of running.tasks) {
+      workScope(running, task as P2Task);
+    }
+  }
+
+  /**
+   * Commit one prospective contract snapshot after the full pure pre-check.
+   * Routes, entries, requests, latest versions and the sequence are preserved;
+   * the sequence never moves backwards.
+   */
+  syncAddedTasks(snapshot: P2Contract): void {
+    const next = p2Snapshot(snapshot) as P2Contract;
+    this.validateAddedTasks(next);
+    const guarded = guardContract(next);
+    this.contract = next;
+    if (guarded > this.lastSeq) {
+      this.lastSeq = guarded;
+    }
   }
 
   routesSnapshot(): readonly P2RouteSpec[] {

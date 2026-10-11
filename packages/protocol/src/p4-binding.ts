@@ -12,15 +12,15 @@ import {
   P2Error,
   canonicalScope,
   p2Snapshot,
-  parseP2WorkPacket,
+  parseP2WorkPacketAny,
   validateP2GoalSpecs,
   validateP2Scope,
+  type P2AcceptedWorkPacket,
   type P2Artifact,
   type P2ArtifactAvailability,
   type P2Contract,
   type P2GoalSpec,
   type P2Task,
-  type P2WorkPacket,
 } from "./p2.js";
 import { detectLoneSurrogates } from "./index.js";
 import { createHash } from "node:crypto";
@@ -291,9 +291,9 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
   if (artifact.rawResponseRef !== `${contract.envelope.sessionId}:raw:${artifact.sourceRequestId}`) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
-  let parsed: P2WorkPacket;
+  let parsed: P2AcceptedWorkPacket;
   try {
-    parsed = parseP2WorkPacket(artifact.rawResponseText);
+    parsed = parseP2WorkPacketAny(artifact.rawResponseText);
   } catch (error) {
     if (error instanceof P2Error) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);

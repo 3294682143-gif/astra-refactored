@@ -688,12 +688,15 @@ export class ContractLedger {
   }
 
   /** Add a whole validated batch; nothing is mutated before the batch passes. */
-  addTasks(tasks: readonly P2Task[]): void {
+  validateTaskAddition(tasks: readonly P2Task[]): void {
     if (!Array.isArray(tasks)) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
     if (tasks.length === 0) {
       return;
+    }
+    if (tasks.length > P2_LIMITS.maxTasks) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     const batch = p2Snapshot(tasks);
     const merged = [...[...this.tasks.values()].map((state) => state.task), ...batch];
@@ -711,6 +714,22 @@ export class ContractLedger {
     ) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
     }
+    if (this.events.length + batch.length > P2_LIMITS.maxLedgerEvents) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+  }
+
+  /** Add a whole validated batch; nothing is mutated before the batch passes. */
+  addTasks(tasks: readonly P2Task[]): void {
+    if (!Array.isArray(tasks)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (tasks.length === 0) {
+      return;
+    }
+    const batch = p2Snapshot(tasks);
+    this.validateTaskAddition(batch);
+    const seq = this.nextSeq;
     const events: P2Event[] = batch.map((task, index) => ({
       eventId: `${this.sessionId}:event:${seq + index}`,
       sessionId: this.sessionId,
@@ -721,9 +740,6 @@ export class ContractLedger {
       taskId: task.taskId,
       obligationId: task.obligationId,
     }));
-    if (this.events.length + events.length > P2_LIMITS.maxLedgerEvents) {
-      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
-    }
     for (const event of events) {
       this.events.push(p2Snapshot(event));
     }

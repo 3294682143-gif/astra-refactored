@@ -96,7 +96,7 @@ allowance as registered tools, plus the method-specific cap of one; neither
 tasks nor cache hits create a fresh budget. A failed attempt still spends its
 slot. Default or insufficient-budget paths do not touch the reader.
 
-WORK context v3 retains the complete validated catalog and loaded asset body,
+WORK context v4 retains the complete validated catalog and loaded asset body,
 title, version and integrity hash through the existing M3 preparation interface.
 Only same-task receipts enter toolObservations; method text may persist across
 tasks as advisory material, never a mathematical premise or verification.
@@ -107,7 +107,7 @@ can be consumed without loading an asset. Oversized contexts are refused, not
 silently truncated or stripped of the catalog.
 
 The existing strict `final` action can now confirm an already protected
-candidate, never create or replace one. WORK context v3 adds `allowFinal` and
+candidate, never create or replace one. WORK context retains `allowFinal` and
 a minimal `{binding, targetHash, answer}` projection. Confirmation requires
 the exact old answer, complete=true and no unresolved items, in the same
 session/problem/contract/scope with a strictly earlier source. Host rebuilds
@@ -117,9 +117,16 @@ not a synthesized WorkPacket or new artifact. Configured R2 still runs within
 the same root capacity. A rejected final stops further calls and may retain
 the old BEST_EFFORT candidate; STRICT still withholds it.
 
-Historical v2 WORK contexts have an explicit read-only validator; the active
-Host requires v3. The 1.2 and 1.3 frame schema bytes are unchanged by this
+Historical v2/v3 WORK contexts have an explicit read-only validator; the active
+Host requires v4. The 1.2 and 1.3 frame schema bytes are unchanged by this
 context-only migration. Full event replay is still a later gate.
+
+Version-2 WorkPackets may carry one strict, untrusted NEW_ROUTE suggestion.
+The original raw packet is preserved. Under the existing capacity allowance,
+TS can derive one new route/task for the source's pending obligation; Host
+independently checks that provenance. The task has no cross-route mathematical
+input refs and cannot replace the first protected candidate. See
+G2_DYNAMIC_ROUTES.md for bounded admission, current test results and remaining gaps.
 
 M5 remains the mathematical final selector. Host only verifies the returned
 answer's provenance and policy: it must equal the actual eligible candidate
@@ -150,7 +157,7 @@ real method reader and existing polynomial executor. See G2_METHOD_BRIDGE.md
 for the acceptance scope and current supervisor verification record.
 
 The final-confirmation slice adds five direct TS tests and 15 real-entry E2E
-cases. The entry suite now has 59 passing tests, including
+cases. The final checkpoint's entry suite had 59 passing tests, including
 tool → WorkPacket → final → R2 in four calls with one artifact and one effect,
 retained original target hashes, STRICT/no-review policies, illegal and
 incomplete final actions, rehashed projection tampering and v2 read-only

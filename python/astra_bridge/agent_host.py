@@ -13,7 +13,12 @@ import copy
 import time
 
 from .agent_client import AgentClient
-from .agent_context import candidate_packet, protected_final, validate_context
+from .agent_context import (
+    _work_ordinals,
+    candidate_packet,
+    protected_final,
+    validate_context,
+)
 from .p0_probe import ProbeError, _Host
 from .p2_host_fixture import _parse_inner
 from .p3_effect_contract import (
@@ -157,6 +162,7 @@ class AgentHost(_Host):
         self.stopped = False
         self.last_model_id = None
         self.solve_result = None
+        self.route_admissions = {}
 
     # -- helpers ----------------------------------------------------------
 
@@ -307,6 +313,29 @@ class AgentHost(_Host):
         if request["phase"] == "WORK":
             reserve_ok = self.max_model_calls - self.model_requests >= 2 + self.max_reviews
             task_id = request["taskId"]
+            provenance = body["routeProvenance"]
+            pending_new_provenance = None
+            if provenance is not None:
+                if not isinstance(provenance, dict):
+                    _fail()
+                recorded = self.route_admissions.get(task_id)
+                if recorded is None:
+                    if self.route_admissions:
+                        _fail()
+                    if task_id != "route-task-" + provenance["sourceRequestId"]:
+                        _fail()
+                    if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
+                        _fail()
+                    completed = len(_work_ordinals(
+                        self.history, self.problem, self.session_id, self.problem_hash,
+                    ))
+                    if self.max_work_units - completed < 1:
+                        _fail()
+                    if self.remaining_ms() <= _MIN_REMAINING_MS:
+                        _fail()
+                    pending_new_provenance = copy.deepcopy(provenance)
+                elif not same_json(recorded, provenance):
+                    _fail()
             cached_tool = any(
                 isinstance(entry, dict)
                 and isinstance(entry.get("request"), dict)
@@ -340,12 +369,25 @@ class AgentHost(_Host):
                 _fail()
             if body["allowMethods"] is not allow_methods:
                 _fail()
+            expected_allow_route = (
+                not self.route_admissions
+                and pending_new_provenance is None
+                and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
+                and self.max_work_units - len(_work_ordinals(
+                    self.history, self.problem, self.session_id, self.problem_hash,
+                )) >= 2
+                and self.remaining_ms() > _MIN_REMAINING_MS
+            )
+            if body["allowRouteProposal"] is not expected_allow_route:
+                _fail()
             expected_allow_final = (
                 body["protectedCandidate"] is not None
                 and self.max_model_calls - self.model_requests >= 1 + self.max_reviews
             )
             if body["allowFinal"] is not expected_allow_final:
                 _fail()
+            if pending_new_provenance is not None:
+                self.route_admissions[task_id] = pending_new_provenance
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail()
         deadline = min(self.deadline, time.monotonic() + request["remainingMs"] / 1000.0)
@@ -737,7 +779,7 @@ class AgentHost(_Host):
                 prior, self.problem, self.session_id, self.problem_hash,
             )
             legal = (
-                body.get("schemaVersion") == "agent-work-context-v3"
+                body.get("schemaVersion") == "agent-work-context-v4"
                 and body.get("allowFinal") is True
                 and expected is not None
                 and same_json(body.get("protectedCandidate"), expected)

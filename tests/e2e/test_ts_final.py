@@ -257,8 +257,9 @@ def test_tampered_protected_candidate_is_refused(field, monkeypatch, process_tra
     assert process_tracker
 
 
-def test_legacy_v2_context_is_read_only(monkeypatch, process_tracker):
-    """A real v2-shaped WORK request passes the legacy reader, not the active one."""
+@pytest.mark.parametrize("legacy_version", ["agent-work-context-v2", "agent-work-context-v3"])
+def test_legacy_context_is_read_only(legacy_version, monkeypatch, process_tracker):
+    """A real legacy-shaped WORK request passes the legacy reader, not the active one."""
     import copy
     import hashlib
 
@@ -282,11 +283,16 @@ def test_legacy_v2_context_is_read_only(monkeypatch, process_tracker):
     params = captured[0]
     request = copy.deepcopy(params["request"])
     body = json.loads(request["messages"][1]["content"])
-    assert body["schemaVersion"] == "agent-work-context-v3"
+    assert body["schemaVersion"] == "agent-work-context-v4"
+    assert "allowRouteProposal" in body
+    assert "routeProvenance" in body
     assert "protectedCandidate" in body
-    body["schemaVersion"] = "agent-work-context-v2"
-    del body["allowFinal"]
-    del body["protectedCandidate"]
+    body["schemaVersion"] = legacy_version
+    del body["allowRouteProposal"]
+    del body["routeProvenance"]
+    if legacy_version == "agent-work-context-v2":
+        del body["allowFinal"]
+        del body["protectedCandidate"]
     request["messages"][1]["content"] = json.dumps(
         body, ensure_ascii=False, separators=(",", ":")
     )
@@ -299,7 +305,7 @@ def test_legacy_v2_context_is_read_only(monkeypatch, process_tracker):
     legacy = context_module.validate_legacy_context(
         request, PROBLEM, session_id, problem_hash, {}, []
     )
-    assert legacy["schemaVersion"] == "agent-work-context-v2"
+    assert legacy["schemaVersion"] == legacy_version
     with pytest.raises(ProbeError):
         context_module.validate_context(
             request, PROBLEM, session_id, problem_hash, {}, []

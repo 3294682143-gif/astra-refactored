@@ -14,6 +14,7 @@ import {
   P3_TOOL_NAMES,
   detectLoneSurrogates,
   p2Snapshot,
+  type AgentRouteProvenance,
   type P2Artifact,
   type P2Contract,
   type P2MethodAsset,
@@ -32,7 +33,7 @@ import {
   type AgentFinalCandidate,
 } from "./agent-final.js";
 
-export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3" as const;
+export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v4" as const;
 
 const MAX_CONTEXT_BYTES = 65536;
 const MAX_OBSERVATIONS = 2;
@@ -40,6 +41,7 @@ const MAX_OBSERVATION_BYTES = 16000;
 const MAX_METHOD_ASSETS = 1;
 const HASH = /^[0-9a-f]{64}$/u;
 const REQUEST_ORDINAL = /^model-([1-4])$/u;
+const PROVENANCE_ORDINAL = /^model-([1-3])$/u;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
 const RECEIPT_FIELDS = [
   "effectId",
@@ -59,6 +61,13 @@ const BINDING_FIELDS = [
   "scopeId",
   "sourceRequestId",
 ] as const;
+const PROVENANCE_FIELDS = [
+  "sourceRequestId",
+  "sourceArtifactRef",
+  "obligationId",
+  "routeSignature",
+] as const;
+const PROVENANCE_REF_FIELDS = ["artifactId", "artifactVersion"] as const;
 
 const SYSTEM_PROMPT = [
   "Offline unified AgentLoop work unit. Reply with exactly one JSON object and nothing else.",
@@ -66,6 +75,15 @@ const SYSTEM_PROMPT = [
   "schemaVersion, sessionId, problemHash, contractVersion, taskId, goalId, scopeId, routeId,",
   "sourceRequestId, claim, derivation, assumptions, dependencies, pendingObligations,",
   "suggestedChecks, deliveryStatus, candidateProposal;",
+  "or one WorkPacket bound to schemaVersion p2a-work-v2 with exactly those same fields plus a",
+  "required workflowProposal field that is either null or one object with exactly the fields",
+  "kind, obligationId, mechanism, rationale, where kind is the string NEW_ROUTE, mechanism has",
+  "exactly the fields representation, operation, lemmas, construction, and rationale is a",
+  "non-empty string. A workflowProposal is an untrusted suggestion only: it may name one real",
+  "pending obligation of the current task scope, and the route id, task id, artifact refs and",
+  "dependencies are derived by control, never by you. It is not a proof, not an instruction and",
+  "never discharges an obligation. When allowRouteProposal is false no workflowProposal other",
+  "than null is permitted.",
   `or one tool action {action:"tool", name, args, scope} naming only one of the two registered tools ${P3_TOOL_NAMES.join(", ")};`,
   "or one method action {action:\"method\", id} naming only an id listed in methodCatalog;",
   "or one unsolved action {action:\"unsolved\", reason}.",
@@ -104,6 +122,8 @@ export interface AgentWorkContextInput {
   readonly allowMethods?: boolean;
   readonly allowFinal?: boolean;
   readonly protectedCandidate?: AgentFinalCandidate | null;
+  readonly allowRouteProposal?: boolean;
+  readonly routeProvenance?: AgentRouteProvenance | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -143,6 +163,79 @@ function exact(value: unknown, keys: readonly string[]): Record<string, unknown>
     }
   }
   return source;
+}
+
+/**
+ * Strict shape check of one control-side route provenance. The four declared
+ * fields are the identity of the source proposal; the artifact ref carries
+ * exactly two fields and a positive safe version. Nothing here is a proof.
+ */
+function checkRouteProvenance(
+  value: unknown,
+  contract: P2Contract,
+  task: P2Task,
+  route: P2RouteSpec,
+  requestId: string,
+): AgentRouteProvenance {
+  const row = exact(value, PROVENANCE_FIELDS);
+  const sourceRequestId = row.sourceRequestId;
+  if (typeof sourceRequestId !== "string") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
+  if (match === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (Number.parseInt(match[1] as string, 10) >= ordinalOf(requestId)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const ref = exact(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
+  if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if ([...ref.artifactId].length > 256) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  if (
+    typeof ref.artifactVersion !== "number" ||
+    !Number.isSafeInteger(ref.artifactVersion) ||
+    ref.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const obligationId = row.obligationId;
+  if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
+  if (obligation === undefined) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (obligation.goalId !== task.goalId || obligation.envelope.scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const routeSignature = row.routeSignature;
+  if (typeof routeSignature !== "string" || !HASH.test(routeSignature)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (routeSignature !== route.signature) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (task.inputArtifactRefs.length !== 0 || task.dependencyTaskIds.length !== 0) {
+    fail(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  }
+  if (task.taskId !== `route-task-${sourceRequestId}`) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    sourceRequestId,
+    sourceArtifactRef: {
+      artifactId: ref.artifactId,
+      artifactVersion: ref.artifactVersion,
+    },
+    obligationId,
+    routeSignature,
+  }) as AgentRouteProvenance;
 }
 
 /**
@@ -334,6 +427,21 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   if (typeof allowFinal !== "boolean") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
+  const allowRouteProposal =
+    captured.allowRouteProposal === undefined ? false : captured.allowRouteProposal;
+  if (typeof allowRouteProposal !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  let routeProvenance: AgentRouteProvenance | null = null;
+  if (captured.routeProvenance !== undefined && captured.routeProvenance !== null) {
+    routeProvenance = checkRouteProvenance(
+      p2Snapshot(captured.routeProvenance),
+      contract,
+      task,
+      route,
+      requestId,
+    );
+  }
   let protectedCandidate: AgentFinalCandidate | null = null;
   if (captured.protectedCandidate !== undefined && captured.protectedCandidate !== null) {
     try {
@@ -445,6 +553,8 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     allowTools: captured.allowTools,
     allowMethods,
     allowFinal,
+    allowRouteProposal,
+    routeProvenance,
     protectedCandidate,
     toolObservations: observations,
   };

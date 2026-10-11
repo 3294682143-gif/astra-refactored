@@ -17,6 +17,7 @@ from .p0_probe import ProbeError
 from .p2_host_fixture import _exact_keys, _parse_inner, _strict_utf8
 from .p3_host_methods import checked_catalog
 from .p3_host_context import same_json
+from .agent_workflow import check_route_provenance, checked_packet
 
 __all__ = [
     "canonical_scope",
@@ -47,7 +48,8 @@ _SCOPE_FIELDS = (
     "branchConditions", "referenceablePremises",
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
-_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
+_CONTEXT_SCHEMA_VERSION = "agent-work-context-v4"
+_FINAL_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
 _LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
 _R2_SCHEMA_VERSION = "p4-r2-context-v1"
@@ -174,12 +176,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
             return None
         if body.get("problemFullText") != problem:
             return None
-        packet = _parse_inner(receipt["text"])
-        if not isinstance(packet, dict):
-            return None
-        _exact_keys(packet, _PACKET_FIELDS)
-        if packet["schemaVersion"] != _WORK_SCHEMA:
-            return None
+        packet = checked_packet(receipt["text"])
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
         if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
@@ -258,28 +255,24 @@ def _first_candidate_source(history, problem, session_id, problem_hash,
     return None
 
 
-def _work_packet(entry, problem, session_id, problem_hash):
+def _work_packet(entry, problem, session_id, problem_hash,
+                 source_schema=_CONTEXT_SCHEMA_VERSION):
     """Strict parse of one real COMPLETE WORK receipt into its WorkPacket.
 
     Returns ``None`` unless the record is a COMPLETE WORK request whose receipt
-    text is exactly one well-formed ``p2a-work-v1`` packet bound to this
-    session/problem and to the task/scope/route of its own request body. Tool,
-    method, review and malformed records are never counted as work.
+    text is exactly one well-formed ``p2a-work-v1`` or ``p2a-work-v2`` packet
+    bound to this session/problem and to the task/scope/route of its own request
+    body. Tool, method, review and malformed records are never counted as work.
     """
     try:
         request_id, request, receipt, body = _source_body(entry)
         if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
             return None
-        if body.get("schemaVersion") != _CONTEXT_SCHEMA_VERSION:
+        if body.get("schemaVersion") != source_schema:
             return None
         if body.get("problemFullText") != problem:
             return None
-        packet = _parse_inner(receipt["text"])
-        if not isinstance(packet, dict):
-            return None
-        _exact_keys(packet, _PACKET_FIELDS)
-        if packet["schemaVersion"] != _WORK_SCHEMA:
-            return None
+        packet = checked_packet(receipt["text"])
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
         if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
@@ -336,7 +329,8 @@ def _work_packet(entry, problem, session_id, problem_hash):
         return None
 
 
-def _work_ordinals(history, problem, session_id, problem_hash):
+def _work_ordinals(history, problem, session_id, problem_hash,
+                   source_schema=_CONTEXT_SCHEMA_VERSION):
     """Ordered ``(ordinal, request_id)`` of every real COMPLETE WORK record."""
     if not isinstance(history, dict):
         return []
@@ -351,12 +345,15 @@ def _work_ordinals(history, problem, session_id, problem_hash):
     ordered.sort()
     kept = []
     for ordinal, request_id in ordered:
-        if _work_packet(history.get(request_id), problem, session_id, problem_hash) is not None:
+        if _work_packet(
+            history.get(request_id), problem, session_id, problem_hash, source_schema,
+        ) is not None:
             kept.append((ordinal, request_id))
     return kept
 
 
-def protected_final(history, problem, session_id, problem_hash):
+def protected_final(history, problem, session_id, problem_hash,
+                    source_schema=_CONTEXT_SCHEMA_VERSION):
     """Host-side three-field projection of the real first protected candidate.
 
     The binding is rebuilt from the trusted history only: the artifact id is
@@ -366,7 +363,9 @@ def protected_final(history, problem, session_id, problem_hash):
     exists.
     """
     try:
-        found = _first_candidate_source(history, problem, session_id, problem_hash)
+        found = _first_candidate_source(
+            history, problem, session_id, problem_hash, source_schema,
+        )
         if found is None:
             return None
         source_id, packet = found
@@ -383,7 +382,9 @@ def protected_final(history, problem, session_id, problem_hash):
             return None
         source_ordinal = _ordinal(source_id)
         count = 0
-        for ordinal, _ in _work_ordinals(history, problem, session_id, problem_hash):
+        for ordinal, _ in _work_ordinals(
+            history, problem, session_id, problem_hash, source_schema,
+        ):
             if ordinal <= source_ordinal:
                 count += 1
         if count < 1:
@@ -558,9 +559,12 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         "allowTools", "allowMethods", "toolObservations",
     )
     extra = {"methodCatalog"}
-    if version == _CONTEXT_SCHEMA_VERSION:
+    if version in (_FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION):
         required = required + ("allowFinal", "protectedCandidate")
         extra = extra | {"allowFinal", "protectedCandidate"}
+    if version == _CONTEXT_SCHEMA_VERSION:
+        required = required + ("allowRouteProposal", "routeProvenance")
+        extra = extra | {"allowRouteProposal", "routeProvenance"}
     if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
     if body["schemaVersion"] != version:
@@ -604,6 +608,23 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     obligations = body["obligations"]
     if not isinstance(obligations, list) or not obligations:
         _fail()
+    expected_obligation_task_id = task["taskId"]
+    if version == _CONTEXT_SCHEMA_VERSION:
+        provenance = check_route_provenance(body, history)
+        if provenance is not None:
+            source_entry = history.get(provenance["sourceRequestId"])
+            if not isinstance(source_entry, dict):
+                _fail()
+            source_body = _parse_inner(source_entry["request"]["messages"][1]["content"])
+            if not isinstance(source_body, dict):
+                _fail()
+            source_scope = source_body.get("scope")
+            source_task = source_body.get("task")
+            if not isinstance(source_scope, dict) or not isinstance(source_task, dict):
+                _fail()
+            if not same_json(source_scope, scope):
+                _fail()
+            expected_obligation_task_id = source_task.get("taskId")
     found = False
     for row in obligations:
         if not isinstance(row, dict):
@@ -617,7 +638,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if row_envelope.get("scopeId") != task["scopeId"]:
             _fail()
-        if row_envelope.get("taskId") != task["taskId"]:
+        if row_envelope.get("taskId") != expected_obligation_task_id:
             _fail()
         found = True
     if not found:
@@ -641,11 +662,11 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     if version == _LEGACY_CONTEXT_SCHEMA_VERSION:
         if "allowFinal" in body or "protectedCandidate" in body:
             _fail()
-    if version == _CONTEXT_SCHEMA_VERSION:
+    if version in (_FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION):
         if not isinstance(body["allowFinal"], bool):
             _fail()
         expected_projection = protected_final(
-            history, problem, session_id, problem_hash,
+            history, problem, session_id, problem_hash, version,
         )
         if expected_projection is not None:
             if expected_projection["binding"]["scopeId"] != task["scopeId"]:
@@ -653,6 +674,14 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         if body["allowFinal"] and expected_projection is None:
             _fail()
         if not same_json(body["protectedCandidate"], expected_projection):
+            _fail()
+    if version == _CONTEXT_SCHEMA_VERSION:
+        if not isinstance(body["allowRouteProposal"], bool):
+            _fail()
+        provenance = check_route_provenance(body, history)
+        if provenance is None and body["routeProvenance"] is not None:
+            _fail()
+        if provenance is not None and not same_json(body["routeProvenance"], provenance):
             _fail()
     check_inputs(body, history, request_id)
     expected = [
@@ -786,12 +815,15 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
 
 def validate_legacy_context(request, problem, session_id, problem_hash, history,
                             effects, catalog=None, method_assets=None):
-    """Read-only validation of one legacy v2 WORK context.
+    """Read-only validation of one legacy v2 or v3 WORK context.
 
-    Only the older ``agent-work-context-v2`` shape is accepted here, and the
-    new ``allowFinal``/``protectedCandidate`` fields must be absent. The active
-    Host entry never calls this function; it exists so a historical v2 record
-    can still be re-checked without being rewritten into the v3 shape.
+    Only the older ``agent-work-context-v2`` and ``agent-work-context-v3``
+    shapes are accepted here. A v2 body must not carry the
+    ``allowFinal``/``protectedCandidate`` fields; a v3 body is checked with the
+    same shared final-projection guard as the active v4 shape, but never with
+    the v4 proposal fields. The active Host entry never calls this function; it
+    exists so a historical record can still be re-checked without being
+    rewritten into the v4 shape.
     """
     request_id, messages = _validate_request(copy.deepcopy(request))
     if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
@@ -803,7 +835,8 @@ def validate_legacy_context(request, problem, session_id, problem_hash, history,
         _fail()
     if request["phase"] != "WORK":
         _fail()
-    if body.get("schemaVersion") != _LEGACY_CONTEXT_SCHEMA_VERSION:
+    version = body.get("schemaVersion")
+    if version not in (_LEGACY_CONTEXT_SCHEMA_VERSION, _FINAL_CONTEXT_SCHEMA_VERSION):
         _fail()
     task = body.get("task")
     if not isinstance(task, dict):
@@ -812,6 +845,6 @@ def validate_legacy_context(request, problem, session_id, problem_hash, history,
         _fail()
     _check_work(
         body, request_id, problem, session_id, problem_hash, history, effects,
-        catalog, method_assets, _LEGACY_CONTEXT_SCHEMA_VERSION, False,
+        catalog, method_assets, version, False,
     )
     return copy.deepcopy(body)

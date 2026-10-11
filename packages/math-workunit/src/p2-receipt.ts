@@ -17,13 +17,13 @@ import {
   P2Error,
   detectLoneSurrogates,
   p2Snapshot,
-  parseP2WorkPacket,
+  parseP2WorkPacketAny,
+  type P2AcceptedWorkPacket,
   type P2ArtifactRef,
   type P2Contract,
   type P2PacketDelivery,
   type P2Task,
   type P2TransportStatus,
-  type P2WorkPacket,
   type Scope,
 } from "@astra/protocol";
 import { workHash, workRefKey, workSeq, workShort } from "./p2-context.js";
@@ -42,7 +42,7 @@ export interface P2WorkReceipt {
 /** Result of reading one receipt; `packet` is null when the text did not parse. */
 export interface P2WorkReceiptRead {
   readonly receipt: P2WorkReceipt;
-  readonly packet: P2WorkPacket | null;
+  readonly packet: P2AcceptedWorkPacket | null;
   readonly deliveryStatus: P2PacketDelivery;
   readonly dependencies: readonly P2ArtifactRef[];
 }
@@ -123,7 +123,7 @@ function trustedInputRefs(task: P2Task): readonly P2ArtifactRef[] {
  * input refs. A ref outside that set is `UNKNOWN_DEPENDENCY`; a repeated ref
  * is `DUPLICATE_ID`. Existence and store availability are not checked here.
  */
-function packetDependencies(packet: P2WorkPacket, trusted: readonly P2ArtifactRef[]): readonly P2ArtifactRef[] {
+function packetDependencies(packet: P2AcceptedWorkPacket, trusted: readonly P2ArtifactRef[]): readonly P2ArtifactRef[] {
   const allowed = new Set(trusted.map((ref) => workRefKey(ref)));
   const seen = new Set<string>();
   const collected: P2ArtifactRef[] = [];
@@ -142,7 +142,7 @@ function packetDependencies(packet: P2WorkPacket, trusted: readonly P2ArtifactRe
 }
 
 /** Every packet assumption must already be a declared scope assumption. */
-function checkAssumptions(packet: P2WorkPacket, scope: Scope): void {
+function checkAssumptions(packet: P2AcceptedWorkPacket, scope: Scope): void {
   const declared = new Set(scope.localAssumptions);
   for (const assumption of packet.assumptions) {
     if (!declared.has(assumption)) {
@@ -153,7 +153,7 @@ function checkAssumptions(packet: P2WorkPacket, scope: Scope): void {
 
 /** Re-check every identity field of a parsed packet against the trusted side. */
 function checkPacketBinding(
-  packet: P2WorkPacket,
+  packet: P2AcceptedWorkPacket,
   contract: P2Contract,
   task: P2Task,
   scope: Scope,
@@ -194,7 +194,7 @@ function checkPacketBinding(
 }
 
 /** Transport status dominates the model's own delivery self-assessment. */
-function effectiveDelivery(transportStatus: P2TransportStatus, packet: P2WorkPacket | null): P2PacketDelivery {
+function effectiveDelivery(transportStatus: P2TransportStatus, packet: P2AcceptedWorkPacket | null): P2PacketDelivery {
   if (transportStatus === "TRUNCATED") {
     return "TRUNCATED";
   }
@@ -249,9 +249,9 @@ export function readWorkReceipt(
 
   const trusted = trustedInputRefs(task);
 
-  let packet: P2WorkPacket | null = null;
+  let packet: P2AcceptedWorkPacket | null = null;
   try {
-    packet = parseP2WorkPacket(raw.text);
+    packet = parseP2WorkPacketAny(raw.text);
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;

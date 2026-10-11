@@ -45,15 +45,9 @@ import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
+import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
-const ROUTE = {
-  routeId: "route-1",
-  representation: "original-problem",
-  operation: "direct-reasoning",
-  lemmas: [],
-  construction: "unified-agent-loop",
-} as const;
 const CANDIDATE_KINDS = ["CANDIDATE_VALIDITY", "ANSWER_REQUEST"] as const;
 const MIN_MS = 25;
 
@@ -101,7 +95,7 @@ export async function runAgentLoop(
   );
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
-  const route = store.registerRoute(ROUTE);
+  const workflow = new AgentWorkflowRoutes(ledger, store);
   const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls);
   const calls = new AgentCalls(root, gate, captured);
 
@@ -156,7 +150,13 @@ export async function runAgentLoop(
         break;
       }
       const ready = ledger.readyTasks();
-      const chosen = chooseP2ReadyTask(ledger.snapshot(), ready);
+      // A dynamically admitted route task is preferred while it is genuinely
+      // READY; otherwise the original ready set is used unchanged.
+      const routeReady = ready.filter((task) => workflow.provenanceOf(task.taskId) !== null);
+      const chosen = chooseP2ReadyTask(
+        ledger.snapshot(),
+        routeReady.length > 0 ? routeReady : ready,
+      );
       if (chosen === null) {
         stop = "WORK_UNITS_COMPLETE";
         break;
@@ -171,6 +171,7 @@ export async function runAgentLoop(
         stop = "CONTROL_REJECTED";
         break;
       }
+      const route = workflow.forTask(running);
       const observations: P3EffectReceipt[] = [];
       let subGate: P3EffectGate | null = null;
       const effectRoom = opts.maxEffects - root.effectCalls();
@@ -232,6 +233,19 @@ export async function runAgentLoop(
           protectedCandidate.binding.scopeId === running.scopeId;
         const exposedCandidate = sameScope ? protectedCandidate : null;
         const allowFinal = sameScope && callsLeft() >= 1 + opts.maxReviews;
+        // The proposal flag reserves the current WORK call itself: admission
+        // is only considered for the budget left after this work is received.
+        const remainingCallsAfterWork = callsLeft() - 1;
+        const remainingUnitsAfterWork = opts.maxWorkUnits - workUnits - 1;
+        const allowRouteProposal =
+          remainingCallsAfterWork >= 1 &&
+          remainingUnitsAfterWork >= 1 &&
+          workflow.canAdmit(
+            remainingCallsAfterWork,
+            opts.maxReviews,
+            remainingUnitsAfterWork,
+            root.remainingMs(),
+          );
         const requestId = root.nextModelId();
         if (requestId === null) {
           stop = "BUDGET_EXHAUSTED";
@@ -252,6 +266,8 @@ export async function runAgentLoop(
             protectedCandidate: exposedCandidate,
             catalog,
             methodAssets,
+            allowRouteProposal,
+            routeProvenance: workflow.provenanceOf(running.taskId),
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -422,6 +438,18 @@ export async function runAgentLoop(
             }
           }
         }
+        // Only a WORK whose context actually allowed a proposal may admit one.
+        // A rejected proposal returns false and leaves the accepted artifact,
+        // the ledger, the store and the protected candidate untouched.
+        if (allowRouteProposal) {
+          workflow.admit(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs(),
+          );
+        }
         advanced = true;
         break;
       }
@@ -564,6 +592,9 @@ export async function runAgentLoop(
     decision,
     session: root.snapshot(),
     catalog,
+    routes: workflow.snapshot().routes,
+    taskRoutes: workflow.snapshot().taskRoutes,
+    routeAdmissions: workflow.snapshot().routeAdmissions,
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }

@@ -9,7 +9,15 @@
  * mathematical verification.
  */
 
-import type { P2Artifact, P2Contract, P2Event, P2GoalSpec, P2TransportStatus } from "./p2.js";
+import type {
+  P2Artifact,
+  P2ArtifactRef,
+  P2Contract,
+  P2Event,
+  P2GoalSpec,
+  P2RouteSpec,
+  P2TransportStatus,
+} from "./p2.js";
 import type { P2MethodCatalog } from "./p2-methods.js";
 import type { P3EffectReceipt, P3EffectRequest } from "./p3.js";
 import type { P4DeliveryPolicy, P4FinalDecision, P4ReviewSnapshot } from "./p4.js";
@@ -205,6 +213,35 @@ export interface AgentLoopPrivateState {
   readonly decision: P4FinalDecision;
   readonly session: AgentSessionSnapshot;
   readonly catalog?: P2MethodCatalog | null;
+  readonly routes?: readonly P2RouteSpec[];
+  readonly taskRoutes?: readonly AgentTaskRoute[];
+  readonly routeAdmissions?: readonly AgentRouteAdmission[];
+}
+
+/**
+ * Control-side provenance of one dynamically admitted route. The four fields
+ * are the declared identity of the source proposal; they are data identity,
+ * never an independent mathematical proof.
+ */
+export interface AgentRouteProvenance {
+  readonly sourceRequestId: string;
+  readonly sourceArtifactRef: P2ArtifactRef;
+  readonly obligationId: string;
+  readonly routeSignature: string;
+}
+
+/** Private mapping of one task to the route it runs under. */
+export interface AgentTaskRoute {
+  readonly taskId: string;
+  readonly routeId: string;
+  readonly provenance: AgentRouteProvenance | null;
+}
+
+/** Private record of one admitted route; never sent on the wire. */
+export interface AgentRouteAdmission {
+  readonly taskId: string;
+  readonly routeId: string;
+  readonly provenance: AgentRouteProvenance;
 }
 
 /** Frozen result of one unified AgentLoop run. */
