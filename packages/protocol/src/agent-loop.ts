@@ -16,6 +16,7 @@ import type {
   P2Event,
   P2GoalSpec,
   P2RouteSpec,
+  P2Task,
   P2TransportStatus,
 } from "./p2.js";
 import type { P2MethodCatalog } from "./p2-methods.js";
@@ -217,6 +218,8 @@ export interface AgentLoopPrivateState {
   readonly taskRoutes?: readonly AgentTaskRoute[];
   readonly routeAdmissions?: readonly AgentRouteAdmission[];
   readonly dependencyAdmissions?: readonly AgentRouteAdmission[];
+  readonly revisions?: readonly AgentRevisionRecord[];
+  readonly readyTasks?: readonly P2Task[];
 }
 
 /**
@@ -251,6 +254,38 @@ export interface AgentRouteAdmission {
   readonly taskId: string;
   readonly routeId: string;
   readonly provenance: AgentRouteProvenance;
+}
+
+/**
+ * Control-side provenance of one artifact redo. The five declared fields are
+ * the identity of the source proposal and of the target it names; `targetHash`
+ * is the sha256 of the exact raw response text of the target artifact. It is
+ * an integrity identity of the same bytes, never a mathematical proof and
+ * never a statement about the target's correctness.
+ */
+export interface AgentRevisionProvenance {
+  readonly sourceRequestId: string;
+  readonly sourceArtifactRef: P2ArtifactRef;
+  readonly targetArtifactRef: P2ArtifactRef;
+  readonly targetSourceRequestId: string;
+  readonly targetHash: string;
+}
+
+/** Fixed lifecycle of one redo record. No other state is accepted. */
+export const AGENT_REVISION_STATUS = Object.freeze(["PENDING", "COMMITTED", "ABORTED"] as const);
+export type AgentRevisionStatus = (typeof AGENT_REVISION_STATUS)[number];
+
+/**
+ * Private record of one artifact redo. It is never sent on the wire and
+ * carries no raw model text. `newRef` is null until a real replacement is
+ * committed; `staleRefs` is the exact invalidation closure of that commit.
+ */
+export interface AgentRevisionRecord {
+  readonly provenance: AgentRevisionProvenance;
+  readonly taskId: string;
+  readonly status: AgentRevisionStatus;
+  readonly newRef: P2ArtifactRef | null;
+  readonly staleRefs: readonly P2ArtifactRef[];
 }
 
 /** Frozen result of one unified AgentLoop run. */

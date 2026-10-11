@@ -52,6 +52,10 @@ export type P2WorkPacketSchemaVersionV2 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V
 export const P2_WORK_PACKET_SCHEMA_VERSION_V3 = "p2a-work-v3" as const;
 export type P2WorkPacketSchemaVersionV3 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V3;
 
+/** Fourth WorkPacket schema version: adds one untrusted artifact-redo proposal. */
+export const P2_WORK_PACKET_SCHEMA_VERSION_V4 = "p2a-work-v4" as const;
+export type P2WorkPacketSchemaVersionV4 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V4;
+
 /** Bounds for this phase. All are safe integers. */
 export const P2_LIMITS = {
   maxGoals: 8,
@@ -302,6 +306,19 @@ export interface P2DependentTaskProposal {
 }
 
 /**
+ * One untrusted artifact-redo suggestion carried by a v4 WorkPacket. It is
+ * model data only: no taskId, route, scope, version, budget or supersedes
+ * field exists here, and the control side derives all of those itself. A
+ * `null` target asks to redo the work that just delivered this packet; a
+ * non-null target must be a real input ref of the current accepted work.
+ */
+export interface P2ArtifactRedoProposal {
+  readonly kind: "REDO_ARTIFACT";
+  readonly targetArtifactRef: P2ArtifactRef | null;
+  readonly rationale: string;
+}
+
+/**
  * Strict v2 WorkPacket: every v1 field with the same meaning, plus a required
  * `workflowProposal` that is either `null` or one NEW_ROUTE suggestion.
  */
@@ -319,8 +336,17 @@ export interface P2WorkPacketV3 extends Omit<P2WorkPacket, "schemaVersion"> {
   readonly workflowProposal: P2DependentTaskProposal | null;
 }
 
+/**
+ * Strict v4 WorkPacket: every v1 field with the same meaning, plus a required
+ * `workflowProposal` that is either `null` or one REDO_ARTIFACT suggestion.
+ */
+export interface P2WorkPacketV4 extends Omit<P2WorkPacket, "schemaVersion"> {
+  readonly schemaVersion: P2WorkPacketSchemaVersionV4;
+  readonly workflowProposal: P2ArtifactRedoProposal | null;
+}
+
 /** Any accepted WorkPacket version. Each keeps its own raw identity. */
-export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2 | P2WorkPacketV3;
+export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2 | P2WorkPacketV3 | P2WorkPacketV4;
 
 export const P2_ARTIFACT_AVAILABILITY = ["ACTIVE", "STALE"] as const;
 export type P2ArtifactAvailability = (typeof P2_ARTIFACT_AVAILABILITY)[number];
@@ -840,6 +866,58 @@ export function p2WorkPacketSchemaV3(): unknown {
   return cachedWorkPacketSchemaV3;
 }
 
+const ARTIFACT_REDO_PROPOSAL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "targetArtifactRef", "rationale"],
+  properties: {
+    kind: { const: "REDO_ARTIFACT" },
+    targetArtifactRef: {
+      type: ["object", "null"],
+      additionalProperties: false,
+      required: ["artifactId", "artifactVersion"],
+      properties: {
+        artifactId: SHORT,
+        artifactVersion: { type: "integer", minimum: 1, maximum: MAX_SAFE },
+      },
+    },
+    rationale: TEXT,
+  },
+} as const;
+
+/**
+ * v4 schema: a shallow copy of the v1 property set with `schemaVersion`
+ * replaced and `workflowProposal` added as a nullable REDO_ARTIFACT object.
+ * Built lazily so no top-level read of a re-exported `index` binding can hit a
+ * TDZ hazard.
+ */
+function buildWorkPacketSchemaV4(): unknown {
+  const properties: Record<string, unknown> = { ...WORK_PACKET_SCHEMA.properties };
+  properties.schemaVersion = { const: P2_WORK_PACKET_SCHEMA_VERSION_V4 };
+  properties.workflowProposal = {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: ["kind", "targetArtifactRef", "rationale"],
+    properties: ARTIFACT_REDO_PROPOSAL_SCHEMA.properties,
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [...WORK_PACKET_SCHEMA.required, "workflowProposal"],
+    properties,
+  };
+}
+
+let cachedWorkPacketSchemaV4: unknown = null;
+
+/** The normative v4 WorkPacket schema, deep-frozen on first use. */
+export function p2WorkPacketSchemaV4(): unknown {
+  if (cachedWorkPacketSchemaV4 === null) {
+    cachedWorkPacketSchemaV4 = p2Snapshot(buildWorkPacketSchemaV4());
+  }
+  return cachedWorkPacketSchemaV4;
+}
+
 /**
  * Shared strict parse core: surrogate scan, UTF-8 decode, duplicate keys,
  * non-finite tokens, unsafe numbers, JSON.parse, parsed-surrogate scan, then
@@ -923,6 +1001,9 @@ export function parseP2WorkPacketAny(text: string): P2AcceptedWorkPacket {
     }
     if (version === P2_WORK_PACKET_SCHEMA_VERSION_V3) {
       return p2WorkPacketSchemaV3();
+    }
+    if (version === P2_WORK_PACKET_SCHEMA_VERSION_V4) {
+      return p2WorkPacketSchemaV4();
     }
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   });

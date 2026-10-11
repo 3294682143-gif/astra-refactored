@@ -12,9 +12,13 @@ import {
   P2_ERROR_CODES,
   P2Error,
   P3_TOOL_NAMES,
+  canonicalScope,
   detectLoneSurrogates,
   p2Snapshot,
+  parseP2WorkPacketAny,
+  p4JsonEqual,
   type AgentDependencyProvenance,
+  type AgentRevisionProvenance,
   type AgentRouteProvenance,
   type P2Artifact,
   type P2Contract,
@@ -24,6 +28,7 @@ import {
   type P2Task,
   type P3EffectReceipt,
   type P3EffectRequest,
+  type Scope,
 } from "@astra/protocol";
 import { prepareP2Context } from "@astra/math-workunit";
 import { p4Hash } from "@astra/protocol";
@@ -34,7 +39,7 @@ import {
   type AgentFinalCandidate,
 } from "./agent-final.js";
 
-export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5" as const;
+export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v6" as const;
 
 const MAX_CONTEXT_BYTES = 65536;
 const MAX_OBSERVATIONS = 2;
@@ -69,6 +74,46 @@ const PROVENANCE_FIELDS = [
   "routeSignature",
 ] as const;
 const PROVENANCE_REF_FIELDS = ["artifactId", "artifactVersion"] as const;
+const REVISION_PROVENANCE_FIELDS = [
+  "sourceRequestId",
+  "sourceArtifactRef",
+  "targetArtifactRef",
+  "targetSourceRequestId",
+  "targetHash",
+] as const;
+const REVISION_TARGET_FIELDS = [
+  "envelope",
+  "artifactId",
+  "routeId",
+  "scope",
+  "dependencies",
+  "sourceRequestId",
+  "rawResponseHash",
+  "rawResponseRef",
+  "rawResponseText",
+  "packet",
+  "transportStatus",
+  "deliveryStatus",
+  "level",
+  "checkResult",
+  "provisionalDependency",
+] as const;
+const REVISION_TARGET_ENVELOPE_FIELDS = [
+  "recordId",
+  "sessionId",
+  "problemHash",
+  "sourceModule",
+  "taskId",
+  "contractVersion",
+  "artifactId",
+  "artifactVersion",
+  "scopeId",
+  "causeEventId",
+  "eventSeq",
+] as const;
+const REVISION_TARGET_REF_FIELDS = ["artifactId", "artifactVersion"] as const;
+const REVISION_ORDINAL = /^model-([1-4])$/u;
+const REVISION_MAX_ID_CHARS = 256;
 const DEPENDENCY_TASK_PREFIX = "dep-task-";
 
 const SYSTEM_PROMPT = [
@@ -94,6 +139,17 @@ const SYSTEM_PROMPT = [
   "scope, dependencies and budget are derived by control, never by you. It is not a proof, not",
   "an instruction and never discharges an obligation. For v3, When allowTaskContinuation is false no",
   "workflowProposal other than null is permitted.",
+  "or one WorkPacket bound to schemaVersion p2a-work-v4 with exactly those same fields plus a",
+  "required workflowProposal field that is either null or one object with exactly the fields",
+  "kind, targetArtifactRef, rationale, where kind is the string REDO_ARTIFACT, targetArtifactRef",
+  "is either null or one object with exactly the fields artifactId, artifactVersion, and",
+  "rationale is a non-empty string. A null targetArtifactRef asks to redo the work that just",
+  "delivered this packet; a non-null targetArtifactRef must be one real input artifact ref of",
+  "the current accepted work. A REDO_ARTIFACT proposal is an untrusted suggestion only: the",
+  "task id, route, scope, new version, supersedes ref and budget are derived by control, never",
+  "by you. It is not a proof, not a refutation of the old artifact, not an instruction and",
+  "never discharges an obligation. For v4, when allowArtifactRedo is false no workflowProposal",
+  "other than null is permitted.",
   `or one tool action {action:"tool", name, args, scope} naming only one of the two registered tools ${P3_TOOL_NAMES.join(", ")};`,
   "or one method action {action:\"method\", id} naming only an id listed in methodCatalog;",
   "or one unsolved action {action:\"unsolved\", reason}.",
@@ -136,6 +192,9 @@ export interface AgentWorkContextInput {
   readonly routeProvenance?: AgentRouteProvenance | null;
   readonly allowTaskContinuation?: boolean;
   readonly dependencyProvenance?: AgentDependencyProvenance | null;
+  readonly allowArtifactRedo?: boolean;
+  readonly revisionProvenance?: AgentRevisionProvenance | null;
+  readonly revisionTarget?: P2Artifact | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -363,6 +422,309 @@ function checkDependencyProvenance(
 }
 
 /**
+ * Strict shape check of one control-side revision provenance. The five
+ * declared fields are the identity of the source proposal and of the target it
+ * names; both request ordinals must be real earlier WORK ordinals and the
+ * target ordinal must precede the source ordinal. Nothing here is a proof and
+ * no model-supplied text is trusted.
+ */
+function checkRevisionProvenance(
+  value: unknown,
+  requestId: string,
+): AgentRevisionProvenance {
+  const row = exact(value, REVISION_PROVENANCE_FIELDS);
+  const sourceRequestId = row.sourceRequestId;
+  if (typeof sourceRequestId !== "string") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const sourceMatch = REVISION_ORDINAL.exec(sourceRequestId);
+  if (sourceMatch === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const sourceOrdinal = Number.parseInt(sourceMatch[1] as string, 10);
+  if (sourceOrdinal >= ordinalOf(requestId)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const targetSourceRequestId = row.targetSourceRequestId;
+  if (typeof targetSourceRequestId !== "string") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const targetMatch = REVISION_ORDINAL.exec(targetSourceRequestId);
+  if (targetMatch === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const targetOrdinal = Number.parseInt(targetMatch[1] as string, 10);
+  if (targetOrdinal > sourceOrdinal) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const sourceRef = exact(row.sourceArtifactRef, REVISION_TARGET_REF_FIELDS);
+  if (
+    typeof sourceRef.artifactId !== "string" ||
+    sourceRef.artifactId.trim().length === 0 ||
+    [...sourceRef.artifactId].length > REVISION_MAX_ID_CHARS
+  ) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (
+    typeof sourceRef.artifactVersion !== "number" ||
+    !Number.isSafeInteger(sourceRef.artifactVersion) ||
+    sourceRef.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const targetRef = exact(row.targetArtifactRef, REVISION_TARGET_REF_FIELDS);
+  if (
+    typeof targetRef.artifactId !== "string" ||
+    targetRef.artifactId.trim().length === 0 ||
+    [...targetRef.artifactId].length > REVISION_MAX_ID_CHARS
+  ) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (
+    typeof targetRef.artifactVersion !== "number" ||
+    !Number.isSafeInteger(targetRef.artifactVersion) ||
+    targetRef.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const targetHash = row.targetHash;
+  if (typeof targetHash !== "string" || !HASH.test(targetHash)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    sourceRequestId,
+    sourceArtifactRef: {
+      artifactId: sourceRef.artifactId,
+      artifactVersion: sourceRef.artifactVersion,
+    },
+    targetArtifactRef: {
+      artifactId: targetRef.artifactId,
+      artifactVersion: targetRef.artifactVersion,
+    },
+    targetSourceRequestId,
+    targetHash,
+  }) as AgentRevisionProvenance;
+}
+
+/**
+ * Strict shape check of one control-side revision target. The target is the
+ * real M3 artifact record of the pending redo, kept in its exact public shape:
+ * every declared field must be present, the envelope must carry exactly the
+ * canonical M3 envelope fields, and the raw text must re-parse into exactly the
+ * stored packet. It is revision material, never a mathematical input premise.
+ */
+function checkRevisionTarget(
+  value: unknown,
+  contract: P2Contract,
+  task: P2Task,
+  route: P2RouteSpec,
+  trustedScope: Scope,
+  provenance: AgentRevisionProvenance,
+): P2Artifact {
+  const row = exact(value, REVISION_TARGET_FIELDS);
+  const envelope = exact(row.envelope, REVISION_TARGET_ENVELOPE_FIELDS);
+  if (envelope.sourceModule !== "M3") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.sessionId !== contract.envelope.sessionId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.problemHash !== contract.problemHash) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.contractVersion !== contract.contractVersion) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (envelope.taskId !== task.taskId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  if (typeof envelope.recordId !== "string" || envelope.recordId.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (typeof envelope.causeEventId !== "string" || envelope.causeEventId.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (
+    typeof envelope.eventSeq !== "number" ||
+    !Number.isSafeInteger(envelope.eventSeq) ||
+    envelope.eventSeq < 1
+  ) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const artifactId = row.artifactId;
+  if (
+    typeof artifactId !== "string" ||
+    artifactId.trim().length === 0 ||
+    [...artifactId].length > REVISION_MAX_ID_CHARS
+  ) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.artifactId !== artifactId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (
+    typeof envelope.artifactVersion !== "number" ||
+    !Number.isSafeInteger(envelope.artifactVersion) ||
+    envelope.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (artifactId !== provenance.targetArtifactRef.artifactId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (envelope.artifactVersion !== provenance.targetArtifactRef.artifactVersion) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (row.sourceRequestId !== provenance.targetSourceRequestId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (row.routeId !== route.routeId) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (row.transportStatus !== "COMPLETE" || row.deliveryStatus !== "COMPLETE") {
+    fail(P2_ERROR_CODES.PACKET_DELIVERY);
+  }
+  if (row.level !== "PROVISIONAL" || row.checkResult !== "UNKNOWN") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (typeof row.provisionalDependency !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const rawText = row.rawResponseText;
+  if (typeof rawText !== "string" || !detectLoneSurrogates(rawText).ok) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (Buffer.byteLength(rawText, "utf8") > MAX_CONTEXT_BYTES) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  if (typeof row.rawResponseHash !== "string" || !HASH.test(row.rawResponseHash)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (row.rawResponseHash !== p4Hash(rawText)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (row.rawResponseHash !== provenance.targetHash) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (row.rawResponseRef !== `${contract.envelope.sessionId}:raw:${row.sourceRequestId}`) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const scope = row.scope;
+  if (typeof scope !== "object" || scope === null || Array.isArray(scope)) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  if ((scope as Scope).scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  if (canonicalScope(scope as Scope) !== canonicalScope(trustedScope)) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const dependencies = row.dependencies;
+  if (!Array.isArray(dependencies)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  for (const item of dependencies) {
+    const ref = exact(item, REVISION_TARGET_REF_FIELDS);
+    if (
+      typeof ref.artifactId !== "string" ||
+      ref.artifactId.trim().length === 0 ||
+      [...ref.artifactId].length > REVISION_MAX_ID_CHARS
+    ) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (
+      typeof ref.artifactVersion !== "number" ||
+      !Number.isSafeInteger(ref.artifactVersion) ||
+      ref.artifactVersion < 1
+    ) {
+      fail(P2_ERROR_CODES.VERSION_MISMATCH);
+    }
+  }
+  const packet = row.packet;
+  if (packet === null || typeof packet !== "object" || Array.isArray(packet)) {
+    fail(P2_ERROR_CODES.PACKET_DELIVERY);
+  }
+  let parsed: unknown;
+  try {
+    parsed = parseP2WorkPacketAny(rawText);
+  } catch (error) {
+    if (error instanceof P2Error) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    throw error;
+  }
+  if (!p4JsonEqual(p2Snapshot(parsed), p2Snapshot(packet))) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const bound = packet as {
+    readonly sessionId: string;
+    readonly problemHash: string;
+    readonly contractVersion: number;
+    readonly taskId: string;
+    readonly goalId: string;
+    readonly scopeId: string;
+    readonly routeId: string;
+    readonly sourceRequestId: string;
+  };
+  if (bound.sessionId !== contract.envelope.sessionId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (bound.problemHash !== contract.problemHash) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (bound.contractVersion !== contract.contractVersion) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (bound.taskId !== task.taskId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (bound.goalId !== task.goalId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (bound.scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  if (bound.routeId !== route.routeId) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (bound.sourceRequestId !== row.sourceRequestId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    envelope: {
+      recordId: envelope.recordId,
+      sessionId: envelope.sessionId,
+      problemHash: envelope.problemHash,
+      sourceModule: "M3",
+      taskId: envelope.taskId,
+      contractVersion: envelope.contractVersion,
+      artifactId: envelope.artifactId,
+      artifactVersion: envelope.artifactVersion,
+      scopeId: envelope.scopeId,
+      causeEventId: envelope.causeEventId,
+      eventSeq: envelope.eventSeq,
+    },
+    artifactId,
+    routeId: row.routeId,
+    scope: p2Snapshot(scope) as Scope,
+    dependencies: p2Snapshot(dependencies) as readonly { readonly artifactId: string; readonly artifactVersion: number }[],
+    sourceRequestId: row.sourceRequestId,
+    rawResponseHash: row.rawResponseHash,
+    rawResponseRef: row.rawResponseRef,
+    rawResponseText: rawText,
+    packet: p2Snapshot(packet),
+    transportStatus: "COMPLETE",
+    deliveryStatus: "COMPLETE",
+    level: "PROVISIONAL",
+    checkResult: "UNKNOWN",
+    provisionalDependency: row.provisionalDependency,
+  }) as unknown as P2Artifact;
+}
+
+/**
  * Keep only observations that are bound to this exact session, problem,
  * contract version, task and scope, were produced by an earlier root request
  * ordinal, and carry a well-formed hash and the fixed PROVISIONAL/UNKNOWN
@@ -561,6 +923,11 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   if (typeof allowTaskContinuation !== "boolean") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
+  const allowArtifactRedo =
+    captured.allowArtifactRedo === undefined ? false : captured.allowArtifactRedo;
+  if (typeof allowArtifactRedo !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
   let routeProvenance: AgentRouteProvenance | null = null;
   if (captured.routeProvenance !== undefined && captured.routeProvenance !== null) {
     routeProvenance = checkRouteProvenance(
@@ -584,6 +951,24 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   }
   if (routeProvenance !== null && dependencyProvenance !== null) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const rawRevisionProvenance =
+    captured.revisionProvenance === undefined ? null : captured.revisionProvenance;
+  const rawRevisionTarget =
+    captured.revisionTarget === undefined ? null : captured.revisionTarget;
+  if ((rawRevisionProvenance === null) !== (rawRevisionTarget === null)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  let revisionProvenance: AgentRevisionProvenance | null = null;
+  let revisionTarget: P2Artifact | null = null;
+  if (rawRevisionProvenance !== null && rawRevisionTarget !== null) {
+    if (allowArtifactRedo || allowRouteProposal || allowTaskContinuation) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    revisionProvenance = checkRevisionProvenance(
+      p2Snapshot(rawRevisionProvenance),
+      requestId,
+    );
   }
   let protectedCandidate: AgentFinalCandidate | null = null;
   if (captured.protectedCandidate !== undefined && captured.protectedCandidate !== null) {
@@ -675,6 +1060,20 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     fail(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   const prepared = body as Record<string, unknown>;
+  if (rawRevisionProvenance !== null && rawRevisionTarget !== null && revisionProvenance !== null) {
+    const preparedScope = prepared["scope"];
+    if (typeof preparedScope !== "object" || preparedScope === null || Array.isArray(preparedScope)) {
+      fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    revisionTarget = checkRevisionTarget(
+      p2Snapshot(rawRevisionTarget),
+      contract,
+      task,
+      route,
+      preparedScope as Scope,
+      revisionProvenance,
+    );
+  }
   const expectedEntries = catalog === null ? [] : catalog.entries;
   const preparedCatalog = prepared["methodCatalog"];
   if (!Array.isArray(preparedCatalog) || preparedCatalog.length !== expectedEntries.length) {
@@ -698,8 +1097,11 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     allowFinal,
     allowRouteProposal,
     allowTaskContinuation,
+    allowArtifactRedo,
     routeProvenance,
     dependencyProvenance,
+    revisionProvenance,
+    revisionTarget,
     protectedCandidate,
     toolObservations: observations,
   };

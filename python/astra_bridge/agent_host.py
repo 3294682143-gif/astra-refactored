@@ -19,6 +19,7 @@ from .agent_context import (
     protected_final,
     validate_context,
 )
+from .agent_history import project_artifacts
 from .p0_probe import ProbeError, _Host
 from .p2_host_fixture import _parse_inner
 from .p3_effect_contract import (
@@ -164,6 +165,7 @@ class AgentHost(_Host):
         self.solve_result = None
         self.route_admissions = {}
         self.dependency_admissions = {}
+        self.redo_record = None
 
     # -- helpers ----------------------------------------------------------
 
@@ -318,6 +320,12 @@ class AgentHost(_Host):
             pending_new_provenance = None
             dep_provenance = body["dependencyProvenance"]
             pending_new_dependency = None
+            # A redo request (already recorded, or proposed by this very body)
+            # suppresses the route/continuation proposal flags: the remaining
+            # budget must stay reserved for the redo WORK and its R2 review.
+            prospective_redo_used = (
+                self.redo_record is not None or body["revisionProvenance"] is not None
+            )
             if provenance is not None and dep_provenance is not None:
                 _fail()
             if dep_provenance is not None:
@@ -398,6 +406,7 @@ class AgentHost(_Host):
             expected_allow_route = (
                 not self.route_admissions
                 and pending_new_provenance is None
+                and not prospective_redo_used
                 and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
                 and self.max_work_units - len(_work_ordinals(
                     self.history, self.problem, self.session_id, self.problem_hash,
@@ -408,6 +417,7 @@ class AgentHost(_Host):
                 _fail()
             expected_allow_continuation = (
                 len(self.dependency_admissions) + (1 if pending_new_dependency is not None else 0) < 2
+                and not prospective_redo_used
                 and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
                 and self.max_work_units - len(_work_ordinals(
                     self.history, self.problem, self.session_id, self.problem_hash,
@@ -416,12 +426,52 @@ class AgentHost(_Host):
             )
             if body["allowTaskContinuation"] is not expected_allow_continuation:
                 _fail()
+            revision = body["revisionProvenance"]
+            redo_used = self.redo_record is not None
+            pending_redo = None
+            if revision is not None:
+                if not isinstance(revision, dict):
+                    _fail()
+                if redo_used:
+                    if not same_json(self.redo_record, revision):
+                        _fail()
+                else:
+                    if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
+                        _fail()
+                    completed = len(_work_ordinals(
+                        self.history, self.problem, self.session_id, self.problem_hash,
+                    ))
+                    if self.max_work_units - completed < 1:
+                        _fail()
+                    if self.remaining_ms() <= _MIN_REMAINING_MS:
+                        _fail()
+                    pending_redo = copy.deepcopy(revision)
+                    redo_used = True
+            expected_allow_redo = (
+                not redo_used
+                and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
+                and self.max_work_units - len(_work_ordinals(
+                    self.history, self.problem, self.session_id, self.problem_hash,
+                )) >= 2
+                and self.remaining_ms() > _MIN_REMAINING_MS
+            )
+            if body["allowArtifactRedo"] is not expected_allow_redo:
+                _fail()
+            if redo_used:
+                if body["allowRouteProposal"] is not False:
+                    _fail()
+                if body["allowTaskContinuation"] is not False:
+                    _fail()
             expected_allow_final = (
                 body["protectedCandidate"] is not None
                 and self.max_model_calls - self.model_requests >= 1 + self.max_reviews
             )
             if body["allowFinal"] is not expected_allow_final:
                 _fail()
+            if self.remaining_ms() <= _MIN_REMAINING_MS:
+                _fail()
+            if pending_redo is not None:
+                self.redo_record = pending_redo
             if pending_new_provenance is not None:
                 self.route_admissions[task_id] = pending_new_provenance
             if pending_new_dependency is not None:
@@ -744,6 +794,22 @@ class AgentHost(_Host):
             )
             if packet is None:
                 _fail()
+            projection = project_artifacts(
+                self.history, self.session_id, self.problem_hash,
+            )
+            row = projection["bySourceRef"].get(candidate)
+            if not isinstance(row, dict):
+                _fail()
+            if row["availability"] != "ACTIVE":
+                _fail()
+            latest = None
+            for other in projection["rows"]:
+                if other["artifactId"] != row["artifactId"]:
+                    continue
+                if latest is None or other["envelope"]["artifactVersion"] > latest["envelope"]["artifactVersion"]:
+                    latest = other
+            if latest is not row:
+                _fail()
             if summary["finalResponse"] != packet["candidateProposal"]:
                 _fail()
             first = None
@@ -817,7 +883,7 @@ class AgentHost(_Host):
                 prior, self.problem, self.session_id, self.problem_hash,
             )
             legal = (
-                body.get("schemaVersion") == "agent-work-context-v5"
+                body.get("schemaVersion") == "agent-work-context-v6"
                 and body.get("allowFinal") is True
                 and expected is not None
                 and same_json(body.get("protectedCandidate"), expected)

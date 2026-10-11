@@ -44,6 +44,21 @@ export interface P2RevisionDelta {
   readonly removedTaskIds: readonly string[];
 }
 
+/**
+ * Control-side ticket of one task-specific redo scheduling. It is a private
+ * bookkeeping handle, never a mathematical claim: it only records that one
+ * delivered task was put back to READY so its work can be redone. The state
+ * backup stays inside the ledger and cannot be injected by a caller.
+ */
+export interface P2RedoTicket {
+  readonly sessionId: string;
+  readonly problemHash: string;
+  readonly contractVersion: number;
+  readonly taskId: string;
+  readonly targetRef: P2ArtifactRef;
+  readonly preparedEventSeq: number;
+}
+
 interface TaskState {
   readonly task: P2Task;
   readonly delivery: P2TaskDelivery;
@@ -56,8 +71,34 @@ interface ObligationState {
   readonly acceptance: P2AcceptanceReceipt | null;
 }
 
+interface RedoBackup {
+  readonly ticket: P2RedoTicket;
+  readonly task: TaskState;
+  readonly obligation: ObligationState;
+}
+
+/**
+ * Fully pre-validated commit plan of one redo delivery. It is built by the
+ * shared pure helper and applied by `commitRedoDelivery` without any further
+ * check, so a rejected pre-check can never leave partial state.
+ */
+interface RedoCommitPlan {
+  readonly ticket: P2RedoTicket;
+  readonly newRef: P2ArtifactRef;
+  readonly staleRefs: readonly P2ArtifactRef[];
+  readonly eventSeq: number;
+  readonly events: readonly P2Event[];
+  readonly affectedTaskIds: readonly string[];
+  readonly affectedObligationIds: readonly string[];
+  readonly reopenedObligationIds: readonly string[];
+}
+
 function refKey(ref: P2ArtifactRef): string {
   return `${ref.artifactId}@${ref.artifactVersion}`;
+}
+
+function sameRef(left: P2ArtifactRef, right: P2ArtifactRef): boolean {
+  return left.artifactId === right.artifactId && left.artifactVersion === right.artifactVersion;
 }
 
 function isBoundedString(value: unknown, maxChars: number): value is string {
@@ -220,6 +261,7 @@ export class ContractLedger {
   private readonly events: P2Event[] = [];
   private readonly tasks = new Map<string, TaskState>();
   private readonly obligations = new Map<string, ObligationState>();
+  private readonly redoBackups = new Map<string, RedoBackup>();
   private nextSeq: number;
 
   constructor(contract: P2Contract) {
@@ -685,6 +727,379 @@ export class ContractLedger {
         this.tasks.set(taskId, { ...task, delivery: "READY", deliveredRefs: [] });
       }
     }
+  }
+
+  /**
+   * Pure pre-check of one task-specific redo scheduling. Nothing is mutated:
+   * the task must be DELIVERED with exactly the requested ref as its only
+   * delivered ref, its obligation must not be SATISFIED or BLOCKED, no redo
+   * may already be pending for it, and the event budget must allow one more
+   * record. This is a work-reopen check, never a mathematical refutation.
+   */
+  validateRedoTicket(taskId: string, targetRef: P2ArtifactRef): void {
+    if (!isBoundedString(taskId, P2_LIMITS.maxShortStringChars)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (!isArtifactRef(targetRef)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    const state = this.requireTask(taskId);
+    if (state.delivery !== "DELIVERED") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    const only = state.deliveredRefs[0];
+    if (state.deliveredRefs.length !== 1 || only === undefined || !sameRef(only, targetRef)) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    const obligation = this.requireObligation(state.task.obligationId);
+    if (obligation.status === "SATISFIED" || obligation.status === "BLOCKED") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (this.redoBackups.size !== 0) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    const seq = this.nextSeq;
+    if (
+      !Number.isSafeInteger(seq) ||
+      seq < 1 ||
+      seq >= Number.MAX_SAFE_INTEGER ||
+      this.events.length + 1 > P2_LIMITS.maxLedgerEvents
+    ) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+  }
+
+  /**
+   * Schedule one task-specific redo. After the full pure pre-check the current
+   * task and obligation state are backed up privately, one
+   * OBLIGATION_REOPENED record is appended to explain the work reopen, and only
+   * this task moves back to READY while keeping its immutable definition and
+   * its previous delivered refs. No other task, no artifact and no obligation
+   * acceptance is touched, and nothing here is a mathematical refutation.
+   */
+  prepareRedo(taskId: string, targetRef: P2ArtifactRef): P2RedoTicket {
+    const frozenRef = p2Snapshot(targetRef) as P2ArtifactRef;
+    this.validateRedoTicket(taskId, frozenRef);
+    const state = this.requireTask(taskId);
+    const obligation = this.requireObligation(state.task.obligationId);
+    const seq = this.nextSeq;
+    const ticket = p2Snapshot({
+      sessionId: this.sessionId,
+      problemHash: this.problemHash,
+      contractVersion: this.contract.contractVersion,
+      taskId,
+      targetRef: frozenRef,
+      preparedEventSeq: seq,
+    }) as P2RedoTicket;
+    const backup = p2Snapshot({
+      ticket,
+      task: state,
+      obligation,
+    }) as RedoBackup;
+    this.append("OBLIGATION_REOPENED", "M1", seq, {
+      taskId,
+      obligationId: state.task.obligationId,
+      artifactId: frozenRef.artifactId,
+      artifactVersion: frozenRef.artifactVersion,
+    });
+    this.redoBackups.set(taskId, backup);
+    this.tasks.set(taskId, {
+      task: state.task,
+      delivery: "READY",
+      deliveredRefs: state.deliveredRefs,
+    });
+    this.obligations.set(state.task.obligationId, {
+      obligation: obligation.obligation,
+      status: "REOPENED",
+      acceptance: obligation.acceptance,
+    });
+    return ticket;
+  }
+
+  /**
+   * Abort one pending redo and restore the exact backed-up task and obligation
+   * state. The ticket must be the recorded one and the task must still be
+   * READY or RUNNING; the sequence never moves backwards and no new artifact
+   * ref is invented. The prepare record stays in the event history.
+   */
+  abortRedo(ticket: P2RedoTicket): void {
+    const frozen = p2Snapshot(ticket) as P2RedoTicket;
+    if (typeof frozen !== "object" || frozen === null || Array.isArray(frozen)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const taskId = frozen.taskId;
+    if (!isBoundedString(taskId, P2_LIMITS.maxShortStringChars)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const backup = this.redoBackups.get(taskId);
+    if (backup === undefined) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (
+      frozen.sessionId !== this.sessionId ||
+      frozen.problemHash !== this.problemHash ||
+      frozen.contractVersion !== this.contract.contractVersion ||
+      JSON.stringify(backup.ticket) !== JSON.stringify(frozen)
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const state = this.requireTask(taskId);
+    if (state.delivery !== "READY" && state.delivery !== "RUNNING") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    this.tasks.set(taskId, backup.task);
+    this.obligations.set(backup.task.task.obligationId, backup.obligation);
+    this.redoBackups.delete(taskId);
+  }
+
+  /**
+   * Pure pre-check of one redo delivery. Nothing is mutated: the pending
+   * backup ticket must match this session/hash/version and the exact recorded
+   * sequence, the target task must be RUNNING, the new ref must be the next
+   * version of the same artifactId, and every stale ref must be a real ref
+   * currently held by the target task or by a real transitive dependent task
+   * of it. The closure may not contain an unrelated task that merely shares
+   * the obligation. All events, the sequence and the affected sets are built
+   * here so the commit can apply them without any further check.
+   */
+  validateRedoDelivery(
+    ticket: P2RedoTicket,
+    newRef: P2ArtifactRef,
+    staleRefs: readonly P2ArtifactRef[],
+    eventSeq: number,
+  ): void {
+    this.prepareRedoCommit(ticket, newRef, staleRefs, eventSeq);
+  }
+
+  /**
+   * Commit one fully pre-validated redo delivery. The first record is the new
+   * DELIVERED ref of the target task; then every stale ref is recorded as
+   * invalidated; then each affected dependent task is reset to READY with no
+   * refs and its obligation is reopened once. Unrelated tasks, their refs and
+   * their obligations are untouched, and no mathematical acceptance is made.
+   */
+  commitRedoDelivery(
+    ticket: P2RedoTicket,
+    newRef: P2ArtifactRef,
+    staleRefs: readonly P2ArtifactRef[],
+    eventSeq: number,
+  ): void {
+    const plan = this.prepareRedoCommit(ticket, newRef, staleRefs, eventSeq);
+    for (const event of plan.events) {
+      this.events.push(p2Snapshot(event));
+    }
+    this.nextSeq = plan.eventSeq + plan.events.length;
+    const target = this.requireTask(plan.ticket.taskId);
+    this.tasks.set(plan.ticket.taskId, {
+      task: target.task,
+      delivery: "DELIVERED",
+      deliveredRefs: [plan.newRef],
+    });
+    for (const taskId of plan.affectedTaskIds) {
+      const state = this.requireTask(taskId);
+      this.tasks.set(taskId, {
+        task: { ...state.task, inputArtifactRefs: [] },
+        delivery: "READY",
+        deliveredRefs: [],
+      });
+    }
+    for (const obligationId of plan.reopenedObligationIds) {
+      const state = this.requireObligation(obligationId);
+      this.obligations.set(obligationId, {
+        obligation: state.obligation,
+        status: "REOPENED",
+        acceptance: null,
+      });
+    }
+    this.redoBackups.delete(plan.ticket.taskId);
+  }
+
+  private prepareRedoCommit(
+    ticket: P2RedoTicket,
+    newRef: P2ArtifactRef,
+    staleRefs: readonly P2ArtifactRef[],
+    eventSeq: number,
+  ): RedoCommitPlan {
+    if (typeof ticket !== "object" || ticket === null || Array.isArray(ticket)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const frozenTicket = p2Snapshot(ticket) as P2RedoTicket;
+    if (!isBoundedString(frozenTicket.taskId, P2_LIMITS.maxShortStringChars)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (!isArtifactRef(frozenTicket.targetRef)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    // Snapshot first, then validate the frozen copy: a getter cannot swap the
+    // value between the check and the use.
+    const frozenNew = p2Snapshot(newRef) as P2ArtifactRef;
+    if (!isArtifactRef(frozenNew)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (!Array.isArray(staleRefs)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    const frozenStaleInput = p2Snapshot(staleRefs) as readonly P2ArtifactRef[];
+    if (frozenStaleInput.length > P2_LIMITS.maxArtifacts) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+    const frozenStale: P2ArtifactRef[] = [];
+    const staleKeys = new Set<string>();
+    for (const ref of frozenStaleInput) {
+      if (!isArtifactRef(ref)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+      }
+      const key = refKey(ref);
+      if (staleKeys.has(key)) {
+        throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+      }
+      staleKeys.add(key);
+      frozenStale.push(ref);
+    }
+    if (!Number.isSafeInteger(eventSeq) || eventSeq < 1 || eventSeq >= Number.MAX_SAFE_INTEGER) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+
+    const backup = this.redoBackups.get(frozenTicket.taskId);
+    if (backup === undefined) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (
+      frozenTicket.sessionId !== this.sessionId ||
+      frozenTicket.problemHash !== this.problemHash ||
+      frozenTicket.contractVersion !== this.contract.contractVersion ||
+      JSON.stringify(backup.ticket) !== JSON.stringify(frozenTicket)
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (eventSeq !== this.nextSeq) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const target = this.requireTask(frozenTicket.taskId);
+    if (target.delivery !== "RUNNING") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (
+      frozenNew.artifactId !== frozenTicket.targetRef.artifactId ||
+      frozenNew.artifactVersion !== frozenTicket.targetRef.artifactVersion + 1
+    ) {
+      throw new P2Error(P2_ERROR_CODES.VERSION_MISMATCH);
+    }
+    if (!staleKeys.has(refKey(frozenTicket.targetRef))) {
+      throw new P2Error(P2_ERROR_CODES.STALE_DEPENDENCY);
+    }
+
+    // Real transitive dependents of the target task, by task dependency only.
+    // A dependent is affected whether it is DELIVERED, PARTIAL or READY: a
+    // READY dependent still holds stale input refs that must be cleared.
+    const dependents = new Set<string>();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const [taskId, state] of this.tasks) {
+        if (taskId === frozenTicket.taskId || dependents.has(taskId)) {
+          continue;
+        }
+        if (
+          state.task.dependencyTaskIds.some(
+            (dependency) => dependency === frozenTicket.taskId || dependents.has(dependency),
+          )
+        ) {
+          dependents.add(taskId);
+          grew = true;
+        }
+      }
+    }
+
+    // The exact stale closure: the old target ref plus every ref currently
+    // held by the target task and by every real transitive dependent task.
+    // A ref outside this set is rejected, and every ref inside it must be
+    // listed, so a partial closure can never leave a stale ref ACTIVE.
+    const expected = new Set<string>([refKey(frozenTicket.targetRef)]);
+    for (const ref of backup.task.deliveredRefs) {
+      expected.add(refKey(ref));
+    }
+    const affectedTaskIds: string[] = [];
+    for (const taskId of dependents) {
+      const state = this.requireTask(taskId);
+      affectedTaskIds.push(taskId);
+      for (const ref of state.deliveredRefs) {
+        expected.add(refKey(ref));
+      }
+    }
+    for (const key of staleKeys) {
+      if (!expected.has(key)) {
+        throw new P2Error(P2_ERROR_CODES.STALE_DEPENDENCY);
+      }
+    }
+    for (const key of expected) {
+      if (!staleKeys.has(key)) {
+        throw new P2Error(P2_ERROR_CODES.STALE_DEPENDENCY);
+      }
+    }
+
+    const affectedObligationIds: string[] = [];
+    const reopenedObligationIds: string[] = [];
+    const targetObligationId = target.task.obligationId;
+    for (const taskId of affectedTaskIds) {
+      const state = this.requireTask(taskId);
+      const obligationId = state.task.obligationId;
+      if (!affectedObligationIds.includes(obligationId)) {
+        affectedObligationIds.push(obligationId);
+      }
+      if (!reopenedObligationIds.includes(obligationId)) {
+        reopenedObligationIds.push(obligationId);
+      }
+    }
+
+    const events: P2Event[] = [];
+    const push = (
+      eventType: P2EventType,
+      sourceModule: P2Event["sourceModule"],
+      extra: Partial<P2Event>,
+    ): void => {
+      events.push({
+        eventId: `${this.sessionId}:event:${eventSeq + events.length}`,
+        sessionId: this.sessionId,
+        eventSeq: eventSeq + events.length,
+        eventType,
+        sourceModule,
+        contractVersion: this.contract.contractVersion,
+        ...extra,
+      });
+    };
+    push("DELIVERY_RECORDED", "M3", {
+      taskId: frozenTicket.taskId,
+      obligationId: targetObligationId,
+      artifactId: frozenNew.artifactId,
+      artifactVersion: frozenNew.artifactVersion,
+    });
+    for (const ref of frozenStale) {
+      push("ARTIFACT_INVALIDATED", "M3", {
+        artifactId: ref.artifactId,
+        artifactVersion: ref.artifactVersion,
+      });
+    }
+    for (const obligationId of reopenedObligationIds) {
+      push("OBLIGATION_REOPENED", "M1", { obligationId });
+    }
+    if (this.events.length + events.length > P2_LIMITS.maxLedgerEvents) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+    if (eventSeq + events.length >= Number.MAX_SAFE_INTEGER) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+
+    return p2Snapshot({
+      ticket: frozenTicket,
+      newRef: frozenNew,
+      staleRefs: frozenStale,
+      eventSeq,
+      events,
+      affectedTaskIds,
+      affectedObligationIds,
+      reopenedObligationIds,
+    }) as RedoCommitPlan;
   }
 
   /** Add a whole validated batch; nothing is mutated before the batch passes. */

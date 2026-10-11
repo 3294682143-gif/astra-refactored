@@ -361,6 +361,51 @@ export class P2WorkunitStore {
    * result stays PROVISIONAL/UNKNOWN; this is not mathematical acceptance.
    */
   accept(task: P2Task, input: P2WorkReceipt): P2Artifact {
+    const { artifact, receipt, entryKey } = this.prepareAcceptance(task, input);
+    const entry = p2Snapshot({ artifact, availability: "ACTIVE" }) as P2ArtifactEntry;
+    if (receipt.supersedes !== null) {
+      this.invalidate(receipt.supersedes);
+    }
+    this.entries.set(entryKey, entry);
+    this.latest.set(artifact.artifactId, artifact.envelope.artifactVersion as number);
+    this.requests.add(receipt.sourceRequestId);
+    this.lastSeq = receipt.eventSeq;
+    return artifact;
+  }
+
+  /**
+   * Pure pre-check of one prospective acceptance. Runs every validation and
+   * builds the exact artifact plus its entry key, but writes no map, no
+   * request, no latest version and no sequence. `accept` reuses this so the
+   * pre-check and the commit can never diverge.
+   */
+  validateAccept(task: P2Task, input: P2WorkReceipt): P2Artifact {
+    return this.prepareAcceptance(task, input).artifact;
+  }
+
+  /**
+   * Pure pre-check of one prospective replacement of an existing version.
+   *
+   * It runs the same shared acceptance pre-check and then requires the new
+   * artifact to keep the exact canonical scope of the version it replaces.
+   * Nothing is mutated: no map, no request, no latest version, no sequence and
+   * no availability change. The scope comparison uses the full canonical scope
+   * of the prepared artifact, which the shared M3 work-scope resolution has
+   * already bound to the real goal/scope of the task.
+   */
+  validateReplacement(task: P2Task, input: P2WorkReceipt, previous: P2Artifact): P2Artifact {
+    const prepared = this.prepareAcceptance(task, input).artifact;
+    const frozenPrevious = p2Snapshot(previous) as P2Artifact;
+    if (canonicalScope(prepared.scope) !== canonicalScope(frozenPrevious.scope)) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    return prepared;
+  }
+
+  private prepareAcceptance(
+    task: P2Task,
+    input: P2WorkReceipt,
+  ): { readonly artifact: P2Artifact; readonly receipt: P2WorkReceipt; readonly entryKey: string } {
     const frozenTask = p2Snapshot(task) as P2Task;
     const scope = workScope(this.contract, frozenTask);
     const read = readWorkReceipt(this.contract, frozenTask, scope, input);
@@ -413,15 +458,11 @@ export class P2WorkunitStore {
     }) as P2Artifact;
 
     const entryKey = workRefKey({ artifactId: artifact.artifactId, artifactVersion });
-    const entry = p2Snapshot({ artifact, availability: "ACTIVE" }) as P2ArtifactEntry;
-    if (receipt.supersedes !== null) {
-      this.invalidate(receipt.supersedes);
-    }
-    this.entries.set(entryKey, entry);
-    this.latest.set(artifact.artifactId, artifactVersion);
-    this.requests.add(receipt.sourceRequestId);
-    this.lastSeq = receipt.eventSeq;
-    return artifact;
+    return p2Snapshot({ artifact, receipt, entryKey }) as {
+      readonly artifact: P2Artifact;
+      readonly receipt: P2WorkReceipt;
+      readonly entryKey: string;
+    };
   }
 
   /**
@@ -547,6 +588,23 @@ export class P2WorkunitStore {
   }
 
   invalidate(ref: P2ArtifactRef): readonly P2ArtifactRef[] {
+    const affected = this.previewInvalidation(ref);
+    for (const item of affected) {
+      const key = workRefKey(item);
+      const entry = this.entries.get(key) as P2ArtifactEntry;
+      this.entries.set(key, p2Snapshot({ artifact: entry.artifact, availability: "STALE" }) as P2ArtifactEntry);
+    }
+    return affected;
+  }
+
+  /**
+   * Pure query of the exact invalidation closure of one ref: the target plus
+   * every transitive downstream that depends on it. Nothing is mutated and no
+   * availability is changed. A ref that is not a stored version is rejected
+   * with the same fixed code as `invalidate`, so a forged version can never
+   * turn into an empty closure.
+   */
+  previewInvalidation(ref: P2ArtifactRef): readonly P2ArtifactRef[] {
     const rootKey = workRefKey(ref);
     if (!this.entries.has(rootKey)) {
       throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
@@ -571,8 +629,10 @@ export class P2WorkunitStore {
     const affected: P2ArtifactRef[] = [];
     for (const key of closure) {
       const entry = this.entries.get(key) as P2ArtifactEntry;
-      this.entries.set(key, p2Snapshot({ artifact: entry.artifact, availability: "STALE" }) as P2ArtifactEntry);
-      affected.push({ artifactId: entry.artifact.artifactId, artifactVersion: entry.artifact.envelope.artifactVersion as number });
+      affected.push({
+        artifactId: entry.artifact.artifactId,
+        artifactVersion: entry.artifact.envelope.artifactVersion as number,
+      });
     }
     return p2Snapshot(affected) as readonly P2ArtifactRef[];
   }

@@ -22,6 +22,8 @@ from .agent_workflow import (
     check_route_provenance,
     checked_packet,
 )
+from .agent_history import check_revision_context
+from .agent_history import artifact_view, project_artifacts
 
 __all__ = [
     "canonical_scope",
@@ -53,7 +55,9 @@ _SCOPE_FIELDS = (
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 _CONTEXT_SCHEMA_VERSION = "agent-work-context-v4"
-_ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5"
+_ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v6"
+_DEPENDENCY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5"
+_REVISION_CONTEXT_SCHEMA_VERSION = "agent-work-context-v6"
 _FINAL_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
 _LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
@@ -388,21 +392,18 @@ def protected_final(history, problem, session_id, problem_hash,
         scope = body.get("scope")
         if not isinstance(task, dict) or not isinstance(scope, dict):
             return None
-        source_ordinal = _ordinal(source_id)
-        count = 0
-        for ordinal, _ in _work_ordinals(
-            history, problem, session_id, problem_hash, source_schema,
-        ):
-            if ordinal <= source_ordinal:
-                count += 1
-        if count < 1:
+        projection = project_artifacts(history, session_id, problem_hash)
+        row = projection["bySourceRef"].get(source_id)
+        if not isinstance(row, dict):
+            return None
+        if row["availability"] != "ACTIVE":
             return None
         binding = {
             "sessionId": session_id,
             "problemHash": problem_hash,
             "contractVersion": 1,
-            "artifactId": "artifact-" + str(count),
-            "artifactVersion": 1,
+            "artifactId": row["artifactId"],
+            "artifactVersion": row["envelope"]["artifactVersion"],
             "taskId": task.get("taskId"),
             "goalId": task.get("goalId"),
             "scopeId": scope.get("scopeId"),
@@ -448,11 +449,13 @@ def check_inputs(inner, history, current_request_id):
     if not isinstance(dependencies, list) or len(refs) != len(artifacts) or len(refs) > _MAX_REFS:
         _fail()
     current_ordinal = _ordinal(current_request_id)
+    projection = project_artifacts(history, inner["sessionId"], inner["problemHash"])
+    by_source = projection["bySourceRef"]
     seen = set()
     for index, ref in enumerate(refs):
         _exact_keys(ref, ("artifactId", "artifactVersion"))
         artifact_id = _text(ref["artifactId"], 256)
-        if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] != 1:
+        if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] < 1:
             _fail()
         if artifact_id in seen:
             _fail()
@@ -465,6 +468,17 @@ def check_inputs(inner, history, current_request_id):
         if not isinstance(source_id, str) or source_id not in history:
             _fail()
         if _ordinal(source_id) >= current_ordinal:
+            _fail()
+        actual_row = by_source.get(source_id)
+        if not isinstance(actual_row, dict):
+            _fail()
+        if actual_row["availability"] != "ACTIVE":
+            _fail()
+        if not same_json(artifact_view(actual_row), artifact):
+            _fail()
+        if actual_row["artifactId"] != artifact_id:
+            _fail()
+        if actual_row["envelope"]["artifactVersion"] != ref["artifactVersion"]:
             _fail()
         source_id, request, receipt, body = _source_body(history[source_id])
         if request["sessionId"] != inner["sessionId"] or request["problemHash"] != inner["problemHash"]:
@@ -539,7 +553,7 @@ def check_inputs(inner, history, current_request_id):
             _fail()
         if envelope.get("scopeId") != scope.get("scopeId"):
             _fail()
-        if not _is_int(envelope.get("artifactVersion")) or envelope["artifactVersion"] != 1:
+        if not _is_int(envelope.get("artifactVersion")) or envelope["artifactVersion"] < 1:
             _fail()
         if not _is_int(envelope.get("contractVersion")) or envelope["contractVersion"] != 1:
             _fail()
@@ -569,16 +583,25 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     extra = {"methodCatalog"}
     if version in (
         _FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION,
-        _ACTIVE_CONTEXT_SCHEMA_VERSION,
+        _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
     ):
         required = required + ("allowFinal", "protectedCandidate")
         extra = extra | {"allowFinal", "protectedCandidate"}
-    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
+    ):
         required = required + ("allowRouteProposal", "routeProvenance")
         extra = extra | {"allowRouteProposal", "routeProvenance"}
-    if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
+    if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
         required = required + ("allowTaskContinuation", "dependencyProvenance")
         extra = extra | {"allowTaskContinuation", "dependencyProvenance"}
+    if version == _REVISION_CONTEXT_SCHEMA_VERSION:
+        required = required + (
+            "allowArtifactRedo", "revisionProvenance", "revisionTarget",
+        )
+        extra = extra | {"allowArtifactRedo", "revisionProvenance", "revisionTarget"}
     if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
     if body["schemaVersion"] != version:
@@ -624,11 +647,14 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _fail()
     expected_obligation_task_id = task["taskId"]
     provenance = None
-    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
+    ):
         route_prov = check_route_provenance(body, history, version)
         dep_prov = None
-        if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
-            dep_prov = check_dependency_provenance(body, history)
+        if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
+            dep_prov = check_dependency_provenance(body, history, version)
         if route_prov is not None and dep_prov is not None:
             _fail()
         provenance = dep_prov if dep_prov is not None else route_prov
@@ -699,7 +725,8 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
     if version in (
         _FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION,
-        _ACTIVE_CONTEXT_SCHEMA_VERSION,
+        _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
     ):
         if not isinstance(body["allowFinal"], bool):
             _fail()
@@ -713,7 +740,10 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if not same_json(body["protectedCandidate"], expected_projection):
             _fail()
-    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
+    ):
         if not isinstance(body["allowRouteProposal"], bool):
             _fail()
         route_prov = check_route_provenance(body, history, version)
@@ -721,13 +751,25 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if route_prov is not None and not same_json(body["routeProvenance"], route_prov):
             _fail()
-    if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
+    if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
         if not isinstance(body["allowTaskContinuation"], bool):
             _fail()
-        dep_prov = check_dependency_provenance(body, history)
+        dep_prov = check_dependency_provenance(body, history, version)
         if dep_prov is None and body["dependencyProvenance"] is not None:
             _fail()
         if dep_prov is not None and not same_json(body["dependencyProvenance"], dep_prov):
+            _fail()
+    if version == _REVISION_CONTEXT_SCHEMA_VERSION:
+        if not isinstance(body["allowArtifactRedo"], bool):
+            _fail()
+        revision_prov = check_revision_context(
+            body, history, session_id, problem_hash,
+        )
+        if revision_prov is None and body["revisionProvenance"] is not None:
+            _fail()
+        if revision_prov is not None and not same_json(
+            body["revisionProvenance"], revision_prov,
+        ):
             _fail()
     check_inputs(body, history, request_id)
     expected = [
@@ -757,13 +799,20 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
         _fail()
     if not _is_int(target["contractVersion"]) or target["contractVersion"] != 1:
         _fail()
-    if not _is_int(target["artifactVersion"]) or target["artifactVersion"] != 1:
+    if not _is_int(target["artifactVersion"]) or target["artifactVersion"] < 1:
         _fail()
     source_id = target["sourceRequestId"]
     if _ordinal(source_id) >= _ordinal(request_id):
         _fail()
     packet = candidate_packet(history, source_id, problem, session_id, problem_hash)
     if packet is None:
+        _fail()
+    expected_final = protected_final(history, problem, session_id, problem_hash)
+    if expected_final is None:
+        _fail()
+    if target["artifactId"] != expected_final["binding"]["artifactId"]:
+        _fail()
+    if target["artifactVersion"] != expected_final["binding"]["artifactVersion"]:
         _fail()
     if target["taskId"] != packet["taskId"] or target["goalId"] != packet["goalId"]:
         _fail()
@@ -841,11 +890,11 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             _fail()
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
-        if body.get("schemaVersion") != _ACTIVE_CONTEXT_SCHEMA_VERSION:
+        if body.get("schemaVersion") != _REVISION_CONTEXT_SCHEMA_VERSION:
             _fail()
         _check_work(
             body, request_id, problem, session_id, problem_hash, history, effects,
-            catalog, method_assets, _ACTIVE_CONTEXT_SCHEMA_VERSION, True,
+            catalog, method_assets, _REVISION_CONTEXT_SCHEMA_VERSION, True,
         )
     elif request["phase"] == "R2":
         target = body.get("target")
@@ -884,7 +933,7 @@ def validate_legacy_context(request, problem, session_id, problem_hash, history,
     version = body.get("schemaVersion")
     if version not in (
         _LEGACY_CONTEXT_SCHEMA_VERSION, _FINAL_CONTEXT_SCHEMA_VERSION,
-        _CONTEXT_SCHEMA_VERSION,
+        _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
     ):
         _fail()
     task = body.get("task")

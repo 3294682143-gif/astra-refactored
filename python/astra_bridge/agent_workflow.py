@@ -28,8 +28,10 @@ __all__ = [
 _WORK_V1 = "p2a-work-v1"
 _WORK_V2 = "p2a-work-v2"
 _WORK_V3 = "p2a-work-v3"
+_WORK_V4 = "p2a-work-v4"
 _CONTEXT_V4 = "agent-work-context-v4"
 _CONTEXT_V5 = "agent-work-context-v5"
+_CONTEXT_V6 = "agent-work-context-v6"
 _MAX_TEXT = 4096
 _MAX_SHORT = 256
 _MAX_LEMMAS = 32
@@ -43,6 +45,7 @@ _PACKET_FIELDS = (
 )
 _PROPOSAL_FIELDS = ("kind", "obligationId", "mechanism", "rationale")
 _DEPENDENT_FIELDS = ("kind", "obligationId", "rationale")
+_REDO_FIELDS = ("kind", "targetArtifactRef", "rationale")
 _MECHANISM_FIELDS = ("representation", "operation", "lemmas", "construction")
 _PROVENANCE_FIELDS = (
     "sourceRequestId", "sourceArtifactRef", "obligationId", "routeSignature",
@@ -250,6 +253,20 @@ def checked_packet(text):
                 _fail()
             _short_shape(proposal["obligationId"])
             _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
+    elif version == _WORK_V4:
+        _exact_keys(packet, _PACKET_FIELDS + ("workflowProposal",))
+        proposal = packet["workflowProposal"]
+        if proposal is not None:
+            _exact_keys(proposal, _REDO_FIELDS)
+            if proposal["kind"] != "REDO_ARTIFACT":
+                _fail()
+            target = proposal["targetArtifactRef"]
+            if target is not None:
+                _exact_keys(target, _REF_FIELDS)
+                _text(target["artifactId"], _MAX_REF)
+                if not _is_int(target["artifactVersion"]) or target["artifactVersion"] < 1:
+                    _fail()
+            _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
     else:
         _fail()
     _short_shape(packet["sessionId"])
@@ -432,7 +449,7 @@ def _check_source_body(body, source_id, session_id, problem_hash,
     accepted here, so a v5 source can never be read through the legacy path and
     a v4 source can never be read through the active path.
     """
-    if source_schema not in (_CONTEXT_V4, _CONTEXT_V5):
+    if source_schema not in (_CONTEXT_V4, _CONTEXT_V5, _CONTEXT_V6):
         _fail()
     if body.get("schemaVersion") != source_schema:
         _fail()
@@ -453,7 +470,8 @@ def _check_source_body(body, source_id, session_id, problem_hash,
     return task, scope, route, obligations
 
 
-def _check_dependency_source_body(body, source_id, session_id, problem_hash):
+def _check_dependency_source_body(body, source_id, session_id, problem_hash,
+                                  source_schema=_CONTEXT_V5):
     """Strict shape of the source WORK context body of a dependent task (v5).
 
     The active v5 shape is the only one accepted here: a v4 body never carries
@@ -461,7 +479,9 @@ def _check_dependency_source_body(body, source_id, session_id, problem_hash):
     source of a dependent task. The older read-only entry points keep their own
     explicit version parameter and are not widened by this helper.
     """
-    if body.get("schemaVersion") != _CONTEXT_V5:
+    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6):
+        _fail()
+    if body.get("schemaVersion") != source_schema:
         _fail()
     if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
         _fail()
@@ -663,7 +683,7 @@ def check_route_provenance(body, history, source_schema=_CONTEXT_V5):
     # dependency checker owns that proof, so this checker must not reject it as
     # a non-default route. The dependency checker never calls back here.
     if body.get("dependencyProvenance") is not None:
-        if check_dependency_provenance(body, history) is None:
+        if check_dependency_provenance(body, history, source_schema) is None:
             _fail()
         return None
     provenance = body.get("routeProvenance")
@@ -783,7 +803,7 @@ def check_route_provenance(body, history, source_schema=_CONTEXT_V5):
     }
 
 
-def check_dependency_provenance(body, history):
+def check_dependency_provenance(body, history, source_schema=_CONTEXT_V5):
     """Re-derive the control provenance of one dependent-task WORK body.
 
     Returns the validated four-field provenance dict for a real dependent task,
@@ -815,7 +835,9 @@ def check_dependency_provenance(body, history):
         if task_id.startswith("dep-task-"):
             _fail()
         return None
-    if body.get("schemaVersion") != _CONTEXT_V5:
+    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6):
+        _fail()
+    if body.get("schemaVersion") != source_schema:
         _fail()
     if body.get("routeProvenance") is not None:
         _fail()
@@ -838,7 +860,9 @@ def check_dependency_provenance(body, history):
         history, source_id, session_id, problem_hash,
     )
     source_task, source_scope, source_route, source_obligations = (
-        _check_dependency_source_body(source_body, source_id, session_id, problem_hash)
+        _check_dependency_source_body(
+            source_body, source_id, session_id, problem_hash, source_schema,
+        )
     )
     if source_packet["schemaVersion"] != _WORK_V3:
         _fail()

@@ -96,7 +96,7 @@ allowance as registered tools, plus the method-specific cap of one; neither
 tasks nor cache hits create a fresh budget. A failed attempt still spends its
 slot. Default or insufficient-budget paths do not touch the reader.
 
-WORK context v5 retains the complete validated catalog and loaded asset body,
+WORK context v6 retains the complete validated catalog and loaded asset body,
 title, version and integrity hash through the existing M3 preparation interface.
 Only same-task receipts enter toolObservations; method text may persist across
 tasks as advisory material, never a mathematical premise or verification.
@@ -117,8 +117,8 @@ not a synthesized WorkPacket or new artifact. Configured R2 still runs within
 the same root capacity. A rejected final stops further calls and may retain
 the old BEST_EFFORT candidate; STRICT still withholds it.
 
-Historical v2/v3/v4 WORK contexts have an explicit read-only validator; the active
-Host requires v5. The 1.2 and 1.3 frame schema bytes are unchanged by this
+Historical v2/v3/v4/v5 WORK contexts have an explicit read-only validator; the active
+Host requires v6. The 1.2 and 1.3 frame schema bytes are unchanged by this
 context-only migration. Full event replay is still a later gate.
 
 Version-2 WorkPackets may carry one strict, untrusted NEW_ROUTE suggestion.
@@ -135,6 +135,14 @@ scope. The Host verifies the source chain, not just matching field names. Up to
 three dependent WORKs and one R2 fit the same four model calls, without an extra
 planning request. See G2_DEPENDENT_CHAIN.md; this does not implement revision,
 mathematical acceptance or durable recovery.
+
+Version-4 WorkPackets can request one bounded REDO_ARTIFACT. Admission alone
+does not invalidate anything: an actual replacement WORK must pass M1/M3
+preflight and changed-material checks before version+1 and scoped STALE
+propagation occur. Failures retain old versions without refunding calls.
+Host verifies the actual history and provenance. Protected-candidate replacement
+is not granted by this action; a stale protected origin is withheld by S3.
+See G2_ARTIFACT_REDO.md, including the redo-last-WORK preview limit.
 
 M5 remains the mathematical final selector. Host only verifies the returned
 answer's provenance and policy: it must equal the actual eligible candidate

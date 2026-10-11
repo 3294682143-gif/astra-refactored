@@ -46,6 +46,7 @@ import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
 import { AgentWorkflowRoutes } from "./agent-workflow.js";
+import { AgentRevisionAdmission } from "./agent-revision.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
 const CANDIDATE_KINDS = ["CANDIDATE_VALIDITY", "ANSWER_REQUEST"] as const;
@@ -96,6 +97,7 @@ export async function runAgentLoop(
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
   const workflow = new AgentWorkflowRoutes(ledger, store);
+  const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
   const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls);
   const calls = new AgentCalls(root, gate, captured);
 
@@ -107,12 +109,14 @@ export async function runAgentLoop(
   let methodAssets: P2MethodAsset[] = [];
   let stop: AgentTraceCode = "NO_CANDIDATE";
   let target: P4Target | null = null;
+  let protectedOrigin: P4Target | null = null;
   let review: P4ReviewSession | null = null;
   let firstReviewOrdinal = 2;
   let candidateTask: P2Task | null = null;
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
-  const reserve = (): number => (target !== null && opts.maxReviews > 0 ? 1 : 0);
+  const reserve = (): number =>
+    target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
 
   const methodsEnabled =
     opts.maxMethodLoads === 1 &&
@@ -150,6 +154,19 @@ export async function runAgentLoop(
         break;
       }
       const ready = ledger.readyTasks();
+      const pendingRedoTaskId = revision.pendingTaskId();
+      const redoReady =
+        pendingRedoTaskId === null
+          ? []
+          : ready.filter((task) => task.taskId === pendingRedoTaskId);
+      // A pending redo whose task is not genuinely READY is a control
+      // inconsistency: never fall back to an unrelated ordinary task while a
+      // redo is pending, because that would move other mathematical state.
+      if (pendingRedoTaskId !== null && redoReady.length === 0) {
+        root.stop("CONTROL_REJECTED");
+        stop = "CONTROL_REJECTED";
+        break;
+      }
       // A dynamically admitted route task is preferred while it is genuinely
       // READY; otherwise the original ready set is used unchanged.
       const routeReady = ready.filter(
@@ -159,7 +176,7 @@ export async function runAgentLoop(
       );
       const chosen = chooseP2ReadyTask(
         ledger.snapshot(),
-        routeReady.length > 0 ? routeReady : ready,
+        redoReady.length > 0 ? redoReady : routeReady.length > 0 ? routeReady : ready,
       );
       if (chosen === null) {
         stop = "WORK_UNITS_COMPLETE";
@@ -177,6 +194,21 @@ export async function runAgentLoop(
       }
       const route = workflow.forTask(running);
       const observations: P3EffectReceipt[] = [];
+      const seenEffectIds = new Set<string>();
+      for (const item of calls.effects) {
+        const receipt = item.receipt;
+        if (receipt.binding.taskId !== running.taskId) {
+          continue;
+        }
+        if (receipt.status !== "COMPLETE" && receipt.status !== "ERROR") {
+          continue;
+        }
+        if (seenEffectIds.has(receipt.effectId)) {
+          continue;
+        }
+        seenEffectIds.add(receipt.effectId);
+        observations.push(receipt);
+      }
       let subGate: P3EffectGate | null = null;
       const effectRoom = opts.maxEffects - root.effectCalls();
       if (effectRoom > 0 && captured.effect !== null) {
@@ -242,6 +274,7 @@ export async function runAgentLoop(
         const remainingCallsAfterWork = callsLeft() - 1;
         const remainingUnitsAfterWork = opts.maxWorkUnits - workUnits - 1;
         const allowRouteProposal =
+          !revision.hasUsed() &&
           remainingCallsAfterWork >= 1 &&
           remainingUnitsAfterWork >= 1 &&
           workflow.canAdmit(
@@ -251,9 +284,21 @@ export async function runAgentLoop(
             root.remainingMs(),
           );
         const allowTaskContinuation =
+          !revision.hasUsed() &&
           remainingCallsAfterWork >= 1 &&
           remainingUnitsAfterWork >= 1 &&
           workflow.canContinue(
+            remainingCallsAfterWork,
+            opts.maxReviews,
+            remainingUnitsAfterWork,
+            root.remainingMs(),
+          );
+        // The redo flag is a budget question only: a pending redo makes
+        // `canRedo` false by itself, so no pending condition belongs here.
+        const allowArtifactRedo =
+          remainingCallsAfterWork >= 1 &&
+          remainingUnitsAfterWork >= 1 &&
+          revision.canRedo(
             remainingCallsAfterWork,
             opts.maxReviews,
             remainingUnitsAfterWork,
@@ -281,8 +326,11 @@ export async function runAgentLoop(
             methodAssets,
             allowRouteProposal,
             allowTaskContinuation,
+            allowArtifactRedo,
             routeProvenance: workflow.provenanceOf(running.taskId),
             dependencyProvenance: workflow.dependencyProvenanceOf(running.taskId),
+            revisionProvenance: revision.provenanceFor(running.taskId),
+            revisionTarget: revision.targetFor(running.taskId),
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -401,55 +449,115 @@ export async function runAgentLoop(
           break;
         }
         let accepted: P2Artifact;
-        try {
-          accepted = store.accept(running, {
-            artifactId: `artifact-${workUnits + 1}`,
+        let ref: P2ArtifactRef;
+        if (revision.pendingTaskId() === running.taskId) {
+          const origin = revision.provenanceFor(running.taskId);
+          if (origin === null) {
+            root.stop("CONTROL_REJECTED");
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const settled = revision.settle(running, {
+            artifactId: origin.targetArtifactRef.artifactId,
             routeId: route.routeId,
             sourceRequestId: outcome.requestId,
             transportStatus: outcome.receipt.transportStatus,
             text: outcome.receipt.text,
             eventSeq: ledger.nextEventSeq(),
-            supersedes: null,
+            supersedes: origin.targetArtifactRef,
           });
-        } catch (error) {
-          if (!(error instanceof P2Error)) {
-            throw error;
+          if (settled === null) {
+            root.stop("CONTROL_REJECTED");
+            stop = "CONTROL_REJECTED";
+            break;
           }
-          stop = "PACKET_REJECTED";
-          break;
-        }
-        const ref: P2ArtifactRef = {
-          artifactId: accepted.artifactId,
-          artifactVersion: accepted.envelope.artifactVersion ?? 1,
-        };
-        ledger.recordDelivery(
-          running.taskId,
-          ref,
-          accepted.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL",
-          accepted.envelope.eventSeq,
-        );
-        workUnits += 1;
-        if (accepted.deliveryStatus !== "COMPLETE") {
-          stop = "NO_CANDIDATE";
-          break;
-        }
-        if (target === null && store.candidate(ref) !== null) {
-          const obligation = ledger
-            .snapshot()
-            .obligations.find((row) => row.obligationId === running.obligationId);
-          if (
-            obligation !== undefined &&
-            (CANDIDATE_KINDS as readonly string[]).includes(obligation.kind)
-          ) {
+          accepted = settled;
+          ref = {
+            artifactId: settled.artifactId,
+            artifactVersion: settled.envelope.artifactVersion ?? 1,
+          };
+          workUnits += 1;
+          // Refresh the protected origin's current availability immediately:
+          // a later WORK context must never expose a stale candidate as ACTIVE.
+          if (protectedOrigin !== null) {
+            const originRef: P2ArtifactRef = {
+              artifactId: protectedOrigin.binding.artifactId,
+              artifactVersion: protectedOrigin.binding.artifactVersion,
+            };
+            let originEntry;
             try {
-              target = p4Target(ledger.snapshot(), accepted, "ACTIVE");
-              candidateTask = running;
+              originEntry = store.get(originRef);
             } catch (error) {
               if (!(error instanceof P2Error)) {
                 throw error;
               }
-              stop = "CONTROL_REJECTED";
-              break;
+              originEntry = null;
+            }
+            if (originEntry !== null && originEntry.availability === "STALE") {
+              target = p2Snapshot({ ...protectedOrigin, availability: "STALE" as const }) as P4Target;
+            }
+          }
+          if (accepted.deliveryStatus !== "COMPLETE") {
+            stop = "NO_CANDIDATE";
+            break;
+          }
+          // A committed replacement ends the WORK phase of this profile: the
+          // loop exits to the R2/finalization stage instead of admitting more
+          // work, matching the Host-side finished-redo projection.
+          stop = "WORK_UNITS_COMPLETE";
+          break;
+        } else {
+          try {
+            accepted = store.accept(running, {
+              artifactId: `artifact-${workUnits + 1}`,
+              routeId: route.routeId,
+              sourceRequestId: outcome.requestId,
+              transportStatus: outcome.receipt.transportStatus,
+              text: outcome.receipt.text,
+              eventSeq: ledger.nextEventSeq(),
+              supersedes: null,
+            });
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "PACKET_REJECTED";
+            break;
+          }
+          ref = {
+            artifactId: accepted.artifactId,
+            artifactVersion: accepted.envelope.artifactVersion ?? 1,
+          };
+          ledger.recordDelivery(
+            running.taskId,
+            ref,
+            accepted.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL",
+            accepted.envelope.eventSeq,
+          );
+          workUnits += 1;
+          if (accepted.deliveryStatus !== "COMPLETE") {
+            stop = "NO_CANDIDATE";
+            break;
+          }
+          if (target === null && store.candidate(ref) !== null) {
+            const obligation = ledger
+              .snapshot()
+              .obligations.find((row) => row.obligationId === running.obligationId);
+            if (
+              obligation !== undefined &&
+              (CANDIDATE_KINDS as readonly string[]).includes(obligation.kind)
+            ) {
+              try {
+                target = p4Target(ledger.snapshot(), accepted, "ACTIVE");
+                protectedOrigin = target;
+                candidateTask = running;
+              } catch (error) {
+                if (!(error instanceof P2Error)) {
+                  throw error;
+                }
+                stop = "CONTROL_REJECTED";
+                break;
+              }
             }
           }
         }
@@ -474,6 +582,15 @@ export async function runAgentLoop(
             root.remainingMs(),
           );
         }
+        if (allowArtifactRedo) {
+          revision.admit(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs(),
+          );
+        }
         advanced = true;
         break;
       }
@@ -489,7 +606,30 @@ export async function runAgentLoop(
       stop = "WORK_UNITS_COMPLETE";
     }
 
-    if (target !== null && !root.stopped()) {
+    if (revision.pendingTaskId() !== null) {
+      revision.abort();
+    }
+
+    if (protectedOrigin !== null) {
+      const originRef: P2ArtifactRef = {
+        artifactId: protectedOrigin.binding.artifactId,
+        artifactVersion: protectedOrigin.binding.artifactVersion,
+      };
+      let originEntry;
+      try {
+        originEntry = store.get(originRef);
+      } catch (error) {
+        if (!(error instanceof P2Error)) {
+          throw error;
+        }
+        originEntry = null;
+      }
+      if (originEntry !== null && originEntry.availability === "STALE") {
+        target = p2Snapshot({ ...protectedOrigin, availability: "STALE" as const }) as P4Target;
+      }
+    }
+
+    if (target !== null && target.availability === "ACTIVE" && !root.stopped()) {
       if (opts.maxReviews === 0) {
         stop = "NO_REVIEW";
       } else if (root.nextModelId() === null || root.remainingMs() <= MIN_MS) {
@@ -562,6 +702,11 @@ export async function runAgentLoop(
     stop = "CONTROL_REJECTED";
   }
 
+  // A pending redo that never settled must not leave its task READY/PENDING.
+  if (revision.pendingTaskId() !== null) {
+    revision.abort();
+  }
+
   const policy: P4DeliveryPolicy = opts.policy;
   const candidateGate = new P4CandidateGate(
     ledger.snapshot(),
@@ -570,12 +715,13 @@ export async function runAgentLoop(
   );
   if (target !== null) {
     try {
-      candidateGate.protect(target);
+      candidateGate.protect(protectedOrigin === null ? target : protectedOrigin);
     } catch (error) {
       if (!(error instanceof P2Error)) {
         throw error;
       }
-      target = null;
+      root.stop("CONTROL_REJECTED");
+      stop = "CONTROL_REJECTED";
     }
   }
   const decision = candidateGate.finalize(
@@ -620,6 +766,8 @@ export async function runAgentLoop(
     taskRoutes: workflow.snapshot().taskRoutes,
     routeAdmissions: workflow.snapshot().routeAdmissions,
     dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
+    revisions: revision.snapshot(),
+    readyTasks: ledger.readyTasks(),
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }

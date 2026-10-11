@@ -21,7 +21,7 @@ export interface ReactiveWorkOptions {
   readonly claim?: string;
   readonly derivation?: string;
   readonly deliveryStatus?: "COMPLETE" | "INCOMPLETE" | "TRUNCATED" | "ERROR";
-  readonly schemaVersion?: "p2a-work-v1" | "p2a-work-v2" | "p2a-work-v3";
+  readonly schemaVersion?: "p2a-work-v1" | "p2a-work-v2" | "p2a-work-v3" | "p2a-work-v4";
   readonly workflowProposal?: unknown;
   readonly pendingObligations?: readonly string[];
 }
@@ -128,7 +128,11 @@ export function reactiveWork(request: AgentModelRequest, options: ReactiveWorkOp
     deliveryStatus: options.deliveryStatus ?? "COMPLETE",
     candidateProposal: candidate,
   };
-  if (options.schemaVersion === "p2a-work-v2" || options.schemaVersion === "p2a-work-v3") {
+  if (
+    options.schemaVersion === "p2a-work-v2" ||
+    options.schemaVersion === "p2a-work-v3" ||
+    options.schemaVersion === "p2a-work-v4"
+  ) {
     packet.workflowProposal = options.workflowProposal ?? null;
   }
   return JSON.stringify(packet);
