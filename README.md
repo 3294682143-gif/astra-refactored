@@ -73,6 +73,12 @@ keeps its parent/challenge lineage and cannot automatically replace the
 protected candidate. Semantic scope mapping and repair correctness remain
 UNKNOWN; this is still offline infrastructure, not mathematical verification.
 
+The [S1 mapping-review library](docs/P4_MAPPING_REVIEW.md) adds five-dimensional
+model correspondence reports, strict original-text/representation quotes and
+a separate single-check diagnostic gate. Model MATCH is still unverified.
+Only the independent libraries passed acceptance; their proposed end-to-end
+integration remains withheld for repair. Existing workflows are unchanged.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

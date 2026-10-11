@@ -1102,3 +1102,4 @@ export * from "./p3-host.js";
 export * from "./p4.js";
 export * from "./p4-binding.js";
 export * from "./p4-repair.js";
+export * from "./p4-mapping.js";

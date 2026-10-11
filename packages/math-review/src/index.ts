@@ -17,6 +17,8 @@ import {
 export const MATH_REVIEW_VERSION = "0.0.0-p1" as const;
 export * from "./p4-report.js";
 export * from "./p4-session.js";
+export * from "./p4-mapping-report.js";
+export * from "./p4-mapping-session.js";
 
 /** Record the skipped review. No semantic check is run here. */
 export function reviewSkipped(contract: P1Contract, eventSeq: number): P1ReviewResult {

@@ -6,6 +6,11 @@ repair correct. P3 Host `1.1-p3-host-local`, the existing R2/S3 fixture,
 official Python entry, solver, resources and dependencies remain unchanged.
 There is no new RPC, real model client, tool permission or default switch.
 
+A later [S1 mapping-review library slice](P4_MAPPING_REVIEW.md) adds bounded
+model correspondence opinions. Its end-to-end composition is not accepted;
+the diagnostic ledger described here still has semanticMapping UNKNOWN and
+cannot support mathematical obligations.
+
 ## S1: diagnostic identity, not semantic equivalence
 
 `P4DiagnosticLedger` binds a P4 target to at most two existing P3 tool

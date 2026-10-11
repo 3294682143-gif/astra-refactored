@@ -13,6 +13,7 @@ export * from "./p2-gate.js";
 export * from "./p3-parser.js";
 export * from "./p3-effect-data.js";
 export * from "./p3-gate.js";
+export * from "./p4-mapping-gate.js";
 
 /** Below this remaining time the call is refused rather than started. */
 export const MIN_REMAINING_MS = 25 as const;
