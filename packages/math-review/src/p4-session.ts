@@ -37,6 +37,7 @@ const MAX_CHALLENGES = 16;
 const MIN_REMAINING_MS = 26;
 const MAX_REMAINING_MS = 5000;
 const LATE_MS = 25;
+const MAX_REQUEST_ORDINAL = 4;
 const CONTEXT_SCHEMA_VERSION = "p4-r2-context-v1" as const;
 
 const SYSTEM_PROMPT =
@@ -69,14 +70,24 @@ export class P4ReviewSession {
   private readonly contract: P2Contract;
   private readonly target: P4Target;
   private readonly maxReviews: number;
+  private readonly firstRequestOrdinal: number;
   private readonly records: P4ReviewRecord[] = [];
   private readonly challenges: P4Challenge[] = [];
   private readonly evidence: P4ReviewEvidence[] = [];
   private availability: P4EvidenceAvailability = "ACTIVE";
   private blocked = false;
 
-  constructor(contract: P2Contract, target: P4Target, maxReviews = 1) {
+  constructor(contract: P2Contract, target: P4Target, maxReviews = 1, firstRequestOrdinal = 2) {
     if (typeof maxReviews !== "number" || !Number.isSafeInteger(maxReviews) || maxReviews < 0 || maxReviews > MAX_REVIEWS) {
+      fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+    if (
+      typeof firstRequestOrdinal !== "number" ||
+      !Number.isSafeInteger(firstRequestOrdinal) ||
+      firstRequestOrdinal < 2 ||
+      firstRequestOrdinal > MAX_REQUEST_ORDINAL ||
+      firstRequestOrdinal + maxReviews - 1 > MAX_REQUEST_ORDINAL
+    ) {
       fail(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     const frozenContract = p2Snapshot(contract);
@@ -94,6 +105,7 @@ export class P4ReviewSession {
     this.contract = frozenContract;
     this.target = frozenTarget;
     this.maxReviews = maxReviews;
+    this.firstRequestOrdinal = firstRequestOrdinal;
   }
 
   private pending(): P4ReviewRecord | null {
@@ -147,7 +159,7 @@ export class P4ReviewSession {
 
   admit(requestId: string, remainingMs: number): P4ReviewRecord {
     const id = requireText(requestId, 256);
-    if (id !== `model-${this.records.length + 2}`) {
+    if (id !== `model-${this.firstRequestOrdinal + this.records.length}`) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (this.records.length >= this.maxReviews) {
@@ -234,7 +246,7 @@ export class P4ReviewSession {
       code = "INVALID_REPORT";
     } else {
       try {
-        report = parseP4ReviewReport(raw, id, this.target, this.contract);
+        report = parseP4ReviewReport(raw, id, this.target, this.contract, this.firstRequestOrdinal);
       } catch (error) {
         if (!(error instanceof P2Error)) {
           throw error;

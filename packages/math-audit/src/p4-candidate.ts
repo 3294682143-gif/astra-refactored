@@ -42,6 +42,7 @@ import {
 
 const MAX_REMAINING_MS = 5000;
 const MAX_REVIEWS = 2;
+const MAX_REQUEST_ORDINAL = 4;
 const MAX_CHALLENGES = 16;
 const MAX_COVERAGE = 32;
 const MAX_ISSUES = 8;
@@ -264,15 +265,25 @@ function issueKey(issue: Record<string, unknown>): string {
 export class P4CandidateGate {
   private readonly contract: P2Contract;
   private readonly policy: P4DeliveryPolicy;
+  private readonly firstReviewOrdinal: number;
   private protectedTarget: P4Target | null = null;
 
-  constructor(contract: P2Contract, policy: P4DeliveryPolicy) {
+  constructor(contract: P2Contract, policy: P4DeliveryPolicy, firstReviewOrdinal = 2) {
     if (policy !== "BEST_EFFORT" && policy !== "STRICT") {
       fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (
+      typeof firstReviewOrdinal !== "number" ||
+      !Number.isSafeInteger(firstReviewOrdinal) ||
+      firstReviewOrdinal < 2 ||
+      firstReviewOrdinal > MAX_REQUEST_ORDINAL
+    ) {
+      fail(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     const frozen = p2Snapshot(contract);
     this.contract = requireContract(frozen);
     this.policy = policy;
+    this.firstReviewOrdinal = firstReviewOrdinal;
   }
 
   /**
@@ -334,10 +345,13 @@ export class P4CandidateGate {
     if (!Array.isArray(records) || records.length > MAX_REVIEWS) {
       fail(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
+    if (records.length + this.firstReviewOrdinal - 1 > MAX_REQUEST_ORDINAL) {
+      fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
     const settledRecords = new Map<string, Record<string, unknown>>();
     const settledReports = new Map<string, Record<string, unknown>>();
     const mentioned = new Set<string>();
-    let expected = 2;
+    let expected = this.firstReviewOrdinal;
     for (const item of records) {
       const record = exact(item, RECORD_FIELDS);
       const requestId = boundedText(record.requestId, MAX_SHORT_CHARS);

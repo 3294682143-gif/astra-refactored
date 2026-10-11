@@ -1,5 +1,14 @@
 # Astra — TypeScript five-module migration (offline development)
 
+Current integration focus: the [unified TS AgentLoop](docs/UNIFIED_TS_AGENT_LOOP.md)
+reuses M1–M5 under one root session with async model/tool ports, multiple work
+units, one R2 review and S3 candidate selection. New independent P4 fixtures,
+R1 and additional R0 review rounds are frozen. The explicit Python TS engine
+entry is the next integration PR; the existing default entry is unchanged.
+
+For the original full Python architecture, see the independent
+[General Full RC2 source branch](https://github.com/3294682143-gif/astra-refactored/tree/python-full-rc2-frozen).
+
 This branch follows the approved five-module design. It contains the P0 protocol
 probe and the P1 offline prototype: five independent TypeScript mathematical
 packages, runtime-core, a Node composition root and a Python mock-client Host.
