@@ -3,8 +3,11 @@
 Current integration focus: the [unified TS AgentLoop](docs/UNIFIED_TS_AGENT_LOOP.md)
 reuses M1–M5 under one root session with async model/tool ports, multiple work
 units, one R2 review and S3 candidate selection. New independent P4 fixtures,
-R1 and additional R0 review rounds are frozen. The explicit Python TS engine
-entry is the next integration PR; the existing default entry is unchanged.
+R1 and additional R0 review rounds are frozen until the v4 gate requires them.
+The [explicit Python TS entry](docs/TS_ENGINE_ENTRY.md) now connects the injected
+client through a thin Host to `main.js --agent-loop`. The default remains lite;
+formal deployment, mathematical parity and full migration remain unaccepted.
+See the [v4 gateboard](docs/GATEBOARD.md) and [source identity lock](docs/SOURCE_LOCK.md).
 
 For the original full Python architecture, see the independent
 [General Full RC2 source branch](https://github.com/3294682143-gif/astra-refactored/tree/python-full-rc2-frozen).

@@ -1,12 +1,17 @@
 /**
- * P0 Node stdio probe.
+ * Node stdio entry point with two explicit profiles.
  *
- * One reader pumps stdin. Phases: init -> probe -> catalog -> stop -> stopping.
- * While a catalog callback is pending, every host request is refused. stdout
- * carries NDJSON only; stderr carries fixed codes only.
+ * Default (no argument): the P0 probe. One reader pumps stdin; phases are
+ * init -> probe -> catalog -> stop -> stopping. While a catalog callback is
+ * pending, every host request is refused. stdout carries NDJSON only; stderr
+ * carries fixed codes only. This profile is not a math AgentLoop: no model
+ * call, no tool call, no solve path, and its only outbound request is the
+ * read-only `method.catalog` callback.
  *
- * This is not a math AgentLoop: no model call, no tool call, no solve path.
- * The only outbound request is the read-only `method.catalog` callback.
+ * `--agent-loop`: the unified AgentLoop local Host profile. It dynamically
+ * imports `startAgentHost`, which loads the Agent Host manifest and drives
+ * `AgentHostFlow` over the same single-reader channel. The P0 probe logic
+ * below is unchanged and remains the default.
  */
 
 import { readFileSync } from "node:fs";
@@ -425,4 +430,19 @@ function main(): void {
   new Probe(manifest).start();
 }
 
-main();
+const argv = process.argv;
+if (argv.length === 2) {
+  main();
+} else if (argv.length === 3 && argv[2] === "--agent-loop") {
+  import("./agent-host-main.js")
+    .then((module) => {
+      module.startAgentHost(STARTED_AT);
+    })
+    .catch(() => {
+      process.stderr.write(`${ERROR_CODES.FIELD_VALUE}\n`);
+      process.exit(1);
+    });
+} else {
+  process.stderr.write(`${ERROR_CODES.FIELD_VALUE}\n`);
+  process.exit(1);
+}
