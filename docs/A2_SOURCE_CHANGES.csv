@@ -1,0 +1,17 @@
+path,change,source_blob,source_mode,a2_blob,a2_mode
+README.md,modified,5cfcc6cf1a281ab8e3c57d9905202764d20eeff2,100644,42280a3daffa15156ca63a75e3ae7d29b3c4d3e8,100644
+docs/REFRACTOR.md,added,,,eb0e3a98bc6ab05f1825a7f907f9ffb71a9f06d1,100644
+docs/VALIDATION.md,added,,,3e183ee9f48d58ec3af527e19c5be30ede28c720,100644
+docs/VALIDATION_A2.md,added,,,0141bc793661c2cc14056be1f65d2672e5063045,100644
+mathagent/__init__.py,modified,c644f702c73e9f8df0cdc497e3f8aabc1f95fa22,100644,9eb1d32cdb2343fd7241fc77ef4879f83d077ec4,100644
+mathagent/lite/__init__.py,added,,,5fad600b3e1941d197879dda34c9e3632058fdfc,100644
+mathagent/lite/methods.py,added,,,44dd35122071a57450bf22b38da97daa86ce551c,100644
+mathagent/lite/protocol.py,added,,,79da6691b260d2421a4c24ca30cdb26231ef6c1d,100644
+mathagent/lite/runtime.py,added,,,095f6534d7bb9aac9d27057130da0b5c15b05301,100644
+mathagent/runtime/platform_adapter.py,modified,2b34876e191250fa8bfd495faf8fe0845d262e38,100644,7b4eb5a1661bc8b6e0b7711dfd179490cdde5b40,100644
+pyproject.toml,modified,a40cb031f7f361c235e1eb27460e2c049b7dfe0a,100644,aeaca84176db0fd3e660a257b26f5d1ec3c1e35a,100644
+requirements-dev.txt,added,,,b7437b7eb20e27160a14b896aad929d1918d6a70,100644
+tests/test_lite_methods.py,added,,,12470721dce70f74a887be19d466f963357fac58,100644
+tests/test_lite_protocol.py,added,,,c7effd4fb0b87d863f9ef90578feb4a48347960f,100644
+tests/test_lite_runtime.py,added,,,1b714e65cca3a0c87fb36e17566d04c693df2cdd,100644
+user_agent.py,modified,7c4844b63649faa69af023a0bcd39df6a61df93f,100644,f1525c71d1d34ab0b616dc2785ed69c3178852b5,100644
