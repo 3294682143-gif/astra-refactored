@@ -267,12 +267,18 @@ export type P2ArtifactAvailability = (typeof P2_ARTIFACT_AVAILABILITY)[number];
 
 export interface P2Artifact {
   readonly envelope: RecordEnvelope;
+  readonly artifactId: string;
   readonly routeId: string;
+  readonly scope: Scope;
+  readonly dependencies: readonly P2ArtifactRef[];
   readonly sourceRequestId: string;
   readonly rawResponseHash: string;
   readonly rawResponseRef: string;
-  readonly packet: P2WorkPacket;
-  readonly level: EvidenceLevel;
+  readonly rawResponseText: string;
+  readonly packet: P2WorkPacket | null;
+  readonly transportStatus: P2TransportStatus;
+  readonly deliveryStatus: P2PacketDelivery;
+  readonly level: "PROVISIONAL";
   readonly checkResult: "UNKNOWN";
   readonly provisionalDependency: boolean;
 }

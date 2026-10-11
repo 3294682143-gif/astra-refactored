@@ -62,8 +62,10 @@ contracts, not injected already-satisfied state.
   policy is required.
 - The event log is an ordered structural summary, not enough to restore all
   private historical state. There is no persisted recovery or automatic resume.
-- P2 WorkPacket/Artifact/Route types are forward contracts, not an implemented
-  P2 M3 artifact store, dependency invalidation system or route manager.
+- At this M1 acceptance milestone, P2 WorkPacket/Artifact/Route types were only
+  forward contracts. The subsequent [M3 library slice](P2_M3_WORKUNITS.md)
+  implements versioned storage, dependency invalidation and route identities;
+  it does not integrate them into the executable yet.
 - P2 fixture composition, method-card runtime bridge and a2 behaviour alignment
   remain unfinished. Complete R0/R1/R2 and S1/S2/S3 also remain deferred.
 

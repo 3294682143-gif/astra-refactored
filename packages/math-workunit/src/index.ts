@@ -23,6 +23,9 @@ import {
 export const MATH_WORKUNIT_VERSION = "0.0.0-p1" as const;
 export const WORKUNIT_ARTIFACT_VERSION = 1 as const;
 
+export * from "./p2-routes.js";
+export * from "./p2-store.js";
+
 /**
  * The fixed system template. Exported so the Host can compare the exact text
  * it receives instead of guessing at it.
