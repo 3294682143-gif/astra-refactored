@@ -1,5 +1,10 @@
 # P4 R2 review and S3 conservative selection
 
+The subsequent [S1/S2 increment](P4_SCOPE_REPAIR.md) adds a separate diagnostic
+ledger and a one-repair-branch fixture. The R2/S3 runner described here is
+unchanged. Neither increment supplies a semantic equivalence checker or
+automatic authority to replace a protected candidate.
+
 This is the first offline M4/M5 increment, not a complete mathematical review
 or verification engine. It adds pure TypeScript libraries and a fixture
 composition root. P3 Host protocol `1.1-p3-host-local`, the official Python

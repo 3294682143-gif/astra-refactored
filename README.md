@@ -67,6 +67,12 @@ and up to two review receipts under one budget. Model approval never verifies
 a candidate or closes mathematical obligations. P3 Host and the default entry
 are unchanged; full P4 review, checking and repair remain unfinished.
 
+The [S1/S2 increment](docs/P4_SCOPE_REPAIR.md) binds diagnostic tool receipts
+to a target and records one review-triggered repair branch. A child proposal
+keeps its parent/challenge lineage and cannot automatically replace the
+protected candidate. Semantic scope mapping and repair correctness remain
+UNKNOWN; this is still offline infrastructure, not mathematical verification.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.
