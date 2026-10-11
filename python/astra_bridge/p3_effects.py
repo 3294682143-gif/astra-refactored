@@ -111,12 +111,16 @@ def _method_effect(request, catalog, deadline):
     return receipt(request, "COMPLETE", observation)
 
 
-def perform_effect(request, *, executor=None, catalog=None, clock=time.monotonic):
+def perform_effect(request, *, executor=None, catalog=None, clock=time.monotonic, root_deadline=None):
     """Validate one request and perform at most one effect.
 
     The clock is read before validation, so no execution can start before the
     request has been accepted. A deadline that has already passed yields a
     fixed ERROR receipt; a late result never becomes COMPLETE.
+
+    ``root_deadline`` is an optional absolute monotonic deadline owned by the
+    caller. When supplied it can only tighten the local deadline; it never
+    refreshes or extends it.
     """
     try:
         started = clock()
@@ -127,6 +131,14 @@ def perform_effect(request, *, executor=None, catalog=None, clock=time.monotonic
     bound = validate_request(request)
     remaining_ms = bound["remainingMs"]
     deadline = started + remaining_ms / 1000.0 - _SETTLE_SECONDS
+    if root_deadline is not None:
+        if (
+            isinstance(root_deadline, bool)
+            or not isinstance(root_deadline, (int, float))
+            or not isfinite(root_deadline)
+        ):
+            return failure_receipt(bound, "ERROR", "DEADLINE_EXCEEDED")
+        deadline = min(deadline, root_deadline - _SETTLE_SECONDS)
     try:
         now = clock()
     except Exception:  # noqa: BLE001

@@ -13,7 +13,8 @@
     },
     "./schema/p0.schema.json": "./schema/p0.schema.json",
     "./schema/p1.schema.json": "./schema/p1.schema.json",
-    "./schema/p2-host.schema.json": "./schema/p2-host.schema.json"
+    "./schema/p2-host.schema.json": "./schema/p2-host.schema.json",
+    "./schema/p3-host.schema.json": "./schema/p3-host.schema.json"
   },
   "files": [
     "dist/src",

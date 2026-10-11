@@ -1098,3 +1098,4 @@ export * from "./p2-methods.js";
 export * from "./p2-a2.js";
 export * from "./p2-host.js";
 export * from "./p3.js";
+export * from "./p3-host.js";

@@ -14,6 +14,7 @@ import {
   type P2HostManifest,
   type P2HostMethod,
 } from "@astra/protocol";
+import type { ManifestEnvelopes } from "@astra/protocol";
 
 const MAX_DEADLINE_MS = 5000;
 const FIXED_CODES: ReadonlySet<string> = new Set<string>([
@@ -28,8 +29,22 @@ function fixedCode(error: unknown): string {
   return "FIELD_VALUE";
 }
 
-export class P2HostChannel {
-  private readonly manifest: P2HostManifest;
+/**
+ * Minimal codec injection point. `parse` decodes one NDJSON frame and
+ * `payload` validates one params/result payload against the same manifest.
+ * The default codec binds the P2 manifest; a P3 caller passes its own pair.
+ */
+export interface HostChannelCodec<M extends string> {
+  parse(bytes: Uint8Array): JsonRpcMessage;
+  payload(method: M, side: "params" | "result", value: unknown): void;
+}
+
+export class P2HostChannel<
+  M extends string = P2HostMethod,
+  Manifest extends { readonly envelopes: ManifestEnvelopes } = P2HostManifest,
+> {
+  private readonly manifest: Manifest;
+  private readonly codec: HostChannelCodec<M>;
   private readonly startedAt: number;
   private deadline: number;
   private timer: NodeJS.Timeout | null = null;
@@ -40,10 +55,19 @@ export class P2HostChannel {
   private stopFlushed = false;
   private failed = false;
 
-  constructor(manifest: P2HostManifest, startedAt: number = performance.now()) {
+  constructor(
+    manifest: Manifest,
+    startedAt: number = performance.now(),
+    codec?: HostChannelCodec<M>,
+  ) {
     this.manifest = manifest;
     this.startedAt = startedAt;
     this.deadline = startedAt + MAX_DEADLINE_MS;
+    this.codec = codec ?? {
+      parse: (bytes: Uint8Array) => parseP2HostFrame(bytes, manifest as unknown as P2HostManifest),
+      payload: (method: M, side: "params" | "result", value: unknown) =>
+        p2HostPayload(manifest as unknown as P2HostManifest, method as unknown as P2HostMethod, side, value),
+    };
   }
 
   remainingMs(): number {
@@ -86,14 +110,14 @@ export class P2HostChannel {
     });
   }
 
-  send(message: JsonRpcMessage, method: P2HostMethod): void {
+  send(message: JsonRpcMessage, method: M): void {
     if (this.stopping) this.fail(new Error("FIELD_VALUE"));
     if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
     if ("error" in message) this.fail(new Error("FIELD_VALUE"));
     if ("method" in message) {
-      p2HostPayload(this.manifest, method, "params", message.params, undefined);
+      this.codec.payload(method, "params", message.params);
     } else if ("result" in message) {
-      p2HostPayload(this.manifest, method, "result", message.result, undefined);
+      this.codec.payload(method, "result", message.result);
     } else {
       this.fail(new Error("FIELD_VALUE"));
     }
@@ -105,7 +129,7 @@ export class P2HostChannel {
     if (this.buffer.length !== 0) this.fail(new Error("INVALID_JSON"));
     if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
     if (!("result" in message)) this.fail(new Error("FIELD_VALUE"));
-    p2HostPayload(this.manifest, "session.stop", "result", message.result, undefined);
+    this.codec.payload("session.stop" as M, "result", message.result);
     this.stopping = true;
     this.write(message, () => {
       if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
@@ -160,7 +184,7 @@ export class P2HostChannel {
       if (line.length > LIMITS.maxFrameBytes) throw new Error("FRAME_TOO_LARGE");
       this.frames += 1;
       if (this.frames > LIMITS.maxFramesPerSession) throw new Error("FRAME_LIMIT_EXCEEDED");
-      const message = parseP2HostFrame(line, this.manifest);
+      const message = this.codec.parse(line);
       if (this.handler === null) throw new Error("FIELD_VALUE");
       this.handler(message);
       if (this.stopping) {
@@ -176,7 +200,7 @@ export class P2HostChannel {
     if (data.length - 1 > LIMITS.maxFrameBytes) this.fail(new Error("FRAME_TOO_LARGE"));
     this.frames += 1;
     if (this.frames > LIMITS.maxFramesPerSession) this.fail(new Error("FRAME_LIMIT_EXCEEDED"));
-    const parsed = parseP2HostFrame(data.subarray(0, data.length - 1), this.manifest);
+    const parsed = this.codec.parse(data.subarray(0, data.length - 1));
     if (parsed === null) this.fail(new Error("FIELD_VALUE"));
     try {
       process.stdout.write(data, (error?: Error | null) => {

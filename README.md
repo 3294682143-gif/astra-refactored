@@ -51,6 +51,13 @@ method reader on synthetic inputs. This is a separate fixture library and
 one-shot effect adapter, not a P2 Host protocol upgrade or a production client.
 P2 Host 1.1 and the official Python entry point remain unchanged.
 
+The [P3 local tool Host profile](docs/P3_TOOL_HOST.md) additionally runs
+`model → tool → model → final` over the existing Python↔Node channel.
+Python independently admits each tool request against its recorded model
+response and root deadline. This opt-in profile still uses literal model
+fixtures; method actions are unavailable in this Host profile, while the
+separate P3 fixture library retains its method support.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.
