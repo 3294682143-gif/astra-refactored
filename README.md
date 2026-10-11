@@ -76,8 +76,10 @@ UNKNOWN; this is still offline infrastructure, not mathematical verification.
 The [S1 mapping-review library](docs/P4_MAPPING_REVIEW.md) adds five-dimensional
 model correspondence reports, strict original-text/representation quotes and
 a separate single-check diagnostic gate. Model MATCH is still unverified.
-Only the independent libraries passed acceptance; their proposed end-to-end
-integration remains withheld for repair. Existing workflows are unchanged.
+The [offline mapping workflow](docs/P4_MAPPING_WORKFLOW.md) now composes work,
+review and a diagnostic call with protected-candidate handling for invalid
+receipts and a re-tightened dispatch window. Existing Host workflows and the
+default entry are unchanged; formal integration remains pending.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

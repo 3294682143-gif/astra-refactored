@@ -7,9 +7,10 @@ official Python entry, solver, resources and dependencies remain unchanged.
 There is no new RPC, real model client, tool permission or default switch.
 
 A later [S1 mapping-review library slice](P4_MAPPING_REVIEW.md) adds bounded
-model correspondence opinions. Its end-to-end composition is not accepted;
-the diagnostic ledger described here still has semanticMapping UNKNOWN and
-cannot support mathematical obligations.
+model correspondence opinions, followed by an accepted
+[offline composition](P4_MAPPING_WORKFLOW.md). The diagnostic ledger described
+here still has semanticMapping UNKNOWN and cannot support mathematical
+obligations; the new workflow does not prove representation equivalence.
 
 ## S1: diagnostic identity, not semantic equivalence
 

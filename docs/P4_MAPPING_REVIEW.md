@@ -1,5 +1,10 @@
 # P4 S1 mapping-review library — partial increment
 
+Historical library-slice record: the subsequently repaired
+[offline mapping composition](P4_MAPPING_WORKFLOW.md) is now accepted.
+The withheld integration and test failures described below refer to the
+earlier draft, not to the new workflow. Semantic verification remains absent.
+
 This increment accepts independent TypeScript libraries, not an end-to-end
 mapping-review workflow. The previous P4 fixtures, P3 Host, Python entry,
 solver, resources and dependencies remain unchanged. No real model client,
