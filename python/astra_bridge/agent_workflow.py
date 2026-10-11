@@ -1,7 +1,8 @@
-"""Pure Host-side route-proposal helpers for the unified AgentLoop.
+"""Pure Host-side route/dependency-proposal helpers for the unified AgentLoop.
 
-Strictly re-parses one raw WorkPacket (v1/v2) with the shared P0 inner parser
-and derives the canonical route identity of one untrusted NEW_ROUTE mechanism.
+Strictly re-parses one raw WorkPacket (v1/v2/v3) with the shared P0 inner
+parser and derives the canonical route identity of one untrusted NEW_ROUTE
+mechanism or the control provenance of one untrusted DEPENDENT_TASK suggestion.
 No I/O, no client call, no budget change, no mathematical selection: a route
 signature is an identity of declared data, never a proof of independence.
 """
@@ -14,17 +15,21 @@ import json
 
 from .p0_probe import ProbeError
 from .p2_host_fixture import _parse_inner, _strict_utf8
+from .p3_host_context import same_json
 
 __all__ = [
     "checked_packet",
     "normalize_route",
     "default_route",
     "check_route_provenance",
+    "check_dependency_provenance",
 ]
 
 _WORK_V1 = "p2a-work-v1"
 _WORK_V2 = "p2a-work-v2"
+_WORK_V3 = "p2a-work-v3"
 _CONTEXT_V4 = "agent-work-context-v4"
+_CONTEXT_V5 = "agent-work-context-v5"
 _MAX_TEXT = 4096
 _MAX_SHORT = 256
 _MAX_LEMMAS = 32
@@ -37,6 +42,7 @@ _PACKET_FIELDS = (
     "deliveryStatus", "candidateProposal",
 )
 _PROPOSAL_FIELDS = ("kind", "obligationId", "mechanism", "rationale")
+_DEPENDENT_FIELDS = ("kind", "obligationId", "rationale")
 _MECHANISM_FIELDS = ("representation", "operation", "lemmas", "construction")
 _PROVENANCE_FIELDS = (
     "sourceRequestId", "sourceArtifactRef", "obligationId", "routeSignature",
@@ -235,6 +241,15 @@ def checked_packet(text):
                 _short_shape(lemma)
             _short_shape(proposal["mechanism"]["construction"])
             _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
+    elif version == _WORK_V3:
+        _exact_keys(packet, _PACKET_FIELDS + ("workflowProposal",))
+        proposal = packet["workflowProposal"]
+        if proposal is not None:
+            _exact_keys(proposal, _DEPENDENT_FIELDS)
+            if proposal["kind"] != "DEPENDENT_TASK":
+                _fail()
+            _short_shape(proposal["obligationId"])
+            _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
     else:
         _fail()
     _short_shape(packet["sessionId"])
@@ -408,9 +423,18 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
     return {"artifactId": "artifact-" + str(count), "artifactVersion": 1}
 
 
-def _check_source_body(body, source_id, session_id, problem_hash):
-    """Strict shape of the source WORK context body (v4, proposal allowed)."""
-    if body.get("schemaVersion") != _CONTEXT_V4:
+def _check_source_body(body, source_id, session_id, problem_hash,
+                       source_schema=_CONTEXT_V5):
+    """Strict shape of the source WORK context body of a NEW_ROUTE proposal.
+
+    ``source_schema`` is explicit: the active v5 context passes ``v5`` and the
+    read-only v4 entry point passes ``v4``. A body of any other version is never
+    accepted here, so a v5 source can never be read through the legacy path and
+    a v4 source can never be read through the active path.
+    """
+    if source_schema not in (_CONTEXT_V4, _CONTEXT_V5):
+        _fail()
+    if body.get("schemaVersion") != source_schema:
         _fail()
     if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
         _fail()
@@ -427,6 +451,163 @@ def _check_source_body(body, source_id, session_id, problem_hash):
     if not isinstance(route, dict) or not isinstance(obligations, list):
         _fail()
     return task, scope, route, obligations
+
+
+def _check_dependency_source_body(body, source_id, session_id, problem_hash):
+    """Strict shape of the source WORK context body of a dependent task (v5).
+
+    The active v5 shape is the only one accepted here: a v4 body never carries
+    ``allowTaskContinuation``/``dependencyProvenance``, so it can never be the
+    source of a dependent task. The older read-only entry points keep their own
+    explicit version parameter and are not widened by this helper.
+    """
+    if body.get("schemaVersion") != _CONTEXT_V5:
+        _fail()
+    if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
+        _fail()
+    if body.get("sourceRequestId") != source_id:
+        _fail()
+    if body.get("allowTaskContinuation") is not True:
+        _fail()
+    task = body.get("task")
+    scope = body.get("scope")
+    route = body.get("route")
+    obligations = body.get("obligations")
+    if not isinstance(task, dict) or not isinstance(scope, dict):
+        _fail()
+    if not isinstance(route, dict) or not isinstance(obligations, list):
+        _fail()
+    return task, scope, route, obligations
+
+
+def _completed_work_count(history, session_id, problem_hash, upto_ordinal):
+    """Count real COMPLETE valid WorkPackets at or before one ordinal."""
+    count = 0
+    for request_id in history:
+        if not isinstance(request_id, str) or not request_id.startswith("model-"):
+            continue
+        suffix = request_id[len("model-"):]
+        if suffix not in ("1", "2", "3", "4"):
+            continue
+        if int(suffix) > upto_ordinal:
+            continue
+        try:
+            _, packet = _source_record(history, request_id, session_id, problem_hash)
+        except ProbeError:
+            continue
+        if packet["deliveryStatus"] != "COMPLETE":
+            continue
+        count += 1
+    return count
+
+
+def _admitted_task_count(history, session_id, problem_hash, upto_ordinal):
+    """Distinct real dynamic tasks already admitted at or before one ordinal.
+
+    A task counts once when its own WORK body declares a ``route-task-`` or
+    ``dep-task-`` task id and the matching provenance field is non-null. The
+    count is over distinct task ids, never over model rounds: a source child
+    that issues several tool calls is still one admitted task. This is a
+    profile-local derivation, not a general event-sequence recovery.
+    """
+    seen = set()
+    for request_id in history:
+        if not isinstance(request_id, str) or not request_id.startswith("model-"):
+            continue
+        suffix = request_id[len("model-"):]
+        if suffix not in ("1", "2", "3", "4"):
+            continue
+        if int(suffix) > upto_ordinal:
+            continue
+        entry = history.get(request_id)
+        if not isinstance(entry, dict):
+            continue
+        request = entry.get("request")
+        if not isinstance(request, dict) or request.get("phase") != "WORK":
+            continue
+        if request.get("sessionId") != session_id:
+            continue
+        if request.get("problemHash") != problem_hash:
+            continue
+        messages = request.get("messages")
+        if not isinstance(messages, list) or len(messages) != 2:
+            continue
+        try:
+            body = _parse_inner(messages[1]["content"])
+        except ProbeError:
+            continue
+        if not isinstance(body, dict):
+            continue
+        if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
+            continue
+        if not _is_int(body.get("contractVersion")) or body["contractVersion"] != 1:
+            continue
+        if body.get("sourceRequestId") != request_id:
+            continue
+        task = body.get("task")
+        if not isinstance(task, dict):
+            continue
+        task_id = task.get("taskId")
+        if not isinstance(task_id, str):
+            continue
+        if task_id.startswith("route-task-"):
+            provenance = body.get("routeProvenance")
+            if provenance is None or body.get("dependencyProvenance") is not None:
+                continue
+        elif task_id.startswith("dep-task-"):
+            provenance = body.get("dependencyProvenance")
+            if provenance is None or body.get("routeProvenance") is not None:
+                continue
+        else:
+            continue
+        if not isinstance(provenance, dict):
+            continue
+        source_id = provenance.get("sourceRequestId")
+        if not isinstance(source_id, str) or source_id not in history:
+            continue
+        try:
+            if _ordinal(source_id) >= int(suffix):
+                continue
+        except ProbeError:
+            continue
+        seen.add(task_id)
+    return len(seen)
+
+
+def _expected_event_seq(history, session_id, problem_hash, source_ordinal):
+    """Derived ``eventSeq`` of the next appended task in this profile.
+
+    ``2*N + A + 2`` where ``N`` is the number of real COMPLETE valid
+    WorkPackets at or before the source and ``A`` is the number of distinct
+    dynamic tasks already admitted at or before the source. The first child of
+    a one-work source is ``2*1 + 0 + 2 = 4``; its grandchild is
+    ``2*2 + 1 + 2 = 7``. This holds only for this slice, which has no goal
+    revision and no timeout continuation; it is not a general replay rule.
+    """
+    count = _completed_work_count(history, session_id, problem_hash, source_ordinal)
+    if count < 1:
+        _fail()
+    admitted = _admitted_task_count(history, session_id, problem_hash, source_ordinal)
+    return 2 * count + admitted + 2
+
+
+def _check_child_envelope(envelope, source_envelope, session_id, source_id, task_id, event_seq):
+    """The child envelope clones the source envelope except three fields."""
+    if not isinstance(envelope, dict) or not isinstance(source_envelope, dict):
+        _fail()
+    if envelope.get("recordId") != session_id + ":m1:dep-task:" + source_id:
+        _fail()
+    if envelope.get("taskId") != task_id:
+        _fail()
+    if envelope.get("eventSeq") != event_seq:
+        _fail()
+    for name in source_envelope:
+        if name in ("recordId", "taskId", "eventSeq"):
+            continue
+        if envelope.get(name) != source_envelope[name]:
+            _fail()
+    if len(envelope) != len(source_envelope):
+        _fail()
 
 
 def _target_obligation(obligations, obligation_id, scope_id):
@@ -450,7 +631,7 @@ def _target_obligation(obligations, obligation_id, scope_id):
     return found
 
 
-def check_route_provenance(body, history):
+def check_route_provenance(body, history, source_schema=_CONTEXT_V5):
     """Re-derive the control provenance of one WORK context body.
 
     Returns the validated provenance dict for a real second route, or ``None``
@@ -478,11 +659,20 @@ def check_route_provenance(body, history):
         _fail()
     task_id = task.get("taskId")
     _text(task_id, _MAX_SHORT)
+    # A legal dependent task inherits the real route of its source; the
+    # dependency checker owns that proof, so this checker must not reject it as
+    # a non-default route. The dependency checker never calls back here.
+    if body.get("dependencyProvenance") is not None:
+        if check_dependency_provenance(body, history) is None:
+            _fail()
+        return None
     provenance = body.get("routeProvenance")
     if provenance is None:
         if route != default_route():
             _fail()
         if task_id.startswith("route-task-"):
+            _fail()
+        if task_id.startswith("dep-task-"):
             _fail()
         return None
     _exact_keys(provenance, _PROVENANCE_FIELDS)
@@ -504,7 +694,7 @@ def check_route_provenance(body, history):
         history, source_id, session_id, problem_hash,
     )
     source_task, source_scope, source_route, source_obligations = _check_source_body(
-        source_body, source_id, session_id, problem_hash,
+        source_body, source_id, session_id, problem_hash, source_schema,
     )
     if source_packet["schemaVersion"] != _WORK_V2:
         _fail()
@@ -571,25 +761,9 @@ def check_route_provenance(body, history):
         _fail()
     if envelope.get("taskId") != task_id:
         _fail()
-    count = 0
-    for request_id in history:
-        if not isinstance(request_id, str) or not request_id.startswith("model-"):
-            continue
-        suffix = request_id[len("model-"):]
-        if suffix not in ("1", "2", "3", "4"):
-            continue
-        if int(suffix) > _ordinal(source_id):
-            continue
-        try:
-            _, packet = _source_record(history, request_id, session_id, problem_hash)
-        except ProbeError:
-            continue
-        if packet["deliveryStatus"] != "COMPLETE":
-            continue
-        count += 1
-    if count < 1:
-        _fail()
-    if envelope.get("eventSeq") != 2 * count + 2:
+    if envelope.get("eventSeq") != _expected_event_seq(
+        history, session_id, problem_hash, _ordinal(source_id),
+    ):
         _fail()
     for name in source_envelope:
         if name in ("recordId", "taskId", "eventSeq"):
@@ -598,6 +772,158 @@ def check_route_provenance(body, history):
             _fail()
     if len(envelope) != len(source_envelope):
         _fail()
+    return {
+        "sourceRequestId": source_id,
+        "sourceArtifactRef": {
+            "artifactId": ref["artifactId"],
+            "artifactVersion": ref["artifactVersion"],
+        },
+        "obligationId": obligation_id,
+        "routeSignature": route_signature,
+    }
+
+
+def check_dependency_provenance(body, history):
+    """Re-derive the control provenance of one dependent-task WORK body.
+
+    Returns the validated four-field provenance dict for a real dependent task,
+    or ``None`` for a legal body that is not one. Every illegal shape is a
+    fixed rejection. The source is a real COMPLETE v3 WorkPacket whose own v5
+    context already passed the earlier guards; the child definition, route,
+    scope, obligation, envelope and refs are all re-derived from that source
+    history, never from the model's own claims. This function reads only
+    already-verified source history and never calls the route checker, so the
+    two checks cannot recurse.
+    """
+    if not isinstance(body, dict):
+        _fail()
+    session_id = body.get("sessionId")
+    problem_hash = body.get("problemHash")
+    request_id = body.get("sourceRequestId")
+    _text(session_id, _MAX_SHORT)
+    _hash64(problem_hash)
+    _ordinal(request_id)
+    task = body.get("task")
+    route = body.get("route")
+    if not isinstance(task, dict) or not isinstance(route, dict):
+        _fail()
+    task_id = task.get("taskId")
+    _text(task_id, _MAX_SHORT)
+    provenance = body.get("dependencyProvenance")
+    if provenance is None:
+        # Without a proof a dependent-looking task id is never legal.
+        if task_id.startswith("dep-task-"):
+            _fail()
+        return None
+    if body.get("schemaVersion") != _CONTEXT_V5:
+        _fail()
+    if body.get("routeProvenance") is not None:
+        _fail()
+    _exact_keys(provenance, _PROVENANCE_FIELDS)
+    source_id = provenance["sourceRequestId"]
+    _ordinal(source_id)
+    if _ordinal(source_id) >= _ordinal(request_id):
+        _fail()
+    ref = provenance["sourceArtifactRef"]
+    _exact_keys(ref, _REF_FIELDS)
+    if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] != 1:
+        _fail()
+    obligation_id = provenance["obligationId"]
+    _text(obligation_id, _MAX_SHORT)
+    route_signature = provenance["routeSignature"]
+    _hash64(route_signature)
+    if task_id != "dep-task-" + source_id:
+        _fail()
+    source_body, source_packet = _source_record(
+        history, source_id, session_id, problem_hash,
+    )
+    source_task, source_scope, source_route, source_obligations = (
+        _check_dependency_source_body(source_body, source_id, session_id, problem_hash)
+    )
+    if source_packet["schemaVersion"] != _WORK_V3:
+        _fail()
+    proposal = source_packet["workflowProposal"]
+    if proposal is None:
+        _fail()
+    if source_packet["deliveryStatus"] != "COMPLETE":
+        _fail()
+    if proposal["obligationId"] not in source_packet["pendingObligations"]:
+        _fail()
+    if proposal["obligationId"] != obligation_id:
+        _fail()
+    if obligation_id != source_task.get("obligationId"):
+        _fail()
+    scope_id = source_scope.get("scopeId")
+    _hash64(scope_id)
+    _target_obligation(source_obligations, obligation_id, scope_id)
+    if source_packet["sessionId"] != session_id:
+        _fail()
+    if source_packet["problemHash"] != problem_hash:
+        _fail()
+    if source_packet["taskId"] != source_task.get("taskId"):
+        _fail()
+    if source_packet["goalId"] != source_task.get("goalId"):
+        _fail()
+    if source_packet["scopeId"] != scope_id:
+        _fail()
+    if source_packet["routeId"] != source_route.get("routeId"):
+        _fail()
+    if source_packet["sourceRequestId"] != source_id:
+        _fail()
+    expected_ref = _source_artifact_ref(history, source_id, session_id, problem_hash)
+    if ref != expected_ref:
+        _fail()
+    if route_signature != source_route.get("signature"):
+        _fail()
+    # The child inherits the real route of its source, including a second
+    # route; the old artifact route is never relabelled.
+    if route != source_route:
+        _fail()
+    if not same_json(body.get("scope"), source_scope):
+        _fail()
+    if task.get("goalId") != source_task.get("goalId"):
+        _fail()
+    if task.get("obligationId") != obligation_id:
+        _fail()
+    if task.get("scopeId") != scope_id:
+        _fail()
+    if task.get("expectedResult") != source_task.get("expectedResult"):
+        _fail()
+    if task.get("acceptanceCriteria") != source_task.get("acceptanceCriteria"):
+        _fail()
+    if task.get("dependencyTaskIds") != [source_task.get("taskId")]:
+        _fail()
+    if task.get("inputArtifactRefs") != [expected_ref]:
+        _fail()
+    artifacts = body.get("inputArtifacts")
+    if not isinstance(artifacts, list) or len(artifacts) != 1:
+        _fail()
+    artifact = artifacts[0]
+    if not isinstance(artifact, dict):
+        _fail()
+    if artifact.get("artifactId") != expected_ref["artifactId"]:
+        _fail()
+    if artifact.get("sourceRequestId") != source_id:
+        _fail()
+    if artifact.get("routeId") != source_route.get("routeId"):
+        _fail()
+    if not same_json(artifact.get("scope"), source_scope):
+        _fail()
+    artifact_envelope = artifact.get("envelope")
+    if not isinstance(artifact_envelope, dict):
+        _fail()
+    if artifact_envelope.get("taskId") != source_task.get("taskId"):
+        _fail()
+    if not _is_int(artifact_envelope.get("artifactVersion")):
+        _fail()
+    if artifact_envelope["artifactVersion"] != expected_ref["artifactVersion"]:
+        _fail()
+    envelope = task.get("envelope")
+    source_envelope = source_task.get("envelope")
+    _check_child_envelope(
+        envelope, source_envelope, session_id, source_id, task_id,
+        _expected_event_seq(history, session_id, problem_hash, _ordinal(source_id)),
+    )
     return {
         "sourceRequestId": source_id,
         "sourceArtifactRef": {

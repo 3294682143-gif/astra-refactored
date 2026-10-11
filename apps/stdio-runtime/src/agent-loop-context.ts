@@ -14,6 +14,7 @@ import {
   P3_TOOL_NAMES,
   detectLoneSurrogates,
   p2Snapshot,
+  type AgentDependencyProvenance,
   type AgentRouteProvenance,
   type P2Artifact,
   type P2Contract,
@@ -33,7 +34,7 @@ import {
   type AgentFinalCandidate,
 } from "./agent-final.js";
 
-export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v4" as const;
+export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5" as const;
 
 const MAX_CONTEXT_BYTES = 65536;
 const MAX_OBSERVATIONS = 2;
@@ -68,6 +69,7 @@ const PROVENANCE_FIELDS = [
   "routeSignature",
 ] as const;
 const PROVENANCE_REF_FIELDS = ["artifactId", "artifactVersion"] as const;
+const DEPENDENCY_TASK_PREFIX = "dep-task-";
 
 const SYSTEM_PROMPT = [
   "Offline unified AgentLoop work unit. Reply with exactly one JSON object and nothing else.",
@@ -82,8 +84,16 @@ const SYSTEM_PROMPT = [
   "non-empty string. A workflowProposal is an untrusted suggestion only: it may name one real",
   "pending obligation of the current task scope, and the route id, task id, artifact refs and",
   "dependencies are derived by control, never by you. It is not a proof, not an instruction and",
-  "never discharges an obligation. When allowRouteProposal is false no workflowProposal other",
+  "never discharges an obligation. For v2, When allowRouteProposal is false no workflowProposal other",
   "than null is permitted.",
+  "or one WorkPacket bound to schemaVersion p2a-work-v3 with exactly those same fields plus a",
+  "required workflowProposal field that is either null or one object with exactly the fields",
+  "kind, obligationId, rationale, where kind is the string DEPENDENT_TASK and rationale is a",
+  "non-empty string. A DEPENDENT_TASK proposal is an untrusted suggestion only: it may name one",
+  "real pending obligation of the current task scope, and the task id, artifact refs, route,",
+  "scope, dependencies and budget are derived by control, never by you. It is not a proof, not",
+  "an instruction and never discharges an obligation. For v3, When allowTaskContinuation is false no",
+  "workflowProposal other than null is permitted.",
   `or one tool action {action:"tool", name, args, scope} naming only one of the two registered tools ${P3_TOOL_NAMES.join(", ")};`,
   "or one method action {action:\"method\", id} naming only an id listed in methodCatalog;",
   "or one unsolved action {action:\"unsolved\", reason}.",
@@ -124,6 +134,8 @@ export interface AgentWorkContextInput {
   readonly protectedCandidate?: AgentFinalCandidate | null;
   readonly allowRouteProposal?: boolean;
   readonly routeProvenance?: AgentRouteProvenance | null;
+  readonly allowTaskContinuation?: boolean;
+  readonly dependencyProvenance?: AgentDependencyProvenance | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -236,6 +248,118 @@ function checkRouteProvenance(
     obligationId,
     routeSignature,
   }) as AgentRouteProvenance;
+}
+
+/**
+ * Strict shape check of one control-side dependency provenance. The four
+ * declared fields are the identity of the source proposal; the artifact ref
+ * carries exactly two fields and a positive safe version. The child task id is
+ * derived from the source request id, and the single real input artifact must
+ * be exactly the declared source ref of the source task. Nothing here is a
+ * proof and no model-supplied text is trusted.
+ */
+function checkDependencyProvenance(
+  value: unknown,
+  contract: P2Contract,
+  task: P2Task,
+  route: P2RouteSpec,
+  requestId: string,
+  inputs: readonly P2Artifact[],
+): AgentDependencyProvenance {
+  const row = exact(value, PROVENANCE_FIELDS);
+  const sourceRequestId = row.sourceRequestId;
+  if (typeof sourceRequestId !== "string") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
+  if (match === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (Number.parseInt(match[1] as string, 10) >= ordinalOf(requestId)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const ref = exact(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
+  if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if ([...ref.artifactId].length > 256) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  if (
+    typeof ref.artifactVersion !== "number" ||
+    !Number.isSafeInteger(ref.artifactVersion) ||
+    ref.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const obligationId = row.obligationId;
+  if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
+  if (obligation === undefined) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (obligation.goalId !== task.goalId || obligation.envelope.scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const routeSignature = row.routeSignature;
+  if (typeof routeSignature !== "string" || !HASH.test(routeSignature)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (routeSignature !== route.signature) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (task.taskId !== `${DEPENDENCY_TASK_PREFIX}${sourceRequestId}`) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (task.inputArtifactRefs.length !== 1 || task.dependencyTaskIds.length !== 1) {
+    fail(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  }
+  if (inputs.length !== 1) {
+    fail(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  }
+  const input = inputs[0] as P2Artifact;
+  if (input.artifactId !== ref.artifactId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (input.envelope.artifactVersion !== ref.artifactVersion) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (input.sourceRequestId !== sourceRequestId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (input.routeId !== route.routeId) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (input.envelope.sessionId !== contract.envelope.sessionId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (input.envelope.problemHash !== contract.problemHash) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (input.envelope.contractVersion !== contract.contractVersion) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  if (input.envelope.scopeId !== task.scopeId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const declaredRef = task.inputArtifactRefs[0] as { readonly artifactId: string; readonly artifactVersion: number };
+  if (declaredRef.artifactId !== ref.artifactId || declaredRef.artifactVersion !== ref.artifactVersion) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (task.dependencyTaskIds[0] !== input.envelope.taskId) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    sourceRequestId,
+    sourceArtifactRef: {
+      artifactId: ref.artifactId,
+      artifactVersion: ref.artifactVersion,
+    },
+    obligationId,
+    routeSignature,
+  }) as AgentDependencyProvenance;
 }
 
 /**
@@ -432,6 +556,11 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   if (typeof allowRouteProposal !== "boolean") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
+  const allowTaskContinuation =
+    captured.allowTaskContinuation === undefined ? false : captured.allowTaskContinuation;
+  if (typeof allowTaskContinuation !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
   let routeProvenance: AgentRouteProvenance | null = null;
   if (captured.routeProvenance !== undefined && captured.routeProvenance !== null) {
     routeProvenance = checkRouteProvenance(
@@ -441,6 +570,20 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
       route,
       requestId,
     );
+  }
+  let dependencyProvenance: AgentDependencyProvenance | null = null;
+  if (captured.dependencyProvenance !== undefined && captured.dependencyProvenance !== null) {
+    dependencyProvenance = checkDependencyProvenance(
+      p2Snapshot(captured.dependencyProvenance),
+      contract,
+      task,
+      route,
+      requestId,
+      captured.inputs as readonly P2Artifact[],
+    );
+  }
+  if (routeProvenance !== null && dependencyProvenance !== null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   let protectedCandidate: AgentFinalCandidate | null = null;
   if (captured.protectedCandidate !== undefined && captured.protectedCandidate !== null) {
@@ -554,7 +697,9 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     allowMethods,
     allowFinal,
     allowRouteProposal,
+    allowTaskContinuation,
     routeProvenance,
+    dependencyProvenance,
     protectedCandidate,
     toolObservations: observations,
   };

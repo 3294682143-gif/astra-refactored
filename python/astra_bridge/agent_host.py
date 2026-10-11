@@ -163,6 +163,7 @@ class AgentHost(_Host):
         self.last_model_id = None
         self.solve_result = None
         self.route_admissions = {}
+        self.dependency_admissions = {}
 
     # -- helpers ----------------------------------------------------------
 
@@ -315,6 +316,31 @@ class AgentHost(_Host):
             task_id = request["taskId"]
             provenance = body["routeProvenance"]
             pending_new_provenance = None
+            dep_provenance = body["dependencyProvenance"]
+            pending_new_dependency = None
+            if provenance is not None and dep_provenance is not None:
+                _fail()
+            if dep_provenance is not None:
+                if not isinstance(dep_provenance, dict):
+                    _fail()
+                recorded_dep = self.dependency_admissions.get(task_id)
+                if recorded_dep is None:
+                    if len(self.dependency_admissions) >= 2:
+                        _fail()
+                    if task_id != "dep-task-" + dep_provenance["sourceRequestId"]:
+                        _fail()
+                    if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
+                        _fail()
+                    completed = len(_work_ordinals(
+                        self.history, self.problem, self.session_id, self.problem_hash,
+                    ))
+                    if self.max_work_units - completed < 1:
+                        _fail()
+                    if self.remaining_ms() <= _MIN_REMAINING_MS:
+                        _fail()
+                    pending_new_dependency = copy.deepcopy(dep_provenance)
+                elif not same_json(recorded_dep, dep_provenance):
+                    _fail()
             if provenance is not None:
                 if not isinstance(provenance, dict):
                     _fail()
@@ -380,6 +406,16 @@ class AgentHost(_Host):
             )
             if body["allowRouteProposal"] is not expected_allow_route:
                 _fail()
+            expected_allow_continuation = (
+                len(self.dependency_admissions) + (1 if pending_new_dependency is not None else 0) < 2
+                and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
+                and self.max_work_units - len(_work_ordinals(
+                    self.history, self.problem, self.session_id, self.problem_hash,
+                )) >= 2
+                and self.remaining_ms() > _MIN_REMAINING_MS
+            )
+            if body["allowTaskContinuation"] is not expected_allow_continuation:
+                _fail()
             expected_allow_final = (
                 body["protectedCandidate"] is not None
                 and self.max_model_calls - self.model_requests >= 1 + self.max_reviews
@@ -388,6 +424,8 @@ class AgentHost(_Host):
                 _fail()
             if pending_new_provenance is not None:
                 self.route_admissions[task_id] = pending_new_provenance
+            if pending_new_dependency is not None:
+                self.dependency_admissions[task_id] = pending_new_dependency
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail()
         deadline = min(self.deadline, time.monotonic() + request["remainingMs"] / 1000.0)
@@ -779,7 +817,7 @@ class AgentHost(_Host):
                 prior, self.problem, self.session_id, self.problem_hash,
             )
             legal = (
-                body.get("schemaVersion") == "agent-work-context-v4"
+                body.get("schemaVersion") == "agent-work-context-v5"
                 and body.get("allowFinal") is True
                 and expected is not None
                 and same_json(body.get("protectedCandidate"), expected)

@@ -48,6 +48,10 @@ export type P2WorkPacketSchemaVersion = typeof P2_WORK_PACKET_SCHEMA_VERSION;
 export const P2_WORK_PACKET_SCHEMA_VERSION_V2 = "p2a-work-v2" as const;
 export type P2WorkPacketSchemaVersionV2 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V2;
 
+/** Third WorkPacket schema version: adds one untrusted dependent-task proposal. */
+export const P2_WORK_PACKET_SCHEMA_VERSION_V3 = "p2a-work-v3" as const;
+export type P2WorkPacketSchemaVersionV3 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V3;
+
 /** Bounds for this phase. All are safe integers. */
 export const P2_LIMITS = {
   maxGoals: 8,
@@ -287,6 +291,17 @@ export interface P2WorkflowMechanism {
 }
 
 /**
+ * One untrusted dependent-task suggestion carried by a v3 WorkPacket. It is
+ * model data only: no taskId, refs, route, scope, checkpoint or budget field
+ * exists here, and the control side derives all of those itself.
+ */
+export interface P2DependentTaskProposal {
+  readonly kind: "DEPENDENT_TASK";
+  readonly obligationId: string;
+  readonly rationale: string;
+}
+
+/**
  * Strict v2 WorkPacket: every v1 field with the same meaning, plus a required
  * `workflowProposal` that is either `null` or one NEW_ROUTE suggestion.
  */
@@ -295,8 +310,17 @@ export interface P2WorkPacketV2 extends Omit<P2WorkPacket, "schemaVersion"> {
   readonly workflowProposal: P2WorkflowProposal | null;
 }
 
-/** Any accepted WorkPacket version. Both keep their own raw identity. */
-export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2;
+/**
+ * Strict v3 WorkPacket: every v1 field with the same meaning, plus a required
+ * `workflowProposal` that is either `null` or one DEPENDENT_TASK suggestion.
+ */
+export interface P2WorkPacketV3 extends Omit<P2WorkPacket, "schemaVersion"> {
+  readonly schemaVersion: P2WorkPacketSchemaVersionV3;
+  readonly workflowProposal: P2DependentTaskProposal | null;
+}
+
+/** Any accepted WorkPacket version. Each keeps its own raw identity. */
+export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2 | P2WorkPacketV3;
 
 export const P2_ARTIFACT_AVAILABILITY = ["ACTIVE", "STALE"] as const;
 export type P2ArtifactAvailability = (typeof P2_ARTIFACT_AVAILABILITY)[number];
@@ -772,6 +796,50 @@ export function p2WorkPacketSchemaV2(): unknown {
   return cachedWorkPacketSchemaV2;
 }
 
+const DEPENDENT_TASK_PROPOSAL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "obligationId", "rationale"],
+  properties: {
+    kind: { const: "DEPENDENT_TASK" },
+    obligationId: SHORT,
+    rationale: TEXT,
+  },
+} as const;
+
+/**
+ * v3 schema: a shallow copy of the v1 property set with `schemaVersion`
+ * replaced and `workflowProposal` added as a nullable DEPENDENT_TASK object.
+ * Built lazily so no top-level read of a re-exported `index` binding can hit a
+ * TDZ hazard.
+ */
+function buildWorkPacketSchemaV3(): unknown {
+  const properties: Record<string, unknown> = { ...WORK_PACKET_SCHEMA.properties };
+  properties.schemaVersion = { const: P2_WORK_PACKET_SCHEMA_VERSION_V3 };
+  properties.workflowProposal = {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: ["kind", "obligationId", "rationale"],
+    properties: DEPENDENT_TASK_PROPOSAL_SCHEMA.properties,
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [...WORK_PACKET_SCHEMA.required, "workflowProposal"],
+    properties,
+  };
+}
+
+let cachedWorkPacketSchemaV3: unknown = null;
+
+/** The normative v3 WorkPacket schema, deep-frozen on first use. */
+export function p2WorkPacketSchemaV3(): unknown {
+  if (cachedWorkPacketSchemaV3 === null) {
+    cachedWorkPacketSchemaV3 = p2Snapshot(buildWorkPacketSchemaV3());
+  }
+  return cachedWorkPacketSchemaV3;
+}
+
 /**
  * Shared strict parse core: surrogate scan, UTF-8 decode, duplicate keys,
  * non-finite tokens, unsafe numbers, JSON.parse, parsed-surrogate scan, then
@@ -852,6 +920,9 @@ export function parseP2WorkPacketAny(text: string): P2AcceptedWorkPacket {
     }
     if (version === P2_WORK_PACKET_SCHEMA_VERSION_V2) {
       return p2WorkPacketSchemaV2();
+    }
+    if (version === P2_WORK_PACKET_SCHEMA_VERSION_V3) {
+      return p2WorkPacketSchemaV3();
     }
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   });

@@ -257,7 +257,10 @@ def test_tampered_protected_candidate_is_refused(field, monkeypatch, process_tra
     assert process_tracker
 
 
-@pytest.mark.parametrize("legacy_version", ["agent-work-context-v2", "agent-work-context-v3"])
+@pytest.mark.parametrize(
+    "legacy_version",
+    ["agent-work-context-v2", "agent-work-context-v3", "agent-work-context-v4"],
+)
 def test_legacy_context_is_read_only(legacy_version, monkeypatch, process_tracker):
     """A real legacy-shaped WORK request passes the legacy reader, not the active one."""
     import copy
@@ -283,13 +286,18 @@ def test_legacy_context_is_read_only(legacy_version, monkeypatch, process_tracke
     params = captured[0]
     request = copy.deepcopy(params["request"])
     body = json.loads(request["messages"][1]["content"])
-    assert body["schemaVersion"] == "agent-work-context-v4"
+    assert body["schemaVersion"] == "agent-work-context-v5"
     assert "allowRouteProposal" in body
     assert "routeProvenance" in body
     assert "protectedCandidate" in body
+    assert "allowTaskContinuation" in body
+    assert "dependencyProvenance" in body
     body["schemaVersion"] = legacy_version
-    del body["allowRouteProposal"]
-    del body["routeProvenance"]
+    del body["allowTaskContinuation"]
+    del body["dependencyProvenance"]
+    if legacy_version in ("agent-work-context-v2", "agent-work-context-v3"):
+        del body["allowRouteProposal"]
+        del body["routeProvenance"]
     if legacy_version == "agent-work-context-v2":
         del body["allowFinal"]
         del body["protectedCandidate"]

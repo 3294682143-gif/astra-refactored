@@ -152,7 +152,11 @@ export async function runAgentLoop(
       const ready = ledger.readyTasks();
       // A dynamically admitted route task is preferred while it is genuinely
       // READY; otherwise the original ready set is used unchanged.
-      const routeReady = ready.filter((task) => workflow.provenanceOf(task.taskId) !== null);
+      const routeReady = ready.filter(
+        (task) =>
+          workflow.provenanceOf(task.taskId) !== null ||
+          workflow.dependencyProvenanceOf(task.taskId) !== null,
+      );
       const chosen = chooseP2ReadyTask(
         ledger.snapshot(),
         routeReady.length > 0 ? routeReady : ready,
@@ -246,6 +250,15 @@ export async function runAgentLoop(
             remainingUnitsAfterWork,
             root.remainingMs(),
           );
+        const allowTaskContinuation =
+          remainingCallsAfterWork >= 1 &&
+          remainingUnitsAfterWork >= 1 &&
+          workflow.canContinue(
+            remainingCallsAfterWork,
+            opts.maxReviews,
+            remainingUnitsAfterWork,
+            root.remainingMs(),
+          );
         const requestId = root.nextModelId();
         if (requestId === null) {
           stop = "BUDGET_EXHAUSTED";
@@ -267,7 +280,9 @@ export async function runAgentLoop(
             catalog,
             methodAssets,
             allowRouteProposal,
+            allowTaskContinuation,
             routeProvenance: workflow.provenanceOf(running.taskId),
+            dependencyProvenance: workflow.dependencyProvenanceOf(running.taskId),
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -450,6 +465,15 @@ export async function runAgentLoop(
             root.remainingMs(),
           );
         }
+        if (allowTaskContinuation) {
+          workflow.admitDependency(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs(),
+          );
+        }
         advanced = true;
         break;
       }
@@ -595,6 +619,7 @@ export async function runAgentLoop(
     routes: workflow.snapshot().routes,
     taskRoutes: workflow.snapshot().taskRoutes,
     routeAdmissions: workflow.snapshot().routeAdmissions,
+    dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }

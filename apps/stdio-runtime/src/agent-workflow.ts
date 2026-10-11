@@ -13,6 +13,7 @@ import {
   P2_ERROR_CODES,
   P2Error,
   p2Snapshot,
+  type AgentDependencyProvenance,
   type AgentRouteAdmission,
   type AgentRouteProvenance,
   type AgentTaskRoute,
@@ -21,6 +22,7 @@ import {
   type P2RouteSpec,
   type P2Task,
   type P2WorkPacketV2,
+  type P2WorkPacketV3,
 } from "@astra/protocol";
 import {
   P2RouteRegistry,
@@ -31,6 +33,7 @@ import type { ContractLedger } from "@astra/math-contract";
 import type { P2WorkunitStore } from "@astra/math-workunit";
 
 const MAX_ROUTES = 2;
+const MAX_DEPENDENCIES = 2;
 const MAX_REVIEWS = 1;
 const MAX_WORK_UNITS = 3;
 const MAX_REMAINING_MS = 5000;
@@ -83,6 +86,7 @@ export class AgentWorkflowRoutes {
   private readonly defaultRoute: P2RouteSpec;
   private readonly taskRoutes = new Map<string, AgentTaskRoute>();
   private readonly admissions: AgentRouteAdmission[] = [];
+  private readonly dependencies: AgentRouteAdmission[] = [];
 
   constructor(ledger: ContractLedger, store: P2WorkunitStore) {
     this.ledger = ledger;
@@ -119,7 +123,14 @@ export class AgentWorkflowRoutes {
 
   /** Provenance of one task, or null for a task on the default route. */
   provenanceOf(taskId: string): AgentRouteProvenance | null {
-    return this.taskRoutes.get(taskId)?.provenance ?? null;
+    const admission = this.admissions.find((row) => row.taskId === taskId);
+    return admission?.provenance ?? null;
+  }
+
+  /** Provenance of one dependent task, or null when it is not one. */
+  dependencyProvenanceOf(taskId: string): AgentDependencyProvenance | null {
+    const admission = this.dependencies.find((row) => row.taskId === taskId);
+    return admission?.provenance ?? null;
   }
 
   /**
@@ -149,6 +160,212 @@ export class AgentWorkflowRoutes {
       return false;
     }
     return ms > MIN_REMAINING_MS;
+  }
+
+  /**
+   * Whether one dependent task may even be considered. Same strict bounds as
+   * `canAdmit`, but the route count is not a limit here: only the dependency
+   * admission count is.
+   */
+  canContinue(
+    remainingCalls: number,
+    maxReviews: number,
+    remainingWorkUnits: number,
+    remainingMs: number,
+  ): boolean {
+    const calls = boundedInt(remainingCalls, 4);
+    const reviews = boundedInt(maxReviews, MAX_REVIEWS);
+    const units = boundedInt(remainingWorkUnits, MAX_WORK_UNITS);
+    const ms = boundedInt(remainingMs, MAX_REMAINING_MS);
+    if (this.dependencies.length >= MAX_DEPENDENCIES) {
+      return false;
+    }
+    if (calls < 1 + reviews) {
+      return false;
+    }
+    if (units < 1) {
+      return false;
+    }
+    return ms > MIN_REMAINING_MS;
+  }
+
+  /**
+   * Admit one dependent task from a real COMPLETE v3 artifact.
+   *
+   * Every check runs before the first mutation. A rejected proposal returns
+   * `false` and leaves the ledger, store, routes and mappings untouched; the
+   * already accepted artifact and candidate are preserved. The model supplies
+   * no task id, refs, route or budget: the child inherits the real route of its
+   * source task and its input refs are filled later by the ledger.
+   */
+  admitDependency(
+    artifact: P2Artifact,
+    remainingCalls: number,
+    maxReviews: number,
+    remainingWorkUnits: number,
+    remainingMs: number,
+  ): boolean {
+    if (!this.canContinue(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
+      return false;
+    }
+    if (!isPlainObject(artifact)) {
+      return false;
+    }
+    const frozen = p2Snapshot(artifact) as P2Artifact;
+    if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
+      return false;
+    }
+    const packet = frozen.packet;
+    if (packet === null || packet.schemaVersion !== "p2a-work-v3") {
+      return false;
+    }
+    const proposal = (packet as P2WorkPacketV3).workflowProposal;
+    if (proposal === null || !isPlainObject(proposal)) {
+      return false;
+    }
+    if (proposal.kind !== "DEPENDENT_TASK") {
+      return false;
+    }
+    if (typeof proposal.rationale !== "string" || proposal.rationale.trim().length === 0) {
+      return false;
+    }
+    const obligationId = proposal.obligationId;
+    if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
+      return false;
+    }
+
+    // The artifact must be the real ACTIVE latest entry of the store.
+    const ref: P2ArtifactRef = {
+      artifactId: frozen.artifactId,
+      artifactVersion: frozen.envelope.artifactVersion ?? 0,
+    };
+    let entry;
+    try {
+      entry = this.store.get(ref);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+    if (entry.availability !== "ACTIVE") {
+      return false;
+    }
+    if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
+      return false;
+    }
+    // Only a strictly higher version of the same artifactId makes this entry
+    // non-latest; keeping older versions is normal and never a rejection.
+    const currentVersion = frozen.envelope.artifactVersion ?? 0;
+    if (
+      this.store
+        .snapshot()
+        .some(
+          (row) =>
+            row.artifact.artifactId === frozen.artifactId &&
+            (row.artifact.envelope.artifactVersion ?? 0) > currentVersion,
+        )
+    ) {
+      return false;
+    }
+
+    const contract = this.ledger.snapshot();
+    const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
+    if (sourceTask === undefined || sourceTask.delivery !== "DELIVERED") {
+      return false;
+    }
+    if (obligationId !== sourceTask.obligationId) {
+      return false;
+    }
+    const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
+    if (obligation === undefined) {
+      return false;
+    }
+    if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
+      return false;
+    }
+    if (obligation.envelope.scopeId !== sourceTask.scopeId) {
+      return false;
+    }
+    if (!packet.pendingObligations.includes(obligationId)) {
+      return false;
+    }
+
+    const sourceRoute = this.forTask(sourceTask);
+    if (sourceRoute.routeId !== frozen.routeId) {
+      return false;
+    }
+    if (!this.store.routesSnapshot().some((route) => route.routeId === sourceRoute.routeId)) {
+      return false;
+    }
+
+    const taskId = `dep-task-${frozen.sourceRequestId}`;
+    if ([...taskId].length > MAX_TASK_ID_CHARS) {
+      return false;
+    }
+    if (contract.tasks.some((task) => task.taskId === taskId)) {
+      return false;
+    }
+    if (this.dependencies.some((row) => row.provenance.sourceRequestId === frozen.sourceRequestId)) {
+      return false;
+    }
+    const eventSeq = this.ledger.nextEventSeq();
+    const sessionId = contract.envelope.sessionId;
+    const newTask: P2Task = p2Snapshot({
+      envelope: {
+        ...sourceTask.envelope,
+        recordId: `${sessionId}:m1:dep-task:${frozen.sourceRequestId}`,
+        taskId,
+        eventSeq,
+      },
+      taskId,
+      goalId: sourceTask.goalId,
+      obligationId: sourceTask.obligationId,
+      scopeId: sourceTask.scopeId,
+      inputArtifactRefs: [],
+      dependencyTaskIds: [sourceTask.taskId],
+      expectedResult: sourceTask.expectedResult,
+      acceptanceCriteria: sourceTask.acceptanceCriteria,
+      delivery: "READY",
+    }) as P2Task;
+
+    const prospective = p2Snapshot({
+      ...contract,
+      tasks: [...contract.tasks, newTask],
+    });
+    try {
+      this.ledger.validateTaskAddition([newTask]);
+      this.store.validateAddedTasks(prospective);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+
+    const provenance: AgentDependencyProvenance = p2Snapshot({
+      sourceRequestId: frozen.sourceRequestId,
+      sourceArtifactRef: ref,
+      obligationId,
+      routeSignature: sourceRoute.signature,
+    }) as AgentDependencyProvenance;
+
+    // No asynchronous gap: every mutation below uses the already validated
+    // frozen values and cannot fail. No route is registered and no source
+    // artifact is relabelled.
+    this.ledger.addTasks([newTask]);
+    this.store.syncAddedTasks(this.ledger.snapshot());
+    this.taskRoutes.set(taskId, p2Snapshot({
+      taskId,
+      routeId: sourceRoute.routeId,
+      provenance: null,
+    }) as AgentTaskRoute);
+    this.dependencies.push(p2Snapshot({
+      taskId,
+      routeId: sourceRoute.routeId,
+      provenance,
+    }) as AgentRouteAdmission);
+    return true;
   }
 
   /**
@@ -387,11 +604,13 @@ export class AgentWorkflowRoutes {
     readonly routes: readonly P2RouteSpec[];
     readonly taskRoutes: readonly AgentTaskRoute[];
     readonly routeAdmissions: readonly AgentRouteAdmission[];
+    readonly dependencyAdmissions: readonly AgentRouteAdmission[];
   } {
     return p2Snapshot({
       routes: this.store.routesSnapshot(),
       taskRoutes: [...this.taskRoutes.values()],
       routeAdmissions: [...this.admissions],
+      dependencyAdmissions: [...this.dependencies],
     });
   }
 }

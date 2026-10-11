@@ -96,7 +96,7 @@ allowance as registered tools, plus the method-specific cap of one; neither
 tasks nor cache hits create a fresh budget. A failed attempt still spends its
 slot. Default or insufficient-budget paths do not touch the reader.
 
-WORK context v4 retains the complete validated catalog and loaded asset body,
+WORK context v5 retains the complete validated catalog and loaded asset body,
 title, version and integrity hash through the existing M3 preparation interface.
 Only same-task receipts enter toolObservations; method text may persist across
 tasks as advisory material, never a mathematical premise or verification.
@@ -117,8 +117,8 @@ not a synthesized WorkPacket or new artifact. Configured R2 still runs within
 the same root capacity. A rejected final stops further calls and may retain
 the old BEST_EFFORT candidate; STRICT still withholds it.
 
-Historical v2/v3 WORK contexts have an explicit read-only validator; the active
-Host requires v4. The 1.2 and 1.3 frame schema bytes are unchanged by this
+Historical v2/v3/v4 WORK contexts have an explicit read-only validator; the active
+Host requires v5. The 1.2 and 1.3 frame schema bytes are unchanged by this
 context-only migration. Full event replay is still a later gate.
 
 Version-2 WorkPackets may carry one strict, untrusted NEW_ROUTE suggestion.
@@ -127,6 +127,14 @@ TS can derive one new route/task for the source's pending obligation; Host
 independently checks that provenance. The task has no cross-route mathematical
 input refs and cannot replace the first protected candidate. See
 G2_DYNAMIC_ROUTES.md for bounded admission, current test results and remaining gaps.
+
+Version-3 WorkPackets may instead propose one DEPENDENT_TASK for the source's
+pending obligation. M1 derives the child dependency and fills its real delivered
+parent ref; M3 retains the actual raw artifact/version under the same route and
+scope. The Host verifies the source chain, not just matching field names. Up to
+three dependent WORKs and one R2 fit the same four model calls, without an extra
+planning request. See G2_DEPENDENT_CHAIN.md; this does not implement revision,
+mathematical acceptance or durable recovery.
 
 M5 remains the mathematical final selector. Host only verifies the returned
 answer's provenance and policy: it must equal the actual eligible candidate

@@ -17,7 +17,11 @@ from .p0_probe import ProbeError
 from .p2_host_fixture import _exact_keys, _parse_inner, _strict_utf8
 from .p3_host_methods import checked_catalog
 from .p3_host_context import same_json
-from .agent_workflow import check_route_provenance, checked_packet
+from .agent_workflow import (
+    check_dependency_provenance,
+    check_route_provenance,
+    checked_packet,
+)
 
 __all__ = [
     "canonical_scope",
@@ -49,6 +53,7 @@ _SCOPE_FIELDS = (
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 _CONTEXT_SCHEMA_VERSION = "agent-work-context-v4"
+_ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5"
 _FINAL_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
 _LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
@@ -66,6 +71,9 @@ _R2_FIELDS = (
 _TARGET_FIELDS = (
     "sessionId", "problemHash", "contractVersion", "artifactId",
     "artifactVersion", "taskId", "goalId", "scopeId", "sourceRequestId",
+)
+_DEPENDENCY_PROVENANCE_FIELDS = (
+    "sourceRequestId", "sourceArtifactRef", "obligationId", "routeSignature",
 )
 
 
@@ -155,7 +163,7 @@ def _source_body(entry):
 
 
 def candidate_packet(history, request_id, problem, session_id, problem_hash,
-                     source_schema=_CONTEXT_SCHEMA_VERSION):
+                     source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
     """Return the exact source work packet, or None when it is not a candidate.
 
     The packet is the strict parse of the Host-returned receipt text, not a
@@ -233,7 +241,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
 
 
 def _first_candidate_source(history, problem, session_id, problem_hash,
-                            source_schema=_CONTEXT_SCHEMA_VERSION):
+                            source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
     """Lowest-ordinal real source request that is an eligible candidate."""
     if not isinstance(history, dict):
         return None
@@ -256,7 +264,7 @@ def _first_candidate_source(history, problem, session_id, problem_hash,
 
 
 def _work_packet(entry, problem, session_id, problem_hash,
-                 source_schema=_CONTEXT_SCHEMA_VERSION):
+                 source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
     """Strict parse of one real COMPLETE WORK receipt into its WorkPacket.
 
     Returns ``None`` unless the record is a COMPLETE WORK request whose receipt
@@ -330,7 +338,7 @@ def _work_packet(entry, problem, session_id, problem_hash,
 
 
 def _work_ordinals(history, problem, session_id, problem_hash,
-                   source_schema=_CONTEXT_SCHEMA_VERSION):
+                   source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
     """Ordered ``(ordinal, request_id)`` of every real COMPLETE WORK record."""
     if not isinstance(history, dict):
         return []
@@ -353,7 +361,7 @@ def _work_ordinals(history, problem, session_id, problem_hash,
 
 
 def protected_final(history, problem, session_id, problem_hash,
-                    source_schema=_CONTEXT_SCHEMA_VERSION):
+                    source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
     """Host-side three-field projection of the real first protected candidate.
 
     The binding is rebuilt from the trusted history only: the artifact id is
@@ -548,7 +556,7 @@ def _ordinal(request_id):
 
 
 def _check_work(body, request_id, problem, session_id, problem_hash, history, effects,
-                catalog=None, method_assets=None, version=_CONTEXT_SCHEMA_VERSION,
+                catalog=None, method_assets=None, version=_ACTIVE_CONTEXT_SCHEMA_VERSION,
                 allow_final=False):
     """Validate one WORK context body against the Host request and records."""
     keys = set(body.keys())
@@ -559,12 +567,18 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         "allowTools", "allowMethods", "toolObservations",
     )
     extra = {"methodCatalog"}
-    if version in (_FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION,
+        _ACTIVE_CONTEXT_SCHEMA_VERSION,
+    ):
         required = required + ("allowFinal", "protectedCandidate")
         extra = extra | {"allowFinal", "protectedCandidate"}
-    if version == _CONTEXT_SCHEMA_VERSION:
+    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
         required = required + ("allowRouteProposal", "routeProvenance")
         extra = extra | {"allowRouteProposal", "routeProvenance"}
+    if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
+        required = required + ("allowTaskContinuation", "dependencyProvenance")
+        extra = extra | {"allowTaskContinuation", "dependencyProvenance"}
     if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
     if body["schemaVersion"] != version:
@@ -609,8 +623,15 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     if not isinstance(obligations, list) or not obligations:
         _fail()
     expected_obligation_task_id = task["taskId"]
-    if version == _CONTEXT_SCHEMA_VERSION:
-        provenance = check_route_provenance(body, history)
+    provenance = None
+    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
+        route_prov = check_route_provenance(body, history, version)
+        dep_prov = None
+        if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
+            dep_prov = check_dependency_provenance(body, history)
+        if route_prov is not None and dep_prov is not None:
+            _fail()
+        provenance = dep_prov if dep_prov is not None else route_prov
         if provenance is not None:
             source_entry = history.get(provenance["sourceRequestId"])
             if not isinstance(source_entry, dict):
@@ -619,12 +640,26 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             if not isinstance(source_body, dict):
                 _fail()
             source_scope = source_body.get("scope")
-            source_task = source_body.get("task")
-            if not isinstance(source_scope, dict) or not isinstance(source_task, dict):
+            source_obligations = source_body.get("obligations")
+            if not isinstance(source_scope, dict) or not isinstance(source_obligations, list):
                 _fail()
             if not same_json(source_scope, scope):
                 _fail()
-            expected_obligation_task_id = source_task.get("taskId")
+            row_task_id = None
+            for row in source_obligations:
+                if not isinstance(row, dict):
+                    _fail()
+                if row.get("obligationId") != task["obligationId"]:
+                    continue
+                row_envelope = row.get("envelope")
+                if not isinstance(row_envelope, dict):
+                    _fail()
+                if row_envelope.get("scopeId") != task["scopeId"]:
+                    _fail()
+                row_task_id = row_envelope.get("taskId")
+            if not isinstance(row_task_id, str):
+                _fail()
+            expected_obligation_task_id = row_task_id
     found = False
     for row in obligations:
         if not isinstance(row, dict):
@@ -662,7 +697,10 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     if version == _LEGACY_CONTEXT_SCHEMA_VERSION:
         if "allowFinal" in body or "protectedCandidate" in body:
             _fail()
-    if version in (_FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION,
+        _ACTIVE_CONTEXT_SCHEMA_VERSION,
+    ):
         if not isinstance(body["allowFinal"], bool):
             _fail()
         expected_projection = protected_final(
@@ -675,13 +713,21 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if not same_json(body["protectedCandidate"], expected_projection):
             _fail()
-    if version == _CONTEXT_SCHEMA_VERSION:
+    if version in (_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION):
         if not isinstance(body["allowRouteProposal"], bool):
             _fail()
-        provenance = check_route_provenance(body, history)
-        if provenance is None and body["routeProvenance"] is not None:
+        route_prov = check_route_provenance(body, history, version)
+        if route_prov is None and body["routeProvenance"] is not None:
             _fail()
-        if provenance is not None and not same_json(body["routeProvenance"], provenance):
+        if route_prov is not None and not same_json(body["routeProvenance"], route_prov):
+            _fail()
+    if version == _ACTIVE_CONTEXT_SCHEMA_VERSION:
+        if not isinstance(body["allowTaskContinuation"], bool):
+            _fail()
+        dep_prov = check_dependency_provenance(body, history)
+        if dep_prov is None and body["dependencyProvenance"] is not None:
+            _fail()
+        if dep_prov is not None and not same_json(body["dependencyProvenance"], dep_prov):
             _fail()
     check_inputs(body, history, request_id)
     expected = [
@@ -795,11 +841,11 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             _fail()
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
-        if body.get("schemaVersion") != _CONTEXT_SCHEMA_VERSION:
+        if body.get("schemaVersion") != _ACTIVE_CONTEXT_SCHEMA_VERSION:
             _fail()
         _check_work(
             body, request_id, problem, session_id, problem_hash, history, effects,
-            catalog, method_assets, _CONTEXT_SCHEMA_VERSION, True,
+            catalog, method_assets, _ACTIVE_CONTEXT_SCHEMA_VERSION, True,
         )
     elif request["phase"] == "R2":
         target = body.get("target")
@@ -815,10 +861,10 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
 
 def validate_legacy_context(request, problem, session_id, problem_hash, history,
                             effects, catalog=None, method_assets=None):
-    """Read-only validation of one legacy v2 or v3 WORK context.
+    """Read-only validation of one legacy v2, v3 or v4 WORK context.
 
-    Only the older ``agent-work-context-v2`` and ``agent-work-context-v3``
-    shapes are accepted here. A v2 body must not carry the
+    Only the older ``agent-work-context-v2``, ``agent-work-context-v3`` and
+    ``agent-work-context-v4`` shapes are accepted here. A v2 body must not carry the
     ``allowFinal``/``protectedCandidate`` fields; a v3 body is checked with the
     same shared final-projection guard as the active v4 shape, but never with
     the v4 proposal fields. The active Host entry never calls this function; it
@@ -836,7 +882,10 @@ def validate_legacy_context(request, problem, session_id, problem_hash, history,
     if request["phase"] != "WORK":
         _fail()
     version = body.get("schemaVersion")
-    if version not in (_LEGACY_CONTEXT_SCHEMA_VERSION, _FINAL_CONTEXT_SCHEMA_VERSION):
+    if version not in (
+        _LEGACY_CONTEXT_SCHEMA_VERSION, _FINAL_CONTEXT_SCHEMA_VERSION,
+        _CONTEXT_SCHEMA_VERSION,
+    ):
         _fail()
     task = body.get("task")
     if not isinstance(task, dict):

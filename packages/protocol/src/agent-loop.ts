@@ -216,6 +216,7 @@ export interface AgentLoopPrivateState {
   readonly routes?: readonly P2RouteSpec[];
   readonly taskRoutes?: readonly AgentTaskRoute[];
   readonly routeAdmissions?: readonly AgentRouteAdmission[];
+  readonly dependencyAdmissions?: readonly AgentRouteAdmission[];
 }
 
 /**
@@ -229,6 +230,14 @@ export interface AgentRouteProvenance {
   readonly obligationId: string;
   readonly routeSignature: string;
 }
+
+/**
+ * Control-side provenance of one dynamically admitted dependent task. Same
+ * four declared identity fields as a route provenance; it is data identity,
+ * never an independent mathematical proof, and it never replaces the route
+ * provenance of a NEW_ROUTE task.
+ */
+export type AgentDependencyProvenance = AgentRouteProvenance;
 
 /** Private mapping of one task to the route it runs under. */
 export interface AgentTaskRoute {

@@ -21,6 +21,9 @@ export interface ReactiveWorkOptions {
   readonly claim?: string;
   readonly derivation?: string;
   readonly deliveryStatus?: "COMPLETE" | "INCOMPLETE" | "TRUNCATED" | "ERROR";
+  readonly schemaVersion?: "p2a-work-v1" | "p2a-work-v2" | "p2a-work-v3";
+  readonly workflowProposal?: unknown;
+  readonly pendingObligations?: readonly string[];
 }
 
 export interface ReactivePorts {
@@ -103,8 +106,8 @@ function bodyOf(request: AgentModelRequest): Record<string, unknown> {
 export function reactiveWork(request: AgentModelRequest, options: ReactiveWorkOptions = {}): string {
   const body = bodyOf(request) as unknown as WorkBody;
   const candidate = options.candidate === undefined ? "4" : options.candidate;
-  return JSON.stringify({
-    schemaVersion: "p2a-work-v1",
+  const packet: Record<string, unknown> = {
+    schemaVersion: options.schemaVersion ?? "p2a-work-v1",
     sessionId: body.sessionId,
     problemHash: body.problemHash,
     contractVersion: body.contractVersion,
@@ -120,11 +123,15 @@ export function reactiveWork(request: AgentModelRequest, options: ReactiveWorkOp
       artifactId: ref.artifactId,
       artifactVersion: ref.artifactVersion,
     })),
-    pendingObligations: [],
+    pendingObligations: options.pendingObligations ?? [],
     suggestedChecks: [],
     deliveryStatus: options.deliveryStatus ?? "COMPLETE",
     candidateProposal: candidate,
-  });
+  };
+  if (options.schemaVersion === "p2a-work-v2" || options.schemaVersion === "p2a-work-v3") {
+    packet.workflowProposal = options.workflowProposal ?? null;
+  }
+  return JSON.stringify(packet);
 }
 
 /** One literal tool action naming an existing registered tool. */
