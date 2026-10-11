@@ -27,6 +27,7 @@ export * from "./p2-routes.js";
 export * from "./p2-store.js";
 export * from "./p2-prepare.js";
 export * from "./p2-a2-context.js";
+export * from "./p3-context.js";
 
 /**
  * The fixed system template. Exported so the Host can compare the exact text

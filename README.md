@@ -43,6 +43,14 @@ mock receipts with dependency checks and protected candidates; the default is
 still one call. It remains opt-in and MOCK_ONLY. Full action policy, formal
 client integration and default switching are unfinished.
 
+The [P3 finite-action offline loop](docs/P3_FINITE_ACTIONS.md) now parses
+tool/method/final/unsolved actions, admits and deduplicates controlled effects,
+and carries full recorded observations into the next TypeScript context.
+Integration tests execute the two existing isolated Python operators and the
+method reader on synthetic inputs. This is a separate fixture library and
+one-shot effect adapter, not a P2 Host protocol upgrade or a production client.
+P2 Host 1.1 and the official Python entry point remain unchanged.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.
