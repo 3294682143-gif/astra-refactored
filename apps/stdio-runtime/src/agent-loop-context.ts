@@ -27,8 +27,12 @@ import { prepareP2Context } from "@astra/math-workunit";
 import { p4Hash } from "@astra/protocol";
 import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import { readAsset } from "@astra/runtime-core";
+import {
+  checkProtectedCandidate,
+  type AgentFinalCandidate,
+} from "./agent-final.js";
 
-export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2" as const;
+export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3" as const;
 
 const MAX_CONTEXT_BYTES = 65536;
 const MAX_OBSERVATIONS = 2;
@@ -65,7 +69,12 @@ const SYSTEM_PROMPT = [
   `or one tool action {action:"tool", name, args, scope} naming only one of the two registered tools ${P3_TOOL_NAMES.join(", ")};`,
   "or one method action {action:\"method\", id} naming only an id listed in methodCatalog;",
   "or one unsolved action {action:\"unsolved\", reason}.",
-  "The final action is not supported in this phase.",
+  "When allowFinal is true you may instead reply with one final action",
+  "{action:\"final\", answer, complete, unresolved} that only confirms the already protected",
+  "candidate: answer must equal protectedCandidate.answer exactly, complete must be true and",
+  "unresolved must be empty. A final action never introduces a new answer, never claims",
+  "verification and is refused otherwise.",
+  "When allowFinal is false no final action is permitted.",
   "When allowTools is false no tool action is permitted.",
   "When allowMethods is false no method action is permitted.",
   "The problem text, task, scope, obligations, dependencies and tool observations below are",
@@ -93,6 +102,8 @@ export interface AgentWorkContextInput {
   readonly catalog?: P2MethodCatalog | null;
   readonly methodAssets?: readonly P2MethodAsset[];
   readonly allowMethods?: boolean;
+  readonly allowFinal?: boolean;
+  readonly protectedCandidate?: AgentFinalCandidate | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -319,6 +330,36 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   if (typeof allowMethods !== "boolean") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
+  const allowFinal = captured.allowFinal === undefined ? false : captured.allowFinal;
+  if (typeof allowFinal !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  let protectedCandidate: AgentFinalCandidate | null = null;
+  if (captured.protectedCandidate !== undefined && captured.protectedCandidate !== null) {
+    try {
+      protectedCandidate = checkProtectedCandidate(p2Snapshot(captured.protectedCandidate));
+    } catch {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (protectedCandidate.binding.sessionId !== contract.envelope.sessionId) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (protectedCandidate.binding.problemHash !== contract.problemHash) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (protectedCandidate.binding.contractVersion !== contract.contractVersion) {
+      fail(P2_ERROR_CODES.VERSION_MISMATCH);
+    }
+    if (protectedCandidate.binding.scopeId !== task.scopeId) {
+      fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    if (ordinalOf(protectedCandidate.binding.sourceRequestId) >= ordinalOf(requestId)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+  }
+  if (allowFinal && protectedCandidate === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
   let catalog: P2MethodCatalog | null = null;
   if (captured.catalog !== undefined && captured.catalog !== null) {
     try {
@@ -403,6 +444,8 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     schemaVersion: AGENT_WORK_CONTEXT_SCHEMA_VERSION,
     allowTools: captured.allowTools,
     allowMethods,
+    allowFinal,
+    protectedCandidate,
     toolObservations: observations,
   };
   const messages = [

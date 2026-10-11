@@ -18,7 +18,14 @@ from .p2_host_fixture import _exact_keys, _parse_inner, _strict_utf8
 from .p3_host_methods import checked_catalog
 from .p3_host_context import same_json
 
-__all__ = ["canonical_scope", "candidate_packet", "check_inputs", "validate_context"]
+__all__ = [
+    "canonical_scope",
+    "candidate_packet",
+    "check_inputs",
+    "protected_final",
+    "validate_context",
+    "validate_legacy_context",
+]
 
 _MAX_REFS = 3
 _MAX_TEXT_CHARS = 4096
@@ -40,7 +47,8 @@ _SCOPE_FIELDS = (
     "branchConditions", "referenceablePremises",
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
-_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
+_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
+_LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
 _R2_SCHEMA_VERSION = "p4-r2-context-v1"
 _TASK_FIELDS = (
@@ -144,7 +152,8 @@ def _source_body(entry):
     return request_id, request, receipt, body
 
 
-def candidate_packet(history, request_id, problem, session_id, problem_hash):
+def candidate_packet(history, request_id, problem, session_id, problem_hash,
+                     source_schema=_CONTEXT_SCHEMA_VERSION):
     """Return the exact source work packet, or None when it is not a candidate.
 
     The packet is the strict parse of the Host-returned receipt text, not a
@@ -161,7 +170,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash):
             return None
         if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
             return None
-        if body.get("schemaVersion") != _CONTEXT_SCHEMA_VERSION:
+        if body.get("schemaVersion") != source_schema:
             return None
         if body.get("problemFullText") != problem:
             return None
@@ -223,6 +232,193 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash):
     except ProbeError:
         return None
     except Exception:  # noqa: BLE001 - a malformed record is not a candidate
+        return None
+
+
+def _first_candidate_source(history, problem, session_id, problem_hash,
+                            source_schema=_CONTEXT_SCHEMA_VERSION):
+    """Lowest-ordinal real source request that is an eligible candidate."""
+    if not isinstance(history, dict):
+        return None
+    ordered = []
+    for request_id in history:
+        if not isinstance(request_id, str) or not request_id.startswith("model-"):
+            continue
+        suffix = request_id[len("model-"):]
+        if suffix not in ("1", "2", "3", "4"):
+            continue
+        ordered.append((int(suffix), request_id))
+    ordered.sort()
+    for _, request_id in ordered:
+        packet = candidate_packet(
+            history, request_id, problem, session_id, problem_hash, source_schema,
+        )
+        if packet is not None:
+            return request_id, packet
+    return None
+
+
+def _work_packet(entry, problem, session_id, problem_hash):
+    """Strict parse of one real COMPLETE WORK receipt into its WorkPacket.
+
+    Returns ``None`` unless the record is a COMPLETE WORK request whose receipt
+    text is exactly one well-formed ``p2a-work-v1`` packet bound to this
+    session/problem and to the task/scope/route of its own request body. Tool,
+    method, review and malformed records are never counted as work.
+    """
+    try:
+        request_id, request, receipt, body = _source_body(entry)
+        if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
+            return None
+        if body.get("schemaVersion") != _CONTEXT_SCHEMA_VERSION:
+            return None
+        if body.get("problemFullText") != problem:
+            return None
+        packet = _parse_inner(receipt["text"])
+        if not isinstance(packet, dict):
+            return None
+        _exact_keys(packet, _PACKET_FIELDS)
+        if packet["schemaVersion"] != _WORK_SCHEMA:
+            return None
+        if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
+            return None
+        if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
+            return None
+        if packet["sourceRequestId"] != request_id:
+            return None
+        if packet["deliveryStatus"] != "COMPLETE":
+            return None
+        task = body.get("task")
+        scope = body.get("scope")
+        route = body.get("route")
+        if not isinstance(task, dict) or not isinstance(scope, dict) or not isinstance(route, dict):
+            return None
+        if packet["taskId"] != task.get("taskId") or packet["goalId"] != task.get("goalId"):
+            return None
+        if packet["scopeId"] != scope.get("scopeId") or packet["routeId"] != route.get("routeId"):
+            return None
+        if canonical_scope(scope) != packet["scopeId"]:
+            return None
+        refs = task.get("inputArtifactRefs")
+        if not isinstance(refs, list):
+            return None
+        declared = []
+        for ref in refs:
+            if not isinstance(ref, dict):
+                return None
+            _exact_keys(ref, ("artifactId", "artifactVersion"))
+            artifact_id = _text(ref["artifactId"], 256)
+            if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] != 1:
+                return None
+            if artifact_id in declared:
+                return None
+            declared.append(artifact_id)
+        dependencies = packet["dependencies"]
+        if not isinstance(dependencies, list):
+            return None
+        seen = []
+        for ref in dependencies:
+            if not isinstance(ref, dict):
+                return None
+            _exact_keys(ref, ("artifactId", "artifactVersion"))
+            artifact_id = _text(ref["artifactId"], 256)
+            if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] != 1:
+                return None
+            if artifact_id in seen or artifact_id not in declared:
+                return None
+            seen.append(artifact_id)
+        _text(packet["claim"], _MAX_TEXT_CHARS)
+        _text(packet["derivation"], _MAX_TEXT_CHARS)
+        return packet
+    except ProbeError:
+        return None
+    except Exception:  # noqa: BLE001 - a malformed record is not a work packet
+        return None
+
+
+def _work_ordinals(history, problem, session_id, problem_hash):
+    """Ordered ``(ordinal, request_id)`` of every real COMPLETE WORK record."""
+    if not isinstance(history, dict):
+        return []
+    ordered = []
+    for request_id in history:
+        if not isinstance(request_id, str) or not request_id.startswith("model-"):
+            continue
+        suffix = request_id[len("model-"):]
+        if suffix not in ("1", "2", "3", "4"):
+            continue
+        ordered.append((int(suffix), request_id))
+    ordered.sort()
+    kept = []
+    for ordinal, request_id in ordered:
+        if _work_packet(history.get(request_id), problem, session_id, problem_hash) is not None:
+            kept.append((ordinal, request_id))
+    return kept
+
+
+def protected_final(history, problem, session_id, problem_hash):
+    """Host-side three-field projection of the real first protected candidate.
+
+    The binding is rebuilt from the trusted history only: the artifact id is
+    the count of real COMPLETE WORK packets at or before the source request,
+    never the model-call ordinal, and the target hash is recomputed from the
+    exact raw receipt bytes. Returns ``None`` when no real eligible candidate
+    exists.
+    """
+    try:
+        found = _first_candidate_source(history, problem, session_id, problem_hash)
+        if found is None:
+            return None
+        source_id, packet = found
+        entry = history.get(source_id)
+        if not isinstance(entry, dict):
+            return None
+        _, request, receipt, body = _source_body(entry)
+        raw_text = receipt["text"]
+        if not isinstance(raw_text, str):
+            return None
+        task = body.get("task")
+        scope = body.get("scope")
+        if not isinstance(task, dict) or not isinstance(scope, dict):
+            return None
+        source_ordinal = _ordinal(source_id)
+        count = 0
+        for ordinal, _ in _work_ordinals(history, problem, session_id, problem_hash):
+            if ordinal <= source_ordinal:
+                count += 1
+        if count < 1:
+            return None
+        binding = {
+            "sessionId": session_id,
+            "problemHash": problem_hash,
+            "contractVersion": 1,
+            "artifactId": "artifact-" + str(count),
+            "artifactVersion": 1,
+            "taskId": task.get("taskId"),
+            "goalId": task.get("goalId"),
+            "scopeId": scope.get("scopeId"),
+            "sourceRequestId": source_id,
+        }
+        ordered = {}
+        for name in _TARGET_FIELDS:
+            ordered[name] = binding[name]
+        raw_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+        payload = json.dumps(
+            [ordered, raw_hash], ensure_ascii=False, separators=(",", ":"),
+            allow_nan=False,
+        )
+        target_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        answer = packet["candidateProposal"]
+        if not isinstance(answer, str) or not answer.strip():
+            return None
+        return {
+            "binding": ordered,
+            "targetHash": target_hash,
+            "answer": answer,
+        }
+    except ProbeError:
+        return None
+    except Exception:  # noqa: BLE001 - a malformed record is not a projection
         return None
 
 
@@ -351,7 +547,8 @@ def _ordinal(request_id):
 
 
 def _check_work(body, request_id, problem, session_id, problem_hash, history, effects,
-                catalog=None, method_assets=None):
+                catalog=None, method_assets=None, version=_CONTEXT_SCHEMA_VERSION,
+                allow_final=False):
     """Validate one WORK context body against the Host request and records."""
     keys = set(body.keys())
     required = (
@@ -360,9 +557,13 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         "route", "sourceRequestId", "inputArtifacts", "methodAssets",
         "allowTools", "allowMethods", "toolObservations",
     )
-    if not set(required) <= keys or not keys <= set(required) | {"methodCatalog"}:
+    extra = {"methodCatalog"}
+    if version == _CONTEXT_SCHEMA_VERSION:
+        required = required + ("allowFinal", "protectedCandidate")
+        extra = extra | {"allowFinal", "protectedCandidate"}
+    if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
-    if body["schemaVersion"] != _CONTEXT_SCHEMA_VERSION:
+    if body["schemaVersion"] != version:
         _fail()
     if body["promptVersion"] != _PROMPT_VERSION:
         _fail()
@@ -437,6 +638,22 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _fail()
     if body["allowMethods"] and not entries:
         _fail()
+    if version == _LEGACY_CONTEXT_SCHEMA_VERSION:
+        if "allowFinal" in body or "protectedCandidate" in body:
+            _fail()
+    if version == _CONTEXT_SCHEMA_VERSION:
+        if not isinstance(body["allowFinal"], bool):
+            _fail()
+        expected_projection = protected_final(
+            history, problem, session_id, problem_hash,
+        )
+        if expected_projection is not None:
+            if expected_projection["binding"]["scopeId"] != task["scopeId"]:
+                expected_projection = None
+        if body["allowFinal"] and expected_projection is None:
+            _fail()
+        if not same_json(body["protectedCandidate"], expected_projection):
+            _fail()
     check_inputs(body, history, request_id)
     expected = [
         entry["receipt"]
@@ -549,9 +766,11 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             _fail()
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
+        if body.get("schemaVersion") != _CONTEXT_SCHEMA_VERSION:
+            _fail()
         _check_work(
             body, request_id, problem, session_id, problem_hash, history, effects,
-            catalog, method_assets,
+            catalog, method_assets, _CONTEXT_SCHEMA_VERSION, True,
         )
     elif request["phase"] == "R2":
         target = body.get("target")
@@ -562,4 +781,37 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
         _check_r2(body, request_id, problem, session_id, problem_hash, history)
     else:
         _fail()
+    return copy.deepcopy(body)
+
+
+def validate_legacy_context(request, problem, session_id, problem_hash, history,
+                            effects, catalog=None, method_assets=None):
+    """Read-only validation of one legacy v2 WORK context.
+
+    Only the older ``agent-work-context-v2`` shape is accepted here, and the
+    new ``allowFinal``/``protectedCandidate`` fields must be absent. The active
+    Host entry never calls this function; it exists so a historical v2 record
+    can still be re-checked without being rewritten into the v3 shape.
+    """
+    request_id, messages = _validate_request(copy.deepcopy(request))
+    if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
+        _fail()
+    body = _parse_inner(messages[1]["content"])
+    if not isinstance(body, dict):
+        _fail()
+    if body.get("problemFullText") != problem:
+        _fail()
+    if request["phase"] != "WORK":
+        _fail()
+    if body.get("schemaVersion") != _LEGACY_CONTEXT_SCHEMA_VERSION:
+        _fail()
+    task = body.get("task")
+    if not isinstance(task, dict):
+        _fail()
+    if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
+        _fail()
+    _check_work(
+        body, request_id, problem, session_id, problem_hash, history, effects,
+        catalog, method_assets, _LEGACY_CONTEXT_SCHEMA_VERSION, False,
+    )
     return copy.deepcopy(body)

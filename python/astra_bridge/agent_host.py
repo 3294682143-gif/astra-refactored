@@ -13,7 +13,7 @@ import copy
 import time
 
 from .agent_client import AgentClient
-from .agent_context import candidate_packet, validate_context
+from .agent_context import candidate_packet, protected_final, validate_context
 from .p0_probe import ProbeError, _Host
 from .p2_host_fixture import _parse_inner
 from .p3_effect_contract import (
@@ -339,6 +339,12 @@ class AgentHost(_Host):
             if body["allowTools"] is not allow_tools:
                 _fail()
             if body["allowMethods"] is not allow_methods:
+                _fail()
+            expected_allow_final = (
+                body["protectedCandidate"] is not None
+                and self.max_model_calls - self.model_requests >= 1 + self.max_reviews
+            )
+            if body["allowFinal"] is not expected_allow_final:
                 _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail()
@@ -669,5 +675,93 @@ class AgentHost(_Host):
                     break
             if first != candidate:
                 _fail()
+        self._check_final_provenance(candidate, summary["stopReason"])
         self.solve_result = copy.deepcopy(result)
         self.expected = None
+
+    def _check_final_provenance(self, candidate, stop_reason):
+        """Reject a forged final confirmation; never echo raw model text.
+
+        Every COMPLETE WORK record whose raw text parses as a ``final`` action
+        must be a real confirmation of the protected candidate that already
+        existed in the history before it: the source context must be the v3
+        shape with ``allowFinal`` true and a ``protectedCandidate`` equal to the
+        Host-rebuilt projection of that earlier history, in the same scope, and
+        the action must match answer/complete/unresolved exactly. A legal final
+        stops further WORK, so at most the authorized R2 calls may follow it.
+        An illegal final is a control rejection: the Loop must have stopped with
+        CONTROL_REJECTED and no later model call may exist. A STRICT run keeps
+        its candidate withheld, so ``candidate`` may legitimately be ``None``.
+        """
+        try:
+            ordered = sorted(
+                (
+                    (int(name.split("-")[1]), name)
+                    for name in self.history
+                    if isinstance(name, str)
+                    and name.startswith("model-")
+                    and name.split("-")[1] in ("1", "2", "3", "4")
+                )
+            )
+        except Exception:  # noqa: BLE001 - a malformed key is not a final
+            return
+        for ordinal, request_id in ordered:
+            record = self.history.get(request_id)
+            if not isinstance(record, dict):
+                continue
+            request = record.get("request")
+            receipt = record.get("receipt")
+            if not isinstance(request, dict) or not isinstance(receipt, dict):
+                continue
+            if request.get("phase") != "WORK":
+                continue
+            if receipt.get("transportStatus") != "COMPLETE":
+                continue
+            text = receipt.get("text")
+            if not isinstance(text, str):
+                continue
+            try:
+                action = parse_action(text, self._binding(request_id))
+            except Exception:  # noqa: BLE001 - a non-action is not a final
+                continue
+            if not isinstance(action, dict) or action.get("action") != "final":
+                continue
+            body = _parse_inner(request["messages"][1]["content"])
+            if not isinstance(body, dict):
+                _fail()
+            prior = {}
+            for other_ordinal, other_id in ordered:
+                if other_ordinal < ordinal:
+                    prior[other_id] = self.history[other_id]
+            expected = protected_final(
+                prior, self.problem, self.session_id, self.problem_hash,
+            )
+            legal = (
+                body.get("schemaVersion") == "agent-work-context-v3"
+                and body.get("allowFinal") is True
+                and expected is not None
+                and same_json(body.get("protectedCandidate"), expected)
+                and action.get("answer") == expected["answer"]
+                and action.get("complete") is True
+                and action.get("unresolved") == []
+            )
+            if not legal:
+                if stop_reason != "CONTROL_REJECTED":
+                    _fail()
+                for later_ordinal, later_id in ordered:
+                    if later_ordinal > ordinal:
+                        _fail()
+                continue
+            if candidate is not None and candidate != expected["binding"]["sourceRequestId"]:
+                _fail()
+            for later_ordinal, later_id in ordered:
+                if later_ordinal <= ordinal:
+                    continue
+                later = self.history.get(later_id)
+                if not isinstance(later, dict):
+                    _fail()
+                later_request = later.get("request")
+                if not isinstance(later_request, dict):
+                    _fail()
+                if later_request.get("phase") != "R2":
+                    _fail()

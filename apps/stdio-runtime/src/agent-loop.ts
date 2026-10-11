@@ -43,6 +43,7 @@ import { P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate } from "@astra/math-audit";
 import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
+import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
@@ -225,6 +226,12 @@ export async function runAgentLoop(
           callsLeft() >= 2 + opts.maxReviews &&
           ((methodLoads < opts.maxMethodLoads && root.effectCalls() < opts.maxEffects) ||
             cachedMethod);
+        const protectedCandidate = projectProtectedFinal(ledger.snapshot(), target);
+        const sameScope =
+          protectedCandidate !== null &&
+          protectedCandidate.binding.scopeId === running.scopeId;
+        const exposedCandidate = sameScope ? protectedCandidate : null;
+        const allowFinal = sameScope && callsLeft() >= 1 + opts.maxReviews;
         const requestId = root.nextModelId();
         if (requestId === null) {
           stop = "BUDGET_EXHAUSTED";
@@ -241,6 +248,8 @@ export async function runAgentLoop(
             toolObservations: observations,
             allowTools,
             allowMethods,
+            allowFinal,
+            protectedCandidate: exposedCandidate,
             catalog,
             methodAssets,
           });
@@ -342,7 +351,22 @@ export async function runAgentLoop(
           break;
         }
         if (action !== null && action.action === "final") {
-          stop = "CONTROL_REJECTED";
+          if (
+            exposedCandidate === null ||
+            !allowFinal ||
+            !validateAgentFinal(
+              action,
+              exposedCandidate,
+              ledger.snapshot(),
+              running.scopeId,
+              outcome.requestId,
+            )
+          ) {
+            root.stop("CONTROL_REJECTED");
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          stop = "WORK_UNITS_COMPLETE";
           break;
         }
         let accepted: P2Artifact;
