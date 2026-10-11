@@ -30,6 +30,12 @@ Python resource-reader integration tests. **P2 and the full M3 migration are
 not complete.** This is a separate synthetic fixture runner, not a real model
 client or new RPC stack. The P1 executable and default entry remain unchanged.
 
+The [a2 short-path alignment harness](docs/P2_A2_ALIGNMENT.md) now captures five
+real Python-a2 offline request sequences and independently rebuilds them in TS.
+It provides strict in-memory replay and private-text-free difference reports.
+This is request-level evidence for those five cases, not full a2 equivalence;
+the existing P2 WorkPacket prompt is explicitly detected as different.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

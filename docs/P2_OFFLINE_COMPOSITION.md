@@ -85,6 +85,10 @@ authority; fixture trace indices are not another global event sequence.
 Contract migration, model-driven method actions, a2 prompt/behaviour parity,
 full M2/M4/M5 policy and default-engine switching still need separate work.
 
+The subsequent [a2 short-path harness](P2_A2_ALIGNMENT.md) adds frozen-source
+capture and request-level comparison/replay for five selected baseline paths.
+It does not replace this runner's WorkPacket prompt or establish full parity.
+
 ## Run and acceptance evidence
 
 Use existing locked dependencies and the explicit offline cache procedure in

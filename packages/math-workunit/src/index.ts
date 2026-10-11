@@ -26,6 +26,7 @@ export const WORKUNIT_ARTIFACT_VERSION = 1 as const;
 export * from "./p2-routes.js";
 export * from "./p2-store.js";
 export * from "./p2-prepare.js";
+export * from "./p2-a2-context.js";
 
 /**
  * The fixed system template. Exported so the Host can compare the exact text
