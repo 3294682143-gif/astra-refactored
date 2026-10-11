@@ -96,6 +96,13 @@ contract or satisfy obligations. The [R0/work offline workflow](docs/P4_R0_WORKF
 now shares a root budget with a default 25% planning-call allocation.
 Automatic plan revision/fallback, R1 and formal-client integration remain pending.
 
+The [R0 revision proposal libraries](docs/P4_R0_REVISION_PROPOSAL.md) now bind
+one restricted leaf goal-kind change report to an actual ISSUES review and
+apply it only to a private M1 ledger. The child preserves REOPENED obligations
+and requires new review; it cannot activate or inherit its parent's opinion.
+These libraries are not wired into the existing workflow or its planning
+allowance. Revised-plan review and shared-root revision/fallback remain pending.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

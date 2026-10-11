@@ -25,6 +25,7 @@ export * from "./p4-recheck-session.js";
 export * from "./p4-r0-input.js";
 export * from "./p4-r0-report.js";
 export * from "./p4-r0-session.js";
+export * from "./p4-r0-revision-trigger.js";
 
 /** Record the skipped review. No semantic check is run here. */
 export function reviewSkipped(contract: P1Contract, eventSeq: number): P1ReviewResult {
