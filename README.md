@@ -55,8 +55,10 @@ The [P3 local tool Host profile](docs/P3_TOOL_HOST.md) additionally runs
 `model → tool → model → final` over the existing Python↔Node channel.
 Python independently admits each tool request against its recorded model
 response and root deadline. This opt-in profile still uses literal model
-fixtures; method actions are unavailable in this Host profile, while the
-separate P3 fixture library retains its method support.
+fixtures. The [method Host increment](docs/P3_METHOD_HOST.md) adds a bounded
+catalog callback and on-demand card loading with `--max-method-loads 1`.
+Method loading defaults to off; enabled methods and tools share one effect
+budget and root deadline. P3 peers now use protocol `1.1-p3-host-local`.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

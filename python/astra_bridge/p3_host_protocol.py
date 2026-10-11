@@ -32,7 +32,7 @@ __all__ = [
     "classify_method",
 ]
 
-P3_HOST_VERSION = "1.0-p3-host-local"
+P3_HOST_VERSION = "1.1-p3-host-local"
 P3_HOST_MANIFEST_FORMAT = "astra-p3-host-manifest-v1"
 P3_HOST_SCHEMA_DIALECT = "astra-p0-schema-subset-v1"
 
@@ -42,6 +42,8 @@ P3_HOST_METHODS = (
     "session.stop",
     "model.generate",
     "tool.execute",
+    "method.catalog",
+    "method.load",
 )
 
 P3_HOST_METHOD_DIRECTION = {
@@ -50,6 +52,8 @@ P3_HOST_METHOD_DIRECTION = {
     "session.stop": "host-to-node",
     "model.generate": "node-to-host",
     "tool.execute": "node-to-host",
+    "method.catalog": "node-to-host",
+    "method.load": "node-to-host",
 }
 
 

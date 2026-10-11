@@ -32,11 +32,11 @@ _MAX_UNRESOLVED_CHARS = 256
 _MAX_RECEIPTS = 3
 _MAX_CONTEXT_BYTES = 65536
 _DELIVERY_STATUS = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
-_CONTEXT_SCHEMA_VERSION = "p3-action-context-v1"
+_CONTEXT_SCHEMA_VERSION = "p3-action-context-v2"
 _PROMPT_VERSION = "p3-actions-v1"
 _REQUEST_IDS = ("model-1", "model-2", "model-3")
 _EFFECT_IDS = ("effect-1", "effect-2")
-_ALLOWED_ACTION_IDS = ("PROPOSE_FINAL", "MARK_UNSOLVED", "CALL_REGISTERED_TOOL")
+_ALLOWED_ACTION_IDS = ("PROPOSE_FINAL", "MARK_UNSOLVED", "CALL_REGISTERED_TOOL", "LOAD_METHOD")
 _HEX64 = frozenset("0123456789abcdef")
 
 
@@ -179,18 +179,45 @@ def parse_action(text, binding):
 
 
 def effect_key(action):
-    """Host-side identity of one tool action; the scope wording is excluded."""
-    if not isinstance(action, dict) or action.get("action") != "tool":
+    """Host-side identity of one tool/method action.
+
+    For a tool the scope wording is excluded; for a method the canonical id is
+    the whole identity. The action is re-validated through the strict effect
+    contract, so no looser parse is introduced here.
+    """
+    if not isinstance(action, dict):
         _fail()
-    name = action.get("name")
-    if name not in TOOL_NAMES:
-        _fail()
-    args = action.get("args")
-    if not isinstance(args, dict):
+    kind = action.get("action")
+    if kind == "method":
+        checked = validate_request(
+            {
+                "effectId": "effect-1",
+                "binding": {
+                    "sessionId": "s",
+                    "problemHash": "0" * 64,
+                    "contractVersion": 1,
+                    "taskId": "t",
+                    "scopeId": "0" * 64,
+                    "sourceRequestId": "model-1",
+                },
+                "action": action,
+                "remainingMs": 1000,
+            }
+        )
+        identity = ["method", checked["action"]["id"]]
+    elif kind == "tool":
+        name = action.get("name")
+        if name not in TOOL_NAMES:
+            _fail()
+        args = action.get("args")
+        if not isinstance(args, dict):
+            _fail()
+        identity = [name, args]
+    else:
         _fail()
     try:
         encoded = json.dumps(
-            [name, args], ensure_ascii=False, sort_keys=True,
+            identity, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"), allow_nan=False,
         )
     except (ValueError, TypeError, RecursionError, OverflowError):
@@ -325,7 +352,24 @@ def _check_effects(effects, inner_effects):
         _fail()
 
 
-def strict_context(params, problem, session_id, problem_hash, history, effects, anchor=None, allowed=None):
+def _check_method_catalog(inner_catalog, host_catalog):
+    if host_catalog is None:
+        host_catalog = []
+    if not isinstance(host_catalog, list):
+        _fail()
+    if not isinstance(inner_catalog, list):
+        _fail()
+    if len(inner_catalog) != len(host_catalog):
+        _fail()
+    for entry in host_catalog:
+        _exact_keys(entry, ("id", "title"))
+        _text(entry["id"], 64)
+        _text(entry["title"], 256)
+    if not same_json(inner_catalog, host_catalog):
+        _fail()
+
+
+def strict_context(params, problem, session_id, problem_hash, history, effects, anchor=None, allowed=None, method_catalog=None):
     """Validate the P3 model context against the Host request and its records."""
     messages = params.get("messages")
     if not isinstance(messages, list) or len(messages) != 2:
@@ -350,7 +394,7 @@ def strict_context(params, problem, session_id, problem_hash, history, effects, 
         "schemaVersion", "promptVersion", "task", "problemFullText",
         "problemHash", "sessionId", "contractVersion", "taskId", "scopeId",
         "scope", "obligations", "sourceRequestId", "allowedActionIds",
-        "effects", "history",
+        "effects", "history", "methodCatalog",
     )
     if set(inner.keys()) != set(required):
         _fail()
@@ -397,8 +441,9 @@ def strict_context(params, problem, session_id, problem_hash, history, effects, 
         _fail()
     _check_history(history, inner["history"], ordinal)
     _check_effects(effects, inner["effects"])
+    _check_method_catalog(inner["methodCatalog"], method_catalog)
     if anchor is not None:
-        for key in ("task", "scope", "obligations"):
+        for key in ("task", "scope", "obligations", "methodCatalog"):
             if not same_json(inner[key], anchor[key]):
                 _fail()
     return copy.deepcopy(inner)

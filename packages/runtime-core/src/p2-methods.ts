@@ -67,7 +67,7 @@ function sha256(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
 }
 
-function readCatalog(raw: unknown): P2MethodCatalog {
+export function readCatalog(raw: unknown): P2MethodCatalog {
   const node = keys(raw, ["version", "entries"]);
   if (node.version !== VERSION) {
     throw new P2Error(P2_ERROR_CODES.VERSION_MISMATCH);
@@ -90,7 +90,7 @@ function readCatalog(raw: unknown): P2MethodCatalog {
   return p2Snapshot({ version: VERSION, entries }) as P2MethodCatalog;
 }
 
-function readAsset(raw: unknown, id: string, title: string): P2MethodAsset {
+export function readAsset(raw: unknown, id: string, title: string): P2MethodAsset {
   const node = keys(raw, ["id", "title", "version", "body", "bodySha256", "bodyChars"]);
   if (node.id !== id || node.title !== title || node.version !== VERSION) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);

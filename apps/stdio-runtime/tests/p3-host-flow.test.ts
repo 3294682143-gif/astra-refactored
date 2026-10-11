@@ -22,7 +22,7 @@ const MANIFEST = validateP3HostManifest(
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 const PROBLEM = "PRIVATE problem";
 const SID = "s";
-const COMMON = { protocolVersion: "1.0-p3-host-local", sessionId: SID } as const;
+const COMMON = { protocolVersion: "1.1-p3-host-local", sessionId: SID } as const;
 
 function resultOf(message: JsonRpcMessage): Record<string, unknown> {
   assert.ok("result" in message);
@@ -57,7 +57,7 @@ function setup(maxCalls = 3, maxEffects = 2) {
     jsonrpc: "2.0",
     id: "host-1",
     method: "runtime.initialize",
-    params: { ...COMMON, remainingMs: 4000, maxModelCalls: maxCalls, maxEffects, maxTokens: 8192, mode: "MOCK_ONLY" },
+    params: { ...COMMON, remainingMs: 4000, maxModelCalls: maxCalls, maxEffects, maxMethodLoads: 0, maxTokens: 8192, mode: "MOCK_ONLY" },
   });
   flow.handle({
     jsonrpc: "2.0",
@@ -108,13 +108,16 @@ const POLY = { expression: "(x+1)**2", variables: ["x"], parameters: [] };
 const FINAL = JSON.stringify({ action: "final", answer: "x=1", complete: true, unresolved: [] });
 
 test("manifest and strict frame guards", () => {
-  assert.equal(Object.keys(MANIFEST.methods).length, 5);
+  assert.equal(Object.keys(MANIFEST.methods).length, 7);
   assert.ok(Object.isFrozen(MANIFEST));
   const old = JSON.parse(JSON.stringify(MANIFEST)) as Record<string, unknown>;
-  old["protocolVersion"] = "1.1-p2-host-local";
+  old["protocolVersion"] = "1.0-p3-host-local";
   assert.throws(() => validateP3HostManifest(old));
+  const p2 = JSON.parse(JSON.stringify(MANIFEST)) as Record<string, unknown>;
+  p2["protocolVersion"] = "1.1-p2-host-local";
+  assert.throws(() => validateP3HostManifest(p2));
   const widened = JSON.parse(JSON.stringify(MANIFEST)) as Record<string, unknown>;
-  (widened["methods"] as Record<string, unknown>)["method.load"] = { direction: "node-to-host", kind: "request", params: {}, result: {} };
+  (widened["methods"] as Record<string, unknown>)["method.unknown"] = { direction: "node-to-host", kind: "request", params: {}, result: {} };
   assert.throws(() => validateP3HostManifest(widened));
   assert.equal(parseFrame(Buffer.from('{"jsonrpc":"2.0","id":"a","id":"b"}', "utf8"), MANIFEST).ok, false);
   assert.equal(parseFrame(Buffer.from('{"jsonrpc":"2.0","id":"a","method":"m","params":{"x":1.5}}', "utf8"), MANIFEST).ok, false);
@@ -202,7 +205,7 @@ test("host identity, phase and replay negatives", () => {
   const h = setup();
   const before = h.flow.snapshot();
   assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "host-9", method: "session.stop", params: { ...COMMON } }));
-  assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "host-1", method: "runtime.initialize", params: { ...COMMON, remainingMs: 4000, maxModelCalls: 3, maxEffects: 2, maxTokens: 8192, mode: "MOCK_ONLY" } }));
+  assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "host-1", method: "runtime.initialize", params: { ...COMMON, remainingMs: 4000, maxModelCalls: 3, maxEffects: 2, maxMethodLoads: 0, maxTokens: 8192, mode: "MOCK_ONLY" } }));
   assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "node-model-1", result: { ...COMMON, sessionId: "other", requestId: "model-1", mode: "MOCK_ONLY", deliveryStatus: "COMPLETE", text: FINAL, remainingMs: 3000 } }));
   assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "node-model-1", result: { ...COMMON, requestId: "model-2", mode: "MOCK_ONLY", deliveryStatus: "COMPLETE", text: FINAL, remainingMs: 3000 } }));
   assert.throws(() => h.flow.handle({ jsonrpc: "2.0", id: "node-model-1", result: { ...COMMON, requestId: "model-1", mode: "MOCK_ONLY", deliveryStatus: "COMPLETE", text: FINAL, remainingMs: 3000, extra: 1 } }));

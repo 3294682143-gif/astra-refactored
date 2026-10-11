@@ -63,6 +63,7 @@ def run_p3_host(
     receipts,
     max_model_calls=3,
     max_effects=2,
+    max_method_loads=0,
     timeout=5,
     node="node",
     script=None,
@@ -86,6 +87,8 @@ def run_p3_host(
         raise ProbeError("FIELD_VALUE")
     if isinstance(max_effects, bool) or not isinstance(max_effects, int) or not 0 <= max_effects <= 2:
         raise ProbeError("FIELD_VALUE")
+    if isinstance(max_method_loads, bool) or not isinstance(max_method_loads, int) or not 0 <= max_method_loads <= 1:
+        raise ProbeError("FIELD_VALUE")
     checked_receipts = validate_receipts(receipts)
     if script is None:
         script = _default_script()
@@ -102,7 +105,7 @@ def run_p3_host(
     session_id = uuid.uuid4().hex
     host = P3HostCallback(
         manifest, session_id, deadline, problem, problem_hash,
-        checked_receipts, max_model_calls, max_effects,
+        checked_receipts, max_model_calls, max_effects, max_method_loads,
     )
     proc = None
     reaped = False
@@ -114,6 +117,7 @@ def run_p3_host(
             "remainingMs": max(1, min(5000, int(host.remaining() * 1000))),
             "maxModelCalls": max_model_calls,
             "maxEffects": max_effects,
+            "maxMethodLoads": max_method_loads,
             "maxTokens": _MAX_TOKENS,
             "mode": "MOCK_ONLY",
         }
@@ -192,6 +196,7 @@ def main(argv=None):
     receipts = []
     max_model_calls = 3
     max_effects = 2
+    max_method_loads = 0
     timeout = 5.0
     index = 0
     while index < len(args):
@@ -204,7 +209,7 @@ def main(argv=None):
             receipts.append({"deliveryStatus": "COMPLETE", "text": args[index + 1]})
             index += 2
             continue
-        if flag in ("--max-model-calls", "--max-effects") and index + 1 < len(args):
+        if flag in ("--max-model-calls", "--max-effects", "--max-method-loads") and index + 1 < len(args):
             try:
                 value = int(args[index + 1])
             except ValueError:
@@ -212,8 +217,10 @@ def main(argv=None):
                 return 2
             if flag == "--max-model-calls":
                 max_model_calls = value
-            else:
+            elif flag == "--max-effects":
                 max_effects = value
+            else:
+                max_method_loads = value
             index += 2
             continue
         if flag == "--timeout" and index + 1 < len(args):
@@ -235,6 +242,7 @@ def main(argv=None):
             receipts=receipts,
             max_model_calls=max_model_calls,
             max_effects=max_effects,
+            max_method_loads=max_method_loads,
             timeout=timeout,
         )
     except ProbeError as exc:

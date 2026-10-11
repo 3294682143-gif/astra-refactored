@@ -1,5 +1,12 @@
 # P3 local tool Host profile
 
+The tool-only milestone is recorded below. The current
+[method Host increment](P3_METHOD_HOST.md) upgrades P3 peers to
+`1.1-p3-host-local` and adds opt-in catalog/load callbacks. Method loading
+defaults to off, so the tool examples retain their behaviour. The current
+context schema is `p3-action-context-v2`; old P3 wire versions are rejected.
+P0/P1/P2 protocols remain unchanged.
+
 This increment connects the P3 TypeScript action loop to a real Python Host
 and Node child process. Model responses remain literal offline fixtures.
 The only mathematical effects are the two existing isolated operators,

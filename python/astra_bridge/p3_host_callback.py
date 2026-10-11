@@ -26,6 +26,7 @@ from .p3_host_context import (
     strict_context,
     validate_receipts,
 )
+from .p3_host_methods import checked_catalog
 from .p3_host_protocol import P3_HOST_VERSION, payload
 
 __all__ = ["P3HostCallback"]
@@ -34,10 +35,12 @@ _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 5000
 _MAX_MODEL_CALLS = 3
 _MAX_EFFECTS = 2
+_MAX_METHOD_LOADS = 1
 _MAX_TOKENS = 8192
 _TEMPERATURE = "0.2"
 _BASE_ACTIONS = ("PROPOSE_FINAL", "MARK_UNSOLVED")
 _TOOL_ACTION = "CALL_REGISTERED_TOOL"
+_METHOD_ACTION = "LOAD_METHOD"
 _STOP_REASONS = (
     "FINAL", "UNSOLVED", "FIXTURE_EXHAUSTED", "BUDGET_EXHAUSTED", "TRANSPORT_STOP",
     "ACTION_REJECTED", "EFFECT_UNAVAILABLE", "EFFECT_UNKNOWN", "DEADLINE_EXCEEDED",
@@ -53,17 +56,20 @@ class P3HostCallback(_Host):
     """Host-side P3 callback state machine over the shared P0 reader."""
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
-                 receipts, max_calls, max_effects):
+                 receipts, max_calls, max_effects, max_method_loads=0):
         super().__init__(manifest, session_id, None, deadline)
         if isinstance(max_calls, bool) or not isinstance(max_calls, int) or not 0 <= max_calls <= _MAX_MODEL_CALLS:
             _fail()
         if isinstance(max_effects, bool) or not isinstance(max_effects, int) or not 0 <= max_effects <= _MAX_EFFECTS:
+            _fail()
+        if isinstance(max_method_loads, bool) or not isinstance(max_method_loads, int) or not 0 <= max_method_loads <= _MAX_METHOD_LOADS:
             _fail()
         self.problem = problem
         self.problem_hash = problem_hash
         self.receipts = validate_receipts(receipts)
         self.max_calls = max_calls
         self.max_effects = max_effects
+        self.max_method_loads = max_method_loads
         self.history = []
         self.effects = []
         self.effect_records = []
@@ -76,6 +82,14 @@ class P3HostCallback(_Host):
         self.solve_result = None
         self.model_calls = 0
         self.effect_calls = 0
+        self.method_loads = 0
+        self.catalog_calls = 0
+        self.method_catalog = None
+        self.catalog_entries = []
+        self.catalog_record = None
+        self.catalog_required = (
+            max_method_loads == 1 and max_calls > 1 and max_effects > 0
+        )
         self.stop_reason = "FIXTURE_EXHAUSTED"
         self.stopped = False
 
@@ -121,15 +135,33 @@ class P3HostCallback(_Host):
 
     def _allowed(self, ordinal):
         allowed = list(_BASE_ACTIONS)
-        if ordinal < self.max_calls and (self.effect_calls < self.max_effects or self.cache):
-            allowed.append(_TOOL_ACTION)
+        if ordinal < self.max_calls:
+            tool_left = self.effect_calls < self.max_effects
+            tool_cached = any(
+                entry["source"] == "PROGRAM_OBSERVATION" for entry in self.cache.values()
+            )
+            if tool_left or tool_cached:
+                allowed.append(_TOOL_ACTION)
+            method_left = (
+                self.method_loads < _MAX_METHOD_LOADS
+                and self.effect_calls < self.max_effects
+            )
+            method_cached = any(
+                entry["source"] == "METHOD_REFERENCE" for entry in self.cache.values()
+            )
+            if (
+                self.max_method_loads == 1
+                and self.catalog_entries
+                and (method_left or method_cached)
+            ):
+                allowed.append(_METHOD_ACTION)
         return allowed
 
     # -- inbound ----------------------------------------------------------
 
     def on_request(self, message):
         method = message["method"]
-        if method not in ("model.generate", "tool.execute"):
+        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load"):
             _fail()
         if self.expected is None or self.expected != ("host-2", "session.solve"):
             _fail()
@@ -142,9 +174,60 @@ class P3HostCallback(_Host):
         params = message["params"]
         payload(self.manifest, method, "params", params, self.session_id)
         if method == "model.generate":
+            if self.catalog_required and (
+                self.catalog_calls != 1 or not self.callback_done
+            ):
+                _fail()
             self.on_model(message["id"], params)
             return
-        self.on_tool(message["id"], params)
+        if method == "method.catalog":
+            if self.model_calls != 0 or self.catalog_calls != 0 or not self.catalog_required:
+                _fail()
+            if self.remaining_ms() <= _MIN_REMAINING_MS:
+                _fail()
+            if message["id"] != "node-catalog-1":
+                _fail()
+            self.on_catalog(message["id"], params)
+            return
+        if method == "method.load":
+            self.on_effect(message["id"], params, "method.load")
+            return
+        self.on_effect(message["id"], params, "tool.execute")
+
+    def on_catalog(self, frame_id, params):
+        if self.catalog_record is not None:
+            _fail()
+        self.catalog_record = {
+            "state": "ADMITTED",
+            "params": copy.deepcopy(params),
+            "result": None,
+        }
+        self.catalog_record["state"] = "DISPATCHED"
+        from .p2_methods import MethodCatalog, fixture_catalog
+
+        try:
+            self.method_catalog = MethodCatalog()
+            raw = fixture_catalog(self.method_catalog)
+            catalog = checked_catalog(raw)
+        except Exception:  # noqa: BLE001 - an unavailable catalog is not a failure
+            self.method_catalog = None
+            catalog = {"version": "1.1.0", "entries": []}
+        self.catalog_entries = copy.deepcopy(catalog["entries"])
+        self.catalog_calls = 1
+        self.catalog_record["result"] = copy.deepcopy(catalog)
+        self.catalog_record["state"] = "OBSERVED"
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            self.stopped = True
+        if self.remaining() <= 0:
+            raise ProbeError("TIMEOUT")
+        result = {
+            **self._common(),
+            "remainingMs": self.remaining_ms(),
+            "catalog": copy.deepcopy(catalog),
+        }
+        self.callback_done = False
+        self.send(self.proc, {"jsonrpc": "2.0", "id": frame_id, "result": result}, "method.catalog")
+        self.pending_is_callback = True
 
     def on_model(self, frame_id, params):
         ordinal = self.model_calls + 1
@@ -165,7 +248,7 @@ class P3HostCallback(_Host):
             if previous["receipt"]["deliveryStatus"] != "COMPLETE":
                 _fail()
             action = parse_action(previous["receipt"]["text"], self._binding(previous["requestId"]))
-            if action["action"] != "tool":
+            if action["action"] not in ("tool", "method"):
                 _fail()
             key = effect_key(action)
             if key not in self.cache:
@@ -180,7 +263,7 @@ class P3HostCallback(_Host):
         allowed = self._allowed(ordinal)
         inner = strict_context(
             params, self.problem, self.session_id, self.problem_hash,
-            self.history, self.effects, self.anchor, allowed,
+            self.history, self.effects, self.anchor, allowed, self.catalog_entries,
         )
         if self.history:
             if params["messages"][0] != self.history[0]["params"]["messages"][0]:
@@ -228,7 +311,7 @@ class P3HostCallback(_Host):
         self.send(self.proc, {"jsonrpc": "2.0", "id": frame_id, "result": result}, "model.generate")
         self.pending_is_callback = True
 
-    def on_tool(self, frame_id, params):
+    def on_effect(self, frame_id, params, wire_method):
         record = self._last_model()
         if record is None or record["state"] != "RETURNED":
             _fail()
@@ -244,7 +327,8 @@ class P3HostCallback(_Host):
         if frame_id != "node-effect-" + str(self.effect_calls + 1):
             _fail()
         action = request["action"]
-        if action["action"] != "tool":
+        expected_kind = "method" if wire_method == "method.load" else "tool"
+        if action["action"] != expected_kind:
             _fail()
         binding = self._binding(record["requestId"])
         if not same_json(request["binding"], binding):
@@ -258,6 +342,20 @@ class P3HostCallback(_Host):
         key = effect_key(action)
         if key in self.cache:
             _fail()
+        if expected_kind == "method":
+            if self.max_method_loads != 1:
+                _fail()
+            if self.method_catalog is None or self.catalog_calls != 1:
+                _fail()
+            if self.method_loads >= _MAX_METHOD_LOADS:
+                _fail()
+            known = False
+            for entry in self.catalog_entries:
+                if entry["id"] == action["id"]:
+                    known = True
+                    break
+            if not known:
+                _fail()
         bound = copy.deepcopy(request)
         bound["remainingMs"] = min(request["remainingMs"], self.remaining_ms())
         if bound["remainingMs"] < _MIN_REMAINING_MS + 1:
@@ -269,9 +367,16 @@ class P3HostCallback(_Host):
         })
         self.effect_records[-1]["state"] = "DISPATCHED"
         self.effect_calls += 1
+        if expected_kind == "method":
+            self.method_loads += 1
         self.source_used.add(source)
         try:
-            result = perform_effect(bound, root_deadline=self.deadline)
+            if expected_kind == "method":
+                result = perform_effect(
+                    bound, root_deadline=self.deadline, catalog=self.method_catalog
+                )
+            else:
+                result = perform_effect(bound, root_deadline=self.deadline)
         except Exception:  # noqa: BLE001 - an unknown outcome is never a proof
             result = failure_receipt(bound, "UNKNOWN", "UNKNOWN_OUTCOME")
         try:
@@ -302,7 +407,7 @@ class P3HostCallback(_Host):
             "remainingMs": self.remaining_ms(),
         }
         self.callback_done = False
-        self.send(self.proc, {"jsonrpc": "2.0", "id": frame_id, "result": result_frame}, "tool.execute")
+        self.send(self.proc, {"jsonrpc": "2.0", "id": frame_id, "result": result_frame}, wire_method)
         self.pending_is_callback = True
 
     # -- outbound results -------------------------------------------------
@@ -336,6 +441,10 @@ class P3HostCallback(_Host):
             _fail()
         if result["effectCalls"] != self.effect_calls:
             _fail()
+        if result["catalogCalls"] != self.catalog_calls:
+            _fail()
+        if result["methodLoads"] != self.method_loads:
+            _fail()
         pending_cache_source = None
         cached = result["cachedEffects"]
         if cached != len(self.cached_sources):
@@ -350,7 +459,7 @@ class P3HostCallback(_Host):
                 _fail()
             record = self._last_model()
             action = parse_action(record["receipt"]["text"], self._binding(record["requestId"]))
-            if action["action"] != "tool":
+            if action["action"] not in ("tool", "method"):
                 _fail()
             if effect_key(action) not in self.cache:
                 _fail()

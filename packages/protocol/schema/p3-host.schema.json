@@ -2,8 +2,8 @@
   "format": "astra-p3-host-manifest-v1",
   "schemaDialect": "astra-p0-schema-subset-v1",
   "title": "Astra P3 local Host<->Node protocol manifest",
-  "description": "Single normative field specification for the P3 local Host<->Node NDJSON channel. Local prototype: fixture model only, no real provider, no network, no arbitrary code. Protocol version is fixed to 1.0-p3-host-local. Byte limits and business binding checks are enforced by the host handlers, not by this manifest.",
-  "protocolVersion": "1.0-p3-host-local",
+  "description": "Single normative field specification for the P3 local Host<->Node NDJSON channel. Local prototype: fixture model only, no real provider, no network, no arbitrary code. Protocol version is fixed to 1.1-p3-host-local. Byte limits and business binding checks are enforced by the host handlers, not by this manifest.",
+  "protocolVersion": "1.1-p3-host-local",
   "limits": {
     "maxFrameBytes": 65536,
     "maxFramesPerSession": 64,
@@ -60,13 +60,14 @@
       "params": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["protocolVersion", "sessionId", "remainingMs", "maxModelCalls", "maxEffects", "maxTokens", "mode"],
+        "required": ["protocolVersion", "sessionId", "remainingMs", "maxModelCalls", "maxEffects", "maxMethodLoads", "maxTokens", "mode"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "remainingMs": { "type": "integer", "minimum": 1, "maximum": 5000 },
           "maxModelCalls": { "type": "integer", "minimum": 0, "maximum": 3 },
           "maxEffects": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "maxMethodLoads": { "type": "integer", "minimum": 0, "maximum": 1 },
           "maxTokens": { "type": "integer", "const": 8192 },
           "mode": { "type": "string", "const": "MOCK_ONLY" }
         }
@@ -76,7 +77,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "mode", "targetEnvironment"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "mode": { "type": "string", "const": "MOCK_ONLY" },
           "targetEnvironment": { "type": "string", "const": "TARGET_UNVERIFIED" }
@@ -91,7 +92,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "problem", "problemHash"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "problem": { "type": "string", "minLength": 1, "maxLength": 8192 },
           "problemHash": { "type": "string", "minLength": 64, "maxLength": 64 }
@@ -100,9 +101,9 @@
       "result": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["protocolVersion", "sessionId", "mode", "targetEnvironment", "status", "finalResponse", "candidateVerified", "strictAcceptance", "modelCalls", "effectCalls", "cachedEffects", "candidateRequestId", "contextHash", "stopReason"],
+        "required": ["protocolVersion", "sessionId", "mode", "targetEnvironment", "status", "finalResponse", "candidateVerified", "strictAcceptance", "modelCalls", "effectCalls", "cachedEffects", "catalogCalls", "methodLoads", "candidateRequestId", "contextHash", "stopReason"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "mode": { "type": "string", "const": "MOCK_ONLY" },
           "targetEnvironment": { "type": "string", "const": "TARGET_UNVERIFIED" },
@@ -113,6 +114,8 @@
           "modelCalls": { "type": "integer", "minimum": 0, "maximum": 3 },
           "effectCalls": { "type": "integer", "minimum": 0, "maximum": 2 },
           "cachedEffects": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "catalogCalls": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "methodLoads": { "type": "integer", "minimum": 0, "maximum": 1 },
           "candidateRequestId": { "type": ["string", "null"], "enum": [null, "model-1", "model-2", "model-3"] },
           "contextHash": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
           "stopReason": {
@@ -130,7 +133,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 }
         }
       },
@@ -139,7 +142,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "stopped"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "stopped": { "type": "boolean", "const": true }
         }
@@ -153,7 +156,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "requestId", "problemHash", "contractVersion", "taskId", "scopeId", "messages", "contextHash", "maxTokens", "temperature"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "requestId": { "type": "string", "enum": ["model-1", "model-2", "model-3"] },
           "problemHash": { "type": "string", "minLength": 64, "maxLength": 64 },
@@ -183,7 +186,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "requestId", "mode", "deliveryStatus", "text", "remainingMs"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "requestId": { "type": "string", "enum": ["model-1", "model-2", "model-3"] },
           "mode": { "type": "string", "const": "MOCK_ONLY" },
@@ -201,7 +204,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "request"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "request": {
             "type": "object",
@@ -243,7 +246,7 @@
         "additionalProperties": false,
         "required": ["protocolVersion", "sessionId", "receipt", "remainingMs"],
         "properties": {
-          "protocolVersion": { "type": "string", "const": "1.0-p3-host-local" },
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
           "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "receipt": {
             "type": "object",
@@ -266,6 +269,131 @@
               },
               "status": { "type": "string", "enum": ["COMPLETE", "ERROR", "UNKNOWN"] },
               "source": { "type": "string", "const": "PROGRAM_OBSERVATION" },
+              "observation": { "type": "string", "minLength": 1, "maxLength": 16000 },
+              "observationHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+              "level": { "type": "string", "const": "PROVISIONAL" },
+              "checkResult": { "type": "string", "const": "UNKNOWN" }
+            }
+          },
+          "remainingMs": { "type": "integer", "minimum": 0, "maximum": 5000 }
+        }
+      }
+    },
+    "method.catalog": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "remainingMs", "catalog"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "remainingMs": { "type": "integer", "minimum": 0, "maximum": 5000 },
+          "catalog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["version", "entries"],
+            "properties": {
+              "version": { "type": "string", "const": "1.1.0" },
+              "entries": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "title"],
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+                    "title": { "type": "string", "minLength": 1, "maxLength": 256 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "method.load": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "request"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["effectId", "binding", "action", "remainingMs"],
+            "properties": {
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "problemHash", "contractVersion", "taskId", "scopeId", "sourceRequestId"],
+                "properties": {
+                  "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+                  "problemHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+                  "contractVersion": { "type": "integer", "const": 1 },
+                  "taskId": { "type": "string", "minLength": 1, "maxLength": 256 },
+                  "scopeId": { "type": "string", "minLength": 64, "maxLength": 64 },
+                  "sourceRequestId": { "type": "string", "enum": ["model-1", "model-2", "model-3"] }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["action", "id"],
+                "properties": {
+                  "action": { "type": "string", "const": "method" },
+                  "id": { "type": "string", "minLength": 1, "maxLength": 64 }
+                }
+              },
+              "remainingMs": { "type": "integer", "minimum": 26, "maximum": 5000 }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion", "sessionId", "receipt", "remainingMs"],
+        "properties": {
+          "protocolVersion": { "type": "string", "const": "1.1-p3-host-local" },
+          "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["effectId", "binding", "status", "source", "observation", "observationHash", "level", "checkResult"],
+            "properties": {
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "problemHash", "contractVersion", "taskId", "scopeId", "sourceRequestId"],
+                "properties": {
+                  "sessionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+                  "problemHash": { "type": "string", "minLength": 64, "maxLength": 64 },
+                  "contractVersion": { "type": "integer", "const": 1 },
+                  "taskId": { "type": "string", "minLength": 1, "maxLength": 256 },
+                  "scopeId": { "type": "string", "minLength": 64, "maxLength": 64 },
+                  "sourceRequestId": { "type": "string", "enum": ["model-1", "model-2", "model-3"] }
+                }
+              },
+              "status": { "type": "string", "enum": ["COMPLETE", "ERROR", "UNKNOWN"] },
+              "source": { "type": "string", "const": "METHOD_REFERENCE" },
               "observation": { "type": "string", "minLength": 1, "maxLength": 16000 },
               "observationHash": { "type": "string", "minLength": 64, "maxLength": 64 },
               "level": { "type": "string", "const": "PROVISIONAL" },

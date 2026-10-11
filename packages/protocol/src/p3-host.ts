@@ -17,18 +17,21 @@ import {
   type JsonRpcMessage,
   type ManifestEnvelopes,
   type ManifestMethod,
+  type P2MethodCatalog,
 } from "./index.js";
 
-export const P3_HOST_VERSION = "1.0-p3-host-local";
+export const P3_HOST_VERSION = "1.1-p3-host-local";
 export type P3HostVersion = typeof P3_HOST_VERSION;
 
-/** The five methods of this local Host slice, in fixed order. */
+/** The seven methods of this local Host slice, in fixed order. */
 export const P3_HOST_METHODS = Object.freeze([
   "runtime.initialize",
   "session.solve",
   "session.stop",
   "model.generate",
   "tool.execute",
+  "method.catalog",
+  "method.load",
 ] as const);
 export type P3HostMethod = (typeof P3_HOST_METHODS)[number];
 
@@ -41,6 +44,12 @@ export interface P3HostManifest {
   readonly methods: Readonly<Record<P3HostMethod, ManifestMethod>>;
 }
 
+/** The explicit "catalog unavailable" view used before any catalog call. */
+export const P3_EMPTY_METHOD_CATALOG: P2MethodCatalog = Object.freeze({
+  version: "1.1.0",
+  entries: Object.freeze([]),
+}) as P2MethodCatalog;
+
 const HOST_FORMAT = "astra-p3-host-manifest-v1";
 const HOST_DIRECTION: Readonly<Record<P3HostMethod, "host-to-node" | "node-to-host">> = {
   "runtime.initialize": "host-to-node",
@@ -48,6 +57,8 @@ const HOST_DIRECTION: Readonly<Record<P3HostMethod, "host-to-node" | "node-to-ho
   "session.stop": "host-to-node",
   "model.generate": "node-to-host",
   "tool.execute": "node-to-host",
+  "method.catalog": "node-to-host",
+  "method.load": "node-to-host",
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

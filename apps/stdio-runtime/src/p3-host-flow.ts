@@ -14,8 +14,10 @@ import {
   P3_TOOL_NAMES,
   p2Snapshot,
   p3HostPayload,
+  P3_EMPTY_METHOD_CATALOG,
   type JsonRpcMessage,
   type P2Contract,
+  type P2MethodCatalog,
   type P2Task,
   type P3Action,
   type P3Binding,
@@ -28,6 +30,7 @@ import { compileP2Contract, p2ProblemHashOf } from "@astra/math-contract";
 import { ContractLedger } from "@astra/math-contract";
 import { P2ModelGate, chooseP2ReadyTask } from "@astra/math-gateway";
 import { P3EffectGate, p3EffectFailure, p3EffectReceipt, parseP3Action } from "@astra/math-gateway";
+import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import { prepareP3Context, type P3ContextHistoryEntry } from "@astra/math-workunit";
 
 const MAX_DEADLINE_MS = 5000;
@@ -79,7 +82,7 @@ function wireBytes(message: JsonRpcMessage): number {
 export class P3HostFlow {
   private readonly manifest: P3HostManifest;
   private readonly io: P3HostIO;
-  private phase: "init" | "solve" | "model" | "effect" | "stop" | "done" = "init";
+  private phase: "init" | "solve" | "catalog" | "model" | "effect" | "stop" | "done" = "init";
   private sessionId = "";
   private problem = "";
   private problemHash = "";
@@ -90,9 +93,13 @@ export class P3HostFlow {
   private effectGate: P3EffectGate | null = null;
   private maxCalls = 0;
   private maxEffects = 0;
+  private maxMethodLoads = 0;
   private modelCalls = 0;
   private effectCalls = 0;
   private cachedEffects = 0;
+  private catalogCalls = 0;
+  private methodLoads = 0;
+  private catalog: P2MethodCatalog = P3_EMPTY_METHOD_CATALOG;
   private history: P3ContextHistoryEntry[] = [];
   private effects: P3EffectReceipt[] = [];
   private privateRequests: PrivateModelRequest[] = [];
@@ -121,6 +128,9 @@ export class P3HostFlow {
       modelCalls: this.modelCalls,
       effectCalls: this.effectCalls,
       cachedEffects: this.cachedEffects,
+      catalogCalls: this.catalogCalls,
+      methodLoads: this.methodLoads,
+      catalog: this.catalog,
       history: this.history,
       effects: this.effects,
       privateRequests: this.privateRequests,
@@ -166,8 +176,16 @@ export class P3HostFlow {
       this.onModel(message.id, result);
       return;
     }
+    if (this.phase === "catalog") {
+      p3HostPayload(this.manifest, "method.catalog", "result", result, this.sessionId);
+      this.onCatalog(message.id, result);
+      return;
+    }
     if (this.phase === "effect") {
-      p3HostPayload(this.manifest, "tool.execute", "result", result, this.sessionId);
+      const pending = this.pendingEffect;
+      if (pending === null) fail("FIELD_VALUE");
+      const wire = pending.request.action.action === "method" ? "method.load" : "tool.execute";
+      p3HostPayload(this.manifest, wire, "result", result, this.sessionId);
       this.onEffect(message.id, result);
       return;
     }
@@ -180,14 +198,17 @@ export class P3HostFlow {
     const remainingMs = params["remainingMs"];
     const maxCalls = params["maxModelCalls"];
     const maxEffects = params["maxEffects"];
+    const maxMethodLoads = params["maxMethodLoads"];
     if (typeof remainingMs !== "number" || !Number.isSafeInteger(remainingMs) || remainingMs < 1) fail("FIELD_VALUE");
     if (typeof maxCalls !== "number" || !Number.isSafeInteger(maxCalls) || maxCalls < 0 || maxCalls > 3) fail("FIELD_VALUE");
     if (typeof maxEffects !== "number" || !Number.isSafeInteger(maxEffects) || maxEffects < 0 || maxEffects > 2) fail("FIELD_VALUE");
+    if (typeof maxMethodLoads !== "number" || !Number.isSafeInteger(maxMethodLoads) || maxMethodLoads < 0 || maxMethodLoads > 1) fail("FIELD_VALUE");
     if (params["maxTokens"] !== MAX_TOKENS) fail("FIELD_VALUE");
     if (params["mode"] !== "MOCK_ONLY") fail("FIELD_VALUE");
     this.sessionId = sessionId;
     this.maxCalls = maxCalls;
     this.maxEffects = maxEffects;
+    this.maxMethodLoads = maxMethodLoads;
     this.io.tighten(remainingMs);
     this.phase = "solve";
     this.io.send({
@@ -236,6 +257,36 @@ export class P3HostFlow {
       taskId: started.taskId,
       scopeId: started.scopeId,
     }, this.maxEffects);
+    if (this.maxMethodLoads === 1 && this.maxCalls > 1 && this.maxEffects > 0 && this.io.remainingMs() > MIN_REMAINING_MS) {
+      this.phase = "catalog";
+      this.catalogCalls += 1;
+      this.io.send({
+        jsonrpc: "2.0",
+        id: "node-catalog-1",
+        method: "method.catalog",
+        params: {
+          protocolVersion: this.manifest.protocolVersion,
+          sessionId: this.sessionId,
+        },
+      }, "method.catalog");
+      return;
+    }
+    this.phase = "model";
+    this.model();
+  }
+
+  private onCatalog(id: string, params: Record<string, unknown>): void {
+    if (id !== "node-catalog-1") fail("ID_MISMATCH");
+    if (params["sessionId"] !== this.sessionId) fail("SESSION_MISMATCH");
+    const remainingMs = params["remainingMs"];
+    if (typeof remainingMs !== "number" || !Number.isSafeInteger(remainingMs) || remainingMs < 0) fail("FIELD_VALUE");
+    const catalog: P2MethodCatalog = p3MethodCatalog(params["catalog"]);
+    this.io.tighten(remainingMs);
+    this.catalog = catalog;
+    if (this.io.remainingMs() <= MIN_REMAINING_MS) {
+      this.finish("DEADLINE_EXCEEDED");
+      return;
+    }
     this.phase = "model";
     this.model();
   }
@@ -276,10 +327,10 @@ export class P3HostFlow {
     const remainingTurns = this.maxCalls - this.modelCalls;
     const allowed = effectGate
       .allowedActionIds(remainingTurns, remaining)
-      .filter((actionId) => actionId !== "LOAD_METHOD");
+      .filter((actionId) => actionId !== "LOAD_METHOD" || (this.maxMethodLoads === 1 && this.catalog.entries.length > 0));
     let context;
     try {
-      context = prepareP3Context(contract, task, requestId, allowed, this.effects, this.history);
+      context = prepareP3Context(contract, task, requestId, allowed, this.effects, this.history, this.catalog.entries);
     } catch (error) {
       if (error instanceof P2Error) {
         this.finish("CONTEXT_REJECTED");
@@ -378,13 +429,26 @@ export class P3HostFlow {
       return;
     }
     if (action.action === "method") {
-      this.finish("EFFECT_UNAVAILABLE");
-      return;
+      if (this.maxMethodLoads === 0 || this.catalog.entries.length === 0) {
+        this.finish("EFFECT_UNAVAILABLE");
+        return;
+      }
+      let known = false;
+      for (const entry of this.catalog.entries) {
+        if (entry.id === action.id) {
+          known = true;
+          break;
+        }
+      }
+      if (!known) {
+        this.finish("EFFECT_UNAVAILABLE");
+        return;
+      }
     }
-    this.onToolAction(action);
+    this.onEffectAction(action);
   }
 
-  private onToolAction(action: Extract<P3Action, { action: "tool" }>): void {
+  private onEffectAction(action: Extract<P3Action, { action: "tool" | "method" }>): void {
     const effectGate = this.effectGate;
     if (effectGate === null) fail("FIELD_VALUE");
     const remainingTurns = this.maxCalls - this.modelCalls + 1;
@@ -405,10 +469,11 @@ export class P3HostFlow {
       return;
     }
     const request = admitted.request;
+    const wire = request.action.action === "method" ? "method.load" : "tool.execute";
     const message: JsonRpcMessage = {
       jsonrpc: "2.0",
       id: `node-effect-${this.effectCalls + 1}`,
-      method: "tool.execute",
+      method: wire,
       params: {
         protocolVersion: this.manifest.protocolVersion,
         sessionId: this.sessionId,
@@ -426,8 +491,11 @@ export class P3HostFlow {
     effectGate.markDispatched(request.effectId);
     this.pendingEffect = { effectId: request.effectId, request };
     this.effectCalls += 1;
+    if (request.action.action === "method") {
+      this.methodLoads += 1;
+    }
     this.phase = "effect";
-    this.io.send(message, "tool.execute");
+    this.io.send(message, wire);
   }
 
   private onEffect(id: string, params: Record<string, unknown>): void {
@@ -447,6 +515,16 @@ export class P3HostFlow {
       this.pendingEffect = null;
       this.finish("EFFECT_UNKNOWN");
       return;
+    }
+    if (pending.request.action.action === "method") {
+      try {
+        p3MethodObservation(receipt, pending.request, this.catalog);
+      } catch {
+        effectGate.settle(p3EffectFailure(pending.request, "UNKNOWN"));
+        this.pendingEffect = null;
+        this.finish("EFFECT_UNKNOWN");
+        return;
+      }
     }
     this.io.tighten(remainingMs);
     effectGate.settle(receipt);
@@ -483,6 +561,8 @@ export class P3HostFlow {
         modelCalls: this.modelCalls,
         effectCalls: this.effectCalls,
         cachedEffects: this.cachedEffects,
+        catalogCalls: this.catalogCalls,
+        methodLoads: this.methodLoads,
         candidateRequestId: this.candidateRequestId,
         contextHash: this.lastContextHash,
         stopReason: reason,
