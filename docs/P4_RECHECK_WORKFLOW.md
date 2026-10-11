@@ -85,7 +85,9 @@ file, reviewed/applied changes and ran verification. A length-limited output
 was used only for complete test units; its incomplete group was withheld and
 subsequently supplied in full. Existing accepted tests were not weakened.
 
-The four-step root is accepted only for this offline fixture. R0/R1 review,
+The four-step root is accepted only for this offline fixture. The separate
+[R0 pristine-plan preflight/review libraries](P4_R0_PREFLIGHT.md) are accepted,
+but full R0 orchestration and R1 review,
 mathematical verification, authorized candidate replacement, dependency
 reopening, formal Host/client integration, durable external responsibility
 and target/default-switch acceptance remain pending.

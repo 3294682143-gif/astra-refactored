@@ -89,6 +89,11 @@ protected parent and unresolved challenge. Its defaults remain three calls
 and no recheck; the old gate and Host budgets are unchanged. Mathematical
 verification and formal-client integration remain pending.
 
+The [R0 pristine-plan libraries](docs/P4_R0_PREFLIGHT.md) add M1 template
+preflight and risk/budget dispatch policy, followed by bounded M4 review.
+Skipped review is explicit, not a PASS; model opinions cannot revise the
+contract or satisfy obligations. R0 workflow integration and R1 remain pending.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

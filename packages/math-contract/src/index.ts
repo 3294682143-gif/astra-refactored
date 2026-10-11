@@ -21,6 +21,7 @@ export const CONTRACT_VERSION = 1 as const;
 
 export * from "./p2-compiler.js";
 export * from "./p2-ledger.js";
+export * from "./p4-r0.js";
 
 /** The single obligation this phase records; it stays OPEN. */
 export const ANSWER_REQUEST_OBLIGATION: P1Obligation = Object.freeze({
