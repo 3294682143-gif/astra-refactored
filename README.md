@@ -36,6 +36,11 @@ It provides strict in-memory replay and private-text-free difference reports.
 This is request-level evidence for those five cases, not full a2 equivalence;
 the existing P2 WorkPacket prompt is explicitly detected as different.
 
+The [P2 local Host bridge](docs/P2_HOST_BRIDGE.md) now runs one P2 work unit
+through a real Python↔Node process channel, with on-demand method callbacks
+and one in-memory mock model receipt. It remains opt-in and MOCK_ONLY; formal
+client integration, multi-unit scheduling and default switching are unfinished.
+
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,
 WASI binaries, model-mailbox files, run logs or credentials.

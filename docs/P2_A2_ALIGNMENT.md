@@ -102,6 +102,10 @@ not expose private replay data in public traces. This increment supplies test
 fixtures and request comparisons for that work; it does not authorize or
 implement live evaluations, new RPC methods or default-engine switching.
 
+A later [P2 local Host slice](P2_HOST_BRIDGE.md) adds a separately versioned
+six-method channel for one P2 work unit and a pure mock model receipt. It is
+not formal target/client acceptance or a switch to the a2 alignment profile.
+
 Further a2 alignment still needs broader protocol/error/tool/context-budget
 cases and full behaviour/configuration comparisons. M2/M4/M5 completion, formal
 Host integration and release gates remain unfinished.

@@ -89,6 +89,11 @@ The subsequent [a2 short-path harness](P2_A2_ALIGNMENT.md) adds frozen-source
 capture and request-level comparison/replay for five selected baseline paths.
 It does not replace this runner's WorkPacket prompt or establish full parity.
 
+The subsequent [P2 local Host bridge](P2_HOST_BRIDGE.md) adds a separate
+single-work-unit stdio integration using the existing framing/validation and
+Python process supervision. This in-memory runner remains unchanged; formal
+client support and multi-unit Host scheduling are still pending.
+
 ## Run and acceptance evidence
 
 Use existing locked dependencies and the explicit offline cache procedure in

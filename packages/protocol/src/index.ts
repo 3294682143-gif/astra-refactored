@@ -1096,3 +1096,4 @@ export * from "./p1.js";
 export * from "./p2.js";
 export * from "./p2-methods.js";
 export * from "./p2-a2.js";
+export * from "./p2-host.js";
