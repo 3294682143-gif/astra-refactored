@@ -92,7 +92,9 @@ verification and formal-client integration remain pending.
 The [R0 pristine-plan libraries](docs/P4_R0_PREFLIGHT.md) add M1 template
 preflight and risk/budget dispatch policy, followed by bounded M4 review.
 Skipped review is explicit, not a PASS; model opinions cannot revise the
-contract or satisfy obligations. R0 workflow integration and R1 remain pending.
+contract or satisfy obligations. The [R0/work offline workflow](docs/P4_R0_WORKFLOW.md)
+now shares a root budget with a default 25% planning-call allocation.
+Automatic plan revision/fallback, R1 and formal-client integration remain pending.
 
 This repository is the refactored Astra source tree. It is a source-only work
 copy: it does not carry local installation assets, runtime-install profiles,

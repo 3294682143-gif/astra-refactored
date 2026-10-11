@@ -1,5 +1,10 @@
 # P4 R0 pristine-plan preflight and review libraries
 
+Historical library-slice record: the subsequent
+[R0/work offline shared-root workflow](P4_R0_WORKFLOW.md) is now accepted,
+including a model-call-count planning allocation. Existing runtime defaults
+are unchanged; plan revision/fallback and R1 are not yet implemented.
+
 This slice adds M1 planning preflight and an independent M4 R0 review session.
 It does not insert R0 into any existing solver or Host workflow. Existing
 call limits, fixtures, Python entry, resources and dependencies are unchanged.
