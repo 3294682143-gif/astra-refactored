@@ -708,8 +708,20 @@ export async function runAgentLoop(
             ? accepted.packet.scopeProposal
             : null;
         if (scopeProposal !== null) {
+          // Explicit six-field -> four-field projection of the untrusted v5
+          // scope proposal. `kind` and `rationale` are dropped here; only the
+          // four declared list fields reach the store. The projection and its
+          // validation happen before any write, so a tampered, missing or
+          // extra field is a fixed rejection with no side effect on the store,
+          // the ledger or the scheduling sequence.
+          const projected = {
+            quantifiers: scopeProposal.quantifiers,
+            branchConditions: scopeProposal.branchConditions,
+            boundaryCases: scopeProposal.boundaryCases,
+            goalExhaustion: scopeProposal.goalExhaustion,
+          };
           try {
-            store.declareScopeCoverage(running, scopeProposal);
+            store.declareScopeCoverage(running, projected);
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;
