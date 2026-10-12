@@ -82,6 +82,13 @@ _TARGET_FIELDS = (
 _DEPENDENCY_PROVENANCE_FIELDS = (
     "sourceRequestId", "sourceArtifactRef", "obligationId", "routeSignature",
 )
+_SCOPE_COVERAGE_FIELDS = (
+    "quantifiers", "branchConditions", "boundaryCases", "goalExhaustion",
+    "coverageHash",
+)
+_TASK_SCOPE_COVERAGE_FIELDS = ("taskId", "scopeId", "coverage")
+_MAX_COVERAGE_ITEMS = 32
+_MAX_COVERAGE_CHARS = 256
 
 
 def _fail():
@@ -110,6 +117,77 @@ def _hash64(value):
         if ch not in "0123456789abcdef":
             _fail()
     return value
+
+
+def _coverage_item(value):
+    if not isinstance(value, str):
+        _fail()
+    if not js_nonempty(value):
+        _fail()
+    if len(value) > _MAX_COVERAGE_CHARS:
+        _fail()
+    _strict_utf8(value)
+    return value
+
+
+def _coverage_list(value):
+    if not isinstance(value, list) or len(value) > _MAX_COVERAGE_ITEMS:
+        _fail()
+    seen = set()
+    out = []
+    for item in value:
+        text = _coverage_item(item)
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _scope_coverage(value):
+    """Re-check one declared coverage record; the hash must be self-consistent."""
+    _exact_keys(value, _SCOPE_COVERAGE_FIELDS)
+    quantifiers = _coverage_list(value["quantifiers"])
+    branch_conditions = _coverage_list(value["branchConditions"])
+    boundary_cases = _coverage_list(value["boundaryCases"])
+    goal_exhaustion = _coverage_list(value["goalExhaustion"])
+    payload = [quantifiers, branch_conditions, boundary_cases, goal_exhaustion]
+    try:
+        encoded = json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    except (ValueError, TypeError, RecursionError, OverflowError):
+        _fail()
+    expected = hashlib.sha256(encoded).hexdigest()
+    if value["coverageHash"] != expected:
+        _fail()
+    return {
+        "quantifiers": quantifiers,
+        "branchConditions": branch_conditions,
+        "boundaryCases": boundary_cases,
+        "goalExhaustion": goal_exhaustion,
+        "coverageHash": expected,
+    }
+
+
+def _check_scope_coverage(body, task):
+    """Optional declared coverage rows; absent means empty, never a failure."""
+    if "scopeCoverage" not in body:
+        return
+    rows = body["scopeCoverage"]
+    if not isinstance(rows, list) or len(rows) > _MAX_COVERAGE_ITEMS:
+        _fail()
+    for row in rows:
+        _exact_keys(row, _TASK_SCOPE_COVERAGE_FIELDS)
+        task_id = _text(row["taskId"], 256)
+        scope_id = _hash64(row["scopeId"])
+        coverage = _scope_coverage(row["coverage"])
+        if task_id != task["taskId"]:
+            _fail()
+        if scope_id != task["scopeId"]:
+            _fail()
+        if not same_json(row["coverage"], coverage):
+            _fail()
 
 
 def canonical_scope(scope):
@@ -583,7 +661,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         "route", "sourceRequestId", "inputArtifacts", "methodAssets",
         "allowTools", "allowMethods", "toolObservations",
     )
-    extra = {"methodCatalog"}
+    extra = {"methodCatalog", "scopeCoverage"}
     if version in (
         _FINAL_CONTEXT_SCHEMA_VERSION, _CONTEXT_SCHEMA_VERSION,
         _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _ACTIVE_CONTEXT_SCHEMA_VERSION,
@@ -799,6 +877,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if not same_json(policy, PROGRESS_POLICY):
             _fail()
+    _check_scope_coverage(body, task)
     check_inputs(body, history, request_id)
     expected = [
         entry["receipt"]

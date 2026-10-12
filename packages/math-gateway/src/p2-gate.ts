@@ -17,6 +17,7 @@ import { p2Snapshot } from "@astra/protocol";
  */
 export interface P2StoredScopeCoverage {
   readonly taskId: string;
+  readonly scopeId: string;
   readonly coverageHash: string;
 }
 
@@ -279,12 +280,47 @@ export function readStoredScopeCoverage(
       throw new P2Error("PACKET_BINDING");
     }
     const id = requireShortString(row.taskId);
+    const scopeId = requireShortString(row.scopeId);
+    if (!HEX64.test(scopeId)) {
+      throw new P2Error("PACKET_BINDING");
+    }
     if (typeof row.coverageHash !== "string" || !HEX64.test(row.coverageHash)) {
       throw new P2Error("PACKET_BINDING");
     }
     if (id === wanted) {
-      return p2Snapshot({ taskId: id, coverageHash: row.coverageHash }) as P2StoredScopeCoverage;
+      return p2Snapshot({
+        taskId: id,
+        scopeId,
+        coverageHash: row.coverageHash,
+      }) as P2StoredScopeCoverage;
     }
   }
   return null;
+}
+
+/**
+ * Read the stored declared coverage of one task and require it to have been
+ * declared against the exact trusted scope of that task. A missing row, a
+ * scope-id mismatch or a malformed row is a fixed rejection. The declaration
+ * is still never a coverage proof: this only refuses to read a declaration
+ * that belongs to a different scope.
+ */
+export function requireStoredScopeCoverage(
+  rows: readonly P2StoredScopeCoverage[],
+  taskId: string,
+  scopeId: string,
+): P2StoredScopeCoverage {
+  const wanted = requireShortString(taskId);
+  const wantedScope = requireShortString(scopeId);
+  if (!HEX64.test(wantedScope)) {
+    throw new P2Error("PACKET_BINDING");
+  }
+  const row = readStoredScopeCoverage(rows, wanted);
+  if (row === null) {
+    throw new P2Error("PACKET_BINDING");
+  }
+  if (row.scopeId !== wantedScope) {
+    throw new P2Error("SCOPE_MISMATCH");
+  }
+  return row;
 }

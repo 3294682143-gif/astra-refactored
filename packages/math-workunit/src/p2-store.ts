@@ -26,11 +26,13 @@ import {
 import {
   checkScopeCoverage,
   checkScopeCoverageAgainstScope,
+  checkTaskScopeCoverage,
   p2ScopeCoverage,
   workHash,
   workRefKey,
   workScope,
   type P2ScopeCoverage,
+  type P2TaskScopeCoverage,
 } from "./p2-context.js";
 import { P2RouteRegistry, type P2RouteInput } from "./p2-routes.js";
 import { readWorkReceipt, type P2WorkReceipt } from "./p2-receipt.js";
@@ -42,15 +44,7 @@ export interface P2ArtifactEntry {
   readonly availability: P2ArtifactAvailability;
 }
 
-/**
- * Declared scope coverage of one task, as stored control-side data. It is an
- * identity of declared data only: it never marks an obligation covered and
- * never closes a task.
- */
-export interface P2TaskScopeCoverage {
-  readonly taskId: string;
-  readonly coverage: P2ScopeCoverage;
-}
+export type { P2TaskScopeCoverage } from "./p2-context.js";
 
 const MAX_TASKS = P2_LIMITS.maxTasks;
 const MAX_OBLIGATIONS = P2_LIMITS.maxObligations;
@@ -100,7 +94,7 @@ export class P2WorkunitStore {
   private readonly entries = new Map<string, P2ArtifactEntry>();
   private readonly latest = new Map<string, number>();
   private readonly requests = new Set<string>();
-  private readonly scopeCoverage = new Map<string, P2ScopeCoverage>();
+  private readonly scopeCoverage = new Map<string, P2TaskScopeCoverage>();
   private lastSeq: number;
 
   constructor(contract: P2Contract) {
@@ -126,7 +120,11 @@ export class P2WorkunitStore {
     const scope = workScope(this.contract, frozenTask);
     const coverage = p2ScopeCoverage(p2Snapshot(proposal));
     checkScopeCoverageAgainstScope(coverage, scope);
-    this.scopeCoverage.set(frozenTask.taskId, coverage);
+    this.scopeCoverage.set(frozenTask.taskId, p2Snapshot({
+      taskId: frozenTask.taskId,
+      scopeId: scope.scopeId,
+      coverage,
+    }) as P2TaskScopeCoverage);
     return p2Snapshot(coverage) as P2ScopeCoverage;
   }
 
@@ -136,14 +134,18 @@ export class P2WorkunitStore {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
     }
     const stored = this.scopeCoverage.get(taskId);
-    return stored === undefined ? null : (p2Snapshot(stored) as P2ScopeCoverage);
+    return stored === undefined ? null : (p2Snapshot(stored.coverage) as P2ScopeCoverage);
   }
 
-  /** Deep-frozen copy of every stored declared coverage row. */
+  /**
+   * Deep-frozen copy of every stored declared coverage row, each carrying the
+   * trusted scope id it was declared against. The row is declared data only:
+   * it never marks an obligation covered and never closes a task.
+   */
   scopeCoverageSnapshot(): readonly P2TaskScopeCoverage[] {
     const rows: P2TaskScopeCoverage[] = [];
-    for (const [taskId, coverage] of this.scopeCoverage) {
-      rows.push({ taskId, coverage });
+    for (const row of this.scopeCoverage.values()) {
+      rows.push(checkTaskScopeCoverage(row));
     }
     return p2Snapshot(rows) as readonly P2TaskScopeCoverage[];
   }

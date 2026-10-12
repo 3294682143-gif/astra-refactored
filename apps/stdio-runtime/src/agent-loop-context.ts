@@ -31,6 +31,7 @@ import {
   type Scope,
 } from "@astra/protocol";
 import { prepareP2Context } from "@astra/math-workunit";
+import { checkTaskScopeCoverage } from "@astra/math-workunit";
 import { p4Hash } from "@astra/protocol";
 import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import { readAsset } from "@astra/runtime-core";
@@ -202,6 +203,7 @@ export interface AgentWorkContextInput {
   readonly allowArtifactRedo?: boolean;
   readonly revisionProvenance?: AgentRevisionProvenance | null;
   readonly revisionTarget?: P2Artifact | null;
+  readonly scopeCoverage?: readonly unknown[] | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -1044,6 +1046,34 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     assets,
   );
 
+  // Declared scope coverage rows of this task only. Each row is re-checked by
+  // the shared M3 guard and must be bound to this exact task and scope; a
+  // missing field is an empty list. This is declared data: it never closes an
+  // obligation, never changes the ready set and is never a coverage proof.
+  const rawScopeCoverage =
+    captured.scopeCoverage === undefined || captured.scopeCoverage === null
+      ? []
+      : captured.scopeCoverage;
+  if (!Array.isArray(rawScopeCoverage) || rawScopeCoverage.length > 32) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  const scopeCoverage: unknown[] = [];
+  for (const item of rawScopeCoverage) {
+    let row;
+    try {
+      row = checkTaskScopeCoverage(p2Snapshot(item));
+    } catch {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (row.taskId !== task.taskId) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (row.scopeId !== task.scopeId) {
+      fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    scopeCoverage.push(row);
+  }
+
   const base = prepareP2Context(
     contract,
     task,
@@ -1112,6 +1142,7 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     revisionTarget,
     protectedCandidate,
     toolObservations: observations,
+    scopeCoverage,
   };
   const messages = [
     { role: "system" as const, content: SYSTEM_PROMPT },

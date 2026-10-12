@@ -33,7 +33,9 @@ export {
   p2ScopeCoverage,
   checkScopeCoverage,
   checkScopeCoverageAgainstScope,
+  checkTaskScopeCoverage,
   type P2ScopeCoverage,
+  type P2TaskScopeCoverage,
 } from "./p2-context.js";
 
 /**

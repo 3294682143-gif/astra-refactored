@@ -48,6 +48,46 @@ export interface P2ScopeCoverage {
   readonly coverageHash: string;
 }
 
+/**
+ * One task's declared scope coverage together with the trusted scope identity
+ * it was declared against. The `scopeId` is the canonical scope hash of the
+ * task's own goal scope at declaration time; it is an identity of declared
+ * data, never a coverage proof and never a readiness decision.
+ */
+export interface P2TaskScopeCoverage {
+  readonly taskId: string;
+  readonly scopeId: string;
+  readonly coverage: P2ScopeCoverage;
+}
+
+/** Exact own-key set of one stored task-coverage row; extra keys rejected. */
+const TASK_SCOPE_COVERAGE_FIELDS = ["taskId", "scopeId", "coverage"] as const;
+
+/**
+ * Re-check one stored task-coverage row: exact keys, a bounded task id, a
+ * 64-hex scope id and a coverage record whose own hash matches its declared
+ * lists. Nothing here derives coverage or closes an obligation.
+ */
+export function checkTaskScopeCoverage(value: unknown): P2TaskScopeCoverage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const source = value as Record<string, unknown>;
+  const keys = Object.keys(source);
+  if (keys.length !== TASK_SCOPE_COVERAGE_FIELDS.length) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  for (const field of TASK_SCOPE_COVERAGE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(source, field)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+  }
+  const taskId = workShort(source.taskId);
+  const scopeId = requireHash(source.scopeId);
+  const coverage = checkScopeCoverage(source.coverage);
+  return p2Snapshot({ taskId, scopeId, coverage }) as P2TaskScopeCoverage;
+}
+
 const SCOPE_COVERAGE_FIELDS = [
   ...P2_SCOPE_COVERAGE_FIELDS,
   "coverageHash",
