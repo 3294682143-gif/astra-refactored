@@ -24,6 +24,8 @@ from .agent_workflow import (
 )
 from .agent_history import check_revision_context
 from .agent_history import artifact_view, project_artifacts
+from .agent_progress import PROGRESS_POLICY
+from .text_contract import js_nonempty
 
 __all__ = [
     "canonical_scope",
@@ -55,9 +57,10 @@ _SCOPE_FIELDS = (
 )
 _CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 _CONTEXT_SCHEMA_VERSION = "agent-work-context-v4"
-_ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v6"
+_ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7"
 _DEPENDENCY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5"
 _REVISION_CONTEXT_SCHEMA_VERSION = "agent-work-context-v6"
+_PROGRESS_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7"
 _FINAL_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
 _LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
@@ -92,7 +95,7 @@ def _is_int(value):
 def _text(value, max_chars, allow_empty=False):
     if not isinstance(value, str):
         _fail()
-    if not allow_empty and not value.strip():
+    if not allow_empty and not js_nonempty(value):
         _fail()
     if len(value) > max_chars:
         _fail()
@@ -223,7 +226,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         _text(packet["claim"], _MAX_TEXT_CHARS)
         _text(packet["derivation"], _MAX_TEXT_CHARS)
         candidate = packet["candidateProposal"]
-        if not isinstance(candidate, str) or not candidate.strip():
+        if not isinstance(candidate, str) or not js_nonempty(candidate):
             return None
         _text(candidate, _MAX_TEXT_CHARS)
         obligations = body.get("obligations")
@@ -419,7 +422,7 @@ def protected_final(history, problem, session_id, problem_hash,
         )
         target_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         answer = packet["candidateProposal"]
-        if not isinstance(answer, str) or not answer.strip():
+        if not isinstance(answer, str) or not js_nonempty(answer):
             return None
         return {
             "binding": ordered,
@@ -591,17 +594,24 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     if version in (
         _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
         _REVISION_CONTEXT_SCHEMA_VERSION,
+        _PROGRESS_CONTEXT_SCHEMA_VERSION,
     ):
         required = required + ("allowRouteProposal", "routeProvenance")
         extra = extra | {"allowRouteProposal", "routeProvenance"}
-    if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION,
+        _PROGRESS_CONTEXT_SCHEMA_VERSION,
+    ):
         required = required + ("allowTaskContinuation", "dependencyProvenance")
         extra = extra | {"allowTaskContinuation", "dependencyProvenance"}
-    if version == _REVISION_CONTEXT_SCHEMA_VERSION:
+    if version in (_REVISION_CONTEXT_SCHEMA_VERSION, _PROGRESS_CONTEXT_SCHEMA_VERSION):
         required = required + (
             "allowArtifactRedo", "revisionProvenance", "revisionTarget",
         )
         extra = extra | {"allowArtifactRedo", "revisionProvenance", "revisionTarget"}
+    if version == _PROGRESS_CONTEXT_SCHEMA_VERSION:
+        required = required + ("progressPolicy",)
+        extra = extra | {"progressPolicy"}
     if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
     if body["schemaVersion"] != version:
@@ -650,10 +660,14 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     if version in (
         _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
         _REVISION_CONTEXT_SCHEMA_VERSION,
+        _PROGRESS_CONTEXT_SCHEMA_VERSION,
     ):
         route_prov = check_route_provenance(body, history, version)
         dep_prov = None
-        if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
+        if version in (
+            _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION,
+            _PROGRESS_CONTEXT_SCHEMA_VERSION,
+        ):
             dep_prov = check_dependency_provenance(body, history, version)
         if route_prov is not None and dep_prov is not None:
             _fail()
@@ -742,7 +756,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
     if version in (
         _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
-        _REVISION_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION, _PROGRESS_CONTEXT_SCHEMA_VERSION,
     ):
         if not isinstance(body["allowRouteProposal"], bool):
             _fail()
@@ -751,7 +765,10 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if route_prov is not None and not same_json(body["routeProvenance"], route_prov):
             _fail()
-    if version in (_DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION):
+    if version in (
+        _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION,
+        _PROGRESS_CONTEXT_SCHEMA_VERSION,
+    ):
         if not isinstance(body["allowTaskContinuation"], bool):
             _fail()
         dep_prov = check_dependency_provenance(body, history, version)
@@ -759,17 +776,28 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _fail()
         if dep_prov is not None and not same_json(body["dependencyProvenance"], dep_prov):
             _fail()
-    if version == _REVISION_CONTEXT_SCHEMA_VERSION:
+    if version in (_REVISION_CONTEXT_SCHEMA_VERSION, _PROGRESS_CONTEXT_SCHEMA_VERSION):
         if not isinstance(body["allowArtifactRedo"], bool):
             _fail()
         revision_prov = check_revision_context(
-            body, history, session_id, problem_hash,
+            body, history, session_id, problem_hash, version,
         )
         if revision_prov is None and body["revisionProvenance"] is not None:
             _fail()
         if revision_prov is not None and not same_json(
             body["revisionProvenance"], revision_prov,
         ):
+            _fail()
+    if version == _PROGRESS_CONTEXT_SCHEMA_VERSION:
+        # The fixed policy is control data: an exact four-field identity, never
+        # a model-supplied threshold. ``same_json`` is byte-exact, so a JSON
+        # ``true`` never collapses into ``1``.
+        policy = body["progressPolicy"]
+        if not isinstance(policy, dict):
+            _fail()
+        if set(policy.keys()) != set(PROGRESS_POLICY) or len(policy) != len(PROGRESS_POLICY):
+            _fail()
+        if not same_json(policy, PROGRESS_POLICY):
             _fail()
     check_inputs(body, history, request_id)
     expected = [
@@ -890,11 +918,11 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             _fail()
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
-        if body.get("schemaVersion") != _REVISION_CONTEXT_SCHEMA_VERSION:
+        if body.get("schemaVersion") != _PROGRESS_CONTEXT_SCHEMA_VERSION:
             _fail()
         _check_work(
             body, request_id, problem, session_id, problem_hash, history, effects,
-            catalog, method_assets, _REVISION_CONTEXT_SCHEMA_VERSION, True,
+            catalog, method_assets, _PROGRESS_CONTEXT_SCHEMA_VERSION, True,
         )
     elif request["phase"] == "R2":
         target = body.get("target")
@@ -910,15 +938,16 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
 
 def validate_legacy_context(request, problem, session_id, problem_hash, history,
                             effects, catalog=None, method_assets=None):
-    """Read-only validation of one legacy v2, v3 or v4 WORK context.
+    """Read-only validation of one legacy v2..v6 WORK context.
 
-    Only the older ``agent-work-context-v2``, ``agent-work-context-v3`` and
-    ``agent-work-context-v4`` shapes are accepted here. A v2 body must not carry the
+    Only the older ``agent-work-context-v2`` .. ``agent-work-context-v6``
+    shapes are accepted here; the active v7 shape is never accepted through
+    this read-only path. A v2 body must not carry the
     ``allowFinal``/``protectedCandidate`` fields; a v3 body is checked with the
-    same shared final-projection guard as the active v4 shape, but never with
-    the v4 proposal fields. The active Host entry never calls this function; it
+    same shared final-projection guard as the active shape, but never with the
+    later proposal fields. The active Host entry never calls this function; it
     exists so a historical record can still be re-checked without being
-    rewritten into the v4 shape.
+    rewritten into a newer shape.
     """
     request_id, messages = _validate_request(copy.deepcopy(request))
     if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
@@ -934,6 +963,7 @@ def validate_legacy_context(request, problem, session_id, problem_hash, history,
     if version not in (
         _LEGACY_CONTEXT_SCHEMA_VERSION, _FINAL_CONTEXT_SCHEMA_VERSION,
         _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,
+        _REVISION_CONTEXT_SCHEMA_VERSION,
     ):
         _fail()
     task = body.get("task")

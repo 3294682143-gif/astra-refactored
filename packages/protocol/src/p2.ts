@@ -396,8 +396,17 @@ export const P2_EVENT_TYPE = [
   "ARTIFACT_INVALIDATED",
   "ROUTE_REGISTERED",
   "FIXTURE_EXHAUSTED",
+  "TASK_YIELDED",
 ] as const;
 export type P2EventType = (typeof P2_EVENT_TYPE)[number];
+
+/** Fixed reason of one task-level yield. No free-form reason is accepted. */
+export const P2_TASK_YIELD_REASON = ["UNSOLVED", "PARTIAL", "REPEATED_EFFECT"] as const;
+export type P2TaskYieldReason = (typeof P2_TASK_YIELD_REASON)[number];
+
+/** Schema version carried only by a TASK_YIELDED event. */
+export const P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION = "p2-task-progress-v1" as const;
+export type P2TaskProgressEventSchemaVersion = typeof P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION;
 
 export interface P2Event {
   readonly eventId: string;
@@ -410,6 +419,10 @@ export interface P2Event {
   readonly obligationId?: string;
   readonly artifactId?: string;
   readonly artifactVersion?: number;
+  /** Present only on a TASK_YIELDED event; older events keep their exact bytes. */
+  readonly eventSchemaVersion?: P2TaskProgressEventSchemaVersion;
+  readonly sourceRequestId?: string;
+  readonly yieldReason?: P2TaskYieldReason;
 }
 
 // ---------------------------------------------------------------------------

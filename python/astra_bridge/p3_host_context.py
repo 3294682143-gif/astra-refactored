@@ -14,6 +14,7 @@ import json
 from .p0_probe import ProbeError
 from .p3_effect_contract import TOOL_NAMES, validate_request
 from .p2_host_fixture import _parse_inner
+from .text_contract import js_nonempty
 
 __all__ = [
     "parse_action",
@@ -74,7 +75,7 @@ def _utf8(value):
 def _text(value, max_chars, allow_empty=False):
     if not isinstance(value, str):
         _fail()
-    if not allow_empty and not value.strip():
+    if not allow_empty and not js_nonempty(value):
         _fail()
     length = _code_points(value)
     if length is None or length > max_chars:

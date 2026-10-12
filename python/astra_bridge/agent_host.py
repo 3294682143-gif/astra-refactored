@@ -20,6 +20,7 @@ from .agent_context import (
     validate_context,
 )
 from .agent_history import project_artifacts
+from .agent_progress import PROGRESS_POLICY, yielded_task_ids
 from .p0_probe import ProbeError, _Host
 from .p2_host_fixture import _parse_inner
 from .p3_effect_contract import (
@@ -309,11 +310,23 @@ class AgentHost(_Host):
                 _fail()
         if request_id in self.history:
             _fail()
+        # A task that already yielded this session is never scheduled again:
+        # the check runs before the context validation and before any client
+        # call, so a re-dispatch of a yielded task costs no new model call.
+        if request["phase"] == "WORK":
+            if request["taskId"] in yielded_task_ids(self.history, self.effects):
+                _fail()
         body = validate_context(
             request, self.problem, self.session_id, self.problem_hash,
             self.history, self.effects, self.catalog, self.method_assets,
         )
         if request["phase"] == "WORK":
+            # The fixed policy is control data: the Host re-checks the exact
+            # four-field identity itself and never trusts a body-supplied
+            # threshold.
+            policy = body.get("progressPolicy")
+            if not isinstance(policy, dict) or not same_json(policy, PROGRESS_POLICY):
+                _fail()
             reserve_ok = self.max_model_calls - self.model_requests >= 2 + self.max_reviews
             task_id = request["taskId"]
             provenance = body["routeProvenance"]
@@ -339,9 +352,9 @@ class AgentHost(_Host):
                         _fail()
                     if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
                         _fail()
-                    completed = len(_work_ordinals(
-                        self.history, self.problem, self.session_id, self.problem_hash,
-                    ))
+                    completed = len(project_artifacts(
+                        self.history, self.session_id, self.problem_hash,
+                    )["rows"])
                     if self.max_work_units - completed < 1:
                         _fail()
                     if self.remaining_ms() <= _MIN_REMAINING_MS:
@@ -360,9 +373,9 @@ class AgentHost(_Host):
                         _fail()
                     if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
                         _fail()
-                    completed = len(_work_ordinals(
-                        self.history, self.problem, self.session_id, self.problem_hash,
-                    ))
+                    completed = len(project_artifacts(
+                        self.history, self.session_id, self.problem_hash,
+                    )["rows"])
                     if self.max_work_units - completed < 1:
                         _fail()
                     if self.remaining_ms() <= _MIN_REMAINING_MS:
@@ -408,9 +421,9 @@ class AgentHost(_Host):
                 and pending_new_provenance is None
                 and not prospective_redo_used
                 and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
-                and self.max_work_units - len(_work_ordinals(
-                    self.history, self.problem, self.session_id, self.problem_hash,
-                )) >= 2
+                and self.max_work_units - len(project_artifacts(
+                    self.history, self.session_id, self.problem_hash,
+                )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
             if body["allowRouteProposal"] is not expected_allow_route:
@@ -419,9 +432,9 @@ class AgentHost(_Host):
                 len(self.dependency_admissions) + (1 if pending_new_dependency is not None else 0) < 2
                 and not prospective_redo_used
                 and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
-                and self.max_work_units - len(_work_ordinals(
-                    self.history, self.problem, self.session_id, self.problem_hash,
-                )) >= 2
+                and self.max_work_units - len(project_artifacts(
+                    self.history, self.session_id, self.problem_hash,
+                )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
             if body["allowTaskContinuation"] is not expected_allow_continuation:
@@ -438,9 +451,9 @@ class AgentHost(_Host):
                 else:
                     if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
                         _fail()
-                    completed = len(_work_ordinals(
-                        self.history, self.problem, self.session_id, self.problem_hash,
-                    ))
+                    completed = len(project_artifacts(
+                        self.history, self.session_id, self.problem_hash,
+                    )["rows"])
                     if self.max_work_units - completed < 1:
                         _fail()
                     if self.remaining_ms() <= _MIN_REMAINING_MS:
@@ -450,9 +463,9 @@ class AgentHost(_Host):
             expected_allow_redo = (
                 not redo_used
                 and self.max_model_calls - self.model_requests >= 2 + self.max_reviews
-                and self.max_work_units - len(_work_ordinals(
-                    self.history, self.problem, self.session_id, self.problem_hash,
-                )) >= 2
+                and self.max_work_units - len(project_artifacts(
+                    self.history, self.session_id, self.problem_hash,
+                )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
             if body["allowArtifactRedo"] is not expected_allow_redo:
@@ -883,7 +896,7 @@ class AgentHost(_Host):
                 prior, self.problem, self.session_id, self.problem_hash,
             )
             legal = (
-                body.get("schemaVersion") == "agent-work-context-v6"
+                body.get("schemaVersion") == "agent-work-context-v7"
                 and body.get("allowFinal") is True
                 and expected is not None
                 and same_json(body.get("protectedCandidate"), expected)

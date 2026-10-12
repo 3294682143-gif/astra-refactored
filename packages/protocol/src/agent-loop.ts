@@ -17,6 +17,7 @@ import type {
   P2GoalSpec,
   P2RouteSpec,
   P2Task,
+  P2TaskYieldReason,
   P2TransportStatus,
 } from "./p2.js";
 import type { P2MethodCatalog } from "./p2-methods.js";
@@ -220,6 +221,22 @@ export interface AgentLoopPrivateState {
   readonly dependencyAdmissions?: readonly AgentRouteAdmission[];
   readonly revisions?: readonly AgentRevisionRecord[];
   readonly readyTasks?: readonly P2Task[];
+  readonly progressEvents?: readonly AgentProgressEvent[];
+}
+
+/** Fixed schema version of one private progress event record. */
+export const AGENT_PROGRESS_EVENT_SCHEMA_VERSION = "agent-progress-event-v1" as const;
+export type AgentProgressEventSchemaVersion = typeof AGENT_PROGRESS_EVENT_SCHEMA_VERSION;
+
+/**
+ * Private record of one task-level yield. It mirrors the real M1 TASK_YIELDED
+ * event; it is never a mathematical claim and never a new model call.
+ */
+export interface AgentProgressEvent {
+  readonly schemaVersion: AgentProgressEventSchemaVersion;
+  readonly taskId: string;
+  readonly sourceRequestId: string;
+  readonly reason: P2TaskYieldReason;
 }
 
 /**

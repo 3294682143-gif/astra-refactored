@@ -96,7 +96,7 @@ allowance as registered tools, plus the method-specific cap of one; neither
 tasks nor cache hits create a fresh budget. A failed attempt still spends its
 slot. Default or insufficient-budget paths do not touch the reader.
 
-WORK context v6 retains the complete validated catalog and loaded asset body,
+WORK context v7 retains the complete validated catalog and loaded asset body,
 title, version and integrity hash through the existing M3 preparation interface.
 Only same-task receipts enter toolObservations; method text may persist across
 tasks as advisory material, never a mathematical premise or verification.
@@ -117,8 +117,8 @@ not a synthesized WorkPacket or new artifact. Configured R2 still runs within
 the same root capacity. A rejected final stops further calls and may retain
 the old BEST_EFFORT candidate; STRICT still withholds it.
 
-Historical v2/v3/v4/v5 WORK contexts have an explicit read-only validator; the active
-Host requires v6. The 1.2 and 1.3 frame schema bytes are unchanged by this
+Historical v2–v6 WORK contexts have an explicit read-only validator; the active
+Host requires v7. The 1.2 and 1.3 frame schema bytes are unchanged by this
 context-only migration. Full event replay is still a later gate.
 
 Version-2 WorkPackets may carry one strict, untrusted NEW_ROUTE suggestion.
@@ -143,6 +143,13 @@ propagation occur. Failures retain old versions without refunding calls.
 Host verifies the actual history and provenance. Protected-candidate replacement
 is not granted by this action; a stale protected origin is withheld by S3.
 See G2_ARTIFACT_REDO.md, including the redo-last-WORK preview limit.
+
+The fixed ProgressPolicy yields only the current task after an explicit unsolved
+reply, a valid partial delivery or two consecutive cached effect repeats. Another
+actual ready task can then run under the same root; transport UNKNOWN/error/length
+still stops the run and cannot be used for retry. Host checks the same policy and
+prior task state, including exact ECMAScript non-empty text semantics. See
+G2_PROGRESS_POLICY.md for acceptance and remaining limits.
 
 M5 remains the mathematical final selector. Host only verifies the returned
 answer's provenance and policy: it must equal the actual eligible candidate

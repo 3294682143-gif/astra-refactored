@@ -22,6 +22,7 @@ from .p0_protocol import (
     _scan_depth,
     decode_frame,
 )
+from .text_contract import js_nonempty
 
 __all__ = [
     "TOOL_NAMES",
@@ -89,7 +90,7 @@ def _utf8_bytes(value):
 def _strict_text(value, code, max_chars=None, allow_empty=False):
     if not isinstance(value, str):
         _fail(code)
-    if not allow_empty and not value.strip():
+    if not allow_empty and not js_nonempty(value):
         _fail(code)
     if max_chars is not None and len(value) > max_chars:
         _fail("FIELD_VALUE")
@@ -230,7 +231,7 @@ def receipt(request, status, observation):
     bound = validate_request(request)
     if status not in ("COMPLETE", "ERROR", "UNKNOWN"):
         _fail("FIELD_VALUE")
-    if not isinstance(observation, str) or not observation.strip():
+    if not isinstance(observation, str) or not js_nonempty(observation):
         _fail("FIELD_VALUE")
     if _utf8_bytes(observation) > MAX_OBSERVATION_BYTES:
         _fail("FIELD_VALUE")

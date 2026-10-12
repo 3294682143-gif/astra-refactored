@@ -13,6 +13,8 @@ import {
   P2Error,
   P2_ERROR_CODES,
   P2_TASK_DELIVERY,
+  P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION,
+  P2_TASK_YIELD_REASON,
   p2Snapshot,
   validateP2GoalSpecs,
   type P2AcceptanceReceipt,
@@ -24,6 +26,7 @@ import {
   type P2Obligation,
   type P2Task,
   type P2TaskDelivery,
+  type P2TaskYieldReason,
 } from "@astra/protocol";
 
 import { compileP2Contract, p2ProblemHashOf, p2ScopeIdOf } from "./p2-compiler.js";
@@ -133,6 +136,9 @@ function isArtifactRef(value: unknown): value is P2ArtifactRef {
     (source.artifactVersion as number) >= 1
   );
 }
+
+/** A real earlier WORK request ordinal; no other request id is accepted. */
+const YIELD_REQUEST_ORDINAL = /^model-([1-4])$/u;
 
 /**
  * Validate one task batch against the contract and against itself: envelope
@@ -707,6 +713,85 @@ export class ContractLedger {
         this.tasks.set(taskId, { ...task, delivery: "BLOCKED" });
       }
     }
+  }
+
+  /**
+   * Pure pre-check of one task-specific yield. Nothing is mutated: the task
+   * must be RUNNING or PARTIAL, its obligation must not be SATISFIED or
+   * BLOCKED, no redo may be pending, the task must hold no delivered ref, the
+   * reason must be one fixed value, the source request must be a real earlier
+   * WORK ordinal, and the event budget must allow one more record. This is a
+   * scheduling check, never a mathematical refutation or satisfaction.
+   */
+  validateYieldTask(
+    taskId: string,
+    sourceRequestId: string,
+    reason: P2TaskYieldReason,
+  ): void {
+    if (!isBoundedString(taskId, P2_LIMITS.maxShortStringChars)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (
+      typeof sourceRequestId !== "string" ||
+      YIELD_REQUEST_ORDINAL.exec(sourceRequestId) === null
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (!(P2_TASK_YIELD_REASON as readonly string[]).includes(reason)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const state = this.requireTask(taskId);
+    if (state.delivery !== "RUNNING" && state.delivery !== "PARTIAL") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (state.deliveredRefs.length !== 0) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    const obligation = this.requireObligation(state.task.obligationId);
+    if (obligation.status === "SATISFIED" || obligation.status === "BLOCKED") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (this.redoBackups.size !== 0) {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    const seq = this.nextSeq;
+    if (
+      !Number.isSafeInteger(seq) ||
+      seq < 1 ||
+      seq >= Number.MAX_SAFE_INTEGER ||
+      this.events.length + 1 > P2_LIMITS.maxLedgerEvents
+    ) {
+      throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
+    }
+  }
+
+  /**
+   * Yield one task for this session. After the full pure pre-check one
+   * TASK_YIELDED record is appended and only this task moves to BLOCKED with
+   * no delivered refs; its immutable definition, its dependencies, every other
+   * task and every obligation state stay untouched. No obligation is blocked,
+   * no acceptance is cleared and nothing here is a mathematical refutation.
+   */
+  yieldTask(
+    taskId: string,
+    sourceRequestId: string,
+    reason: P2TaskYieldReason,
+  ): void {
+    this.validateYieldTask(taskId, sourceRequestId, reason);
+    const state = this.requireTask(taskId);
+    const seq = this.nextSeq;
+    this.append("TASK_YIELDED", "M1", seq, {
+      taskId,
+      obligationId: state.task.obligationId,
+      sourceRequestId,
+      yieldReason: reason,
+      eventSchemaVersion: P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION,
+    });
+    this.tasks.set(taskId, {
+      task: state.task,
+      delivery: "BLOCKED",
+      deliveredRefs: [],
+    });
   }
 
   /** Reopen an obligation: old acceptance is cleared, event history is kept. */

@@ -21,6 +21,7 @@ from .p0_probe import ProbeError
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import same_json as _same_json
 from .agent_workflow import _source_record
+from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
 
@@ -37,13 +38,11 @@ _REVISION_FIELDS = (
 _REF_FIELDS = ("artifactId", "artifactVersion")
 _WORK_V4 = "p2a-work-v4"
 _CONTEXT_V6 = "agent-work-context-v6"
+_CONTEXT_V7 = "agent-work-context-v7"
 _MAX_TEXT = 4096
 _MAX_SHORT = 256
 _HEX64 = frozenset("0123456789abcdef")
-_WS = ("\t", "\n", "\v", "\f", "\r", " ", "\u00a0", "\u1680", "\u2000",
-       "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007",
-       "\u2008", "\u2009", "\u200a", "\u2028", "\u2029", "\u202f", "\u205f",
-       "\u3000", "\ufeff")
+_WS = JS_WHITESPACE
 
 
 def _fail():
@@ -64,7 +63,7 @@ def _exact_keys(value, keys):
 def _text(value, max_chars, allow_empty=False):
     if not isinstance(value, str):
         _fail()
-    if not allow_empty and not value.strip():
+    if not allow_empty and not js_nonempty(value):
         _fail()
     if len(value) > max_chars:
         _fail()
@@ -101,13 +100,7 @@ def _js_trim(value):
     """ECMAScript ``String.prototype.trim`` over the shared whitespace set."""
     if not isinstance(value, str):
         _fail()
-    start = 0
-    end = len(value)
-    while start < end and _is_ws(value[start]):
-        start += 1
-    while end > start and _is_ws(value[end - 1]):
-        end -= 1
-    return value[start:end]
+    return js_trim(value)
 
 
 def _row_version(row):
@@ -246,6 +239,14 @@ def project_artifacts(history, session_id, problem_hash):
     """
     if not isinstance(history, dict):
         _fail()
+    # Imported lazily: ``agent_progress`` imports ``agent_workflow``, so a
+    # top-level import here would create a workflow -> history -> progress ->
+    # workflow cycle. The helper is pure and reads only this history.
+    from .agent_progress import progress_events
+
+    yield_by_request = {}
+    for row in progress_events(history):
+        yield_by_request[row["sourceRequestId"]] = row
     rows = []
     by_source = {}
     next_seq = 2
@@ -293,13 +294,23 @@ def project_artifacts(history, session_id, problem_hash):
         if active_task != task_id:
             next_seq += 1
             active_task = task_id
+        # A real task-level yield of this request advances the control sequence
+        # by one step and clears the active task, before any packet handling:
+        # an unsolved or repeated-cache WORK has no delivery artifact. A PARTIAL
+        # yield is not skipped here: its real partial packet is still projected
+        # below as one accepted artifact and then advances the sequence again.
+        yield_row = yield_by_request.get(request_id)
+        if yield_row is not None and yield_row["reason"] != "PARTIAL":
+            next_seq += 1
+            active_task = None
+            continue
         try:
-            _, packet = _source_record(history, request_id, session_id, problem_hash)
+            _, packet = _source_record(
+                history, request_id, session_id, problem_hash, require_complete=False,
+            )
         except ProbeError:
             continue
-        if packet["deliveryStatus"] != "COMPLETE":
-            continue
-        if not packet["claim"].strip() or not packet["derivation"].strip():
+        if not js_nonempty(packet["claim"]) or not js_nonempty(packet["derivation"]):
             continue
         raw = entry["receipt"]["text"]
         if not isinstance(raw, str):
@@ -323,6 +334,11 @@ def project_artifacts(history, session_id, problem_hash):
                 _fail()
             if old["packet"] is None:
                 _fail()
+            if packet["deliveryStatus"] != "COMPLETE":
+                # A redo whose replacement packet is not COMPLETE never
+                # produces a new version and never invalidates the target: the
+                # projection-only partial relaxation must not leak into redo.
+                continue
             if _material(old["packet"]) == _material(packet):
                 continue
             # The closure is computed over the rows that already exist, before
@@ -375,7 +391,7 @@ def project_artifacts(history, session_id, problem_hash):
             "rawResponseText": raw,
             "packet": packet,
             "transportStatus": "COMPLETE",
-            "deliveryStatus": "COMPLETE",
+            "deliveryStatus": packet["deliveryStatus"],
             "level": "PROVISIONAL",
             "checkResult": "UNKNOWN",
             "provisionalDependency": bool(task.get("inputArtifactRefs")),
@@ -383,6 +399,15 @@ def project_artifacts(history, session_id, problem_hash):
         }
         rows.append(row)
         by_source[request_id] = row
+        if packet["deliveryStatus"] != "COMPLETE":
+            # A real partial delivery keeps its exact raw bytes, hash, packet
+            # and actual delivery status; it counts as one accepted artifact
+            # and then yields its task, so the sequence advances twice.
+            next_seq += 1
+            if yield_row is not None:
+                next_seq += 1
+            active_task = None
+            continue
         if stale_refs is None:
             next_seq += 1
         else:
@@ -393,10 +418,15 @@ def project_artifacts(history, session_id, problem_hash):
             next_seq += 1
             finished_redo = True
         active_task = None
-    return copy.deepcopy({"rows": rows, "bySourceRef": by_source})
+    return copy.deepcopy({
+        "rows": rows,
+        "bySourceRef": by_source,
+        "nextEventSeq": next_seq,
+    })
 
 
-def check_revision_context(body, history, session_id, problem_hash):
+def check_revision_context(body, history, session_id, problem_hash,
+                           source_schema=_CONTEXT_V6):
     """Re-derive the control provenance of one redo WORK context body.
 
     Returns the validated five-field provenance dict for a real redo request,
@@ -408,7 +438,9 @@ def check_revision_context(body, history, session_id, problem_hash):
     """
     if not isinstance(body, dict):
         _fail()
-    if body.get("schemaVersion") != _CONTEXT_V6:
+    if source_schema not in (_CONTEXT_V6, _CONTEXT_V7):
+        _fail()
+    if body.get("schemaVersion") != source_schema:
         _fail()
     if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
         _fail()

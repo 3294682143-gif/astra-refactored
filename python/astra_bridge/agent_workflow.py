@@ -16,6 +16,7 @@ import json
 from .p0_probe import ProbeError
 from .p2_host_fixture import _parse_inner, _strict_utf8
 from .p3_host_context import same_json
+from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = [
     "checked_packet",
@@ -32,6 +33,7 @@ _WORK_V4 = "p2a-work-v4"
 _CONTEXT_V4 = "agent-work-context-v4"
 _CONTEXT_V5 = "agent-work-context-v5"
 _CONTEXT_V6 = "agent-work-context-v6"
+_CONTEXT_V7 = "agent-work-context-v7"
 _MAX_TEXT = 4096
 _MAX_SHORT = 256
 _MAX_LEMMAS = 32
@@ -58,10 +60,7 @@ _DEFAULT_MECHANISM = {
     "construction": "unified-agent-loop",
 }
 _HEX64 = frozenset("0123456789abcdef")
-_WS = ("\t", "\n", "\v", "\f", "\r", " ", "\u00a0", "\u1680", "\u2000",
-       "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007",
-       "\u2008", "\u2009", "\u200a", "\u2028", "\u2029", "\u202f", "\u205f",
-       "\u3000", "\ufeff")
+_WS = JS_WHITESPACE
 
 
 def _fail():
@@ -102,7 +101,7 @@ def _code_points(value):
 def _text(value, max_chars, allow_empty=False):
     if not isinstance(value, str):
         _fail()
-    if not allow_empty and not value.strip():
+    if not allow_empty and not js_nonempty(value):
         _fail()
     length = _code_points(value)
     if length is None or length > max_chars:
@@ -145,13 +144,7 @@ def _is_ws(ch):
 
 
 def _trim(value):
-    start = 0
-    end = len(value)
-    while start < end and _is_ws(value[start]):
-        start += 1
-    while end > start and _is_ws(value[end - 1]):
-        end -= 1
-    return value[start:end]
+    return js_trim(value)
 
 
 def _collapse(value):
@@ -330,7 +323,7 @@ def default_route():
     return normalize_route(copy.deepcopy(_DEFAULT_MECHANISM))
 
 
-def _source_record(history, source_id, session_id, problem_hash):
+def _source_record(history, source_id, session_id, problem_hash, *, require_complete=True):
     """Strict read of one real COMPLETE WORK record; returns (body, packet).
 
     The request body and the raw receipt packet are cross-checked against each
@@ -339,6 +332,13 @@ def _source_record(history, source_id, session_id, problem_hash):
     subset of the body's own ``inputArtifactRefs``, and every declared
     assumption must already be a declared scope assumption. A record that fails
     any of these is not a source, never a repaired one.
+
+    ``require_complete`` defaults to ``True`` and keeps the original behaviour:
+    only a COMPLETE delivery is a source for route, dependency and redo
+    provenance. The optional ``False`` form is a projection-only relaxation
+    that still requires a COMPLETE transport and every original binding,
+    dependency, scope and non-empty claim/derivation check; it never widens the
+    provenance callers, which all keep the default.
     """
     if not isinstance(history, dict):
         _fail()
@@ -364,8 +364,19 @@ def _source_record(history, source_id, session_id, problem_hash):
     body = _parse_inner(messages[1]["content"])
     if not isinstance(body, dict):
         _fail()
-    packet = checked_packet(receipt["text"])
-    if packet["deliveryStatus"] != "COMPLETE":
+    text = receipt["text"]
+    if not isinstance(text, str):
+        _fail()
+    packet = checked_packet(text)
+    if require_complete:
+        if packet["deliveryStatus"] != "COMPLETE":
+            _fail()
+    elif packet["deliveryStatus"] not in ("COMPLETE", "INCOMPLETE", "TRUNCATED", "ERROR"):
+        _fail()
+    # A real M3 delivery must carry non-empty material; the shape check above
+    # allows an empty TEXT field, so the acceptance layer rejects it here for
+    # both the COMPLETE source path and the projection-only partial path.
+    if not _trim(packet["claim"]) or not _trim(packet["derivation"]):
         _fail()
     if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
         _fail()
@@ -419,7 +430,14 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
     if not isinstance(history, dict):
         _fail()
     source_ordinal = _ordinal(source_id)
-    count = 0
+    # The source must itself be a real referenceable COMPLETE delivery before
+    # the projection is queried; the projection then reports the actual
+    # artifact id and version, counting every real accepted M3 work including
+    # partial deliveries, so a skipped partial never shifts a later id.
+    _, packet = _source_record(history, source_id, session_id, problem_hash)
+    if packet["deliveryStatus"] != "COMPLETE":
+        _fail()
+    prior = {}
     for request_id in history:
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
@@ -428,20 +446,25 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
             continue
         if int(suffix) > source_ordinal:
             continue
-        try:
-            _, packet = _source_record(history, request_id, session_id, problem_hash)
-        except ProbeError:
-            continue
-        if packet["deliveryStatus"] != "COMPLETE":
-            continue
-        count += 1
-    if count < 1:
+        prior[request_id] = history[request_id]
+    from .agent_history import project_artifacts
+
+    projection = project_artifacts(prior, session_id, problem_hash)
+    row = projection["bySourceRef"].get(source_id)
+    if not isinstance(row, dict):
         _fail()
-    return {"artifactId": "artifact-" + str(count), "artifactVersion": 1}
+    if row["availability"] != "ACTIVE":
+        _fail()
+    if row["deliveryStatus"] != "COMPLETE":
+        _fail()
+    return {
+        "artifactId": row["artifactId"],
+        "artifactVersion": row["envelope"]["artifactVersion"],
+    }
 
 
 def _check_source_body(body, source_id, session_id, problem_hash,
-                       source_schema=_CONTEXT_V5):
+                       source_schema=_CONTEXT_V7):
     """Strict shape of the source WORK context body of a NEW_ROUTE proposal.
 
     ``source_schema`` is explicit: the active v5 context passes ``v5`` and the
@@ -449,7 +472,7 @@ def _check_source_body(body, source_id, session_id, problem_hash,
     accepted here, so a v5 source can never be read through the legacy path and
     a v4 source can never be read through the active path.
     """
-    if source_schema not in (_CONTEXT_V4, _CONTEXT_V5, _CONTEXT_V6):
+    if source_schema not in (_CONTEXT_V4, _CONTEXT_V5, _CONTEXT_V6, _CONTEXT_V7):
         _fail()
     if body.get("schemaVersion") != source_schema:
         _fail()
@@ -471,7 +494,7 @@ def _check_source_body(body, source_id, session_id, problem_hash,
 
 
 def _check_dependency_source_body(body, source_id, session_id, problem_hash,
-                                  source_schema=_CONTEXT_V5):
+                                  source_schema=_CONTEXT_V7):
     """Strict shape of the source WORK context body of a dependent task (v5).
 
     The active v5 shape is the only one accepted here: a v4 body never carries
@@ -479,7 +502,7 @@ def _check_dependency_source_body(body, source_id, session_id, problem_hash,
     source of a dependent task. The older read-only entry points keep their own
     explicit version parameter and are not widened by this helper.
     """
-    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6):
+    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6, _CONTEXT_V7):
         _fail()
     if body.get("schemaVersion") != source_schema:
         _fail()
@@ -604,11 +627,41 @@ def _expected_event_seq(history, session_id, problem_hash, source_ordinal):
     ``2*2 + 1 + 2 = 7``. This holds only for this slice, which has no goal
     revision and no timeout continuation; it is not a general replay rule.
     """
-    count = _completed_work_count(history, session_id, problem_hash, source_ordinal)
-    if count < 1:
+    if not isinstance(history, dict):
         _fail()
-    admitted = _admitted_task_count(history, session_id, problem_hash, source_ordinal)
-    return 2 * count + admitted + 2
+    if not _is_int(source_ordinal) or source_ordinal < 1:
+        _fail()
+    prior = {}
+    for request_id in history:
+        if not isinstance(request_id, str) or not request_id.startswith("model-"):
+            continue
+        suffix = request_id[len("model-"):]
+        if suffix not in ("1", "2", "3", "4"):
+            continue
+        if int(suffix) > source_ordinal:
+            continue
+        entry = history.get(request_id)
+        if not isinstance(entry, dict):
+            continue
+        request = entry.get("request")
+        if not isinstance(request, dict):
+            continue
+        if request.get("sessionId") != session_id:
+            continue
+        if request.get("problemHash") != problem_hash:
+            continue
+        prior[request_id] = entry
+    # Imported lazily: ``agent_history`` imports ``agent_workflow``, so a
+    # top-level import here would create a cycle. The projection is pure and
+    # reads only the filtered prior history, which never contains the source
+    # request currently being validated.
+    from .agent_history import project_artifacts
+
+    projection = project_artifacts(prior, session_id, problem_hash)
+    next_seq = projection["nextEventSeq"]
+    if not _is_int(next_seq) or next_seq < 1:
+        _fail()
+    return next_seq
 
 
 def _check_child_envelope(envelope, source_envelope, session_id, source_id, task_id, event_seq):
@@ -651,7 +704,7 @@ def _target_obligation(obligations, obligation_id, scope_id):
     return found
 
 
-def check_route_provenance(body, history, source_schema=_CONTEXT_V5):
+def check_route_provenance(body, history, source_schema=_CONTEXT_V7):
     """Re-derive the control provenance of one WORK context body.
 
     Returns the validated provenance dict for a real second route, or ``None``
@@ -803,7 +856,7 @@ def check_route_provenance(body, history, source_schema=_CONTEXT_V5):
     }
 
 
-def check_dependency_provenance(body, history, source_schema=_CONTEXT_V5):
+def check_dependency_provenance(body, history, source_schema=_CONTEXT_V7):
     """Re-derive the control provenance of one dependent-task WORK body.
 
     Returns the validated four-field provenance dict for a real dependent task,
@@ -835,7 +888,7 @@ def check_dependency_provenance(body, history, source_schema=_CONTEXT_V5):
         if task_id.startswith("dep-task-"):
             _fail()
         return None
-    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6):
+    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6, _CONTEXT_V7):
         _fail()
     if body.get("schemaVersion") != source_schema:
         _fail()

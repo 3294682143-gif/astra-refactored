@@ -37,6 +37,7 @@ import {
   P4RecheckModelGate,
   chooseP2ReadyTask,
   parseP3Action,
+  p3EffectKey,
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4ReviewSession } from "@astra/math-review";
@@ -47,6 +48,7 @@ import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
 import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
+import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
 const CANDIDATE_KINDS = ["CANDIDATE_VALIDITY", "ANSWER_REQUEST"] as const;
@@ -100,6 +102,7 @@ export async function runAgentLoop(
   const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
   const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls);
   const calls = new AgentCalls(root, gate, captured);
+  const progress = new AgentProgressPolicy();
 
   let workUnits = 0;
   let reviewCalls = 0;
@@ -225,6 +228,7 @@ export async function runAgentLoop(
         );
       }
       let advanced = false;
+      let yielded = false;
       while (!root.stopped()) {
         if (root.remainingMs() <= MIN_MS) {
           stop = "DEADLINE_EXCEEDED";
@@ -391,6 +395,22 @@ export async function runAgentLoop(
             stop = receipt.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
             break;
           }
+          const cached = root.effectCalls() === effectsBefore;
+          let repeated = false;
+          try {
+            repeated = progress.observeEffect(
+              running.taskId,
+              outcome.requestId,
+              p3EffectKey(action),
+              cached,
+            );
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
           if (!observations.some((item) => item.effectId === receipt.effectId)) {
             observations.push(receipt);
           }
@@ -423,9 +443,43 @@ export async function runAgentLoop(
               }
             }
           }
+          if (repeated && revision.pendingTaskId() === null) {
+            try {
+              ledger.validateYieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.validateRecordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              ledger.yieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.recordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+            yielded = true;
+            stop = "NO_CANDIDATE";
+            break;
+          }
           continue;
         }
         if (action !== null && action.action === "unsolved") {
+          if (revision.pendingTaskId() === null) {
+            try {
+              ledger.validateYieldTask(running.taskId, outcome.requestId, "UNSOLVED");
+              progress.validateRecordYield(running.taskId, outcome.requestId, "UNSOLVED");
+              ledger.yieldTask(running.taskId, outcome.requestId, "UNSOLVED");
+              progress.recordYield(running.taskId, outcome.requestId, "UNSOLVED");
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+            yielded = true;
+            stop = "NO_CANDIDATE";
+            break;
+          }
           stop = "NO_CANDIDATE";
           break;
         }
@@ -536,6 +590,21 @@ export async function runAgentLoop(
           );
           workUnits += 1;
           if (accepted.deliveryStatus !== "COMPLETE") {
+            if (revision.pendingTaskId() === null) {
+              try {
+                ledger.validateYieldTask(running.taskId, outcome.requestId, "PARTIAL");
+                progress.validateRecordYield(running.taskId, outcome.requestId, "PARTIAL");
+                ledger.yieldTask(running.taskId, outcome.requestId, "PARTIAL");
+                progress.recordYield(running.taskId, outcome.requestId, "PARTIAL");
+              } catch (error) {
+                if (!(error instanceof P2Error)) {
+                  throw error;
+                }
+                stop = "CONTROL_REJECTED";
+                break;
+              }
+              yielded = true;
+            }
             stop = "NO_CANDIDATE";
             break;
           }
@@ -596,6 +665,9 @@ export async function runAgentLoop(
       }
       if (stop !== "NO_CANDIDATE" && stop !== "WORK_UNITS_COMPLETE") {
         break;
+      }
+      if (yielded) {
+        continue;
       }
       if (!advanced) {
         break;
@@ -768,6 +840,7 @@ export async function runAgentLoop(
     dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
     revisions: revision.snapshot(),
     readyTasks: ledger.readyTasks(),
+    progressEvents: progress.snapshot(),
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }
