@@ -305,8 +305,9 @@ def _check_obligations(obligations, task, session_id, problem_hash, version):
         if not _is_int(envelope.get("contractVersion")) or envelope.get("contractVersion") != version:
             _fail()
         if entry["obligationId"] == task["obligationId"]:
-            if entry["kind"] not in ("CANDIDATE_VALIDITY", "ANSWER_REQUEST"):
-                _fail()
+            # Candidate eligibility is decided by the Node control side only;
+            # the Host checks the real goal binding here and never its own kind
+            # set (no independent derivation).
             if entry["goalId"] != task["goalId"]:
                 _fail()
             found = True

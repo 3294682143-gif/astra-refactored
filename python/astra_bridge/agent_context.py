@@ -25,7 +25,6 @@ from .agent_workflow import (
 from .agent_history import check_revision_context
 from .agent_history import artifact_view, project_artifacts
 from .agent_progress import PROGRESS_POLICY
-from .p2_goal_contract import is_answer_obligation_kind
 from .text_contract import js_nonempty
 
 __all__ = [
@@ -310,14 +309,15 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         obligations = body.get("obligations")
         if not isinstance(obligations, list):
             return None
+        # Candidate eligibility is decided by the Node control side only. The
+        # Host re-checks the structural binding of the task obligation row and
+        # never derives, widens or narrows the kind-based decision itself.
         for entry_row in obligations:
             if not isinstance(entry_row, dict):
                 return None
             if entry_row.get("obligationId") != task.get("obligationId"):
                 continue
-            if is_answer_obligation_kind(entry_row.get("kind")):
-                return copy.deepcopy(packet)
-            return None
+            return copy.deepcopy(packet)
         return None
     except ProbeError:
         return None

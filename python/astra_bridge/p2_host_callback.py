@@ -6,7 +6,6 @@ import copy
 import json
 
 from .p0_probe import ProbeError, _Host
-from .p2_goal_contract import is_answer_obligation_kind
 from .p2_host_fixture import OfflineP2Client, _parse_inner, strict_context
 from .p2_host_protocol import P2_HOST_VERSION, payload
 
@@ -275,12 +274,14 @@ class P2HostCallback(_Host):
             obligations = inner.get("obligations")
             if not isinstance(task, dict) or not isinstance(obligations, list):
                 raise ProbeError("FIELD_VALUE")
-            kinds = {
-                entry.get("kind")
+            # The Host does not re-derive candidate eligibility: the Node
+            # control side is the single source of that decision. Only the
+            # structural presence of the task's own obligation row is checked.
+            if not any(
+                isinstance(entry, dict)
+                and entry.get("obligationId") == task.get("obligationId")
                 for entry in obligations
-                if isinstance(entry, dict) and entry.get("obligationId") == task.get("obligationId")
-            }
-            if not any(is_answer_obligation_kind(kind) for kind in kinds):
+            ):
                 raise ProbeError("FIELD_VALUE")
             if result["artifactCount"] < 1 or result["artifactCount"] > self.model_calls:
                 raise ProbeError("FIELD_VALUE")
