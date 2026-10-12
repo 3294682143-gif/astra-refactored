@@ -668,6 +668,27 @@ export async function runAgentLoop(
             root.remainingMs(),
           );
         }
+        // A real v5 SCOPE_REFINEMENT proposal is registered as declared data
+        // only. It never closes an obligation, never changes the ready set and
+        // is never a coverage proof; an out-of-scope item is a fixed
+        // SCOPE_MISMATCH rejection that leaves the accepted artifact, the
+        // ledger and the store untouched.
+        const scopeProposal =
+          accepted.packet !== null &&
+          accepted.packet.schemaVersion === "p2a-work-v5"
+            ? accepted.packet.scopeProposal
+            : null;
+        if (scopeProposal !== null) {
+          try {
+            store.declareScopeCoverage(running, scopeProposal);
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+        }
         advanced = true;
         break;
       }
