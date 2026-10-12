@@ -23,7 +23,15 @@ import {
   type P2RouteSpec,
   type P2Task,
 } from "@astra/protocol";
-import { workHash, workRefKey, workScope } from "./p2-context.js";
+import {
+  checkScopeCoverage,
+  checkScopeCoverageAgainstScope,
+  p2ScopeCoverage,
+  workHash,
+  workRefKey,
+  workScope,
+  type P2ScopeCoverage,
+} from "./p2-context.js";
 import { P2RouteRegistry, type P2RouteInput } from "./p2-routes.js";
 import { readWorkReceipt, type P2WorkReceipt } from "./p2-receipt.js";
 
@@ -32,6 +40,16 @@ export type { P2WorkReceipt } from "./p2-receipt.js";
 export interface P2ArtifactEntry {
   readonly artifact: P2Artifact;
   readonly availability: P2ArtifactAvailability;
+}
+
+/**
+ * Declared scope coverage of one task, as stored control-side data. It is an
+ * identity of declared data only: it never marks an obligation covered and
+ * never closes a task.
+ */
+export interface P2TaskScopeCoverage {
+  readonly taskId: string;
+  readonly coverage: P2ScopeCoverage;
 }
 
 const MAX_TASKS = P2_LIMITS.maxTasks;
@@ -82,6 +100,7 @@ export class P2WorkunitStore {
   private readonly entries = new Map<string, P2ArtifactEntry>();
   private readonly latest = new Map<string, number>();
   private readonly requests = new Set<string>();
+  private readonly scopeCoverage = new Map<string, P2ScopeCoverage>();
   private lastSeq: number;
 
   constructor(contract: P2Contract) {
@@ -92,6 +111,41 @@ export class P2WorkunitStore {
 
   registerRoute(input: P2RouteInput): P2RouteSpec {
     return this.routes.register(input);
+  }
+
+  /**
+   * Store the declared scope coverage of one task. The proposal is normalized
+   * through `p2ScopeCoverage` and every quantifier/branch item must already be
+   * part of the trusted scope of that task; an out-of-scope item is a fixed
+   * `SCOPE_MISMATCH` rejection. Nothing else is mutated: artifacts, versions,
+   * requests, routes and the sequence stay exactly as they were, and the
+   * coverage hash is a declaration identity, never a coverage proof.
+   */
+  declareScopeCoverage(task: P2Task, proposal: unknown): P2ScopeCoverage {
+    const frozenTask = p2Snapshot(task) as P2Task;
+    const scope = workScope(this.contract, frozenTask);
+    const coverage = p2ScopeCoverage(p2Snapshot(proposal));
+    checkScopeCoverageAgainstScope(coverage, scope);
+    this.scopeCoverage.set(frozenTask.taskId, coverage);
+    return p2Snapshot(coverage) as P2ScopeCoverage;
+  }
+
+  /** The stored declared coverage of one task, or `null` when none is stored. */
+  scopeCoverageOf(taskId: string): P2ScopeCoverage | null {
+    if (typeof taskId !== "string" || taskId.length === 0) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const stored = this.scopeCoverage.get(taskId);
+    return stored === undefined ? null : (p2Snapshot(stored) as P2ScopeCoverage);
+  }
+
+  /** Deep-frozen copy of every stored declared coverage row. */
+  scopeCoverageSnapshot(): readonly P2TaskScopeCoverage[] {
+    const rows: P2TaskScopeCoverage[] = [];
+    for (const [taskId, coverage] of this.scopeCoverage) {
+      rows.push({ taskId, coverage });
+    }
+    return p2Snapshot(rows) as readonly P2TaskScopeCoverage[];
   }
 
   /**

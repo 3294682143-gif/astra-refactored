@@ -56,6 +56,10 @@ export type P2WorkPacketSchemaVersionV3 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V
 export const P2_WORK_PACKET_SCHEMA_VERSION_V4 = "p2a-work-v4" as const;
 export type P2WorkPacketSchemaVersionV4 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V4;
 
+/** Fifth WorkPacket schema version: adds one untrusted scope-refinement proposal. */
+export const P2_WORK_PACKET_SCHEMA_VERSION_V5 = "p2a-work-v5" as const;
+export type P2WorkPacketSchemaVersionV5 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V5;
+
 /** Bounds for this phase. All are safe integers. */
 export const P2_LIMITS = {
   maxGoals: 8,
@@ -319,6 +323,21 @@ export interface P2ArtifactRedoProposal {
 }
 
 /**
+ * One untrusted scope-refinement suggestion carried by a v5 WorkPacket. It is
+ * model data only: no taskId, route, scopeId, obligationId, budget or
+ * authority field exists here, and the control side derives all of those
+ * itself. Every list is a declaration of data, never a proof of coverage.
+ */
+export interface P2ScopeProposal {
+  readonly kind: "SCOPE_REFINEMENT";
+  readonly quantifiers: readonly string[];
+  readonly branchConditions: readonly string[];
+  readonly boundaryCases: readonly string[];
+  readonly goalExhaustion: readonly string[];
+  readonly rationale: string;
+}
+
+/**
  * Strict v2 WorkPacket: every v1 field with the same meaning, plus a required
  * `workflowProposal` that is either `null` or one NEW_ROUTE suggestion.
  */
@@ -345,8 +364,22 @@ export interface P2WorkPacketV4 extends Omit<P2WorkPacket, "schemaVersion"> {
   readonly workflowProposal: P2ArtifactRedoProposal | null;
 }
 
+/**
+ * Strict v5 WorkPacket: every v4 field with the same meaning, plus a required
+ * `scopeProposal` that is either `null` or one SCOPE_REFINEMENT suggestion.
+ */
+export interface P2WorkPacketV5 extends Omit<P2WorkPacketV4, "schemaVersion"> {
+  readonly schemaVersion: P2WorkPacketSchemaVersionV5;
+  readonly scopeProposal: P2ScopeProposal | null;
+}
+
 /** Any accepted WorkPacket version. Each keeps its own raw identity. */
-export type P2AcceptedWorkPacket = P2WorkPacket | P2WorkPacketV2 | P2WorkPacketV3 | P2WorkPacketV4;
+export type P2AcceptedWorkPacket =
+  | P2WorkPacket
+  | P2WorkPacketV2
+  | P2WorkPacketV3
+  | P2WorkPacketV4
+  | P2WorkPacketV5;
 
 export const P2_ARTIFACT_AVAILABILITY = ["ACTIVE", "STALE"] as const;
 export type P2ArtifactAvailability = (typeof P2_ARTIFACT_AVAILABILITY)[number];
@@ -931,6 +964,73 @@ export function p2WorkPacketSchemaV4(): unknown {
   return cachedWorkPacketSchemaV4;
 }
 
+const SCOPE_PROPOSAL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "kind",
+    "quantifiers",
+    "branchConditions",
+    "boundaryCases",
+    "goalExhaustion",
+    "rationale",
+  ],
+  properties: {
+    kind: { const: "SCOPE_REFINEMENT" },
+    quantifiers: SHORT_LIST,
+    branchConditions: SHORT_LIST,
+    boundaryCases: SHORT_LIST,
+    goalExhaustion: SHORT_LIST,
+    rationale: TEXT,
+  },
+} as const;
+
+/**
+ * v5 schema: a shallow copy of the v4 property set with `schemaVersion`
+ * replaced and `scopeProposal` added as a nullable SCOPE_REFINEMENT object.
+ * Built lazily so no top-level read of a re-exported `index` binding can hit a
+ * TDZ hazard.
+ */
+function buildWorkPacketSchemaV5(): unknown {
+  const properties: Record<string, unknown> = { ...WORK_PACKET_SCHEMA.properties };
+  properties.schemaVersion = { const: P2_WORK_PACKET_SCHEMA_VERSION_V5 };
+  properties.workflowProposal = {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: ["kind", "targetArtifactRef", "rationale"],
+    properties: ARTIFACT_REDO_PROPOSAL_SCHEMA.properties,
+  };
+  properties.scopeProposal = {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: [
+      "kind",
+      "quantifiers",
+      "branchConditions",
+      "boundaryCases",
+      "goalExhaustion",
+      "rationale",
+    ],
+    properties: SCOPE_PROPOSAL_SCHEMA.properties,
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [...WORK_PACKET_SCHEMA.required, "workflowProposal", "scopeProposal"],
+    properties,
+  };
+}
+
+let cachedWorkPacketSchemaV5: unknown = null;
+
+/** The normative v5 WorkPacket schema, deep-frozen on first use. */
+export function p2WorkPacketSchemaV5(): unknown {
+  if (cachedWorkPacketSchemaV5 === null) {
+    cachedWorkPacketSchemaV5 = p2Snapshot(buildWorkPacketSchemaV5());
+  }
+  return cachedWorkPacketSchemaV5;
+}
+
 /**
  * Shared strict parse core: surrogate scan, UTF-8 decode, duplicate keys,
  * non-finite tokens, unsafe numbers, JSON.parse, parsed-surrogate scan, then
@@ -1017,6 +1117,9 @@ export function parseP2WorkPacketAny(text: string): P2AcceptedWorkPacket {
     }
     if (version === P2_WORK_PACKET_SCHEMA_VERSION_V4) {
       return p2WorkPacketSchemaV4();
+    }
+    if (version === P2_WORK_PACKET_SCHEMA_VERSION_V5) {
+      return p2WorkPacketSchemaV5();
     }
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   });

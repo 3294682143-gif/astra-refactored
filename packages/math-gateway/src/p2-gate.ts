@@ -10,6 +10,16 @@ import { P2Error } from "@astra/protocol";
 import type { P2Contract, P2Task, P2TransportStatus } from "@astra/protocol";
 import { p2Snapshot } from "@astra/protocol";
 
+/**
+ * Read-only view of one stored declared scope coverage. The gate only reads
+ * this declaration: it never derives coverage, never closes an obligation and
+ * never admits a completion that lacks declared coverage.
+ */
+export interface P2StoredScopeCoverage {
+  readonly taskId: string;
+  readonly coverageHash: string;
+}
+
 export const P2_MODEL_GATE_VERSION = "0.0.0-p2a" as const;
 
 /** Below this remaining time a call is refused rather than started. */
@@ -248,4 +258,33 @@ export function chooseP2ReadyTask(contract: P2Contract, ready: readonly P2Task[]
   ranked.sort((left, right) => (left.rank !== right.rank ? left.rank - right.rank : left.index - right.index));
   const best = ranked[0];
   return best === undefined ? null : p2Snapshot(best.task);
+}
+
+/**
+ * Read the stored declared coverage of one task from a caller-supplied
+ * read-only view. A missing row returns `null`; the declaration is never
+ * treated as a coverage proof and never changes the ready set.
+ */
+export function readStoredScopeCoverage(
+  rows: readonly P2StoredScopeCoverage[],
+  taskId: string,
+): P2StoredScopeCoverage | null {
+  if (!Array.isArray(rows) || rows.length > 32) {
+    throw new P2Error("BOUND_EXCEEDED");
+  }
+  const wanted = requireShortString(taskId);
+  const frozen = p2Snapshot(rows);
+  for (const row of frozen) {
+    if (typeof row !== "object" || row === null) {
+      throw new P2Error("PACKET_BINDING");
+    }
+    const id = requireShortString(row.taskId);
+    if (typeof row.coverageHash !== "string" || !HEX64.test(row.coverageHash)) {
+      throw new P2Error("PACKET_BINDING");
+    }
+    if (id === wanted) {
+      return p2Snapshot({ taskId: id, coverageHash: row.coverageHash }) as P2StoredScopeCoverage;
+    }
+  }
+  return null;
 }
