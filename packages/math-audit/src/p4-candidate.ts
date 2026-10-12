@@ -16,6 +16,7 @@ import {
   detectLoneSurrogates,
   detectNonFiniteTokens,
   detectUnsafeNumbers,
+  p2IsAnswerObligationKind,
   p2Snapshot,
   type P2Contract,
   type P2ObligationKind,
@@ -131,7 +132,6 @@ const ISSUE_KINDS = [
   "UNSUPPORTED_CONCLUSION",
   "OTHER",
 ] as const;
-const ELIGIBLE_KINDS: readonly P2ObligationKind[] = ["CANDIDATE_VALIDITY", "ANSWER_REQUEST"];
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
@@ -310,7 +310,7 @@ export class P4CandidateGate {
       fail(P2_ERROR_CODES.PACKET_DELIVERY);
     }
     const obligation = taskObligation(this.contract, frozen.binding);
-    if (!ELIGIBLE_KINDS.includes(obligation.kind)) {
+    if (!p2IsAnswerObligationKind(obligation.kind)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (this.protectedTarget === null) {

@@ -25,6 +25,7 @@ from .agent_workflow import (
 from .agent_history import check_revision_context
 from .agent_history import artifact_view, project_artifacts
 from .agent_progress import PROGRESS_POLICY
+from .p2_goal_contract import is_answer_obligation_kind
 from .text_contract import js_nonempty
 
 __all__ = [
@@ -55,7 +56,6 @@ _SCOPE_FIELDS = (
     "scopeId", "domain", "variableBindings", "quantifiers", "localAssumptions",
     "branchConditions", "referenceablePremises",
 )
-_CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 _CONTEXT_SCHEMA_VERSION = "agent-work-context-v4"
 _ACTIVE_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7"
 _DEPENDENCY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v5"
@@ -237,7 +237,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
                 return None
             if entry_row.get("obligationId") != task.get("obligationId"):
                 continue
-            if entry_row.get("kind") in _CANDIDATE_KINDS:
+            if is_answer_obligation_kind(entry_row.get("kind")):
                 return copy.deepcopy(packet)
             return None
         return None

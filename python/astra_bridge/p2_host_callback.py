@@ -6,6 +6,7 @@ import copy
 import json
 
 from .p0_probe import ProbeError, _Host
+from .p2_goal_contract import is_answer_obligation_kind
 from .p2_host_fixture import OfflineP2Client, _parse_inner, strict_context
 from .p2_host_protocol import P2_HOST_VERSION, payload
 
@@ -17,7 +18,6 @@ _MAX_TOKENS = 8192
 _RESERVE_MS = 25
 _MAX_FRAME_BYTES = 65536
 _DELIVERY = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
-_CANDIDATE_KINDS = ("CANDIDATE_VALIDITY", "ANSWER_REQUEST")
 
 
 class P2HostCallback(_Host):
@@ -280,7 +280,7 @@ class P2HostCallback(_Host):
                 for entry in obligations
                 if isinstance(entry, dict) and entry.get("obligationId") == task.get("obligationId")
             }
-            if not kinds & set(_CANDIDATE_KINDS):
+            if not any(is_answer_obligation_kind(kind) for kind in kinds):
                 raise ProbeError("FIELD_VALUE")
             if result["artifactCount"] < 1 or result["artifactCount"] > self.model_calls:
                 raise ProbeError("FIELD_VALUE")

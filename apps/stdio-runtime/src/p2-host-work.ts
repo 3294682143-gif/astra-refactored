@@ -8,6 +8,7 @@
  */
 import {
   P2Error,
+  p2IsAnswerObligationKind,
   p2Snapshot,
   type P2Artifact,
   type P2Contract,
@@ -255,7 +256,7 @@ export class P2HostWork {
       if (task === undefined) continue;
       const obligation = obligations.get(task.obligationId);
       if (obligation === undefined) continue;
-      if (obligation.kind !== "CANDIDATE_VALIDITY" && obligation.kind !== "ANSWER_REQUEST") continue;
+      if (!p2IsAnswerObligationKind(obligation.kind)) continue;
       const ref = {
         artifactId: artifact.artifactId,
         artifactVersion: artifact.envelope.artifactVersion ?? 0,

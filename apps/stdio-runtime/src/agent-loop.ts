@@ -13,6 +13,7 @@
 import {
   P2_ERROR_CODES,
   P2Error,
+  p2IsAnswerObligationKind,
   p2Snapshot,
   p4Hash,
   p4Target,
@@ -51,7 +52,6 @@ import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
-const CANDIDATE_KINDS = ["CANDIDATE_VALIDITY", "ANSWER_REQUEST"] as const;
 const MIN_MS = 25;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -614,7 +614,7 @@ export async function runAgentLoop(
               .obligations.find((row) => row.obligationId === running.obligationId);
             if (
               obligation !== undefined &&
-              (CANDIDATE_KINDS as readonly string[]).includes(obligation.kind)
+              p2IsAnswerObligationKind(obligation.kind)
             ) {
               try {
                 target = p4Target(ledger.snapshot(), accepted, "ACTIVE");

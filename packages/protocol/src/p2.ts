@@ -169,6 +169,33 @@ export const P2_OBLIGATION_KIND = [
 export type P2ObligationKind = (typeof P2_OBLIGATION_KIND)[number];
 
 /**
+ * The single control-side authority for which obligation kinds carry a goal's
+ * final answer: the image of the goal-kind -> answer-obligation map
+ * (`VALUE->CANDIDATE_VALIDITY`, `ALL_SOLUTIONS->EXHAUSTIVENESS`,
+ * `COUNT->COUNT_OBJECTS`, `OPTIMIZATION->GLOBAL_BOUND`, `PROOF->PROOF_GOAL`,
+ * `MULTIPART->SUBGOAL_COVERAGE`, `UNKNOWN->ANSWER_REQUEST`). A COMPLETE packet
+ * for any other obligation (a premise, a local lemma, a feasible point, a
+ * boundary exception, a coverage statement) is never a whole-problem
+ * candidate. The AgentLoop candidate admission and the P4 candidate gate use
+ * this one predicate; the Python Host mirrors it read-only so its projection
+ * cannot independently widen or narrow the control-side decision.
+ */
+export const P2_ANSWER_OBLIGATION_KINDS: readonly P2ObligationKind[] = [
+  "CANDIDATE_VALIDITY",
+  "EXHAUSTIVENESS",
+  "COUNT_OBJECTS",
+  "GLOBAL_BOUND",
+  "PROOF_GOAL",
+  "SUBGOAL_COVERAGE",
+  "ANSWER_REQUEST",
+];
+
+/** True iff `kind` is the answer obligation of some goal kind. */
+export function p2IsAnswerObligationKind(kind: P2ObligationKind): boolean {
+  return (P2_ANSWER_OBLIGATION_KINDS as readonly string[]).includes(kind);
+}
+
+/**
  * Mock-only control-side acceptance receipt. It is never a legal WorkPacket
  * field and no model payload can produce one.
  */
