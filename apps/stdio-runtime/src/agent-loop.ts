@@ -13,7 +13,7 @@
 import {
   P2_ERROR_CODES,
   P2Error,
-  p2IsAnswerObligationKind,
+  p2IsAnswerObligationKindForGoal,
   p2Snapshot,
   p4Hash,
   p4Target,
@@ -24,6 +24,7 @@ import {
   type AgentTraceCode,
   type P2Artifact,
   type P2ArtifactRef,
+  type P2GoalKind,
   type P2MethodAsset,
   type P2MethodCatalog,
   type P2Task,
@@ -53,6 +54,30 @@ import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
 
 const MIN_MS = 25;
+
+/**
+ * The declared goal kind of one goal id, or `UNKNOWN` when the goal is not
+ * part of the trusted contract. The goal tree is walked read-only; nothing
+ * here is a mathematical decision.
+ */
+function goalKindOf(
+  goals: readonly { readonly goalId: string; readonly kind: P2GoalKind; readonly subgoals: readonly unknown[] }[],
+  goalId: string,
+): P2GoalKind {
+  for (const goal of goals) {
+    if (goal.goalId === goalId) {
+      return goal.kind;
+    }
+    const nested = goalKindOf(
+      goal.subgoals as readonly { readonly goalId: string; readonly kind: P2GoalKind; readonly subgoals: readonly unknown[] }[],
+      goalId,
+    );
+    if (nested !== "UNKNOWN") {
+      return nested;
+    }
+  }
+  return "UNKNOWN";
+}
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
@@ -617,15 +642,19 @@ export async function runAgentLoop(
             break;
           }
           if (target === null && store.candidate(ref) !== null) {
-            const obligation = ledger
-              .snapshot()
-              .obligations.find((row) => row.obligationId === running.obligationId);
+            const snapshot = ledger.snapshot();
+            const obligation = snapshot.obligations.find(
+              (row) => row.obligationId === running.obligationId,
+            );
             if (
               obligation !== undefined &&
-              p2IsAnswerObligationKind(obligation.kind)
+              p2IsAnswerObligationKindForGoal(
+                goalKindOf(snapshot.goals, running.goalId),
+                obligation.kind,
+              )
             ) {
               try {
-                target = p4Target(ledger.snapshot(), accepted, "ACTIVE");
+                target = p4Target(snapshot, accepted, "ACTIVE");
                 protectedOrigin = target;
                 candidateTask = running;
               } catch (error) {
