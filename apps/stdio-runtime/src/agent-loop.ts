@@ -315,6 +315,13 @@ export async function runAgentLoop(
         }
         let context: ReturnType<typeof buildAgentWorkContext>;
         try {
+          // Read-only wiring of the declared scope-coverage rows of this exact
+          // task. The rows are declared data only: they never close an
+          // obligation, never change the ready set and are never a coverage
+          // proof. A missing declaration is an empty list.
+          const declaredCoverage = store
+            .scopeCoverageSnapshot()
+            .filter((row) => row.taskId === running.taskId);
           context = buildAgentWorkContext({
             contract: ledger.snapshot(),
             task: running,
@@ -335,6 +342,7 @@ export async function runAgentLoop(
             dependencyProvenance: workflow.dependencyProvenanceOf(running.taskId),
             revisionProvenance: revision.provenanceFor(running.taskId),
             revisionTarget: revision.targetFor(running.taskId),
+            scopeCoverage: declaredCoverage,
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {

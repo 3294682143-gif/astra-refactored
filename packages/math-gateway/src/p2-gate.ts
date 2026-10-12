@@ -324,3 +324,70 @@ export function requireStoredScopeCoverage(
   }
   return row;
 }
+
+/**
+ * Read-only readiness view of one task's declared scope coverage.
+ *
+ * A declared coverage row is *declaration data only*. It never closes an
+ * obligation, never satisfies a task and never changes the ready set: a task
+ * whose obligation is still open stays not-ready even when a well-formed
+ * declaration exists. This helper therefore only reports whether a
+ * declaration is present and well-formed; it never returns a readiness
+ * verdict and never admits a completion.
+ *
+ * - a missing declaration returns `null` (absence is not a failure here);
+ * - a malformed row or a scope-id mismatch is a fixed rejection;
+ * - a present declaration is returned as declared data, never as a proof.
+ */
+export function readDeclaredScopeCoverage(
+  rows: readonly P2StoredScopeCoverage[],
+  taskId: string,
+  scopeId: string,
+): P2StoredScopeCoverage | null {
+  const wanted = requireShortString(taskId);
+  const wantedScope = requireShortString(scopeId);
+  if (!HEX64.test(wantedScope)) {
+    throw new P2Error("PACKET_BINDING");
+  }
+  const row = readStoredScopeCoverage(rows, wanted);
+  if (row === null) {
+    return null;
+  }
+  if (row.scopeId !== wantedScope) {
+    throw new P2Error("SCOPE_MISMATCH");
+  }
+  return row;
+}
+
+/**
+ * M2 readiness/exhaustion gate over declared scope coverage.
+ *
+ * The gate answers exactly one question: may this task be admitted for a
+ * model call *given its declared coverage*? The answer is always the same as
+ * without a declaration, because a declaration is not a coverage proof:
+ *
+ * - a task whose obligation is not satisfied is never ready, with or without
+ *   a declaration ("declared coverage != covered");
+ * - a missing declaration is not a readiness failure by itself;
+ * - a malformed declaration or a scope-id mismatch is a fixed rejection.
+ *
+ * `obligationSatisfied` is the trusted control-side fact; this function never
+ * derives it from the declaration and never mutates any state.
+ */
+export function checkScopeCoverageReadiness(
+  rows: readonly P2StoredScopeCoverage[],
+  taskId: string,
+  scopeId: string,
+  obligationSatisfied: boolean,
+): { readonly ready: boolean; readonly declared: P2StoredScopeCoverage | null } {
+  if (typeof obligationSatisfied !== "boolean") {
+    throw new P2Error("PACKET_BINDING");
+  }
+  const declared = readDeclaredScopeCoverage(rows, taskId, scopeId);
+  // A declaration never closes an obligation: readiness is decided only by
+  // the trusted obligation state, so a declared-but-unmet task stays not-ready.
+  return p2Snapshot({ ready: obligationSatisfied, declared }) as {
+    readonly ready: boolean;
+    readonly declared: P2StoredScopeCoverage | null;
+  };
+}

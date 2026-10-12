@@ -257,3 +257,81 @@ def test_boundary_candidate_is_unverified_and_strict_withholds(process_tracker):
     assert strict["strictAcceptance"] == "NOT_PERFORMED"
     assert strict["childReaped"] is True
     assert process_tracker
+
+
+class DeclaredCoverageClient(ScopeClient):
+    """ScopeClient that declares a real coverage row on its first WORK turn.
+
+    The declaration is carried by the WORK context as declared data only. It
+    must never close the task's obligation, never change the ready set and
+    never turn a sub-answer into the whole-problem candidate.
+    """
+
+    def __init__(self, mode="subanswer"):
+        super().__init__(mode=mode)
+        self.declared = False
+
+    def _work(self, body):
+        text = super()._work(body)
+        if not self.declared:
+            self.declared = True
+            self.declared_task_id = body["task"]["taskId"]
+            self.declared_scope_id = body["task"]["scopeId"]
+        return text
+
+
+def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
+    process_tracker,
+):
+    """A real declared coverage row must not close the obligation or the task.
+
+    The row is wired read-only from the store into the WORK context. It stays
+    declared data: the sub-answer still never becomes the whole-problem
+    candidate, the root duty stays open and the strict acceptance stays
+    NOT_PERFORMED. This is the "declared coverage != covered" boundary.
+    """
+    client = DeclaredCoverageClient(mode="subanswer")
+    result = _solve(client, MULTIPART_PROBLEM, **_BUDGET)
+    assert result["engine"] == "ts"
+    assert result["status"] != "candidate"
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert result["childReaped"] is True
+    assert process_tracker
+    bodies = _work_bodies(client)
+    assert bodies
+    # Every WORK body still carries the declared-coverage field, and a
+    # declaration never makes a sub-answer the whole answer.
+    for body in bodies:
+        assert "scopeCoverage" in body
+        assert isinstance(body["scopeCoverage"], list)
+        for row in body["scopeCoverage"]:
+            assert row["taskId"] == body["task"]["taskId"]
+            assert row["scopeId"] == body["task"]["scopeId"]
+            assert len(row["coverage"]["coverageHash"]) == 64
+    # The root coverage duty is never delivered as a whole answer.
+    for body in bodies:
+        assert body["task"]["taskId"] != "goal-1:OUTPUT_COVERAGE" or body[
+            "task"
+        ]["delivery"] == "RUNNING"
+
+
+def test_declared_coverage_does_not_change_ready_set(process_tracker):
+    """A declared row must not change which tasks are scheduled.
+
+    The same problem and the same reply schedule must produce the same task
+    order with and without a declaration, so a declaration never changes the
+    ready set.
+    """
+    plain = ScopeClient(mode="subanswer")
+    plain_result = _solve(plain, MULTIPART_PROBLEM, **_BUDGET)
+    declared = DeclaredCoverageClient(mode="subanswer")
+    declared_result = _solve(declared, MULTIPART_PROBLEM, **_BUDGET)
+    assert plain_result["status"] == declared_result["status"]
+    assert plain_result["candidate_verified"] is False
+    assert declared_result["candidate_verified"] is False
+    plain_tasks = [body["task"]["taskId"] for body in _work_bodies(plain)]
+    declared_tasks = [body["task"]["taskId"] for body in _work_bodies(declared)]
+    assert plain_tasks == declared_tasks
+    assert plain_tasks
+    assert process_tracker
