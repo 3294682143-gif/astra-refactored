@@ -30,6 +30,7 @@ _WORK_V1 = "p2a-work-v1"
 _WORK_V2 = "p2a-work-v2"
 _WORK_V3 = "p2a-work-v3"
 _WORK_V4 = "p2a-work-v4"
+_WORK_V5 = "p2a-work-v5"
 _CONTEXT_V4 = "agent-work-context-v4"
 _CONTEXT_V5 = "agent-work-context-v5"
 _CONTEXT_V6 = "agent-work-context-v6"
@@ -38,6 +39,8 @@ _MAX_TEXT = 4096
 _MAX_SHORT = 256
 _MAX_LEMMAS = 32
 _MAX_REF = 256
+_MAX_COVERAGE_ITEMS = 32
+_MAX_COVERAGE_CHARS = 256
 _REQUEST_IDS = ("model-1", "model-2", "model-3")
 _PACKET_FIELDS = (
     "schemaVersion", "sessionId", "problemHash", "contractVersion", "taskId",
@@ -48,6 +51,10 @@ _PACKET_FIELDS = (
 _PROPOSAL_FIELDS = ("kind", "obligationId", "mechanism", "rationale")
 _DEPENDENT_FIELDS = ("kind", "obligationId", "rationale")
 _REDO_FIELDS = ("kind", "targetArtifactRef", "rationale")
+_SCOPE_PROPOSAL_FIELDS = (
+    "kind", "quantifiers", "branchConditions", "boundaryCases", "goalExhaustion",
+    "rationale",
+)
 _MECHANISM_FIELDS = ("representation", "operation", "lemmas", "construction")
 _PROVENANCE_FIELDS = (
     "sourceRequestId", "sourceArtifactRef", "obligationId", "routeSignature",
@@ -128,6 +135,52 @@ def _hash64(value):
         if ch not in _HEX64:
             _fail()
     return value
+
+
+def _coverage_item(value):
+    """One declared coverage item: non-empty, bounded, no lone surrogate."""
+    if not isinstance(value, str):
+        _fail()
+    if not js_nonempty(value):
+        _fail()
+    length = _code_points(value)
+    if length is None or length > _MAX_COVERAGE_CHARS:
+        _fail()
+    _strict_utf8(value)
+    return value
+
+
+def _coverage_list(value):
+    """One declared coverage list: at most 32 items, deduplicated by bytes."""
+    if not isinstance(value, list) or len(value) > _MAX_COVERAGE_ITEMS:
+        _fail()
+    seen = set()
+    out = []
+    for item in value:
+        text = _coverage_item(item)
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _check_scope_proposal(proposal):
+    """Strict shape of one untrusted SCOPE_REFINEMENT suggestion.
+
+    Exactly the six declared fields are accepted; the four lists are declared
+    data only and the rationale is a TEXT field the schema allows to be empty.
+    Nothing here derives a task id, scope id, coverage hash or authority, and
+    nothing here marks any obligation covered.
+    """
+    _exact_keys(proposal, _SCOPE_PROPOSAL_FIELDS)
+    if proposal["kind"] != "SCOPE_REFINEMENT":
+        _fail()
+    _coverage_list(proposal["quantifiers"])
+    _coverage_list(proposal["branchConditions"])
+    _coverage_list(proposal["boundaryCases"])
+    _coverage_list(proposal["goalExhaustion"])
+    _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
 
 
 def _ordinal(request_id):
@@ -260,6 +313,23 @@ def checked_packet(text):
                 if not _is_int(target["artifactVersion"]) or target["artifactVersion"] < 1:
                     _fail()
             _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
+    elif version == _WORK_V5:
+        _exact_keys(packet, _PACKET_FIELDS + ("workflowProposal", "scopeProposal"))
+        proposal = packet["workflowProposal"]
+        if proposal is not None:
+            _exact_keys(proposal, _REDO_FIELDS)
+            if proposal["kind"] != "REDO_ARTIFACT":
+                _fail()
+            target = proposal["targetArtifactRef"]
+            if target is not None:
+                _exact_keys(target, _REF_FIELDS)
+                _text(target["artifactId"], _MAX_REF)
+                if not _is_int(target["artifactVersion"]) or target["artifactVersion"] < 1:
+                    _fail()
+            _text(proposal["rationale"], _MAX_TEXT, allow_empty=True)
+        scope_proposal = packet["scopeProposal"]
+        if scope_proposal is not None:
+            _check_scope_proposal(scope_proposal)
     else:
         _fail()
     _short_shape(packet["sessionId"])
