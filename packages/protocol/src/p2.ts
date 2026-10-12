@@ -179,6 +179,13 @@ export type P2ObligationKind = (typeof P2_OBLIGATION_KIND)[number];
  * candidate. The AgentLoop candidate admission and the P4 candidate gate use
  * this one predicate; the Python Host mirrors it read-only so its projection
  * cannot independently widen or narrow the control-side decision.
+ *
+ * @deprecated The global set is a projection of the pairing map below and is
+ * kept only for the not-yet-migrated callers. New code must use
+ * `p2IsAnswerObligationKindForGoal(goalKind, obligationKind)`, because a
+ * local obligation of one goal kind (e.g. `CANDIDATE_VALIDITY` under
+ * `ALL_SOLUTIONS`, `EXHAUSTIVENESS` under `COUNT`) is not the whole-problem
+ * answer of that goal.
  */
 export const P2_ANSWER_OBLIGATION_KINDS: readonly P2ObligationKind[] = [
   "CANDIDATE_VALIDITY",
@@ -190,9 +197,46 @@ export const P2_ANSWER_OBLIGATION_KINDS: readonly P2ObligationKind[] = [
   "ANSWER_REQUEST",
 ];
 
-/** True iff `kind` is the answer obligation of some goal kind. */
+/**
+ * @deprecated True iff `kind` is the answer obligation of *some* goal kind.
+ * Use `p2IsAnswerObligationKindForGoal` for a real goal-scoped decision.
+ */
 export function p2IsAnswerObligationKind(kind: P2ObligationKind): boolean {
   return (P2_ANSWER_OBLIGATION_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * The single control-side authority for which obligation kind carries the
+ * final answer of one goal kind. This is a total map over `P2GoalKind`, so
+ * every goal kind has exactly one answer obligation and no goal kind can fall
+ * through a default branch.
+ */
+export const P2_ANSWER_OBLIGATION_BY_GOAL: Readonly<Record<P2GoalKind, P2ObligationKind>> = {
+  VALUE: "CANDIDATE_VALIDITY",
+  ALL_SOLUTIONS: "EXHAUSTIVENESS",
+  COUNT: "COUNT_OBJECTS",
+  OPTIMIZATION: "GLOBAL_BOUND",
+  PROOF: "PROOF_GOAL",
+  MULTIPART: "SUBGOAL_COVERAGE",
+  UNKNOWN: "ANSWER_REQUEST",
+};
+
+/** The answer obligation kind of one goal kind; total over `P2GoalKind`. */
+export function p2AnswerObligationForGoal(goalKind: P2GoalKind): P2ObligationKind {
+  return P2_ANSWER_OBLIGATION_BY_GOAL[goalKind];
+}
+
+/**
+ * True iff `obligationKind` is the answer obligation of exactly this
+ * `goalKind`. A COMPLETE packet for any other obligation of the same goal (a
+ * premise, a local lemma, a feasible point, a boundary exception, a coverage
+ * statement) is never a whole-problem candidate.
+ */
+export function p2IsAnswerObligationKindForGoal(
+  goalKind: P2GoalKind,
+  obligationKind: P2ObligationKind,
+): boolean {
+  return p2AnswerObligationForGoal(goalKind) === obligationKind;
 }
 
 /**
