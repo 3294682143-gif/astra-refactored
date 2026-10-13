@@ -8,13 +8,13 @@ applies and independently verifies them. No parallel coding agents are used.
 | Field | Current evidence |
 | --- | --- |
 | Baseline | G1 PR2 head `6e45893`, tree `a457740`; PR2 is open, not merged; main/default frozen; see SOURCE_LOCK.md |
-| ROOT_E2E | LOCAL_PASS: `python -m pytest -q tests/e2e` — **168** real public-entry tests on v4 head `7c46a52`, including E01 `{1}->{0,1}`, local-candidate-then-continue, out-of-scope v5 fail-closed (no R2 overwrite / no stale candidate), downstream read of declared coverage, real task-local yielding, real effect caching and Node/Python text parity; old Controller/Lite init/solve disabled |
+| ROOT_E2E | LOCAL_PASS: `python -m pytest -q tests/e2e` — **178** real public-entry tests on v4 head `4f077a1`, including the complete-whole-problem-answer capability (two-part MULTIPART returns the full two-part answer; PARAMETER returns the full classification; budget derived from the task graph; root-aggregation candidate only; missing-branch and preview-budget negatives), E01 `{1}->{0,1}`, out-of-scope v5 fail-closed, downstream read of declared coverage, real task-local yielding, real effect caching and Node/Python text parity; old Controller/Lite init/solve disabled |
 | RC2_MIGRATION | 260 actual source paths, 260 classified with candidate owners, 0 unmatched, 260 REVIEW_REQUIRED, 0 CLOSED; 16 a2 changes separately inventoried |
 | G0 source locks | commit/tree identities captured for RC2, a2, TS, DSH and Pi; audit script + five real-Git tests passed |
 | G0 deployment | BLOCKED_EXTERNAL: no official Node/subprocess permission or target sandbox supplied |
 | BUDGET | Preview 4 model calls / 2 effects / 5000 ms maximum; not official contest limits; no math API calls authorized in current implementation work |
 | MATH | E08/E09/E10/E11/E12/E18 infrastructure paths locally tested; E01 grounded repair and other full math properties pending; real model comparison NOT_RUN |
-| QUALITY | v4 head `7c46a52` exact clean: **280 Node / 554 Python passed (24 WASI skips)**; G1 PR2 exact clean: 244 Node / 406 Python; redo exact clean `5b3ff34`: 269 / 484; progress/parity worktree: 272 / 507, same 24 WASI skips; exact-commit reproduction recorded separately |
+| QUALITY | v4 head `4f077a1` exact clean: **287 Node / 564 Python passed (24 WASI skips)**; G1 PR2 exact clean: 244 Node / 406 Python; redo exact clean `5b3ff34`: 269 / 484; progress/parity worktree: 272 / 507, same 24 WASI skips; exact-commit reproduction recorded separately |
 | G2A METHODS | Real method → WORK → second WORK → R2; one catalog read/one method load in shared effect quota; opt-in only; see G2_METHOD_BRIDGE.md |
 | G2B1 FINAL | Real tool → WORK → final → R2 in four calls; confirms only the protected old candidate; no fabricated artifact; see G2_FINAL_CONFIRMATION.md |
 | G2B2 ROUTES | Model v2 proposal → M1 TASK_ADDED → real second-route WORK; full raw provenance, empty cross-route inputs, current-obligation scope; see G2_DYNAMIC_ROUTES.md |
