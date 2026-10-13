@@ -205,12 +205,12 @@
           "maxModelCalls": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 4
+            "maximum": 32
           },
           "maxWorkUnits": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 32
           },
           "maxEffects": {
             "type": "integer",

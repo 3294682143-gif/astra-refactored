@@ -97,7 +97,7 @@ test("AgentSession refuses replays, a pending stop and an illegal cap without mu
   assert.equal(root.stopped(), true);
   assert.equal(root.snapshot().events.filter((event) => event.kind === "CONTROL").length, 1);
   expectCode(() => root.reserveModel("WORK"), "ILLEGAL_TRANSITION");
-  for (const bad of [-1, 5, 1.5, Number.NaN, true]) {
+  for (const bad of [-1, 33, 1.5, Number.NaN, true]) {
     expectCode(
       () =>
         new AgentSession({

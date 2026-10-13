@@ -37,8 +37,11 @@ const HOST_INIT_ID = "host-1";
 const HOST_SOLVE_ID = "host-2";
 const HOST_STOP_ID = "host-3";
 const PROFILE_ID = "math-agent-preview-v2";
-const MAX_MODEL_CALLS = 4;
-const MAX_WORK_UNITS = 3;
+// Hard caps for the explicit root budget. The budget is derived from the
+// compiled task graph (one work unit per task, plus the review and slack) and
+// clamped to these caps; they are upper bounds, not a per-problem default.
+const MAX_MODEL_CALLS = 32;
+const MAX_WORK_UNITS = 32;
 const MAX_EFFECTS = 2;
 const MAX_REVIEWS = 1;
 const MAX_METHOD_LOADS = 1;

@@ -29,7 +29,7 @@ import type { P2WorkReceipt, P2WorkunitStore } from "@astra/math-workunit";
 
 const MAX_REMAINING_MS = 5000;
 const MIN_REMAINING_MS = 25;
-const MAX_WORK_UNITS = 3;
+const MAX_WORK_UNITS = 32;
 const MAX_REVIEWS = 1;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {

@@ -186,10 +186,11 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const rawPolicy = source.policy;
   const rawNow = source.now;
   const rawGoalSpecs = source.goalSpecs;
+  // Hard caps for the explicit root budget; defaults are the preview profile.
   const maxModelCalls =
-    rawMaxModelCalls === undefined ? 4 : boundedInt(rawMaxModelCalls, 0, 4);
+    rawMaxModelCalls === undefined ? 4 : boundedInt(rawMaxModelCalls, 0, 32);
   const maxWorkUnits =
-    rawMaxWorkUnits === undefined ? 2 : boundedInt(rawMaxWorkUnits, 1, 3);
+    rawMaxWorkUnits === undefined ? 2 : boundedInt(rawMaxWorkUnits, 1, 32);
   const maxEffects = rawMaxEffects === undefined ? 1 : boundedInt(rawMaxEffects, 0, 2);
   const maxReviews = rawMaxReviews === undefined ? 1 : boundedInt(rawMaxReviews, 0, 1);
   const maxMethodLoads =

@@ -35,7 +35,7 @@ import type { P2WorkunitStore } from "@astra/math-workunit";
 const MAX_ROUTES = 2;
 const MAX_DEPENDENCIES = 2;
 const MAX_REVIEWS = 1;
-const MAX_WORK_UNITS = 3;
+const MAX_WORK_UNITS = 32;
 const MAX_REMAINING_MS = 5000;
 const MIN_REMAINING_MS = 25;
 const MAX_TASK_ID_CHARS = 256;

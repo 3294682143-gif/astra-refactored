@@ -92,9 +92,9 @@ class AgentRuntime:
         policy="BEST_EFFORT",
         node="node",
     ):
-        if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 4:
+        if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 32:
             raise ValueError("invalid max_model_calls")
-        if not _is_int(max_work_units) or not 1 <= max_work_units <= 3:
+        if not _is_int(max_work_units) or not 1 <= max_work_units <= 32:
             raise ValueError("invalid max_work_units")
         if not _is_int(max_effects) or not 0 <= max_effects <= 2:
             raise ValueError("invalid max_effects")
