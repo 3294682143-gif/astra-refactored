@@ -19,7 +19,7 @@ export const P4_RECHECK_GATE_VERSION = "0.0.0-p4s2" as const;
 export const P4_RECHECK_MIN_REMAINING_MS = 26 as const;
 
 /** Hard ceiling on admitted calls in this phase. */
-export const P4_RECHECK_MAX_MODEL_CALLS = 4 as const;
+export const P4_RECHECK_MAX_MODEL_CALLS = 32 as const;
 
 /** Default ceiling when the caller does not explicitly widen it. */
 export const P4_RECHECK_DEFAULT_MODEL_CALLS = 3 as const;
