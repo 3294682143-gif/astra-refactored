@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 import user_agent  # noqa: E402
 
 from test_ts_entry import (  # noqa: E402
+    PROBLEM as VALUE_PROBLEM,
     FakeClient,
     no_legacy_solver,
     process_tracker,
@@ -260,23 +261,32 @@ def test_boundary_candidate_is_unverified_and_strict_withholds(process_tracker):
 
 
 class DeclaredCoverageClient(ScopeClient):
-    """ScopeClient that declares a real coverage row on its first WORK turn.
+    """ScopeClient that declares a real, legal v5 coverage row on its first turn.
 
-    The declaration is carried by the WORK context as declared data only. It
-    must never close the task's obligation, never change the ready set and
-    never turn a sub-answer into the whole-problem candidate.
+    The first WORK reply is a ``p2a-work-v5`` packet carrying a non-empty
+    ``scopeProposal`` whose declared lists are inside the task's trusted scope,
+    so the store really registers a declared coverage row. Downstream tasks that
+    consume this task must read that row read-only. It is declared data only: it
+    never closes the task's obligation, never changes the ready set and never
+    turns a sub-answer into the whole-problem candidate.
     """
-
-    def __init__(self, mode="subanswer"):
-        super().__init__(mode=mode)
-        self.declared = False
 
     def _work(self, body):
         text = super()._work(body)
-        if not self.declared:
-            self.declared = True
-            self.declared_task_id = body["task"]["taskId"]
-            self.declared_scope_id = body["task"]["scopeId"]
+        if body["sourceRequestId"] == "model-1":
+            packet = json.loads(text)
+            packet["schemaVersion"] = "p2a-work-v5"
+            packet["workflowProposal"] = None
+            packet["scopeProposal"] = {
+                "kind": "SCOPE_REFINEMENT",
+                "quantifiers": [],
+                "branchConditions": [],
+                "boundaryCases": ["part (a)"],
+                "goalExhaustion": ["part (b)"],
+                "rationale": "declared coverage of both parts",
+            }
+            text = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
+        self.rawtexts[body["sourceRequestId"]] = text
         return text
 
 
@@ -285,10 +295,11 @@ def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
 ):
     """A real declared coverage row must not close the obligation or the task.
 
-    The row is wired read-only from the store into the WORK context. It stays
-    declared data: the sub-answer still never becomes the whole-problem
-    candidate, the root duty stays open and the strict acceptance stays
-    NOT_PERFORMED. This is the "declared coverage != covered" boundary.
+    The row is wired read-only from the store into the WORK context of the
+    declaring task's downstream consumers. It stays declared data: the
+    sub-answer still never becomes the whole-problem candidate, the root duty
+    stays open and the strict acceptance stays NOT_PERFORMED. This is the
+    "declared coverage != covered" boundary.
     """
     client = DeclaredCoverageClient(mode="subanswer")
     result = _solve(client, MULTIPART_PROBLEM, **_BUDGET)
@@ -300,13 +311,15 @@ def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
     assert process_tracker
     bodies = _work_bodies(client)
     assert bodies
-    # Every WORK body still carries the declared-coverage field, and a
-    # declaration never makes a sub-answer the whole answer.
+    # Every WORK body still carries the declared-coverage field, and a row is
+    # bound to its declaring task, which is either this task or one of its
+    # declared upstreams. A declaration never makes a sub-answer the answer.
     for body in bodies:
         assert "scopeCoverage" in body
         assert isinstance(body["scopeCoverage"], list)
+        allowed = {body["task"]["taskId"], *body["task"]["dependencyTaskIds"]}
         for row in body["scopeCoverage"]:
-            assert row["taskId"] == body["task"]["taskId"]
+            assert row["taskId"] in allowed
             assert row["scopeId"] == body["task"]["scopeId"]
             assert len(row["coverage"]["coverageHash"]) == 64
     # The root coverage duty is never delivered as a whole answer.
@@ -314,6 +327,35 @@ def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
         assert body["task"]["taskId"] != "goal-1:OUTPUT_COVERAGE" or body[
             "task"
         ]["delivery"] == "RUNNING"
+
+
+def test_declared_coverage_is_read_by_downstream_consumer(process_tracker):
+    """A legal non-empty v5 declaration is really read by a later consumer.
+
+    The first task declares a non-empty coverage row; the root OUTPUT_COVERAGE
+    task declares that task as an upstream dependency, so its WORK context must
+    carry the exact declared row read-only. This closes the "declared coverage
+    is only ever written" gap: the declaration reaches a real downstream
+    consumer.
+    """
+    client = DeclaredCoverageClient(mode="subanswer")
+    result = _solve(client, MULTIPART_PROBLEM, **_BUDGET)
+    assert result["childReaped"] is True
+    assert process_tracker
+    bodies = _work_bodies(client)
+    assert len(bodies) >= 2
+    declarer = bodies[0]["task"]["taskId"]
+    consumers = [b for b in bodies if declarer in b["task"]["dependencyTaskIds"]]
+    assert consumers, "expected a real downstream consumer of the declaring task"
+    for body in consumers:
+        rows = [row for row in body["scopeCoverage"] if row["taskId"] == declarer]
+        assert len(rows) == 1
+        assert rows[0]["scopeId"] == body["task"]["scopeId"]
+        assert rows[0]["coverage"]["boundaryCases"] == ["part (a)"]
+        assert rows[0]["coverage"]["goalExhaustion"] == ["part (b)"]
+        assert len(rows[0]["coverage"]["coverageHash"]) == 64
+    # The declaring task's own context carried no row yet (declared after it ran).
+    assert bodies[0]["scopeCoverage"] == []
 
 
 def test_declared_coverage_does_not_change_ready_set(process_tracker):
@@ -335,3 +377,64 @@ def test_declared_coverage_does_not_change_ready_set(process_tracker):
     assert plain_tasks == declared_tasks
     assert plain_tasks
     assert process_tracker
+
+
+class LateScopeProposalClient(FakeClient):
+    """FakeClient that puts an out-of-scope v5 proposal on a later WORK turn.
+
+    The FIRST WORK turn is a normal COMPLETE packet, so the run establishes a
+    protected candidate. A LATER task then answers a ``p2a-work-v5`` packet whose
+    ``scopeProposal`` declares a quantifier that is not part of the task's
+    trusted scope.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.rawtexts = {}
+
+    def _work(self, body):
+        text = super()._work(body)
+        if body["sourceRequestId"] == "model-2":
+            packet = json.loads(text)
+            packet["schemaVersion"] = "p2a-work-v5"
+            packet["workflowProposal"] = None
+            packet["scopeProposal"] = {
+                "kind": "SCOPE_REFINEMENT",
+                "quantifiers": ["x=1"],
+                "branchConditions": [],
+                "boundaryCases": [],
+                "goalExhaustion": [],
+                "rationale": "out of scope",
+            }
+            text = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
+        self.rawtexts[body["sourceRequestId"]] = text
+        return text
+
+
+def test_late_out_of_scope_proposal_keeps_control_rejection_and_no_candidate(
+    process_tracker,
+):
+    """An out-of-scope v5 proposal after a candidate exists is fail-closed.
+
+    The first task already established a protected candidate. A later
+    out-of-scope proposal must keep ``CONTROL_REJECTED``: the run must not enter
+    R2, must not overwrite the stop reason with ``REVIEWS_COMPLETE`` and must not
+    release the earlier candidate.
+    """
+    client = LateScopeProposalClient()
+    result = _solve(client, VALUE_PROBLEM, **_BUDGET)
+    assert result["status"] == "unsolved"
+    assert result["stopReason"] == "CONTROL_REJECTED"
+    assert result["reason"] == "NO_CANDIDATE"
+    assert result["final_response"] == "Unsolved."
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert result["childReaped"] is True
+    assert process_tracker
+    # The first turn really established a candidate, yet no R2 review followed
+    # the later rejection: the reason was never overwritten.
+    bodies = _work_bodies(client)
+    assert bodies
+    assert bodies[0]["protectedCandidate"] is None
+    assert any(body["protectedCandidate"] is not None for body in bodies)
+    assert result["metrics"]["review_calls"] == 0

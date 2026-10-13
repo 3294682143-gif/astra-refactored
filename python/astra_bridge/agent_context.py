@@ -169,18 +169,28 @@ def _scope_coverage(value):
 
 
 def _check_scope_coverage(body, task):
-    """Optional declared coverage rows; absent means empty, never a failure."""
+    """Optional declared coverage rows; absent means empty, never a failure.
+
+    A row may be the current task's own declaration or the declaration of one of
+    the task's declared upstream tasks (the tasks it consumes). Each row is
+    re-checked by the shared guard and stays declared data: it never closes an
+    obligation, never changes the ready set and is never a coverage proof.
+    """
     if "scopeCoverage" not in body:
         return
     rows = body["scopeCoverage"]
     if not isinstance(rows, list) or len(rows) > _MAX_COVERAGE_ITEMS:
         _fail()
+    upstream = task.get("dependencyTaskIds")
+    if not isinstance(upstream, list):
+        _fail()
+    allowed = set(upstream)
     for row in rows:
         _exact_keys(row, _TASK_SCOPE_COVERAGE_FIELDS)
         task_id = _text(row["taskId"], 256)
         scope_id = _hash64(row["scopeId"])
         coverage = _scope_coverage(row["coverage"])
-        if task_id != task["taskId"]:
+        if task_id != task["taskId"] and task_id not in allowed:
             _fail()
         if scope_id != task["scopeId"]:
             _fail()

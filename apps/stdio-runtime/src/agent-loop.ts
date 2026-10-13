@@ -340,13 +340,17 @@ export async function runAgentLoop(
         }
         let context: ReturnType<typeof buildAgentWorkContext>;
         try {
-          // Read-only wiring of the declared scope-coverage rows of this exact
+          // Read-only wiring of the declared scope-coverage rows of this task
+          // AND of its declared upstream tasks (the tasks it consumes). A task's
+          // own declaration is registered only after it runs, so in practice a
+          // row is read by the downstream consumers that depend on the declaring
           // task. The rows are declared data only: they never close an
           // obligation, never change the ready set and are never a coverage
           // proof. A missing declaration is an empty list.
+          const upstreamTaskIds = new Set(running.dependencyTaskIds);
           const declaredCoverage = store
             .scopeCoverageSnapshot()
-            .filter((row) => row.taskId === running.taskId);
+            .filter((row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId));
           context = buildAgentWorkContext({
             contract: ledger.snapshot(),
             task: running,
@@ -632,7 +636,14 @@ export async function runAgentLoop(
                 if (!(error instanceof P2Error)) {
                   throw error;
                 }
+                // A control-violating v5 scope proposal is fail-closed: stop the
+                // whole run so a later R2 can never overwrite the reason, and
+                // never release an earlier candidate. No artifact and no
+                // delivery record were written for this turn.
+                root.stop("CONTROL_REJECTED");
                 stop = "CONTROL_REJECTED";
+                target = null;
+                protectedOrigin = null;
                 break;
               }
             }

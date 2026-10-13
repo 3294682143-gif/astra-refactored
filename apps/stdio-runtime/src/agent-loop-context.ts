@@ -1061,10 +1061,12 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     assets,
   );
 
-  // Declared scope coverage rows of this task only. Each row is re-checked by
-  // the shared M3 guard and must be bound to this exact task and scope; a
-  // missing field is an empty list. This is declared data: it never closes an
-  // obligation, never changes the ready set and is never a coverage proof.
+  // Declared scope coverage rows of this task or of one of its declared
+  // upstream tasks (the tasks it consumes). Each row is re-checked by the
+  // shared M3 guard and must be bound to the declaring task and to the shared
+  // scope; a missing field is an empty list. This is declared data: it never
+  // closes an obligation, never changes the ready set and is never a coverage
+  // proof.
   const rawScopeCoverage =
     captured.scopeCoverage === undefined || captured.scopeCoverage === null
       ? []
@@ -1072,6 +1074,7 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
   if (!Array.isArray(rawScopeCoverage) || rawScopeCoverage.length > 32) {
     fail(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
+  const upstreamTaskIds = new Set(task.dependencyTaskIds);
   const scopeCoverage: unknown[] = [];
   for (const item of rawScopeCoverage) {
     let row;
@@ -1080,7 +1083,7 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     } catch {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (row.taskId !== task.taskId) {
+    if (row.taskId !== task.taskId && !upstreamTaskIds.has(row.taskId)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (row.scopeId !== task.scopeId) {

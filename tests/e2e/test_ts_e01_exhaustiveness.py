@@ -14,10 +14,11 @@ answers the ``EXHAUSTIVENESS`` answer obligation with ``{0,1}``. The final
 delivered candidate must be ``{0,1}`` and the valid local ``x=1`` material must
 stay in the history.
 
-The three negative cases below exercise the v5 ``scopeProposal`` boundary:
-a tampered proposal, a missing field, and the no-side-effect property of a
-rejection. Every rejection is a fixed ``FIELD_VALUE`` with the store, the
-ledger and the scheduling sequence unchanged.
+The scope negatives below exercise the v5 ``scopeProposal`` boundary: a
+malformed or out-of-scope proposal and a missing field. Every rejection happens
+before any artifact is saved or any delivery recorded, leaves no candidate and a
+fixed stop reason. (A WORK turn starts its task ledger row before the model
+call, so a rejection is not a claim that the whole ledger is untouched.)
 """
 
 from __future__ import annotations
@@ -266,18 +267,20 @@ def test_missing_scope_proposal_field_is_refused(process_tracker):
 
 
 def test_rejected_scope_proposal_leaves_no_side_effect(process_tracker):
-    """An out-of-scope v5 proposal leaves the store, ledger and sequence untouched.
+    """An out-of-scope v5 proposal is fail-closed before any store write.
 
     The first turn really carries a v5 ``scopeProposal`` whose declared coverage
-    is out of the task's trusted scope. It must be refused BEFORE any write: no
-    artifact is saved, no task delivery is recorded, no candidate exists, and
-    the stop reason is the fixed control rejection -- never a later
-    ``REVIEWS_COMPLETE`` overwrite.
+    is out of the task's trusted scope. It must be refused BEFORE any artifact is
+    saved or any delivery recorded: no candidate exists and the stop reason is
+    the fixed control rejection -- never a later ``REVIEWS_COMPLETE`` overwrite.
+    (The task ledger row itself is started before the model call, as for every
+    WORK turn, so this is not a claim that the entire ledger is untouched.)
     """
     client = E01Client(mode="scope_out")
     result = _solve(client, **_BUDGET)
     assert result["status"] == "unsolved"
     assert result["stopReason"] == "CONTROL_REJECTED"
+    assert result["reason"] == "NO_CANDIDATE"
     assert result["final_response"] == "Unsolved."
     assert result["candidate_verified"] is False
     assert result["strictAcceptance"] == "NOT_PERFORMED"
