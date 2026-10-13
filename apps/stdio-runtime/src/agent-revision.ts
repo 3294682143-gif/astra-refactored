@@ -177,7 +177,10 @@ export class AgentRevisionAdmission {
       return false;
     }
     const packet = frozen.packet;
-    if (packet === null || packet.schemaVersion !== "p2a-work-v4") {
+    if (
+      packet === null ||
+      (packet.schemaVersion !== "p2a-work-v4" && packet.schemaVersion !== "p2a-work-v5")
+    ) {
       return false;
     }
     const proposal = (packet as P2WorkPacketV4).workflowProposal;

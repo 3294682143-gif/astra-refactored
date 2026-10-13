@@ -147,11 +147,11 @@ export class P2WorkunitStore {
     const frozenTask = p2Snapshot(task) as P2Task;
     const scope = workScope(this.contract, frozenTask);
     const coverage = p2ScopeCoverage(p2Snapshot(proposal));
-    checkScopeCoverageAgainstScope(coverage, scope);
     const goal = findGoalSpec(this.contract.goals, frozenTask.goalId);
     if (goal === null) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
     }
+    checkScopeCoverageAgainstScope(coverage, scope, goal.kind);
     checkGoalExhaustionAgainstGoal(coverage, goal);
     return p2Snapshot(coverage) as P2ScopeCoverage;
   }

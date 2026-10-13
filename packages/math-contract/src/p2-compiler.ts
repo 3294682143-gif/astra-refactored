@@ -216,9 +216,24 @@ function defaultScope(goalId: string, kind: P2GoalKind, problem: string): Scope 
     variableBindings: {},
     quantifiers: [],
     localAssumptions: [],
-    branchConditions: [],
+    branchConditions: kind === "PARAMETER" ? [...parameterBranches(problem)] : [],
     referenceablePremises: [],
   };
+}
+
+/**
+ * The trusted parameter branches of a real parameter-classification problem:
+ * the parameter's special value (`<p>=0`) and the ordinary case (`<p>!=0`).
+ * Structural work view only -- never a mathematical parse, never a fixed
+ * problem id. An empty list means no parameter name was declared.
+ */
+export function parameterBranches(problem: string): readonly string[] {
+  const match = /(?:parameter|参数)\s*([A-Za-z])/.exec(problem);
+  const name = match ? match[1] : undefined;
+  if (name === undefined) {
+    return [];
+  }
+  return [`${name}=0`, `${name}!=0`];
 }
 
 /**

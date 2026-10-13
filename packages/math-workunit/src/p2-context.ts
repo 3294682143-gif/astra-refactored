@@ -183,6 +183,7 @@ export function p2ScopeCoverage(value: unknown): P2ScopeCoverage {
 export function checkScopeCoverageAgainstScope(
   coverage: P2ScopeCoverage,
   scope: Scope,
+  goalKind?: string,
 ): void {
   const trusted = validateP2Scope(scope);
   const quantifiers = new Set(trusted.quantifiers);
@@ -195,6 +196,25 @@ export function checkScopeCoverageAgainstScope(
   for (const item of coverage.branchConditions) {
     if (!branches.has(item)) {
       throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+  }
+  // A PARAMETER goal's declared boundaryCases must name exactly the trusted
+  // parameter branches (ordinary + special value). A missing, forged, extra or
+  // duplicated boundary case is a fixed rejection: the model's own claim never
+  // establishes parameter coverage.
+  if (goalKind === "PARAMETER") {
+    const declared = coverage.boundaryCases;
+    const declaredSet = new Set(declared);
+    if (declared.length !== declaredSet.size) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    if (declaredSet.size !== branches.size) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    for (const item of branches) {
+      if (!declaredSet.has(item)) {
+        throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+      }
     }
   }
 }

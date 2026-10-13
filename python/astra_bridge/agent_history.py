@@ -37,6 +37,7 @@ _REVISION_FIELDS = (
 )
 _REF_FIELDS = ("artifactId", "artifactVersion")
 _WORK_V4 = "p2a-work-v4"
+_WORK_V5 = "p2a-work-v5"
 _CONTEXT_V6 = "agent-work-context-v6"
 _CONTEXT_V7 = "agent-work-context-v7"
 _MAX_TEXT = 4096
@@ -496,7 +497,7 @@ def check_revision_context(body, history, session_id, problem_hash,
     if source_body.get("allowArtifactRedo") is not True:
         _fail()
     source_packet = source_row["packet"]
-    if source_packet.get("schemaVersion") != _WORK_V4:
+    if source_packet.get("schemaVersion") not in (_WORK_V4, _WORK_V5):
         _fail()
     proposal = source_packet["workflowProposal"]
     if not isinstance(proposal, dict) or proposal.get("kind") != "REDO_ARTIFACT":
