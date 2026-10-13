@@ -108,6 +108,21 @@ export class P2WorkunitStore {
   }
 
   /**
+   * Pure pre-check of one prospective declared-coverage row. Runs the exact
+   * same normalization and scope binding as `declareScopeCoverage` but writes
+   * nothing, so a caller can prove a v5 scope proposal is admissible BEFORE it
+   * accepts the artifact or records any delivery. An out-of-scope quantifier or
+   * branch condition is the same fixed `SCOPE_MISMATCH` rejection.
+   */
+  validateScopeCoverage(task: P2Task, proposal: unknown): P2ScopeCoverage {
+    const frozenTask = p2Snapshot(task) as P2Task;
+    const scope = workScope(this.contract, frozenTask);
+    const coverage = p2ScopeCoverage(p2Snapshot(proposal));
+    checkScopeCoverageAgainstScope(coverage, scope);
+    return p2Snapshot(coverage) as P2ScopeCoverage;
+  }
+
+  /**
    * Store the declared scope coverage of one task. The proposal is normalized
    * through `p2ScopeCoverage` and every quantifier/branch item must already be
    * part of the trusted scope of that task; an out-of-scope item is a fixed
@@ -118,14 +133,13 @@ export class P2WorkunitStore {
   declareScopeCoverage(task: P2Task, proposal: unknown): P2ScopeCoverage {
     const frozenTask = p2Snapshot(task) as P2Task;
     const scope = workScope(this.contract, frozenTask);
-    const coverage = p2ScopeCoverage(p2Snapshot(proposal));
-    checkScopeCoverageAgainstScope(coverage, scope);
+    const coverage = this.validateScopeCoverage(frozenTask, proposal);
     this.scopeCoverage.set(frozenTask.taskId, p2Snapshot({
       taskId: frozenTask.taskId,
       scopeId: scope.scopeId,
       coverage,
     }) as P2TaskScopeCoverage);
-    return p2Snapshot(coverage) as P2ScopeCoverage;
+    return coverage;
   }
 
   /** The stored declared coverage of one task, or `null` when none is stored. */

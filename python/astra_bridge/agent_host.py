@@ -14,9 +14,9 @@ import time
 
 from .agent_client import AgentClient
 from .agent_context import (
+    _projection_for_source,
     _work_ordinals,
     candidate_packet,
-    protected_final,
     validate_context,
 )
 from .agent_history import project_artifacts
@@ -825,15 +825,11 @@ class AgentHost(_Host):
                 _fail()
             if summary["finalResponse"] != packet["candidateProposal"]:
                 _fail()
-            first = None
-            for request_id in sorted(self.history, key=lambda name: int(name.split("-")[1])):
-                if candidate_packet(
-                    self.history, request_id, self.problem, self.session_id, self.problem_hash,
-                ) is not None:
-                    first = request_id
-                    break
-            if first != candidate:
-                _fail()
+            # Node decides which eligible candidate is protected (by goal-kind
+            # answer obligation); the Host only VERIFIES that the recorded
+            # candidate is a real ACTIVE, latest-version, eligible packet, which
+            # the checks above already establish. It no longer re-selects "the
+            # first" candidate itself.
         self._check_final_provenance(candidate, summary["stopReason"])
         self.solve_result = copy.deepcopy(result)
         self.expected = None
@@ -892,14 +888,23 @@ class AgentHost(_Host):
             for other_ordinal, other_id in ordered:
                 if other_ordinal < ordinal:
                     prior[other_id] = self.history[other_id]
-            expected = protected_final(
-                prior, self.problem, self.session_id, self.problem_hash,
-            )
+            # The Host only VERIFIES the projection the Node recorded for this
+            # WORK context; it never re-selects "the first" candidate. The
+            # expected projection is rebuilt for the recorded source request.
+            recorded = body.get("protectedCandidate")
+            recorded_source = None
+            if isinstance(recorded, dict) and isinstance(recorded.get("binding"), dict):
+                recorded_source = recorded["binding"].get("sourceRequestId")
+            expected = None
+            if isinstance(recorded_source, str):
+                expected = _projection_for_source(
+                    prior, self.problem, self.session_id, self.problem_hash, recorded_source,
+                )
             legal = (
                 body.get("schemaVersion") == "agent-work-context-v7"
                 and body.get("allowFinal") is True
                 and expected is not None
-                and same_json(body.get("protectedCandidate"), expected)
+                and same_json(recorded, expected)
                 and action.get("answer") == expected["answer"]
                 and action.get("complete") is True
                 and action.get("unresolved") == []

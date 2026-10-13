@@ -594,16 +594,51 @@ export async function runAgentLoop(
           stop = "WORK_UNITS_COMPLETE";
           break;
         } else {
+          const receiptInput = {
+            artifactId: `artifact-${workUnits + 1}`,
+            routeId: route.routeId,
+            sourceRequestId: outcome.requestId,
+            transportStatus: outcome.receipt.transportStatus,
+            text: outcome.receipt.text,
+            eventSeq: ledger.nextEventSeq(),
+            supersedes: null,
+          };
+          // Pre-check the acceptance and, when the v5 packet carries a
+          // scopeProposal, validate that declaration BEFORE the artifact write
+          // or the delivery record. An out-of-scope proposal is therefore a
+          // fixed rejection with no side effect on the store, the ledger or the
+          // scheduling sequence.
+          let prepared: P2Artifact;
           try {
-            accepted = store.accept(running, {
-              artifactId: `artifact-${workUnits + 1}`,
-              routeId: route.routeId,
-              sourceRequestId: outcome.requestId,
-              transportStatus: outcome.receipt.transportStatus,
-              text: outcome.receipt.text,
-              eventSeq: ledger.nextEventSeq(),
-              supersedes: null,
-            });
+            prepared = store.validateAccept(running, receiptInput);
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "PACKET_REJECTED";
+            break;
+          }
+          if (prepared.packet !== null && prepared.packet.schemaVersion === "p2a-work-v5") {
+            const proposed = prepared.packet.scopeProposal;
+            if (proposed !== null) {
+              try {
+                store.validateScopeCoverage(running, {
+                  quantifiers: proposed.quantifiers,
+                  branchConditions: proposed.branchConditions,
+                  boundaryCases: proposed.boundaryCases,
+                  goalExhaustion: proposed.goalExhaustion,
+                });
+              } catch (error) {
+                if (!(error instanceof P2Error)) {
+                  throw error;
+                }
+                stop = "CONTROL_REJECTED";
+                break;
+              }
+            }
+          }
+          try {
+            accepted = store.accept(running, receiptInput);
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;

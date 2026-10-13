@@ -31,7 +31,6 @@ __all__ = [
     "canonical_scope",
     "candidate_packet",
     "check_inputs",
-    "protected_final",
     "validate_context",
     "validate_legacy_context",
 ]
@@ -277,12 +276,17 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
             return None
         if packet["deliveryStatus"] != "COMPLETE":
             return None
-        if packet["dependencies"] != []:
-            return None
         task = body.get("task")
         scope = body.get("scope")
         route = body.get("route")
         if not isinstance(task, dict) or not isinstance(scope, dict) or not isinstance(route, dict):
+            return None
+        # Declared dependencies are admitted only when they are exactly this
+        # task's own declared input refs; a foreign, unknown or tampered ref is
+        # still a fixed rejection. Node decides candidate eligibility; the Host
+        # only re-checks the structural binding.
+        refs = task.get("inputArtifactRefs")
+        if not isinstance(refs, list) or packet["dependencies"] != refs:
             return None
         if packet["taskId"] != task.get("taskId") or packet["goalId"] != task.get("goalId"):
             return None
@@ -323,29 +327,6 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         return None
     except Exception:  # noqa: BLE001 - a malformed record is not a candidate
         return None
-
-
-def _first_candidate_source(history, problem, session_id, problem_hash,
-                            source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
-    """Lowest-ordinal real source request that is an eligible candidate."""
-    if not isinstance(history, dict):
-        return None
-    ordered = []
-    for request_id in history:
-        if not isinstance(request_id, str) or not request_id.startswith("model-"):
-            continue
-        suffix = request_id[len("model-"):]
-        if suffix not in ("1", "2", "3", "4"):
-            continue
-        ordered.append((int(suffix), request_id))
-    ordered.sort()
-    for _, request_id in ordered:
-        packet = candidate_packet(
-            history, request_id, problem, session_id, problem_hash, source_schema,
-        )
-        if packet is not None:
-            return request_id, packet
-    return None
 
 
 def _work_packet(entry, problem, session_id, problem_hash,
@@ -443,74 +424,6 @@ def _work_ordinals(history, problem, session_id, problem_hash,
         ) is not None:
             kept.append((ordinal, request_id))
     return kept
-
-
-def protected_final(history, problem, session_id, problem_hash,
-                    source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
-    """Host-side three-field projection of the real first protected candidate.
-
-    The binding is rebuilt from the trusted history only: the artifact id is
-    the count of real COMPLETE WORK packets at or before the source request,
-    never the model-call ordinal, and the target hash is recomputed from the
-    exact raw receipt bytes. Returns ``None`` when no real eligible candidate
-    exists.
-    """
-    try:
-        found = _first_candidate_source(
-            history, problem, session_id, problem_hash, source_schema,
-        )
-        if found is None:
-            return None
-        source_id, packet = found
-        entry = history.get(source_id)
-        if not isinstance(entry, dict):
-            return None
-        _, request, receipt, body = _source_body(entry)
-        raw_text = receipt["text"]
-        if not isinstance(raw_text, str):
-            return None
-        task = body.get("task")
-        scope = body.get("scope")
-        if not isinstance(task, dict) or not isinstance(scope, dict):
-            return None
-        projection = project_artifacts(history, session_id, problem_hash)
-        row = projection["bySourceRef"].get(source_id)
-        if not isinstance(row, dict):
-            return None
-        if row["availability"] != "ACTIVE":
-            return None
-        binding = {
-            "sessionId": session_id,
-            "problemHash": problem_hash,
-            "contractVersion": 1,
-            "artifactId": row["artifactId"],
-            "artifactVersion": row["envelope"]["artifactVersion"],
-            "taskId": task.get("taskId"),
-            "goalId": task.get("goalId"),
-            "scopeId": scope.get("scopeId"),
-            "sourceRequestId": source_id,
-        }
-        ordered = {}
-        for name in _TARGET_FIELDS:
-            ordered[name] = binding[name]
-        raw_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
-        payload = json.dumps(
-            [ordered, raw_hash], ensure_ascii=False, separators=(",", ":"),
-            allow_nan=False,
-        )
-        target_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-        answer = packet["candidateProposal"]
-        if not isinstance(answer, str) or not js_nonempty(answer):
-            return None
-        return {
-            "binding": ordered,
-            "targetHash": target_hash,
-            "answer": answer,
-        }
-    except ProbeError:
-        return None
-    except Exception:  # noqa: BLE001 - a malformed record is not a projection
-        return None
 
 
 def _projection_for_source(history, problem, session_id, problem_hash, source_id,
@@ -989,12 +902,17 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
     packet = candidate_packet(history, source_id, problem, session_id, problem_hash)
     if packet is None:
         _fail()
-    expected_final = protected_final(history, problem, session_id, problem_hash)
+    # The Host only VERIFIES the source the Node recorded; it never re-selects
+    # "the first" candidate. The projection is rebuilt for the named source and
+    # must match the Node binding and hash exactly.
+    expected_final = _projection_for_source(
+        history, problem, session_id, problem_hash, source_id,
+    )
     if expected_final is None:
         _fail()
-    if target["artifactId"] != expected_final["binding"]["artifactId"]:
+    if not same_json(target, expected_final["binding"]):
         _fail()
-    if target["artifactVersion"] != expected_final["binding"]["artifactVersion"]:
+    if body["targetHash"] != expected_final["targetHash"]:
         _fail()
     if target["taskId"] != packet["taskId"] or target["goalId"] != packet["goalId"]:
         _fail()

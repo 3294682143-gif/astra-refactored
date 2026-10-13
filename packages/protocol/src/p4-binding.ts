@@ -237,7 +237,13 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
   if (artifact.packet === null) {
     throw new P2Error(P2_ERROR_CODES.PACKET_DELIVERY);
   }
-  if (artifact.provisionalDependency !== false) {
+  // Unified dependency-admission contract. An artifact that carries its task's
+  // real declared input refs is admitted; the flag must truthfully report that
+  // dependency state (it is never itself grounds for rejection, and it is not a
+  // way to smuggle a foreign dependency in -- the exact input-ref equality and
+  // the real-task check above/below stay the fixed rejections). This matches the
+  // Host-side invariant `provisionalDependency == bool(task.inputArtifactRefs)`.
+  if (artifact.provisionalDependency !== (task.inputArtifactRefs.length > 0)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (!isBoundedString(artifact.artifactId, MAX_SHORT_CHARS)) {
