@@ -31,6 +31,7 @@ import {
 } from "@astra/math-workunit";
 import type { ContractLedger } from "@astra/math-contract";
 import type { P2WorkunitStore } from "@astra/math-workunit";
+import { AGENT_MAX_MODEL_CALLS } from "@astra/runtime-core";
 
 const MAX_ROUTES = 2;
 const MAX_DEPENDENCIES = 2;
@@ -143,7 +144,7 @@ export class AgentWorkflowRoutes {
     remainingWorkUnits: number,
     remainingMs: number,
   ): boolean {
-    const calls = boundedInt(remainingCalls, 4);
+    const calls = boundedInt(remainingCalls, AGENT_MAX_MODEL_CALLS);
     const reviews = boundedInt(maxReviews, MAX_REVIEWS);
     const units = boundedInt(remainingWorkUnits, MAX_WORK_UNITS);
     const ms = boundedInt(remainingMs, MAX_REMAINING_MS);
@@ -173,7 +174,7 @@ export class AgentWorkflowRoutes {
     remainingWorkUnits: number,
     remainingMs: number,
   ): boolean {
-    const calls = boundedInt(remainingCalls, 4);
+    const calls = boundedInt(remainingCalls, AGENT_MAX_MODEL_CALLS);
     const reviews = boundedInt(maxReviews, MAX_REVIEWS);
     const units = boundedInt(remainingWorkUnits, MAX_WORK_UNITS);
     const ms = boundedInt(remainingMs, MAX_REMAINING_MS);

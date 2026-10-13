@@ -25,7 +25,7 @@ from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
 
-_ORDINALS = ("1", "2", "3", "4")
+_ORDINALS = tuple(str(n) for n in range(1, 33))
 _ENVELOPE_FIELDS = (
     "recordId", "sessionId", "problemHash", "sourceModule", "taskId",
     "contractVersion", "artifactId", "artifactVersion", "scopeId",

@@ -29,6 +29,8 @@ import type { P2WorkReceipt, P2WorkunitStore } from "@astra/math-workunit";
 
 const MAX_REMAINING_MS = 5000;
 const MIN_REMAINING_MS = 25;
+import { AGENT_MAX_MODEL_CALLS } from "@astra/runtime-core";
+
 const MAX_WORK_UNITS = 32;
 const MAX_REVIEWS = 1;
 
@@ -130,7 +132,7 @@ export class AgentRevisionAdmission {
     remainingWorkUnits: number,
     remainingMs: number,
   ): boolean {
-    const calls = boundedInt(remainingCalls, 4);
+    const calls = boundedInt(remainingCalls, AGENT_MAX_MODEL_CALLS);
     const reviews = boundedInt(maxReviews, MAX_REVIEWS);
     const units = boundedInt(remainingWorkUnits, MAX_WORK_UNITS);
     const ms = boundedInt(remainingMs, MAX_REMAINING_MS);

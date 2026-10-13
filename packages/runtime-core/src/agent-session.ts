@@ -31,7 +31,9 @@ export const AGENT_MAX_MODEL_CALLS = 32 as const;
 export const AGENT_MAX_EFFECTS = 2 as const;
 export const AGENT_MAX_TRACE_EVENTS = 64 as const;
 
-const MODEL_IDS = ["model-1", "model-2", "model-3", "model-4"] as const;
+// Root model request ids are generated up to the hard cap; the preview profile
+// just uses a smaller budget. No fixed four-id table any more.
+const modelIdFor = (index: number): string => `model-${index + 1}`;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
 const PHASES = ["WORK", "R2"] as const;
 const TRANSPORTS = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"] as const;
@@ -256,10 +258,10 @@ export class AgentSession {
 
   /** The next root model ordinal, or null when the ceiling is reached. */
   nextModelId(): string | null {
-    if (this.#modelCalls >= this.#maxModelCalls) {
+    if (this.#modelCalls >= this.#maxModelCalls || this.#modelCalls >= AGENT_MAX_MODEL_CALLS) {
       return null;
     }
-    return MODEL_IDS[this.#modelCalls] ?? null;
+    return modelIdFor(this.#modelCalls);
   }
 
   /**
@@ -280,7 +282,8 @@ export class AgentSession {
     if (this.remainingMs() <= AGENT_MIN_REMAINING_MS) {
       fail(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
-    const requestId = MODEL_IDS[this.#modelCalls];
+    const requestId =
+      this.#modelCalls < AGENT_MAX_MODEL_CALLS ? modelIdFor(this.#modelCalls) : undefined;
     if (requestId === undefined) {
       fail(P2_ERROR_CODES.BUDGET_EXHAUSTED);
     }

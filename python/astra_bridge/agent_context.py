@@ -423,7 +423,7 @@ def _work_ordinals(history, problem, session_id, problem_hash,
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in ("1", "2", "3", "4"):
+        if suffix not in tuple(str(n) for n in range(1, 33)):
             continue
         ordered.append((int(suffix), request_id))
     ordered.sort()
@@ -625,7 +625,7 @@ def _ordinal(request_id):
     if not isinstance(request_id, str) or not request_id.startswith("model-"):
         _fail()
     suffix = request_id[len("model-"):]
-    if suffix not in ("1", "2", "3", "4"):
+    if suffix not in tuple(str(n) for n in range(1, 33)):
         _fail()
     return int(suffix)
 

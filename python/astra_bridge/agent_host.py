@@ -61,7 +61,7 @@ _STOP_REASONS = (
 )
 _TRACE_KINDS = ("MODEL", "EFFECT", "CONTROL")
 _TRACE_STATES = ("DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED")
-_MODEL_TRACE_IDS = ("model-1", "model-2", "model-3", "model-4")
+_MODEL_TRACE_IDS = tuple("model-" + str(n) for n in range(1, 33))
 _EFFECT_TRACE_IDS = ("effect-1", "effect-2")
 # The root AgentSession emits exactly one control trace id, `control`. The
 # older P0/P1/P2/P3 traces are not touched here; this filter only accepts the
@@ -855,7 +855,7 @@ class AgentHost(_Host):
                     for name in self.history
                     if isinstance(name, str)
                     and name.startswith("model-")
-                    and name.split("-")[1] in ("1", "2", "3", "4")
+                    and name.split("-")[1] in tuple(str(n) for n in range(1, 33))
                 )
             )
         except Exception:  # noqa: BLE001 - a malformed key is not a final
