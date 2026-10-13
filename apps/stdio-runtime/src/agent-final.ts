@@ -32,7 +32,7 @@ export interface AgentFinalCandidate {
 
 const PROJECTION_FIELDS = ["binding", "targetHash", "answer"] as const;
 const HASH = /^[0-9a-f]{64}$/u;
-const REQUEST_ORDINAL = /^model-([1-4])$/u;
+const REQUEST_ORDINAL = /^model-(3[0-2]|[12][0-9]|[1-9])$/u;
 const MAX_ANSWER_CHARS = 4096;
 const MAX_ID_CHARS = 256;
 const MAX_SESSION_CHARS = 128;

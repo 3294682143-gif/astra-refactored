@@ -74,9 +74,12 @@ class ScopeClient(FakeClient):
         task = body["task"]
         obligation_kind = task["obligationId"].split(":", 1)[-1]
         is_subgoal = obligation_kind == "SUBGOAL_COVERAGE"
-        # The whole-problem answer obligation kind: ANSWER_REQUEST for an
-        # UNKNOWN problem, BOUNDARY_EXCEPTIONS for a PARAMETER problem.
-        is_answer = obligation_kind in ("ANSWER_REQUEST", "BOUNDARY_EXCEPTIONS")
+        # The whole-problem candidate comes from the ROOT aggregation task
+        # (goal-1's OUTPUT_COVERAGE). A local boundary/premise step is never the
+        # whole-problem answer; ANSWER_REQUEST is the UNKNOWN class's root duty.
+        is_answer = obligation_kind == "ANSWER_REQUEST" or (
+            obligation_kind == "OUTPUT_COVERAGE" and task.get("goalId") == "goal-1"
+        )
         packet = {
             "schemaVersion": "p2a-work-v1",
             "sessionId": body["sessionId"],

@@ -39,7 +39,7 @@ export const AGENT_PROGRESS_POLICY: AgentProgressPolicyConfig = Object.freeze({
 
 const MAX_TASKS = 4;
 const MAX_RECORDS = 4;
-const REQUEST_ORDINAL = /^model-([1-4])$/u;
+const REQUEST_ORDINAL = /^model-(3[0-2]|[12][0-9]|[1-9])$/u;
 
 interface TaskProgress {
   readonly key: string;

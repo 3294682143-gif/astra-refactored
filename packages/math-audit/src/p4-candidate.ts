@@ -43,7 +43,7 @@ import {
 
 const MAX_REMAINING_MS = 5000;
 const MAX_REVIEWS = 2;
-const MAX_REQUEST_ORDINAL = 4;
+const MAX_REQUEST_ORDINAL = 32;
 const MAX_CHALLENGES = 16;
 const MAX_COVERAGE = 32;
 const MAX_ISSUES = 8;

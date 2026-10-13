@@ -37,7 +37,7 @@ const MAX_CHALLENGES = 16;
 const MIN_REMAINING_MS = 26;
 const MAX_REMAINING_MS = 5000;
 const LATE_MS = 25;
-const MAX_REQUEST_ORDINAL = 4;
+const MAX_REQUEST_ORDINAL = 32;
 const CONTEXT_SCHEMA_VERSION = "p4-r2-context-v1" as const;
 
 const SYSTEM_PROMPT =

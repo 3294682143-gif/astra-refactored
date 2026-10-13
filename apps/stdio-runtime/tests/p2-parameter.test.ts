@@ -14,7 +14,7 @@ test("a parameter-classification problem compiles to PARAMETER with a BOUNDARY_E
   );
   assert.equal(boundaryTasks.length, 1);
   assert.equal(boundaryTasks[0]!.goalId, goal!.goalId);
-  assert.equal(p2IsAnswerObligationKindForGoal("PARAMETER", "BOUNDARY_EXCEPTIONS"), true);
+  assert.equal(p2IsAnswerObligationKindForGoal("PARAMETER", "OUTPUT_COVERAGE"), true);
 });
 
 test("only genuine parameter-classification problems are PARAMETER", () => {
