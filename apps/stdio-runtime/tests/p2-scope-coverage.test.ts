@@ -138,3 +138,52 @@ test("a declared row never closes an obligation or creates a candidate", () => {
   assert.equal(rows.length, 1);
   assert.equal((rows[0] as { taskId: string }).taskId, task.taskId);
 });
+
+function multipartFixture(): { store: P2WorkunitStore; task: P2Task; childIds: string[] } {
+  const contract = compileP2Contract(
+    "Solve both parts: (a) compute 2+2 and (b) compute 3+3",
+    "scope-coverage-multipart",
+  );
+  const store = new P2WorkunitStore(contract);
+  const root = contract.goals.find((goal) => goal.kind === "MULTIPART");
+  assert.ok(root, "expected a MULTIPART root goal");
+  const rootTask = contract.tasks.find((task) => task.goalId === root!.goalId);
+  assert.ok(rootTask, "expected a task of the MULTIPART root goal");
+  const task = p2Snapshot({
+    ...(rootTask as P2Task),
+    delivery: "RUNNING" as const,
+  }) as P2Task;
+  return { store, task, childIds: root!.subgoals.map((child) => child.goalId) };
+}
+
+test("a MULTIPART root must name exactly its trusted child goals to claim exhaustion", () => {
+  const { store, task, childIds } = multipartFixture();
+  assert.deepEqual([...childIds].sort(), ["goal-1-a", "goal-1-b"]);
+  const proposal = legalProposal();
+  proposal.goalExhaustion = [...childIds];
+  const coverage = store.declareScopeCoverage(task, proposal);
+  assert.match(coverage.coverageHash, HEX64);
+  assert.equal(store.scopeCoverageSnapshot().length, 1);
+});
+
+test("a MULTIPART exhaustion claim that misses a child is a fixed SCOPE_MISMATCH", () => {
+  const { store, task, childIds } = multipartFixture();
+  const proposal = legalProposal();
+  proposal.goalExhaustion = childIds.slice(0, 1);
+  assert.equal(
+    codeOf(() => store.declareScopeCoverage(task, proposal)),
+    "SCOPE_MISMATCH",
+  );
+  assert.equal(store.scopeCoverageSnapshot().length, 0);
+});
+
+test("a MULTIPART exhaustion claim with a foreign extra child is a fixed SCOPE_MISMATCH", () => {
+  const { store, task, childIds } = multipartFixture();
+  const proposal = legalProposal();
+  proposal.goalExhaustion = [...childIds, "goal-1-c"];
+  assert.equal(
+    codeOf(() => store.declareScopeCoverage(task, proposal)),
+    "SCOPE_MISMATCH",
+  );
+  assert.equal(store.scopeCoverageSnapshot().length, 0);
+});

@@ -199,6 +199,60 @@ export function checkScopeCoverageAgainstScope(
   }
 }
 
+/**
+ * Reject a declared `goalExhaustion` that does not exactly match the trusted
+ * subgoal set of the declaring goal.
+ *
+ * A goal that carries subgoals (a MULTIPART root) has a trusted child goal id
+ * set. A declaration that claims the goal is exhausted must name exactly that
+ * set: a missing child id, an extra foreign id or a duplicate is a fixed
+ * `SCOPE_MISMATCH` rejection. Order is irrelevant because the comparison is by
+ * set. A goal without subgoals has no trusted counterpart for this list, so
+ * the declaration is carried as declared data and nothing is rejected here.
+ *
+ * This is a comparison against the trusted task graph only. It never closes an
+ * obligation, never changes the ready set and never promotes a declaration to
+ * a coverage proof.
+ */
+export function checkGoalExhaustionAgainstGoal(
+  coverage: P2ScopeCoverage,
+  goal: P2GoalSpec,
+): void {
+  if (typeof goal !== "object" || goal === null || Array.isArray(goal)) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const subgoals = goal.subgoals;
+  if (!Array.isArray(subgoals) || subgoals.length === 0) {
+    return;
+  }
+  const trusted = new Set<string>();
+  for (const child of subgoals) {
+    if (typeof child !== "object" || child === null || Array.isArray(child)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const childGoalId = (child as P2GoalSpec).goalId;
+    if (typeof childGoalId !== "string" || childGoalId.length === 0) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    trusted.add(childGoalId);
+  }
+  const declared = new Set<string>();
+  for (const item of coverage.goalExhaustion) {
+    if (declared.has(item)) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+    declared.add(item);
+  }
+  if (declared.size !== trusted.size) {
+    throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  for (const goalId of trusted) {
+    if (!declared.has(goalId)) {
+      throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
+    }
+  }
+}
+
 /** Exact own-key set of one stored coverage record; extra keys are rejected. */
 export function checkScopeCoverage(value: unknown): P2ScopeCoverage {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

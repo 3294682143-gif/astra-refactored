@@ -20,12 +20,14 @@ import {
   type P2ArtifactAvailability,
   type P2ArtifactRef,
   type P2Contract,
+  type P2GoalSpec,
   type P2RouteSpec,
   type P2Task,
 } from "@astra/protocol";
 import {
   checkScopeCoverage,
   checkScopeCoverageAgainstScope,
+  checkGoalExhaustionAgainstGoal,
   checkTaskScopeCoverage,
   p2ScopeCoverage,
   workHash,
@@ -49,6 +51,27 @@ export type { P2TaskScopeCoverage } from "./p2-context.js";
 const MAX_TASKS = P2_LIMITS.maxTasks;
 const MAX_OBLIGATIONS = P2_LIMITS.maxObligations;
 const MAX_ARTIFACTS = P2_LIMITS.maxArtifacts;
+
+/**
+ * Read-only lookup of one goal node in the trusted goal tree. Returns `null`
+ * when the goal id is not part of the contract; nothing here is a
+ * mathematical decision.
+ */
+function findGoalSpec(
+  goals: readonly P2GoalSpec[],
+  goalId: string,
+): P2GoalSpec | null {
+  for (const goal of goals) {
+    if (goal.goalId === goalId) {
+      return goal;
+    }
+    const nested = findGoalSpec(goal.subgoals, goalId);
+    if (nested !== null) {
+      return nested;
+    }
+  }
+  return null;
+}
 
 /** Static identity guards only; the contract's own task state is not changed. */
 function guardContract(contract: P2Contract): number {
@@ -113,12 +136,23 @@ export class P2WorkunitStore {
    * nothing, so a caller can prove a v5 scope proposal is admissible BEFORE it
    * accepts the artifact or records any delivery. An out-of-scope quantifier or
    * branch condition is the same fixed `SCOPE_MISMATCH` rejection.
+   *
+   * When the declaring goal carries subgoals (a MULTIPART root), the declared
+   * `goalExhaustion` must be exactly the trusted child goal id set of that
+   * goal; a missing, extra or duplicated child id is a fixed `SCOPE_MISMATCH`
+   * rejection. A goal without subgoals keeps the previous behaviour and the
+   * list stays declared data.
    */
   validateScopeCoverage(task: P2Task, proposal: unknown): P2ScopeCoverage {
     const frozenTask = p2Snapshot(task) as P2Task;
     const scope = workScope(this.contract, frozenTask);
     const coverage = p2ScopeCoverage(p2Snapshot(proposal));
     checkScopeCoverageAgainstScope(coverage, scope);
+    const goal = findGoalSpec(this.contract.goals, frozenTask.goalId);
+    if (goal === null) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    checkGoalExhaustionAgainstGoal(coverage, goal);
     return p2Snapshot(coverage) as P2ScopeCoverage;
   }
 

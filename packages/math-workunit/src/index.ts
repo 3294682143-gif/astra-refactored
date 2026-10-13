@@ -33,6 +33,7 @@ export {
   p2ScopeCoverage,
   checkScopeCoverage,
   checkScopeCoverageAgainstScope,
+  checkGoalExhaustionAgainstGoal,
   checkTaskScopeCoverage,
   type P2ScopeCoverage,
   type P2TaskScopeCoverage,
