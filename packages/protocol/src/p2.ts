@@ -130,6 +130,7 @@ export const P2_GOAL_KIND = [
   "COUNT",
   "OPTIMIZATION",
   "PROOF",
+  "PARAMETER",
   "MULTIPART",
   "UNKNOWN",
 ] as const;
@@ -173,12 +174,13 @@ export type P2ObligationKind = (typeof P2_OBLIGATION_KIND)[number];
  * final answer: the image of the goal-kind -> answer-obligation map
  * (`VALUE->CANDIDATE_VALIDITY`, `ALL_SOLUTIONS->EXHAUSTIVENESS`,
  * `COUNT->COUNT_OBJECTS`, `OPTIMIZATION->GLOBAL_BOUND`, `PROOF->PROOF_GOAL`,
- * `MULTIPART->SUBGOAL_COVERAGE`, `UNKNOWN->ANSWER_REQUEST`). A COMPLETE packet
- * for any other obligation (a premise, a local lemma, a feasible point, a
- * boundary exception, a coverage statement) is never a whole-problem
- * candidate. The AgentLoop candidate admission and the P4 candidate gate use
- * this one predicate; the Python Host mirrors it read-only so its projection
- * cannot independently widen or narrow the control-side decision.
+ * `PARAMETER->BOUNDARY_EXCEPTIONS`, `MULTIPART->SUBGOAL_COVERAGE`,
+ * `UNKNOWN->ANSWER_REQUEST`). A COMPLETE packet for any other obligation (a
+ * premise, a local lemma, a feasible point, a boundary exception of another
+ * goal kind, a coverage statement) is never a whole-problem candidate. The
+ * AgentLoop candidate admission and the P4 candidate gate use this one
+ * predicate; the Python Host mirrors it read-only so its projection cannot
+ * independently widen or narrow the control-side decision.
  *
  * @deprecated The global set is a projection of the pairing map below and is
  * kept only for the not-yet-migrated callers. New code must use
@@ -193,6 +195,7 @@ export const P2_ANSWER_OBLIGATION_KINDS: readonly P2ObligationKind[] = [
   "COUNT_OBJECTS",
   "GLOBAL_BOUND",
   "PROOF_GOAL",
+  "BOUNDARY_EXCEPTIONS",
   "SUBGOAL_COVERAGE",
   "ANSWER_REQUEST",
 ];
@@ -217,6 +220,7 @@ export const P2_ANSWER_OBLIGATION_BY_GOAL: Readonly<Record<P2GoalKind, P2Obligat
   COUNT: "COUNT_OBJECTS",
   OPTIMIZATION: "GLOBAL_BOUND",
   PROOF: "PROOF_GOAL",
+  PARAMETER: "BOUNDARY_EXCEPTIONS",
   MULTIPART: "SUBGOAL_COVERAGE",
   UNKNOWN: "ANSWER_REQUEST",
 };

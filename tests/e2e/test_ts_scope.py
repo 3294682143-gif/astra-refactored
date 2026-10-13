@@ -74,7 +74,9 @@ class ScopeClient(FakeClient):
         task = body["task"]
         obligation_kind = task["obligationId"].split(":", 1)[-1]
         is_subgoal = obligation_kind == "SUBGOAL_COVERAGE"
-        is_answer = obligation_kind == "ANSWER_REQUEST"
+        # The whole-problem answer obligation kind: ANSWER_REQUEST for an
+        # UNKNOWN problem, BOUNDARY_EXCEPTIONS for a PARAMETER problem.
+        is_answer = obligation_kind in ("ANSWER_REQUEST", "BOUNDARY_EXCEPTIONS")
         packet = {
             "schemaVersion": "p2a-work-v1",
             "sessionId": body["sessionId"],

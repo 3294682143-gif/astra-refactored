@@ -52,6 +52,7 @@ const KIND_OBLIGATIONS: Readonly<Record<P2GoalKind, readonly P2ObligationKind[]>
   COUNT: ["COUNT_OBJECTS", "NO_DUPLICATES", "EXHAUSTIVENESS", "OUTPUT_COVERAGE"],
   OPTIMIZATION: ["FEASIBILITY", "GLOBAL_BOUND", "ATTAINMENT", "OUTPUT_COVERAGE"],
   PROOF: ["PREMISES", "QUANTIFIERS", "PROOF_GOAL", "OUTPUT_COVERAGE"],
+  PARAMETER: ["DOMAIN_VALIDITY", "BOUNDARY_EXCEPTIONS", "OUTPUT_COVERAGE"],
   MULTIPART: ["SUBGOAL_COVERAGE", "OUTPUT_COVERAGE"],
   UNKNOWN: ["ANSWER_REQUEST", "OUTPUT_COVERAGE"],
 };
@@ -143,6 +144,24 @@ const KEYWORD_RULES: readonly (readonly [P2GoalKind, readonly string[]])[] = [
 ];
 
 /**
+ * Conservative parameter-classification rule. A problem is a parameter
+ * problem only when it names a parameter AND asks for a classification, a
+ * range of values or the value of that parameter. Both halves are required, so
+ * a problem that merely mentions a parameter (e.g. "compute the value of x
+ * given parameter a") is not reclassified. This is a work view, never a
+ * semantic parse, and it never uses a fixed problem id or route id.
+ */
+const PARAMETER_SUBJECT_PATTERN = /parameter|参数/;
+const PARAMETER_REQUEST_PATTERN =
+  /classify|classification|分类|取值范围|range of values|value of the parameter|parameter values?/;
+
+/** True iff the problem is a conservative parameter-classification problem. */
+export function isParameterProblem(problem: string): boolean {
+  const lowered = problem.toLowerCase();
+  return PARAMETER_SUBJECT_PATTERN.test(lowered) && PARAMETER_REQUEST_PATTERN.test(lowered);
+}
+
+/**
  * Conservative single-class keyword selection. Exactly one class must match;
  * zero matches or several matches both yield `UNKNOWN`. This is not a general
  * semantic parse and never claims to be one.
@@ -157,6 +176,9 @@ export function selectP2GoalKind(problem: string): P2GoalKind {
   const lowered = problem.toLowerCase();
   if (multipartPartLabels(problem).length >= 2) {
     return "MULTIPART";
+  }
+  if (isParameterProblem(problem)) {
+    return "PARAMETER";
   }
   const matched: P2GoalKind[] = [];
   if (ALL_SOLUTIONS_PATTERN.test(lowered)) {
