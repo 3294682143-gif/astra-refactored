@@ -134,9 +134,12 @@ class AgentHost(_Host):
             options,
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
-                "maxMethodLoads", "policy",
+                "maxMethodLoads", "policy", "deriveBudget",
             ),
         )
+        if not isinstance(options["deriveBudget"], bool):
+            _fail()
+        self.derive_budget = options["deriveBudget"]
         self.max_model_calls = _bounded_int(options["maxModelCalls"], 0, _MAX_MODEL_CALLS)
         self.max_work_units = _bounded_int(options["maxWorkUnits"], 1, _MAX_WORK_UNITS)
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
@@ -281,7 +284,7 @@ class AgentHost(_Host):
 
     def on_model(self, frame_id, params):
         ordinal = self.model_requests + 1
-        if ordinal > self.max_model_calls:
+        if not self.derive_budget and ordinal > self.max_model_calls:
             _fail()
         if self.model_requests == 0 and self._methods_enabled():
             if self.catalog_calls != 1 or not self.callback_done:
@@ -412,9 +415,9 @@ class AgentHost(_Host):
                     or cached_method
                 )
             )
-            if body["allowTools"] is not allow_tools:
+            if not self.derive_budget and body["allowTools"] is not allow_tools:
                 _fail()
-            if body["allowMethods"] is not allow_methods:
+            if not self.derive_budget and body["allowMethods"] is not allow_methods:
                 _fail()
             expected_allow_route = (
                 not self.route_admissions
@@ -426,7 +429,7 @@ class AgentHost(_Host):
                 )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
-            if body["allowRouteProposal"] is not expected_allow_route:
+            if not self.derive_budget and body["allowRouteProposal"] is not expected_allow_route:
                 _fail()
             expected_allow_continuation = (
                 len(self.dependency_admissions) + (1 if pending_new_dependency is not None else 0) < 2
@@ -437,7 +440,7 @@ class AgentHost(_Host):
                 )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
-            if body["allowTaskContinuation"] is not expected_allow_continuation:
+            if not self.derive_budget and body["allowTaskContinuation"] is not expected_allow_continuation:
                 _fail()
             revision = body["revisionProvenance"]
             redo_used = self.redo_record is not None
@@ -468,7 +471,7 @@ class AgentHost(_Host):
                 )["rows"]) >= 2
                 and self.remaining_ms() > _MIN_REMAINING_MS
             )
-            if body["allowArtifactRedo"] is not expected_allow_redo:
+            if not self.derive_budget and body["allowArtifactRedo"] is not expected_allow_redo:
                 _fail()
             if redo_used:
                 if body["allowRouteProposal"] is not False:
@@ -479,7 +482,7 @@ class AgentHost(_Host):
                 body["protectedCandidate"] is not None
                 and self.max_model_calls - self.model_requests >= 1 + self.max_reviews
             )
-            if body["allowFinal"] is not expected_allow_final:
+            if not self.derive_budget and body["allowFinal"] is not expected_allow_final:
                 _fail()
             if self.remaining_ms() <= _MIN_REMAINING_MS:
                 _fail()
@@ -759,11 +762,19 @@ class AgentHost(_Host):
             "STALE_CANDIDATE", "DEADLINE_EXCEEDED",
         ):
             _fail()
-        if not _is_int(summary["modelCalls"]) or not self.model_requests <= summary["modelCalls"] <= self.max_model_calls:
+        if (
+            not _is_int(summary["modelCalls"])
+            or summary["modelCalls"] < self.model_requests
+            or (not self.derive_budget and summary["modelCalls"] > self.max_model_calls)
+        ):
             _fail()
         if not _is_int(summary["effectCalls"]) or not self.effect_calls <= summary["effectCalls"] <= self.max_effects:
             _fail()
-        if not _is_int(summary["workUnits"]) or not 0 <= summary["workUnits"] <= self.max_work_units:
+        if (
+            not _is_int(summary["workUnits"])
+            or summary["workUnits"] < 0
+            or (not self.derive_budget and summary["workUnits"] > self.max_work_units)
+        ):
             _fail()
         if not _is_int(summary["reviewCalls"]) or summary["reviewCalls"] != self.review_calls:
             _fail()

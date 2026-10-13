@@ -51,7 +51,13 @@ import { buildAgentWorkContext } from "./agent-loop-context.js";
 import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
-import { boundedAwait, captureAgentOptions, captureAgentPorts } from "./agent-loop-io.js";
+import {
+  boundedAwait,
+  captureAgentOptions,
+  captureAgentPorts,
+  deriveRootBudget,
+  type CapturedAgentOptions,
+} from "./agent-loop-io.js";
 
 const MIN_MS = 25;
 
@@ -105,9 +111,26 @@ export async function runAgentLoop(
 ): Promise<AgentLoopResult> {
   const problemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
-  const opts = captureAgentOptions(options);
+  const opts0 = captureAgentOptions(options);
   const captured = captureAgentPorts(ports);
   const problemHash = p4Hash(problemText);
+  const contract = compileP2Contract(
+    problemText,
+    session,
+    opts0.goalSpecs.length > 0 ? opts0.goalSpecs : undefined,
+  );
+  // One budget, derived from the compiled task graph, is the single source.
+  const derived = opts0.deriveBudget
+    ? deriveRootBudget(contract.tasks.length, opts0.maxReviews)
+    : null;
+  const opts: CapturedAgentOptions =
+    derived === null
+      ? opts0
+      : Object.freeze({
+          ...opts0,
+          maxWorkUnits: derived.maxWorkUnits,
+          maxModelCalls: derived.maxModelCalls,
+        });
   const root = new AgentSession({
     sessionId: session,
     problemHash,
@@ -116,11 +139,6 @@ export async function runAgentLoop(
     remainingMs: opts.remainingMs,
     now: opts.now,
   });
-  const contract = compileP2Contract(
-    problemText,
-    session,
-    opts.goalSpecs.length > 0 ? opts.goalSpecs : undefined,
-  );
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
   const workflow = new AgentWorkflowRoutes(ledger, store);

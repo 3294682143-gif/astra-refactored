@@ -37,6 +37,7 @@ const OPTION_FIELDS = [
   "policy",
   "now",
   "goalSpecs",
+  "deriveBudget",
 ] as const;
 const PORT_FIELDS = ["model", "effect", "catalog"] as const;
 
@@ -160,6 +161,7 @@ export interface CapturedAgentOptions {
   readonly policy: "BEST_EFFORT" | "STRICT";
   readonly goalSpecs: readonly P2GoalSpec[];
   readonly now: () => number;
+  readonly deriveBudget: boolean;
 }
 
 /**
@@ -208,6 +210,11 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     rawGoalSpecs === undefined
       ? []
       : validateP2GoalSpecs(p2Snapshot(rawGoalSpecs));
+  const rawDeriveBudget = source.deriveBudget;
+  if (rawDeriveBudget !== undefined && typeof rawDeriveBudget !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const deriveBudget = rawDeriveBudget === true;
   return Object.freeze({
     maxModelCalls,
     maxWorkUnits,
@@ -218,7 +225,33 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     policy,
     goalSpecs: p2Snapshot(goalSpecs) as readonly P2GoalSpec[],
     now: now as () => number,
+    deriveBudget,
   });
+}
+
+/**
+ * The single root-budget derivation. From the compiled task graph it asks for
+ * one work unit per task plus the review and one final slot, clamped to the
+ * hard caps. Node decides this budget and Python only verifies it.
+ */
+export const AGENT_ROOT_MAX_MODEL_CALLS = 32 as const;
+export const AGENT_ROOT_MAX_WORK_UNITS = 32 as const;
+
+export function deriveRootBudget(
+  taskCount: number,
+  maxReviews: number,
+): { readonly maxWorkUnits: number; readonly maxModelCalls: number } {
+  if (
+    !Number.isSafeInteger(taskCount) ||
+    taskCount < 1 ||
+    !Number.isSafeInteger(maxReviews) ||
+    maxReviews < 0
+  ) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const maxWorkUnits = Math.min(Math.max(taskCount, 1), AGENT_ROOT_MAX_WORK_UNITS);
+  const maxModelCalls = Math.min(maxWorkUnits + maxReviews + 1, AGENT_ROOT_MAX_MODEL_CALLS);
+  return Object.freeze({ maxWorkUnits, maxModelCalls });
 }
 
 export interface CapturedAgentPorts {

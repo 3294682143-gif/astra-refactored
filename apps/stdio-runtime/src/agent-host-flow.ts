@@ -98,6 +98,7 @@ interface FrozenOptions {
   readonly maxReviews: number;
   readonly maxMethodLoads: number;
   readonly policy: "BEST_EFFORT" | "STRICT";
+  readonly deriveBudget: boolean;
 }
 
 export class AgentHostFlow {
@@ -235,6 +236,7 @@ export class AgentHostFlow {
     this.effectAvailable = toolExecute === "AVAILABLE" && maxEffects > 0;
     this.methodAvailable =
       methodLoad === "AVAILABLE" && maxMethodLoads === 1 && this.effectAvailable;
+    const deriveBudget = params["deriveBudget"] === true;
     this.options = Object.freeze({
       maxModelCalls,
       maxWorkUnits,
@@ -242,6 +244,7 @@ export class AgentHostFlow {
       maxReviews,
       maxMethodLoads: this.methodAvailable ? maxMethodLoads : 0,
       policy,
+      deriveBudget,
     });
     this.sessionId = sessionId;
     this.io.tighten(remainingMs);
@@ -310,6 +313,7 @@ export class AgentHostFlow {
         maxMethodLoads: options.maxMethodLoads,
         remainingMs: budget,
         policy: options.policy,
+        deriveBudget: options.deriveBudget,
         now,
       }, ports);
     } catch (error) {

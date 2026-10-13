@@ -90,6 +90,7 @@ class AgentRuntime:
         max_method_loads=0,
         problem_seconds=5,
         policy="BEST_EFFORT",
+        derive_budget=False,
         node="node",
     ):
         if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 32:
@@ -102,6 +103,8 @@ class AgentRuntime:
             raise ValueError("invalid max_reviews")
         if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 1:
             raise ValueError("invalid max_method_loads")
+        if not isinstance(derive_budget, bool):
+            raise ValueError("invalid derive_budget")
         if isinstance(problem_seconds, bool) or not isinstance(problem_seconds, (int, float)):
             raise ValueError("invalid problem_seconds")
         if not math.isfinite(problem_seconds) or not 0 < problem_seconds <= _MAX_TIMEOUT:
@@ -115,6 +118,7 @@ class AgentRuntime:
         self.max_effects = max_effects
         self.max_reviews = max_reviews
         self.max_method_loads = max_method_loads
+        self.derive_budget = derive_budget
         self.problem_seconds = float(problem_seconds)
         self.policy = policy
         self.node = node
@@ -151,6 +155,7 @@ class AgentRuntime:
                 "policy": self.policy,
                 "problemSeconds": self.problem_seconds,
                 "node": self.node,
+                "deriveBudget": self.derive_budget,
             }
             return self._solve(started, problem, options)
         finally:
@@ -180,6 +185,7 @@ class AgentRuntime:
             "maxReviews": options["maxReviews"],
             "maxMethodLoads": options["maxMethodLoads"],
             "policy": options["policy"],
+            "deriveBudget": options["deriveBudget"],
         }
         host = AgentHost(
             manifest, session_id, deadline, problem, problem_hash, host_options,
@@ -216,6 +222,7 @@ class AgentRuntime:
                 "maxReviews": options["maxReviews"],
                 "maxMethodLoads": options["maxMethodLoads"],
                 "policy": options["policy"],
+                "deriveBudget": options["deriveBudget"],
             }
             solve = {
                 **common,

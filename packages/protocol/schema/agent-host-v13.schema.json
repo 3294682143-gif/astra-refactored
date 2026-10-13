@@ -130,6 +130,9 @@
           "maxMethodLoads"
         ],
         "properties": {
+          "deriveBudget": {
+            "type": "boolean"
+          },
           "protocolVersion": {
             "type": "string",
             "const": "1.3-agent-loop-preview"
