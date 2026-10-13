@@ -692,8 +692,14 @@ export async function runAgentLoop(
             const obligation = snapshot.obligations.find(
               (row) => row.obligationId === running.obligationId,
             );
+            // The whole-problem candidate may only come from a ROOT goal's
+            // answer obligation. A task of a sub-goal (e.g. a MULTIPART child
+            // goal-1-a) is a local step: it is a real task and can be consumed,
+            // but its COMPLETE packet is never the whole-problem candidate.
+            const rootGoal = snapshot.goals.some((goal) => goal.goalId === running.goalId);
             if (
               obligation !== undefined &&
+              rootGoal &&
               p2IsAnswerObligationKindForGoal(
                 goalKindOf(snapshot.goals, running.goalId),
                 obligation.kind,

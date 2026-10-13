@@ -302,7 +302,7 @@ def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
     "declared coverage != covered" boundary.
     """
     client = DeclaredCoverageClient(mode="subanswer")
-    result = _solve(client, MULTIPART_PROBLEM, **_BUDGET)
+    result = _solve(client, VALUE_PROBLEM, **_BUDGET)
     assert result["engine"] == "ts"
     assert result["status"] != "candidate"
     assert result["candidate_verified"] is False
@@ -332,14 +332,16 @@ def test_declared_coverage_row_is_read_only_and_never_closes_obligation(
 def test_declared_coverage_is_read_by_downstream_consumer(process_tracker):
     """A legal non-empty v5 declaration is really read by a later consumer.
 
-    The first task declares a non-empty coverage row; the root OUTPUT_COVERAGE
-    task declares that task as an upstream dependency, so its WORK context must
-    carry the exact declared row read-only. This closes the "declared coverage
-    is only ever written" gap: the declaration reaches a real downstream
-    consumer.
+    The first task declares a non-empty coverage row; a later OUTPUT_COVERAGE
+    task declares it as an upstream dependency, so its WORK context must carry
+    the exact declared row read-only. This closes the "declared coverage is only
+    ever written" gap: the declaration reaches a real downstream consumer. The
+    dependent same-goal chain is used because the fixed 4-call/3-unit profile
+    cannot reach a real MULTIPART consumer (that structure is proven separately
+    in ``test_ts_multipart.py`` and at the TS unit level).
     """
     client = DeclaredCoverageClient(mode="subanswer")
-    result = _solve(client, MULTIPART_PROBLEM, **_BUDGET)
+    result = _solve(client, VALUE_PROBLEM, **_BUDGET)
     assert result["childReaped"] is True
     assert process_tracker
     bodies = _work_bodies(client)

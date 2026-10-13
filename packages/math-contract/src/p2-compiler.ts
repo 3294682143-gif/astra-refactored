@@ -96,6 +96,45 @@ const KIND_ACCEPTANCE: Readonly<Record<P2ObligationKind, string>> = {
 const ALL_SOLUTIONS_PATTERN =
   /(?:全部|所有)(?:实数|复数)?解|all\s+(?:real\s+|complex\s+)?solutions?/;
 
+/**
+ * A real multi-part problem statement: at least two independently labelled
+ * sub-questions. The pattern only recognises an explicit ordered label
+ * sequence `(a) ... (b) ...` (or `a) ... b) ...`), so a single labelled part
+ * or an unlabelled sentence never becomes MULTIPART. It is a work view, never
+ * a claim that the template is semantically equivalent to the problem.
+ */
+const MULTIPART_PART_PATTERN =
+  /(?:^|[\s,;:。；：])(?:\(([a-h])\)|([a-h])\))\s*\S/gu;
+
+/**
+ * The ordered distinct sub-question labels of a real multi-part statement.
+ * Returns an empty list unless at least two distinct labels appear in
+ * ascending order, so `(b) ... (a) ...` and a repeated single label are not
+ * multi-part. Nothing here is a mathematical parse.
+ */
+export function multipartPartLabels(problem: string): readonly string[] {
+  const labels: string[] = [];
+  for (const match of problem.matchAll(MULTIPART_PART_PATTERN)) {
+    const label = match[1] ?? match[2];
+    if (typeof label !== "string") {
+      continue;
+    }
+    if (!labels.includes(label)) {
+      labels.push(label);
+    }
+  }
+  if (labels.length < 2) {
+    return [];
+  }
+  const sorted = [...labels].sort();
+  for (let index = 0; index < labels.length; index += 1) {
+    if (labels[index] !== sorted[index]) {
+      return [];
+    }
+  }
+  return labels;
+}
+
 const KEYWORD_RULES: readonly (readonly [P2GoalKind, readonly string[]])[] = [
   ["COUNT", ["number of", "how many", "计数", "个数"]],
   ["OPTIMIZATION", ["maximum", "minimum", "maximize", "minimize", "最大", "最小"]],
@@ -107,9 +146,18 @@ const KEYWORD_RULES: readonly (readonly [P2GoalKind, readonly string[]])[] = [
  * Conservative single-class keyword selection. Exactly one class must match;
  * zero matches or several matches both yield `UNKNOWN`. This is not a general
  * semantic parse and never claims to be one.
+ *
+ * A real multi-part statement (two or more ordered sub-question labels) is
+ * classified as `MULTIPART` before the keyword rules run: the sub-questions
+ * are the goal structure, so a keyword inside one part never decides the
+ * whole-problem class. The label scan is structural only and is not a
+ * mathematical parse.
  */
 export function selectP2GoalKind(problem: string): P2GoalKind {
   const lowered = problem.toLowerCase();
+  if (multipartPartLabels(problem).length >= 2) {
+    return "MULTIPART";
+  }
   const matched: P2GoalKind[] = [];
   if (ALL_SOLUTIONS_PATTERN.test(lowered)) {
     matched.push("ALL_SOLUTIONS");
@@ -151,6 +199,43 @@ function defaultScope(goalId: string, kind: P2GoalKind, problem: string): Scope 
   };
 }
 
+/**
+ * The declared sub-question labels of one real multi-part problem, or an empty
+ * list when the problem is not multi-part. The labels are the only structural
+ * input of the MULTIPART goal tree; no fixed problem id and no fixed route id
+ * is ever used.
+ */
+function multipartLabels(problem: string): readonly string[] {
+  return multipartPartLabels(problem);
+}
+
+/**
+ * Build the MULTIPART goal tree of one real multi-part problem: one leaf
+ * subgoal per declared sub-question label, each with its own goal id, scope
+ * and (later) its own obligation and task. The root keeps the whole-problem
+ * scope. Nothing here is a mathematical decomposition.
+ */
+function buildMultipartSpecs(problem: string, labels: readonly string[]): readonly P2GoalSpec[] {
+  const rootId = "goal-1";
+  const subgoals = labels.map((label) => {
+    const goalId = `goal-1-${label}`;
+    return {
+      goalId,
+      kind: "VALUE" as P2GoalKind,
+      scope: defaultScope(goalId, "VALUE", problem),
+      subgoals: [],
+    };
+  });
+  return [
+    {
+      goalId: rootId,
+      kind: "MULTIPART" as P2GoalKind,
+      scope: defaultScope(rootId, "MULTIPART", problem),
+      subgoals,
+    },
+  ];
+}
+
 function normalizeSpec(spec: P2GoalSpec, problem: string): P2GoalSpec {
   const scope = spec.scope;
   const withId: Scope = { ...scope, scopeId: p2ScopeIdOf(scope) };
@@ -161,6 +246,12 @@ function normalizeSpec(spec: P2GoalSpec, problem: string): P2GoalSpec {
 function buildGoalSpecs(problem: string, goalSpecs?: readonly P2GoalSpec[]): readonly P2GoalSpec[] {
   if (goalSpecs === undefined) {
     const kind = selectP2GoalKind(problem);
+    if (kind === "MULTIPART") {
+      const labels = multipartLabels(problem);
+      if (labels.length >= 2) {
+        return buildMultipartSpecs(problem, labels).map((spec) => normalizeSpec(spec, problem));
+      }
+    }
     const goalId = "goal-1";
     return [normalizeSpec({ goalId, kind, scope: defaultScope(goalId, kind, problem), subgoals: [] }, problem)];
   }
