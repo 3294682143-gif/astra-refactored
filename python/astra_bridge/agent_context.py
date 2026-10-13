@@ -513,6 +513,63 @@ def protected_final(history, problem, session_id, problem_hash,
         return None
 
 
+def _projection_for_source(history, problem, session_id, problem_hash, source_id,
+                           source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
+    """Rebuild the exact candidate projection of one named source request.
+
+    Used only to VERIFY the projection the Node control side selected; the Host
+    never chooses a source itself. Returns None when the named source is not a
+    real eligible candidate."""
+    try:
+        if not isinstance(history, dict) or not isinstance(source_id, str):
+            return None
+        packet = candidate_packet(
+            history, source_id, problem, session_id, problem_hash, source_schema,
+        )
+        if packet is None:
+            return None
+        entry = history.get(source_id)
+        if not isinstance(entry, dict):
+            return None
+        _, request, receipt, body = _source_body(entry)
+        raw_text = receipt["text"]
+        if not isinstance(raw_text, str):
+            return None
+        task = body.get("task")
+        scope = body.get("scope")
+        if not isinstance(task, dict) or not isinstance(scope, dict):
+            return None
+        projection = project_artifacts(history, session_id, problem_hash)
+        row = projection["bySourceRef"].get(source_id)
+        if not isinstance(row, dict) or row["availability"] != "ACTIVE":
+            return None
+        binding = {
+            "sessionId": session_id,
+            "problemHash": problem_hash,
+            "contractVersion": 1,
+            "artifactId": row["artifactId"],
+            "artifactVersion": row["envelope"]["artifactVersion"],
+            "taskId": task.get("taskId"),
+            "goalId": task.get("goalId"),
+            "scopeId": scope.get("scopeId"),
+            "sourceRequestId": source_id,
+        }
+        ordered = {}
+        for name in _TARGET_FIELDS:
+            ordered[name] = binding[name]
+        raw_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+        payload = json.dumps([ordered, raw_hash], ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        target_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        answer = packet["candidateProposal"]
+        if not isinstance(answer, str) or not js_nonempty(answer):
+            return None
+        return {"binding": ordered, "targetHash": target_hash, "answer": answer}
+    except ProbeError:
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def check_inputs(inner, history, current_request_id):
     """Check declared input artifacts against the trusted Host history."""
     if not isinstance(inner, dict) or not isinstance(history, dict):
@@ -822,15 +879,33 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     ):
         if not isinstance(body["allowFinal"], bool):
             _fail()
-        expected_projection = protected_final(
-            history, problem, session_id, problem_hash, version,
-        )
-        if expected_projection is not None:
-            if expected_projection["binding"]["scopeId"] != task["scopeId"]:
-                expected_projection = None
-        if body["allowFinal"] and expected_projection is None:
-            _fail()
-        if not same_json(body["protectedCandidate"], expected_projection):
+        projection = body["protectedCandidate"]
+        if projection is not None:
+            _exact_keys(projection, ("binding", "targetHash", "answer"))
+            binding = projection["binding"]
+            _exact_keys(binding, _TARGET_FIELDS)
+            if binding["sessionId"] != session_id or binding["problemHash"] != problem_hash:
+                _fail()
+            if not _is_int(binding["contractVersion"]) or binding["contractVersion"] != 1:
+                _fail()
+            _text(binding["artifactId"], 256)
+            if not _is_int(binding["artifactVersion"]) or binding["artifactVersion"] < 1:
+                _fail()
+            _text(binding["taskId"], 256)
+            _text(binding["goalId"], 256)
+            _hash64(binding["scopeId"])
+            _ordinal(binding["sourceRequestId"])
+            if _ordinal(binding["sourceRequestId"]) >= _ordinal(request_id):
+                _fail()
+            _hash64(projection["targetHash"])
+            _text(projection["answer"], _MAX_TEXT_CHARS)
+            expected = _projection_for_source(
+                history, problem, session_id, problem_hash,
+                binding["sourceRequestId"], version,
+            )
+            if expected is None or not same_json(projection, expected):
+                _fail()
+        if body["allowFinal"] and projection is None:
             _fail()
     if version in (
         _CONTEXT_SCHEMA_VERSION, _DEPENDENCY_CONTEXT_SCHEMA_VERSION,

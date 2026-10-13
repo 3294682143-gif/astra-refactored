@@ -209,8 +209,13 @@ function requireTask(contract: P2Contract, taskId: string): P2Task {
   if (obligation.envelope.scopeId !== found.scopeId) {
     throw new P2Error(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
-  if (found.dependencyTaskIds.length !== 0) {
-    throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  // A task that legitimately depends on earlier tasks is accepted only when
+  // every dependency task id is a real task of this same contract; a foreign
+  // or unknown dependency task is still a fixed rejection.
+  for (const dependencyTaskId of found.dependencyTaskIds) {
+    if (!contract.tasks.some((task) => task.taskId === dependencyTaskId)) {
+      throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    }
   }
   return found;
 }
@@ -262,10 +267,9 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
   if (!isBoundedString(artifact.routeId, MAX_SHORT_CHARS)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
-  if (artifact.dependencies.length !== 0) {
-    throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
-  }
-  if (task.inputArtifactRefs.length !== 0) {
+  // Declared dependencies are accepted only when they are exactly this task's
+  // own declared input refs; a foreign, unknown or tampered ref is refused.
+  if (!p4JsonEqual(artifact.dependencies, task.inputArtifactRefs)) {
     throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
   }
   const scope = validateP2Scope(artifact.scope);
@@ -304,7 +308,7 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
   const packet = artifact.packet;
-  if (packet.dependencies.length !== 0) {
+  if (!p4JsonEqual(packet.dependencies, task.inputArtifactRefs)) {
     throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
   }
   if (packet.sessionId !== contract.envelope.sessionId) {
