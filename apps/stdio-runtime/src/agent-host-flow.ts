@@ -97,6 +97,7 @@ interface FrozenOptions {
   readonly maxEffects: number;
   readonly maxReviews: number;
   readonly maxMethodLoads: number;
+  readonly maxRepairs: number;
   readonly policy: "BEST_EFFORT" | "STRICT";
   readonly deriveBudget: boolean;
 }
@@ -202,6 +203,7 @@ export class AgentHostFlow {
     const maxWorkUnits = safeInt(params["maxWorkUnits"], 1, MAX_WORK_UNITS);
     const maxReviews = safeInt(params["maxReviews"], 0, MAX_REVIEWS);
     const maxMethodLoads = safeInt(params["maxMethodLoads"], 0, MAX_METHOD_LOADS);
+    const maxRepairs = params["maxRepairs"] === undefined ? 0 : safeInt(params["maxRepairs"], 0, 1);
     const remainingMs = safeInt(params["remainingMs"], 1, MAX_REMAINING_MS);
     if (params["profileId"] !== PROFILE_ID) {
       fail(ERROR_CODES.FIELD_VALUE);
@@ -243,6 +245,7 @@ export class AgentHostFlow {
       maxEffects: this.effectAvailable ? maxEffects : 0,
       maxReviews,
       maxMethodLoads: this.methodAvailable ? maxMethodLoads : 0,
+      maxRepairs,
       policy,
       deriveBudget,
     });
@@ -311,6 +314,7 @@ export class AgentHostFlow {
         maxEffects: options.maxEffects,
         maxReviews: options.maxReviews,
         maxMethodLoads: options.maxMethodLoads,
+        maxRepairs: options.maxRepairs,
         remainingMs: budget,
         policy: options.policy,
         deriveBudget: options.deriveBudget,

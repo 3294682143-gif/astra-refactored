@@ -53,11 +53,12 @@ _ENGINE = "ts"
 _MODE = "TS_PREVIEW"
 _POLICIES = ("BEST_EFFORT", "STRICT")
 _STOP_REASONS = (
-    "WORK", "R2", "COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN", "ADMITTED",
+    "WORK", "R2", "REPAIR", "COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN", "ADMITTED",
     "BUDGET_EXHAUSTED", "DEADLINE_EXCEEDED", "ILLEGAL_TRANSITION",
     "NO_CANDIDATE", "NO_REVIEW", "CONTROL_REJECTED", "PACKET_REJECTED",
     "CONTEXT_REJECTED", "REVIEW_STOP", "REVIEWS_COMPLETE",
-    "WORK_UNITS_COMPLETE", "PORT_REJECTED", "STOPPED",
+    "WORK_UNITS_COMPLETE", "REVISED_CANDIDATE", "REVISE_REJECTED",
+    "PORT_REJECTED", "STOPPED",
 )
 _TRACE_KINDS = ("MODEL", "EFFECT", "CONTROL")
 _TRACE_STATES = ("DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED")
@@ -70,8 +71,8 @@ _CONTROL_TRACE_IDS = ("control",)
 _SUMMARY_FIELDS = (
     "mode", "targetEnvironment", "sessionId", "status", "finalResponse",
     "candidateVerified", "strictAcceptance", "policy", "reason", "modelCalls",
-    "effectCalls", "workUnits", "reviewCalls", "catalogCalls", "methodLoads",
-    "stopReason",
+    "effectCalls", "workUnits", "reviewCalls", "repairCalls", "catalogCalls",
+    "methodLoads", "stopReason",
 )
 _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
 
@@ -134,7 +135,7 @@ class AgentHost(_Host):
             options,
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
-                "maxMethodLoads", "policy", "deriveBudget",
+                "maxMethodLoads", "maxRepairs", "policy", "deriveBudget",
             ),
         )
         if not isinstance(options["deriveBudget"], bool):
@@ -145,6 +146,7 @@ class AgentHost(_Host):
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
         self.max_reviews = _bounded_int(options["maxReviews"], 0, _MAX_REVIEWS)
         self.max_method_loads = _bounded_int(options["maxMethodLoads"], 0, _MAX_METHOD_LOADS)
+        self.max_repairs = _bounded_int(options["maxRepairs"], 0, 1)
         if options["policy"] not in _POLICIES:
             _fail()
         self.policy = options["policy"]
@@ -157,6 +159,7 @@ class AgentHost(_Host):
         self.model_requests = 0
         self.effect_calls = 0
         self.review_calls = 0
+        self.repair_calls = 0
         self.catalog_calls = 0
         self.method_loads = 0
         self.catalog = None
@@ -307,6 +310,17 @@ class AgentHost(_Host):
             if self.review_calls >= self.max_reviews:
                 _fail()
             if self.review_calls >= 1:
+                _fail()
+        elif request["phase"] == "REPAIR":
+            # The single G3/PR4 evidence-triggered revision: at most one, only
+            # after exactly one review, and only with repair budget authorized.
+            if self.max_repairs < 1:
+                _fail()
+            if self.review_calls != 1:
+                _fail()
+            if self.repair_calls >= 1:
+                _fail()
+            if self.max_model_calls - self.model_requests < 1:
                 _fail()
         else:
             if self.review_calls > 0:
@@ -513,6 +527,8 @@ class AgentHost(_Host):
         self.last_model_id = request_id
         if request["phase"] == "R2":
             self.review_calls += 1
+        elif request["phase"] == "REPAIR":
+            self.repair_calls += 1
         if transport != "COMPLETE":
             self.stopped = True
         if transport == "UNKNOWN":
@@ -760,6 +776,7 @@ class AgentHost(_Host):
         if summary["reason"] not in (
             "BEST_EFFORT_CANDIDATE", "STRICT_NOT_VERIFIED", "NO_CANDIDATE",
             "STALE_CANDIDATE", "DEADLINE_EXCEEDED",
+            "REVISED_CANDIDATE", "REVISE_REJECTED",
         ):
             _fail()
         if (
@@ -779,6 +796,10 @@ class AgentHost(_Host):
         if not _is_int(summary["reviewCalls"]) or summary["reviewCalls"] != self.review_calls:
             _fail()
         if summary["reviewCalls"] > self.max_reviews:
+            _fail()
+        if not _is_int(summary["repairCalls"]) or summary["repairCalls"] != self.repair_calls:
+            _fail()
+        if summary["repairCalls"] > self.max_repairs:
             _fail()
         if not _is_int(summary["catalogCalls"]) or summary["catalogCalls"] != self.catalog_calls:
             _fail()

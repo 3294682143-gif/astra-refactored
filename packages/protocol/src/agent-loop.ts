@@ -207,6 +207,7 @@ export interface AgentLoopSummary {
   readonly effectCalls: number;
   readonly workUnits: number;
   readonly reviewCalls: number;
+  readonly repairCalls: number;
   readonly catalogCalls: number;
   readonly methodLoads: number;
   readonly stopReason: AgentTraceCode;

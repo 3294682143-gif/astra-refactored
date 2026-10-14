@@ -68,14 +68,33 @@ The closure is now wired into the unique main loop for the opt-in
   (`reason=REVISED_CANDIDATE`), the `x=1` parent artifact is retained, and the
   no-checker / `maxRepairs=0` negatives stay `{1}` / `BEST_EFFORT_CANDIDATE`.
 
-## Not yet wired (remaining slice)
+## Public entry (slice 2) — the real `engine="ts"` flagship
 
-The **real public entry** (`engine="ts"` through the Python Host) still refuses
-the `REPAIR` phase: `python/astra_bridge/agent_host.py` only accepts `WORK`/`R2`
-and forbids any `WORK` after the R2 review. Exposing the loop closure end to end
-therefore needs a **coordinated Node+Host REPAIR slot**: a `validate_context`
-REPAIR branch, a `repairCalls` summary field, the widened `_STOP_REASONS`, and a
-new public-entry flagship + negatives. That is the final step and is
-deliberately kept out of this slice so the 287/186/572 baseline keeps zero
-regressions.
+The loop closure is now reachable through the real public entry. The Python Host
+accepts the additive `REPAIR` phase (`agent_client._PHASES`, `agent_host`
+request/`_STOP_REASONS`/`_SUMMARY_FIELDS` + a `repairCalls` counter,
+`agent_context.validate_context`/`_check_repair`, the v1.3 schema, and the
+`project_artifacts`/`candidate_packet` REPAIR branches), and `maxRepairs` is
+threaded from the Host options through the Node `agent-host-flow` into
+`runAgentLoop`.
+
+`tests/e2e/test_ts_g3_flagship.py` proves it end to end on the real
+`user_agent.ReasoningAgent → Python Host ⇄ main.js --agent-loop` path:
+
+- flagship: `x(x-1)=0`, the model answers `{1}`, one real registered checker
+  action grounds the challenge, the review raises the missing-case challenge, and
+  the single `REPAIR` call releases the revised `{0,1}` candidate
+  (`status=candidate`, `reason=stopReason=REVISED_CANDIDATE`, `candidate_verified=false`);
+- negative: the same run with `maxRepairs` unset (default 0) keeps `{1}` as an
+  ordinary best-effort candidate — the challenge can never replace a candidate.
+
+## Evidence (supervisor-run)
+
+- `node --test` — **294 pass / 0 fail** (adds `p4-revise.test.ts` and
+  `agent-loop-g3.test.ts`).
+- `python -m pytest tests/e2e -q` — **190 passed** (adds
+  `test_ts_g3_flagship.py` positive+negative and `test_ts_g3_negatives.py`).
+- `python -m pytest -q` — **576 passed / 24 skipped** (old WASI skips).
+- `tsc -b` — 0.
+
 

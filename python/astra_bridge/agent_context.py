@@ -63,6 +63,12 @@ _FINAL_CONTEXT_SCHEMA_VERSION = "agent-work-context-v3"
 _LEGACY_CONTEXT_SCHEMA_VERSION = "agent-work-context-v2"
 _PROMPT_VERSION = "p2-workunit-v1"
 _R2_SCHEMA_VERSION = "p4-r2-context-v1"
+_REPAIR_SCHEMA_VERSION = "p4-repair-context-v1"
+_REPAIR_FIELDS = (
+    "schemaVersion", "stage", "requestId", "sessionId", "problemHash",
+    "contractVersion", "problemFullText", "task", "route", "sourceRequestId",
+    "answerObligationId", "challenge", "parentCandidate",
+)
 _TASK_FIELDS = (
     "envelope", "taskId", "goalId", "obligationId", "scopeId",
     "inputArtifactRefs", "dependencyTaskIds", "expectedResult",
@@ -268,12 +274,30 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         entry = history.get(request_id)
         if entry is None:
             return None
-        source_id, request, receipt, body = _source_body(entry)
+        if not isinstance(entry, dict):
+            return None
+        request = entry.get("request")
+        receipt = entry.get("receipt")
+        if not isinstance(request, dict) or not isinstance(receipt, dict):
+            return None
+        try:
+            source_id, messages = _validate_request(copy.deepcopy(request))
+        except ProbeError:
+            return None
         if source_id != request_id:
+            return None
+        # The revised candidate (G3/PR4) comes from a REPAIR request; the
+        # ordinary candidate from a WORK request. `_validate_request` already
+        # accepted the phase, so only these two shapes reach the packet check.
+        if request.get("phase") not in ("WORK", "REPAIR"):
+            return None
+        body = _parse_inner(messages[1]["content"])
+        if not isinstance(body, dict):
             return None
         if request["sessionId"] != session_id or request["problemHash"] != problem_hash:
             return None
-        if body.get("schemaVersion") != source_schema:
+        version = body.get("schemaVersion")
+        if version != source_schema and version != _REPAIR_SCHEMA_VERSION:
             return None
         if body.get("problemFullText") != problem:
             return None
@@ -287,9 +311,8 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         if packet["deliveryStatus"] != "COMPLETE":
             return None
         task = body.get("task")
-        scope = body.get("scope")
         route = body.get("route")
-        if not isinstance(task, dict) or not isinstance(scope, dict) or not isinstance(route, dict):
+        if not isinstance(task, dict) or not isinstance(route, dict):
             return None
         # Declared dependencies are admitted only when they are exactly this
         # task's own declared input refs; a foreign, unknown or tampered ref is
@@ -300,7 +323,23 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
             return None
         if packet["taskId"] != task.get("taskId") or packet["goalId"] != task.get("goalId"):
             return None
-        if packet["scopeId"] != scope.get("scopeId") or packet["routeId"] != route.get("routeId"):
+        if packet["routeId"] != route.get("routeId"):
+            return None
+        candidate = packet["candidateProposal"]
+        if not isinstance(candidate, str) or not js_nonempty(candidate):
+            return None
+        _text(candidate, _MAX_TEXT_CHARS)
+        if version == _REPAIR_SCHEMA_VERSION:
+            # A G3/PR4 revised candidate: the repair context was already checked
+            # by ``_check_repair``; here the Host only re-checks the packet
+            # binding and returns the parsed packet.
+            _text(packet["claim"], _MAX_TEXT_CHARS)
+            _text(packet["derivation"], _MAX_TEXT_CHARS)
+            return copy.deepcopy(packet)
+        scope = body.get("scope")
+        if not isinstance(scope, dict):
+            return None
+        if packet["scopeId"] != scope.get("scopeId"):
             return None
         if canonical_scope(scope) != packet["scopeId"]:
             return None
@@ -316,10 +355,6 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
                 return None
         _text(packet["claim"], _MAX_TEXT_CHARS)
         _text(packet["derivation"], _MAX_TEXT_CHARS)
-        candidate = packet["candidateProposal"]
-        if not isinstance(candidate, str) or not js_nonempty(candidate):
-            return None
-        _text(candidate, _MAX_TEXT_CHARS)
         obligations = body.get("obligations")
         if not isinstance(obligations, list):
             return None
@@ -978,6 +1013,59 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
         _fail()
 
 
+def _check_repair(body, request_id, problem, session_id, problem_hash, history):
+    """Validate one G3/PR4 REPAIR context body (additive, control-side shape).
+
+    The body is Node-built control data: it names the challenged task binding,
+    the answer obligation and the review challenge. The Host only checks that it
+    is internally consistent and bound to the same session/problem/task; it makes
+    no mathematical decision and never promotes evidence.
+    """
+    _exact_keys(body, _REPAIR_FIELDS)
+    if body["schemaVersion"] != _REPAIR_SCHEMA_VERSION:
+        _fail()
+    if body["stage"] != "REPAIR" or body["requestId"] != request_id:
+        _fail()
+    if body["problemFullText"] != problem:
+        _fail()
+    if body["sessionId"] != session_id or body["problemHash"] != problem_hash:
+        _fail()
+    if not _is_int(body["contractVersion"]) or body["contractVersion"] != 1:
+        _fail()
+    if body["sourceRequestId"] != request_id:
+        _fail()
+    task = body["task"]
+    _exact_keys(task, ("taskId", "goalId", "scopeId", "inputArtifactRefs"))
+    if not isinstance(task["taskId"], str) or not task["taskId"]:
+        _fail()
+    if not isinstance(task["goalId"], str) or not task["goalId"]:
+        _fail()
+    _hash64(task["scopeId"])
+    if not isinstance(task["inputArtifactRefs"], list):
+        _fail()
+    route = body["route"]
+    _exact_keys(route, ("routeId",))
+    if not isinstance(route["routeId"], str) or not route["routeId"]:
+        _fail()
+    if not isinstance(body["answerObligationId"], str) or not body["answerObligationId"]:
+        _fail()
+    challenge = body["challenge"]
+    if not isinstance(challenge, dict):
+        _fail()
+    _exact_keys(
+        challenge,
+        ("challengeId", "target", "targetHash", "issue", "requestIds", "status", "availability"),
+    )
+    if challenge["status"] != "CHALLENGED" or challenge["availability"] != "ACTIVE":
+        _fail()
+    _hash64(challenge["targetHash"])
+    if not isinstance(challenge["challengeId"], str) or not challenge["challengeId"]:
+        _fail()
+    if body["parentCandidate"] is not None and not isinstance(body["parentCandidate"], str):
+        _fail()
+    return copy.deepcopy(body)
+
+
 def validate_context(request, problem, session_id, problem_hash, history, effects,
                      catalog=None, method_assets=None):
     """Validate one Host-built model request against its own records.
@@ -1013,6 +1101,13 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
         if target.get("taskId") != request["taskId"] or target.get("scopeId") != request["scopeId"]:
             _fail()
         _check_r2(body, request_id, problem, session_id, problem_hash, history)
+    elif request["phase"] == "REPAIR":
+        task = body.get("task")
+        if not isinstance(task, dict):
+            _fail()
+        if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
+            _fail()
+        _check_repair(body, request_id, problem, session_id, problem_hash, history)
     else:
         _fail()
     return copy.deepcopy(body)

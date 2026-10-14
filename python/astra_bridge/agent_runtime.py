@@ -88,6 +88,7 @@ class AgentRuntime:
         max_effects=1,
         max_reviews=1,
         max_method_loads=0,
+        max_repairs=0,
         problem_seconds=5,
         policy="BEST_EFFORT",
         derive_budget=False,
@@ -103,6 +104,8 @@ class AgentRuntime:
             raise ValueError("invalid max_reviews")
         if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 1:
             raise ValueError("invalid max_method_loads")
+        if not _is_int(max_repairs) or not 0 <= max_repairs <= 1:
+            raise ValueError("invalid max_repairs")
         if not isinstance(derive_budget, bool):
             raise ValueError("invalid derive_budget")
         if isinstance(problem_seconds, bool) or not isinstance(problem_seconds, (int, float)):
@@ -118,6 +121,7 @@ class AgentRuntime:
         self.max_effects = max_effects
         self.max_reviews = max_reviews
         self.max_method_loads = max_method_loads
+        self.max_repairs = max_repairs
         self.derive_budget = derive_budget
         self.problem_seconds = float(problem_seconds)
         self.policy = policy
@@ -152,6 +156,7 @@ class AgentRuntime:
                 "maxEffects": self.max_effects,
                 "maxReviews": self.max_reviews,
                 "maxMethodLoads": self.max_method_loads,
+                "maxRepairs": self.max_repairs,
                 "policy": self.policy,
                 "problemSeconds": self.problem_seconds,
                 "node": self.node,
@@ -184,6 +189,7 @@ class AgentRuntime:
             "maxEffects": options["maxEffects"],
             "maxReviews": options["maxReviews"],
             "maxMethodLoads": options["maxMethodLoads"],
+            "maxRepairs": options["maxRepairs"],
             "policy": options["policy"],
             "deriveBudget": options["deriveBudget"],
         }
@@ -221,6 +227,7 @@ class AgentRuntime:
                 "maxEffects": options["maxEffects"],
                 "maxReviews": options["maxReviews"],
                 "maxMethodLoads": options["maxMethodLoads"],
+                "maxRepairs": options["maxRepairs"],
                 "policy": options["policy"],
                 "deriveBudget": options["deriveBudget"],
             }

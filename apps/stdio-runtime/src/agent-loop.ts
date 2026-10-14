@@ -152,6 +152,7 @@ export async function runAgentLoop(
 
   let workUnits = 0;
   let reviewCalls = 0;
+  let repairCalls = 0;
   let catalogCalls = 0;
   let methodLoads = 0;
   let catalog: P2MethodCatalog | null = null;
@@ -956,10 +957,13 @@ export async function runAgentLoop(
         const requestId = root.nextModelId();
         if (requestId !== null) {
           const body = {
+            schemaVersion: "p4-repair-context-v1" as const,
             sessionId: session,
             problemHash,
             contractVersion: contract.contractVersion,
+            problemFullText: problemText,
             stage: "REPAIR" as const,
+            requestId,
             task: p2Snapshot({
               taskId: repairTask.taskId,
               goalId: repairTask.goalId,
@@ -990,6 +994,7 @@ export async function runAgentLoop(
             contextBytes,
           });
           if (root.modelCalls() > before && outcome.receipt.transportStatus === "COMPLETE") {
+            repairCalls += 1;
             try {
               const childArtifact = store.accept(repairTask, {
                 artifactId: "repair-1",
@@ -1079,6 +1084,7 @@ export async function runAgentLoop(
     effectCalls: root.effectCalls(),
     workUnits,
     reviewCalls,
+    repairCalls,
     catalogCalls,
     methodLoads,
     stopReason: stop,

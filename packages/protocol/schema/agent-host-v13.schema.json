@@ -236,6 +236,11 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 1
+          },
+          "maxRepairs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         }
       },
@@ -416,6 +421,7 @@
                   "enum": [
                     "WORK",
                     "R2",
+                    "REPAIR",
                     "COMPLETE",
                     "TRUNCATED",
                     "ERROR",
@@ -432,6 +438,8 @@
                     "REVIEW_STOP",
                     "REVIEWS_COMPLETE",
                     "WORK_UNITS_COMPLETE",
+                    "REVISED_CANDIDATE",
+                    "REVISE_REJECTED",
                     "PORT_REJECTED",
                     "STOPPED"
                   ]
@@ -456,6 +464,7 @@
               "effectCalls",
               "workUnits",
               "reviewCalls",
+              "repairCalls",
               "stopReason",
               "catalogCalls",
               "methodLoads"
@@ -508,7 +517,9 @@
                   "STRICT_NOT_VERIFIED",
                   "NO_CANDIDATE",
                   "STALE_CANDIDATE",
-                  "DEADLINE_EXCEEDED"
+                  "DEADLINE_EXCEEDED",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED"
                 ]
               },
               "modelCalls": {
@@ -531,11 +542,17 @@
                 "minimum": 0,
                 "maximum": 1
               },
+              "repairCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
               "stopReason": {
                 "type": "string",
                 "enum": [
                   "WORK",
                   "R2",
+                  "REPAIR",
                   "COMPLETE",
                   "TRUNCATED",
                   "ERROR",
@@ -552,6 +569,8 @@
                   "REVIEW_STOP",
                   "REVIEWS_COMPLETE",
                   "WORK_UNITS_COMPLETE",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED",
                   "PORT_REJECTED",
                   "STOPPED"
                 ]
@@ -707,7 +726,8 @@
                 "type": "string",
                 "enum": [
                   "WORK",
-                  "R2"
+                  "R2",
+                  "REPAIR"
                 ]
               },
               "taskId": {

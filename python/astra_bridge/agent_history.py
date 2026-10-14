@@ -20,7 +20,7 @@ import hashlib
 from .p0_probe import ProbeError
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import same_json as _same_json
-from .agent_workflow import _source_record
+from .agent_workflow import _source_record, checked_packet
 from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
@@ -38,6 +38,7 @@ _REVISION_FIELDS = (
 _REF_FIELDS = ("artifactId", "artifactVersion")
 _WORK_V4 = "p2a-work-v4"
 _WORK_V5 = "p2a-work-v5"
+_REPAIR_SCHEMA_VERSION = "p4-repair-context-v1"
 _CONTEXT_V6 = "agent-work-context-v6"
 _CONTEXT_V7 = "agent-work-context-v7"
 _MAX_TEXT = 4096
@@ -152,9 +153,9 @@ def _ordered(history):
     return rows
 
 
-def _body_of(entry):
+def _body_of(entry, phases=("WORK",)):
     request = entry.get("request")
-    if not isinstance(request, dict) or request.get("phase") != "WORK":
+    if not isinstance(request, dict) or request.get("phase") not in phases:
         return None
     messages = request.get("messages")
     if not isinstance(messages, list) or len(messages) != 2:
@@ -259,7 +260,7 @@ def project_artifacts(history, session_id, problem_hash):
         entry = history.get(request_id)
         if not isinstance(entry, dict):
             continue
-        body = _body_of(entry)
+        body = _body_of(entry, ("WORK", "REPAIR"))
         if body is None:
             continue
         if finished_redo:
@@ -274,6 +275,66 @@ def project_artifacts(history, session_id, problem_hash):
             continue
         task_id = task.get("taskId")
         if not isinstance(task_id, str):
+            continue
+        if body.get("schemaVersion") == _REPAIR_SCHEMA_VERSION:
+            # G3/PR4: one revised candidate delivered by the single REPAIR call.
+            # It is projected as one new ACTIVE artifact (version 1); the parent
+            # artifact keeps its own row. Nothing is invented: the row carries the
+            # exact repair receipt bytes and the parsed revised packet.
+            try:
+                packet = checked_packet(entry["receipt"]["text"])
+            except ProbeError:
+                continue
+            if not isinstance(packet, dict) or packet.get("deliveryStatus") != "COMPLETE":
+                continue
+            refs = task.get("inputArtifactRefs")
+            if not isinstance(refs, list):
+                _fail()
+            dependencies = []
+            for ref in refs:
+                _exact_keys(ref, _REF_FIELDS)
+                dependencies.append({
+                    "artifactId": _text(ref["artifactId"], _MAX_SHORT),
+                    "artifactVersion": ref["artifactVersion"],
+                })
+            raw = entry["receipt"]["text"]
+            if not isinstance(raw, str):
+                _fail()
+            digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            artifact_id = "repair-" + str(len(rows) + 1)
+            row = {
+                "envelope": {
+                    "recordId": session_id + ":m3:artifact:" + str(next_seq),
+                    "sessionId": session_id,
+                    "problemHash": problem_hash,
+                    "sourceModule": "M3",
+                    "taskId": task_id,
+                    "contractVersion": 1,
+                    "artifactId": artifact_id,
+                    "artifactVersion": 1,
+                    "scopeId": task.get("scopeId"),
+                    "causeEventId": session_id + ":event:" + str(next_seq),
+                    "eventSeq": next_seq,
+                },
+                "artifactId": artifact_id,
+                "routeId": body.get("route", {}).get("routeId"),
+                "scope": None,
+                "dependencies": dependencies,
+                "sourceRequestId": request_id,
+                "rawResponseHash": digest,
+                "rawResponseRef": session_id + ":raw:" + request_id,
+                "rawResponseText": raw,
+                "packet": packet,
+                "transportStatus": "COMPLETE",
+                "deliveryStatus": "COMPLETE",
+                "level": "PROVISIONAL",
+                "checkResult": "UNKNOWN",
+                "provisionalDependency": bool(refs),
+                "availability": "ACTIVE",
+            }
+            rows.append(row)
+            by_source[request_id] = row
+            next_seq += 1
             continue
         envelope = task.get("envelope")
         if not isinstance(envelope, dict):

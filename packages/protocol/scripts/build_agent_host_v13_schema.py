@@ -94,6 +94,14 @@ def _init_params(manifest):
         "minimum": 0,
         "maximum": 1,
     }
+    # G3/PR4: the single evidence-triggered repair call budget (0 or 1). Optional
+    # so an older sender that omits it still validates; the loop then runs with
+    # no repair.
+    params["properties"]["maxRepairs"] = {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1,
+    }
     caps = params["properties"]["capabilities"]["properties"]
     caps["methodLoad"] = {"type": "string", "enum": ["AVAILABLE", "UNAVAILABLE"]}
 
@@ -101,7 +109,7 @@ def _init_params(manifest):
 def _solve_result(manifest):
     summary = manifest["methods"]["session.solve"]["result"]["properties"]["summary"]
     required = summary["required"]
-    for name in ("catalogCalls", "methodLoads"):
+    for name in ("catalogCalls", "methodLoads", "repairCalls"):
         if name not in required:
             required.append(name)
         summary["properties"][name] = {
@@ -109,6 +117,19 @@ def _solve_result(manifest):
             "minimum": 0,
             "maximum": 1,
         }
+    for name in ("reason", "stopReason"):
+        enum = summary["properties"][name]["enum"]
+        for value in ("REPAIR", "REVISED_CANDIDATE", "REVISE_REJECTED"):
+            if value not in enum:
+                enum.append(value)
+    summary["properties"]["stopReason"]["enum"] = [
+        "WORK", "R2", "REPAIR", "COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN",
+        "ADMITTED", "BUDGET_EXHAUSTED", "DEADLINE_EXCEEDED", "ILLEGAL_TRANSITION",
+        "NO_CANDIDATE", "NO_REVIEW", "CONTROL_REJECTED", "PACKET_REJECTED",
+        "CONTEXT_REJECTED", "REVIEW_STOP", "REVIEWS_COMPLETE",
+        "WORK_UNITS_COMPLETE", "REVISED_CANDIDATE", "REVISE_REJECTED",
+        "PORT_REJECTED", "STOPPED",
+    ]
 
 
 def _catalog_method(p3):
@@ -147,6 +168,15 @@ def _load_method(base):
     return entry
 
 
+def _model_generate(manifest):
+    """Allow the single G3/PR4 REPAIR phase on model.generate params."""
+    params = manifest["methods"]["model.generate"]["params"]
+    enum = params["properties"]["phase"]["enum"]
+    for value in ("REPAIR",):
+        if value not in enum:
+            enum.append(value)
+
+
 def build(base, p3):
     """Return the 1.3 manifest dict derived from the 1.2 base and P3 manifest."""
     _require(isinstance(base, dict), "BASE_INVALID")
@@ -169,6 +199,7 @@ def build(base, p3):
 
     _init_params(manifest)
     _solve_result(manifest)
+    _model_generate(manifest)
     manifest["methods"][METHOD_CATALOG] = _catalog_method(p3)
     manifest["methods"][METHOD_LOAD] = _load_method(base)
     _replace_version(manifest)
