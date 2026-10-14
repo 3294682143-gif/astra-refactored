@@ -163,3 +163,27 @@ def test_e14_released_candidate_is_byte_verbatim(process_tracker):
     assert result["candidate_verified"] is False
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert process_tracker
+
+
+def test_e14_empty_delivered_text_is_never_released(process_tracker):
+    """E14 (empty): a delivered candidate that is empty breaks the non-empty
+    contract and must never be released by S3 (no verified/format upgrade)."""
+    class EmptyCandidateClient(FakeClient):
+        def _work(self, body):
+            packet = json.loads(super()._work(body))
+            packet["candidateProposal"] = ""
+            return json.dumps(packet)
+
+    result = _solve(
+        EmptyCandidateClient(),
+        max_model_calls=4,
+        max_work_units=2,
+        max_effects=1,
+        max_reviews=0,
+    )
+    assert result["status"] != "candidate"
+    assert result["final_response"] == "Unsolved."
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert process_tracker
+
