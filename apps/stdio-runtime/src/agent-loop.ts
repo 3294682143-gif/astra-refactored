@@ -1280,6 +1280,19 @@ export async function runAgentLoop(
                 root.remainingMs(),
               );
               revisedDecision = revision.decision;
+              if (revision.accepted) {
+                // B1c (DECISION-0150): sync the M1 ledger to the local update of
+                // the affected (challenged) answer obligation's task; every other
+                // obligation/task keeps its prior state.
+                ledger.recordLocalRevision(
+                  repairTask.taskId,
+                  {
+                    artifactId: childArtifact.artifactId,
+                    artifactVersion: childArtifact.envelope.artifactVersion ?? 1,
+                  },
+                  childArtifact.envelope.eventSeq,
+                );
+              }
               s2Transaction = {
                 supersededObligationIds: revision.supersededObligationIds,
                 preservedObligationIds: revision.preservedObligationIds,

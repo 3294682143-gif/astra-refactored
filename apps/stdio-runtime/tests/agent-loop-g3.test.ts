@@ -157,6 +157,24 @@ test("flagship: R2 challenge + Host checker evidence revises {1} -> {0,1} in the
   assert.equal(tx!.supersededObligationIds.includes("goal-1:EXHAUSTIVENESS"), true);
   assert.equal(tx!.preservedObligationIds.includes("goal-1:EXHAUSTIVENESS"), false);
   assert.match(String(tx!.preservedParentArtifactId), /^artifact-\d+$/);
+  // B1c: the M1 ledger records the local update of the affected answer task's
+  // obligation as a truthful ARTIFACT_ACCEPTED structural event (no other
+  // obligation/task is touched and nothing is accepted as a theorem).
+  const events = result.privateState.events as readonly {
+    readonly eventType: string;
+    readonly taskId?: string;
+    readonly obligationId?: string;
+    readonly artifactId?: string;
+  }[];
+  const localRevision = events.find(
+    (row) => row.eventType === "ARTIFACT_ACCEPTED" && row.taskId === ANSWER_TASK,
+  );
+  assert.ok(localRevision !== undefined);
+  assert.equal(localRevision!.obligationId, "goal-1:EXHAUSTIVENESS");
+  assert.equal(
+    events.filter((row) => row.eventType === "ARTIFACT_ACCEPTED").length,
+    1,
+  );
 });
 
 test("no checker grounding means no replacement: the parent candidate stays", async () => {

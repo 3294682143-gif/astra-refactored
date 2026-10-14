@@ -615,6 +615,43 @@ export class ContractLedger {
   }
 
   /**
+   * B1c (DECISION-0150): record the local M1 update of one already-delivered
+   * task after an evidence-gated S2 revision. Only this task's current delivery
+   * is repointed at the revised child artifact; every obligation and every other
+   * task keeps its prior state. A truthful structural transition (the M1 ledger
+   * "syncs" the affected obligation's local update), never acceptance and never
+   * a new obligation state.
+   */
+  recordLocalRevision(taskId: string, artifactRef: P2ArtifactRef, eventSeq: number): void {
+    const state = this.requireTask(taskId);
+    if (state.delivery !== "DELIVERED" && state.delivery !== "PARTIAL") {
+      throw new P2Error(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    if (!isArtifactRef(artifactRef)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (
+      !Number.isSafeInteger(eventSeq) ||
+      eventSeq < 1 ||
+      eventSeq >= Number.MAX_SAFE_INTEGER ||
+      eventSeq !== this.nextSeq
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    this.append("ARTIFACT_ACCEPTED", "M1", eventSeq, {
+      taskId,
+      obligationId: state.task.obligationId,
+      artifactId: artifactRef.artifactId,
+      artifactVersion: artifactRef.artifactVersion,
+    });
+    this.tasks.set(taskId, {
+      ...state,
+      delivery: "DELIVERED",
+      deliveredRefs: [p2Snapshot(artifactRef)],
+    });
+  }
+
+  /**
    * The only path to SATISFIED. The receipt must be a trusted M5 mock receipt
    * bound to this session, problem, version, goal and scope, and every
    * evidence ref must be a real latest ref of a currently DELIVERED task.
