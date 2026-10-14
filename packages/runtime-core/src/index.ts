@@ -27,6 +27,7 @@ export * from "./p2-methods.js";
 export * from "./p3-methods.js";
 export * from "./p2-a2-replay.js";
 export * from "./agent-session.js";
+export * from "./session-log.js";
 
 /** Fixed admission reasons. Arbitrary text is never a reason. */
 export const ADMISSION_REASON = ["ADMITTED", "BUDGET_EXHAUSTED"] as const;

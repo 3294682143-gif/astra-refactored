@@ -30,7 +30,7 @@ import {
   p3EffectRequest,
 } from "@astra/math-gateway";
 import type { P4RecheckModelGate } from "@astra/math-gateway";
-import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
+import { SessionLog, p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import type { AgentSession } from "@astra/runtime-core";
 import {
   AGENT_IO_MIN_REMAINING_MS,
@@ -86,11 +86,18 @@ export class AgentCalls {
   private readonly root: AgentSession;
   private readonly gate: P4RecheckModelGate;
   private readonly ports: CapturedAgentPorts;
+  private readonly sessionLog: SessionLog | null;
 
-  constructor(root: AgentSession, gate: P4RecheckModelGate, ports: CapturedAgentPorts) {
+  constructor(
+    root: AgentSession,
+    gate: P4RecheckModelGate,
+    ports: CapturedAgentPorts,
+    sessionLog: SessionLog | null = null,
+  ) {
     this.root = root;
     this.gate = gate;
     this.ports = ports;
+    this.sessionLog = sessionLog;
   }
 
   /**
@@ -151,6 +158,15 @@ export class AgentCalls {
     }
     const permit = this.gate.admit(task, this.nextRequestId(), admitRemaining, phase);
     const requestId = permit.requestId;
+    // G4/PR5 Slice 4a: the request identity is projected from the SessionLog;
+    // the log records the exact model-visible context and its hash.
+    this.sessionLog?.append("MODEL_REQUEST", {
+      phase,
+      requestId,
+      contextHash,
+      contextBytes,
+      messages,
+    });
     const baseRequest = p2Snapshot({
       sessionId: this.root.sessionId,
       problemHash: this.root.problemHash,

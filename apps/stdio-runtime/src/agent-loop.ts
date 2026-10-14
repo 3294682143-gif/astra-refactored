@@ -55,7 +55,7 @@ import {
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
-import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
+import { AgentSession, SessionLog, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
@@ -161,6 +161,7 @@ function parameterGapsOf(
 async function r0Generate(
   root: AgentSession,
   ports: CapturedAgentPorts,
+  sessionLog: SessionLog,
   context: {
     readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
     readonly contextHash: string;
@@ -189,6 +190,13 @@ async function r0Generate(
     remainingMs: remaining,
     maxTokens: 8192 as const,
   }) as AgentModelRequest;
+  sessionLog.append("MODEL_REQUEST", {
+    phase: "R0",
+    requestId,
+    contextHash: request.contextHash,
+    contextBytes: request.contextBytes,
+    messages: request.messages,
+  });
   root.reserveModel("R0");
   let raw: unknown;
   try {
@@ -222,6 +230,7 @@ async function runBoundedR0(
   opts: CapturedAgentOptions,
   problemText: string,
   session: string,
+  sessionLog: SessionLog,
 ): Promise<P2Contract> {
   const fallback = (): P2Contract => compileP2Contract(problemText, session, undefined);
   try {
@@ -242,7 +251,7 @@ async function runBoundedR0(
     }
     const review = new P4R0ReviewSession(prep, 1);
     const admitted = review.admit(root.remainingMs(), r0RootCalls);
-    const receipt = await r0Generate(root, ports, admitted.context, prep.target.binding.planHash);
+    const receipt = await r0Generate(root, ports, sessionLog, admitted.context, prep.target.binding.planHash);
     review.markDispatched();
     const settled = review.settle(receipt.transportStatus, receipt.text, root.remainingMs());
     if (settled.code !== "OK" || settled.report === null || settled.report.conclusion !== "ISSUES") {
@@ -264,7 +273,7 @@ async function runBoundedR0(
     }) as P4R0RevisionTrigger;
     const revision = new P4R0PlanRevisionSession(prep, trigger, 1);
     const rAdmitted = revision.admit(root.remainingMs(), 2, 3);
-    const rReceipt = await r0Generate(root, ports, rAdmitted.context, prep.target.binding.planHash);
+    const rReceipt = await r0Generate(root, ports, sessionLog, rAdmitted.context, prep.target.binding.planHash);
     revision.markDispatched();
     revision.settle(rReceipt.transportStatus, rReceipt.text, root.remainingMs());
     const snapshot = revision.snapshot();
@@ -273,13 +282,15 @@ async function runBoundedR0(
       // is not itself an activatable contract. Recompile a clean version-2
       // contract from the revised goal tree so the main ledger sees OPEN
       // obligations and READY tasks (the single bounded bump is now applied).
-      return compileP2Contract(
+      const revised = compileP2Contract(
         problemText,
         session,
         snapshot.revisedContract.goals,
         snapshot.revisedContract.envelope.eventSeq,
         2,
       );
+      sessionLog.append("CONTRACT_REVISED", { fromVersion: 1, toVersion: revised.contractVersion });
+      return revised;
     }
     return fallback();
   } catch (error) {
@@ -330,13 +341,22 @@ export async function runAgentLoop(
     remainingMs: opts.remainingMs,
     now: opts.now,
   });
+  // G4/PR5 Slice 4a: the immutable SessionLog is the single source of truth for
+  // what the model saw; every model request is a deterministic projection of it.
+  const sessionLog = new SessionLog();
+  sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
   // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
   // any WORK, shares the same root budget, and may change the contract to
   // version 2 via at most one `reviseGoals`. With the default `maxR0=0` this is
   // a no-op and the run is byte-identical to before.
   if (opts.maxR0 >= 1) {
-    contract = await runBoundedR0(contract, root, captured, opts, problemText, session);
+    contract = await runBoundedR0(contract, root, captured, opts, problemText, session, sessionLog);
   }
+  sessionLog.append("CONTRACT", {
+    contractVersion: contract.contractVersion,
+    tasks: contract.tasks.length,
+    obligations: contract.obligations.length,
+  });
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
   const workflow = new AgentWorkflowRoutes(ledger, store);
@@ -348,7 +368,7 @@ export async function runAgentLoop(
     opts.maxModelCalls,
     root.modelCalls(),
   );
-  const calls = new AgentCalls(root, gate, captured);
+  const calls = new AgentCalls(root, gate, captured, sessionLog);
   const progress = new AgentProgressPolicy();
 
   let workUnits = 0;
@@ -655,6 +675,12 @@ export async function runAgentLoop(
             callsLeft(),
             catalog ?? undefined,
           );
+          sessionLog.append(isMethod ? "METHOD_LOAD" : "TOOL_OBSERVATION", {
+            effectId: receipt.effectId,
+            source: receipt.source,
+            level: receipt.level,
+            checkResult: receipt.checkResult,
+          });
           if (isMethod && root.effectCalls() > effectsBefore) {
             methodLoads += 1;
           }
@@ -897,6 +923,13 @@ export async function runAgentLoop(
             accepted.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL",
             accepted.envelope.eventSeq,
           );
+          sessionLog.append("WORKUNIT", {
+            taskId: running.taskId,
+            goalId: running.goalId,
+            artifactId: ref.artifactId,
+            artifactVersion: ref.artifactVersion,
+            deliveryStatus: accepted.deliveryStatus,
+          });
           workUnits += 1;
           if (accepted.deliveryStatus !== "COMPLETE") {
             if (revision.pendingTaskId() === null) {
@@ -1127,6 +1160,15 @@ export async function runAgentLoop(
     // observation already bound to the original problem. This is opt-in
     // (`maxRepairs`); with the default 0 the whole block is dead and the run is
     // byte-identical to before.
+    if (review !== null) {
+      const reviewSnapshotForLog = review.snapshot();
+      sessionLog.append("REVIEW_CHALLENGE", {
+        reviewCalls,
+        challenges: reviewSnapshotForLog.challenges.length,
+        records: reviewSnapshotForLog.records.length,
+      });
+    }
+
     if (
       opts.maxRepairs >= 1 &&
       stop === "REVIEWS_COMPLETE" &&
@@ -1280,6 +1322,10 @@ export async function runAgentLoop(
                 root.remainingMs(),
               );
               revisedDecision = revision.decision;
+              sessionLog.append("REPAIR", {
+                accepted: revision.accepted,
+                reason: revision.decision.reason,
+              });
               if (revision.accepted) {
                 // B1c (DECISION-0150): sync the M1 ledger to the local update of
                 // the affected (challenged) answer obligation's task; every other
@@ -1355,6 +1401,12 @@ export async function runAgentLoop(
       )
       .map((row) => row.obligationId),
   );
+  sessionLog.append("FINAL", {
+    status: decision.status,
+    reason: decision.reason,
+    finalResponse: decision.finalResponse,
+    candidateVerified: false,
+  });
   const summary: AgentLoopSummary = p2Snapshot({
     mode: "TS_PREVIEW" as const,
     targetEnvironment: "TARGET_UNVERIFIED" as const,
@@ -1395,6 +1447,7 @@ export async function runAgentLoop(
     s2Transaction,
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
+    sessionLog: sessionLog.snapshot(),
   });
   return p2Snapshot({ summary, privateState }) as AgentLoopResult;
 }

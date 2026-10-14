@@ -262,6 +262,16 @@ export interface AgentLoopPrivateState {
     readonly supersededObligationIds: readonly string[];
     readonly preservedObligationIds: readonly string[];
     readonly preservedParentArtifactId: string | null;
+  } | null;  /** G4/PR5 Slice 4a: the immutable session log projection (private, not on the wire). */
+  readonly sessionLog?: {
+    readonly schemaVersion: string;
+    readonly version: number;
+    readonly events: readonly {
+      readonly seq: number;
+      readonly schemaVersion: string;
+      readonly kind: string;
+      readonly data: Readonly<Record<string, unknown>>;
+    }[];
   } | null;
 }
 
