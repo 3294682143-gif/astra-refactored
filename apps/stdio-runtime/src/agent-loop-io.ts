@@ -40,6 +40,8 @@ const OPTION_FIELDS = [
   "now",
   "goalSpecs",
   "deriveBudget",
+  "resumeSessionLog",
+  "resumeContractVersion",
 ] as const;
 const PORT_FIELDS = ["model", "effect", "catalog"] as const;
 
@@ -167,6 +169,58 @@ export interface CapturedAgentOptions {
   readonly goalSpecs: readonly P2GoalSpec[];
   readonly now: () => number;
   readonly deriveBudget: boolean;
+  /** G7/PR7 Slice 7d: optional authenticated resume prefix (absent = null). */
+  readonly resumeSessionLog: readonly {
+    readonly seq: number;
+    readonly kind: string;
+    readonly data: Readonly<Record<string, unknown>>;
+  }[] | null;
+  readonly resumeContractVersion: number | null;
+}
+
+const MAX_RESUME_EVENTS = 512;
+const MAX_RESUME_KIND_CHARS = 64;
+
+function checkedResumeLog(value: unknown): CapturedAgentOptions["resumeSessionLog"] {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > MAX_RESUME_EVENTS) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  const out: { seq: number; kind: string; data: Readonly<Record<string, unknown>> }[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const row = value[index];
+    if (!isPlainObject(row)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (row["seq"] !== index + 1) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const kind = row["kind"];
+    if (typeof kind !== "string" || kind.length === 0 || kind.length > MAX_RESUME_KIND_CHARS) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    if (!isPlainObject(row["data"])) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    out.push({
+      seq: index + 1,
+      kind,
+      data: p2Snapshot(row["data"]) as Readonly<Record<string, unknown>>,
+    });
+  }
+  return p2Snapshot(out) as CapturedAgentOptions["resumeSessionLog"];
+}
+
+function checkedResumeVersion(value: unknown): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || (value !== 1 && value !== 2)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return value;
 }
 
 /**
@@ -224,6 +278,11 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   const deriveBudget = rawDeriveBudget === true;
+  const resumeSessionLog = checkedResumeLog(source.resumeSessionLog);
+  const resumeContractVersion = checkedResumeVersion(source.resumeContractVersion);
+  if (resumeSessionLog !== null && resumeContractVersion === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
   return Object.freeze({
     maxModelCalls,
     maxWorkUnits,
@@ -237,6 +296,8 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     goalSpecs: p2Snapshot(goalSpecs) as readonly P2GoalSpec[],
     now: now as () => number,
     deriveBudget,
+    resumeSessionLog,
+    resumeContractVersion,
   });
 }
 

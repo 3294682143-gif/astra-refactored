@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "89e6358c2f2cd36fa2182a243f70316a5581cc5b",
-    "tree": "7345361e888a5f75aae523779ecd2d6f2062245d"
+    "commit": "8a0cf4515e8f0a0316163845dcafe2759412149c",
+    "tree": "3e2ace8917faeba91dbf80538670641ef76e8013"
   },
   "js": [
     {
@@ -15,19 +15,19 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "3966da01b3cc6af1d857eecb7e88f93113991763ca71f7eab00e90316c4d0252",
-      "bytes": 60973
+      "sha256": "6d01356c17ae16a7b31f5bd1b9ab960e6ce2eda553c4093acb95641b66df256e",
+      "bytes": 61609
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
-      "sha256": "9d589da0ea37c5290f164cf85cc55a6bf14bd15c21bb2f8216beb44250bac40b",
-      "bytes": 18368
+      "sha256": "fd196fa343f6a6e99e481c7e7bfe9b4f1a0fd3c515e318fc092c0bb2c1f19130",
+      "bytes": 20881
     }
   ],
   "assets": {
     "protocolSchema": {
       "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "995b6b7389e341ba5d7c34705ac82601f324d338f15ed4035c28446703eb7bf3"
+      "sha256": "0d68c6d4d474adfed534c230b05cfff65696d9d7ed2cf1e3be0fe15a13528461"
     },
     "methodRegistry": {
       "path": "mathagent/resources/tool-registry.json",

@@ -67,8 +67,12 @@ class ReasoningAgent:
         # explicit caller-supplied load_started constrains the first solve.
         self._impl = LiteRuntime(client, **kwargs)
 
-    def solve(self, problem, metadata=None):
-        return self._impl.solve(problem, metadata)
+    def solve(self, problem, metadata=None, resume_checkpoint=None):
+        if resume_checkpoint is None:
+            return self._impl.solve(problem, metadata)
+        if self.engine != "ts":
+            raise TypeError("resume_checkpoint requires engine='ts'")
+        return self._impl.solve(problem, metadata, resume_checkpoint=resume_checkpoint)
 
 
 __all__ = ["ReasoningAgent"]

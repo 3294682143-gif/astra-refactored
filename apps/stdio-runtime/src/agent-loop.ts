@@ -56,7 +56,7 @@ import {
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
-import { AgentSession, SessionLog, p3MethodCatalog, readAsset } from "@astra/runtime-core";
+import { AgentSession, SessionLog, SESSION_LOG_KIND, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
@@ -345,7 +345,20 @@ export async function runAgentLoop(
   // G4/PR5 Slice 4a: the immutable SessionLog is the single source of truth for
   // what the model saw; every model request is a deterministic projection of it.
   const sessionLog = new SessionLog();
-  sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
+  // G7/PR7 Slice 7d: an authenticated resume prefix is pre-seeded as
+  // already-settled events, so the settled model/tool calls are never
+  // re-dispatched. Absent keeps the default path byte-identical.
+  if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
+    for (const row of opts.resumeSessionLog) {
+      const kind = SESSION_LOG_KIND.find((candidate) => candidate === row.kind);
+      if (kind === undefined) {
+        fail(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      sessionLog.append(kind, row.data);
+    }
+  } else {
+    sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
+  }
   // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
   // any WORK, shares the same root budget, and may change the contract to
   // version 2 via at most one `reviseGoals`. With the default `maxR0=0` this is

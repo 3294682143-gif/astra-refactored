@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .agent_client import AgentClient
 from .agent_host import AgentHost
-from . import host_carriers
+from . import host_carriers, host_checkpoint
 from .agent_protocol import AGENT_HOST_VERSION, load_manifest, payload
 from .p0_probe import ProbeError, _child_env, _close_streams, _reap
 from .p0_protocol import ProtocolError
@@ -37,6 +37,7 @@ _PROFILE_ID = "math-agent-preview-v2"
 _POLICIES = ("BEST_EFFORT", "STRICT")
 _UNSOLVED = "Unsolved."
 _DEPLOYMENT_CODES = ("CHILD_FAILED", "SPAWN_FAILED")
+_RESUME_MODES = ("local", "shared_public")
 
 
 def _fail(code="FIELD_VALUE"):
@@ -141,8 +142,15 @@ class AgentRuntime:
 
     # -- public surface ---------------------------------------------------
 
-    def solve(self, problem, metadata=None):
-        """Run one bounded TS preview solve; never falls back to Python."""
+    def solve(self, problem, metadata=None, resume_checkpoint=None):
+        """Run one bounded TS preview solve; never falls back to Python.
+
+        ``resume_checkpoint`` is optional. When it is ``None`` the run is
+        byte-identical to before. When it is supplied the Host first verifies
+        the checkpoint identity through ``host_checkpoint`` and only then
+        injects the authenticated SessionLog prefix; an in-flight
+        ``OUTCOME_UNKNOWN`` request blocks the resume instead of replaying it.
+        """
         started = time.monotonic()
         if not isinstance(problem, str) or not problem.strip():
             raise ValueError("invalid problem")
@@ -172,13 +180,112 @@ class AgentRuntime:
                 "node": self.node,
                 "deriveBudget": self.derive_budget,
             }
-            return self._solve(started, problem, options)
+            resume = None
+            if resume_checkpoint is not None:
+                if self.mode not in _RESUME_MODES:
+                    return self._unsolved(started, "FIELD_VALUE", False)
+                prepared = self._prepare_resume(problem, options, resume_checkpoint)
+                if isinstance(prepared, str):
+                    return self._unsolved(started, prepared, False)
+                options = prepared["options"]
+                resume = prepared
+            return self._solve(started, problem, options, resume)
         finally:
             self._solve_lock.release()
 
     # -- internals --------------------------------------------------------
 
-    def _solve(self, started, problem, options):
+    def _prepare_resume(self, problem, options, checkpoint):
+        """Verify one checkpoint and tighten the root budget; fixed codes only.
+
+        Returns the prepared resume mapping on success, or a fixed error code
+        string. A blocked plan (an in-flight ``OUTCOME_UNKNOWN`` request id) is
+        reported as ``OUTCOME_UNKNOWN`` and never replayed.
+        """
+        problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
+        root_deadline_ms = max(1, min(5000, int(self.problem_seconds * 1000)))
+        try:
+            prior = host_carriers.bind_carrier(
+                self.mode, problem_hash, uuid.uuid4().hex, _PROFILE_ID,
+                max_model_calls=self.max_model_calls,
+                max_work_units=self.max_work_units,
+                max_effects=self.max_effects,
+                root_deadline_ms=root_deadline_ms,
+            )
+        except host_carriers.CarrierError as exc:
+            return exc.code
+        try:
+            plan = host_checkpoint.resume_plan(
+                checkpoint,
+                prior=prior,
+                session_id=uuid.uuid4().hex,
+            )
+        except host_checkpoint.CheckpointError as exc:
+            return exc.code
+        except host_carriers.CarrierError as exc:
+            return exc.code
+        if plan["blocked"]:
+            return "OUTCOME_UNKNOWN"
+        remaining = plan["remaining"]
+        next_options = dict(options)
+        next_options["maxModelCalls"] = min(
+            options["maxModelCalls"], remaining["maxModelCalls"],
+        )
+        next_options["maxEffects"] = min(
+            options["maxEffects"], remaining["maxEffects"],
+        )
+        return {
+            "options": next_options,
+            "sessionLog": plan["sessionLog"],
+            "contractVersion": host_checkpoint.body_contract_version(checkpoint),
+        }
+
+    def export_checkpoint(self, problem, contract_version=1):
+        """Export one controlled checkpoint of the last run; None when unusable.
+
+        Only the settled request ledger of the last run is exported, with an
+        empty SessionLog prefix and no effect spend. A non-resumable carrier, a
+        malformed problem or a rejected export yields ``None`` rather than a
+        partial checkpoint.
+        """
+        if self.mode not in _RESUME_MODES:
+            return None
+        if not isinstance(problem, str) or not problem.strip():
+            return None
+        problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
+        journal = self.last_journal if isinstance(self.last_journal, list) else []
+        ledger, unknown, spent_model = [], [], 0
+        for row in journal:
+            if not isinstance(row, dict):
+                continue
+            state = row.get("state")
+            if state not in ("REMOTE_TERMINAL_CONFIRMED", "OUTCOME_UNKNOWN"):
+                continue
+            if row.get("phase") not in ("WORK", "R2", "REPAIR", "R0"):
+                continue
+            ledger.append(row)
+            spent_model += 1
+            if state == "OUTCOME_UNKNOWN":
+                unknown.append(row.get("requestId"))
+        root_deadline_ms = max(1, min(5000, int(self.problem_seconds * 1000)))
+        try:
+            carrier = host_carriers.bind_carrier(
+                self.mode, problem_hash, uuid.uuid4().hex, _PROFILE_ID,
+                max_model_calls=self.max_model_calls,
+                max_work_units=self.max_work_units,
+                max_effects=self.max_effects,
+                root_deadline_ms=root_deadline_ms,
+            )
+            return host_checkpoint.export_checkpoint(
+                carrier=carrier, problem_hash=problem_hash,
+                contract_version=contract_version,
+                spent={"modelCalls": spent_model, "effectCalls": 0},
+                ledger=ledger, session_log=[], unknown_request_ids=unknown,
+            )
+        except (host_checkpoint.CheckpointError, host_carriers.CarrierError):
+            return None
+
+    def _solve(self, started, problem, options, resume=None):
         before_calls = self.client.calls
         before_records = len(self.client.snapshot())
         if self.client.blocked:
@@ -212,7 +319,13 @@ class AgentRuntime:
             "maxR0": options["maxR0"],
             "policy": options["policy"],
             "deriveBudget": options["deriveBudget"],
+            # G7/PR7 Slice 7d: always present; None on the default path.
+            "resumeSessionLog": None,
+            "resumeContractVersion": None,
         }
+        if resume is not None:
+            host_options["resumeSessionLog"] = resume["sessionLog"]
+            host_options["resumeContractVersion"] = resume["contractVersion"]
         host = AgentHost(
             manifest, session_id, deadline, problem, problem_hash, host_options,
             self.client,
@@ -258,6 +371,9 @@ class AgentRuntime:
                 "problemHash": problem_hash,
                 "remainingMs": max(1, min(5000, int(host.remaining() * 1000))),
             }
+            if resume is not None:
+                solve["resumeSessionLog"] = resume["sessionLog"]
+                solve["resumeContractVersion"] = resume["contractVersion"]
             stop = dict(common)
             payload(manifest, "runtime.initialize", "params", init, session_id)
             payload(manifest, "session.solve", "params", solve, session_id)
@@ -447,6 +563,12 @@ class AgentRuntime:
             "NON_FINITE_NUMBER", "FLOAT_TOKEN", "EXTRA_FIELD", "MISSING_FIELD",
             "FIELD_TYPE", "UNKNOWN_METHOD", "REJECTED_METHOD",
             "SESSION_MISMATCH", "ID_MISMATCH", "UNKNOWN_SCHEMA_KEYWORD",
+            "CHECKPOINT_SHAPE", "CHECKPOINT_DIGEST", "CHECKPOINT_PROBLEM",
+            "CHECKPOINT_VERSION", "CHECKPOINT_MODE", "CHECKPOINT_BUDGET",
+            "CHECKPOINT_CARRIER", "CHECKPOINT_SEQ", "CHECKPOINT_BOUND",
+            "CHECKPOINT_ENCODING", "BUDGET_WIDENED", "BUDGET", "MODE",
+            "PROBLEM_HASH", "SESSION", "PROFILE", "CARRIER",
+            "CROSS_PROBLEM_SESSION", "REQUEST_ID",
         ):
             code = "FIELD_VALUE"
         if metrics is None:

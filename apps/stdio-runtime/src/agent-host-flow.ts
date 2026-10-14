@@ -103,6 +103,67 @@ interface FrozenOptions {
   readonly deriveBudget: boolean;
 }
 
+/** G7/PR7 Slice 7d: one authenticated resume SessionLog row (fixed shape). */
+interface ResumeLogRow {
+  readonly seq: number;
+  readonly kind: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+const MAX_RESUME_EVENTS = 512;
+const MAX_RESUME_KIND_CHARS = 64;
+
+/**
+ * Bounded shape check of the optional resume prefix. Absent stays `null`, so
+ * the default path is byte-identical; a malformed prefix is a fixed failure.
+ */
+function checkedResumeLog(value: unknown): readonly ResumeLogRow[] | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > MAX_RESUME_EVENTS) {
+    fail(ERROR_CODES.FIELD_VALUE);
+  }
+  const out: ResumeLogRow[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const row = value[index];
+    if (!isPlainObject(row)) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    const keys = Object.keys(row);
+    if (keys.length !== 3 || !keys.includes("seq") || !keys.includes("kind") || !keys.includes("data")) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    if (row["seq"] !== index + 1) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    const kind = row["kind"];
+    if (typeof kind !== "string" || kind.length === 0 || kind.length > MAX_RESUME_KIND_CHARS) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    if (!isPlainObject(row["data"])) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
+    out.push({
+      seq: index + 1,
+      kind,
+      data: p2Snapshot(row["data"]) as Readonly<Record<string, unknown>>,
+    });
+  }
+  return Object.freeze(out);
+}
+
+/** Declared contract version of a resume checkpoint (1 or 2), or `null`. */
+function checkedResumeVersion(value: unknown): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || (value !== 1 && value !== 2)) {
+    fail(ERROR_CODES.FIELD_VALUE);
+  }
+  return value;
+}
+
 export class AgentHostFlow {
   private readonly manifest: AgentHostManifest;
   private readonly io: AgentHostIo;
@@ -116,6 +177,8 @@ export class AgentHostFlow {
   private catalogRead = false;
   private modelStarted = false;
   private options: FrozenOptions | null = null;
+  private resumeSessionLog: readonly ResumeLogRow[] | null = null;
+  private resumeContractVersion: number | null = null;
 
   constructor(manifest: AgentHostManifest, io: AgentHostIo) {
     if (manifest.protocolVersion !== AGENT_HOST_VERSION) {
@@ -280,6 +343,13 @@ export class AgentHostFlow {
     if (problemHash !== p4Hash(problem)) {
       fail(ERROR_CODES.FIELD_VALUE);
     }
+    // G7/PR7 Slice 7d: optional authenticated resume prefix; absent keys keep
+    // the default path byte-identical.
+    this.resumeSessionLog = checkedResumeLog(params["resumeSessionLog"]);
+    this.resumeContractVersion = checkedResumeVersion(params["resumeContractVersion"]);
+    if (this.resumeSessionLog !== null && this.resumeContractVersion === null) {
+      fail(ERROR_CODES.FIELD_VALUE);
+    }
     const remainingMs = safeInt(params["remainingMs"], 1, MAX_REMAINING_MS);
     this.io.tighten(remainingMs);
     if (this.io.remainingMs() <= MIN_REMAINING_MS) {
@@ -323,6 +393,12 @@ export class AgentHostFlow {
         policy: options.policy,
         deriveBudget: options.deriveBudget,
         now,
+        ...(this.resumeSessionLog === null
+          ? {}
+          : {
+              resumeSessionLog: this.resumeSessionLog,
+              resumeContractVersion: this.resumeContractVersion,
+            }),
       }, ports);
     } catch (error) {
       this.io.fail(error);

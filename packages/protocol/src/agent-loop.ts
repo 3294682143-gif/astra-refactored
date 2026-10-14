@@ -131,6 +131,20 @@ export interface AgentLoopOptions {
   readonly goalSpecs?: readonly P2GoalSpec[];
   /** Derive the root budget from the compiled task graph instead of the caller. */
   readonly deriveBudget?: boolean;
+  /**
+   * G7/PR7 Slice 7d: an authenticated SessionLog prefix of an earlier run of
+   * the same problem. When present the loop pre-seeds the log with these
+   * already-settled events and continues from the breakpoint instead of
+   * re-running the settled model/tool calls. Absent keeps the default path
+   * byte-identical.
+   */
+  readonly resumeSessionLog?: readonly {
+    readonly seq: number;
+    readonly kind: string;
+    readonly data: Readonly<Record<string, unknown>>;
+  }[];
+  /** Declared contract version of the resume prefix (1 or 2). */
+  readonly resumeContractVersion?: number | null;
 }
 
 /** Fixed trace kinds. No free-form kind is accepted. */

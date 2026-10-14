@@ -98,6 +98,38 @@ def _bounded_int(value, low, high):
     return value
 
 
+def _checked_resume_log(value):
+    """Authenticated SessionLog prefix: fixed kind + bounded data only."""
+    if value is None:
+        return None
+    if not isinstance(value, list) or len(value) > 512:
+        _fail()
+    out = []
+    for index, row in enumerate(value):
+        if not isinstance(row, dict):
+            _fail()
+        if set(row.keys()) != {"seq", "kind", "data"} or len(row) != 3:
+            _fail()
+        if not _is_int(row["seq"]) or row["seq"] != index + 1:
+            _fail()
+        kind = row["kind"]
+        if not isinstance(kind, str) or not kind or len(kind) > 64:
+            _fail()
+        if not isinstance(row["data"], dict):
+            _fail()
+        out.append({"seq": row["seq"], "kind": kind, "data": copy.deepcopy(row["data"])})
+    return out
+
+
+def _checked_resume_version(value):
+    """Declared contract version of a resume checkpoint (1 or 2)."""
+    if value is None:
+        return None
+    if not _is_int(value) or value not in (1, 2):
+        _fail()
+    return value
+
+
 def _trace_id(kind, value):
     """Fixed trace id per kind; a model raw string is never echoed."""
     if kind == "MODEL":
@@ -136,11 +168,18 @@ class AgentHost(_Host):
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
                 "maxMethodLoads", "maxRepairs", "maxR0", "policy", "deriveBudget",
+                "resumeSessionLog", "resumeContractVersion",
             ),
         )
         if not isinstance(options["deriveBudget"], bool):
             _fail()
         self.derive_budget = options["deriveBudget"]
+        # G7/PR7 Slice 7d: an optional authenticated resume prefix. Absent keys
+        # stay None, so the default path is byte-identical.
+        self.resume_session_log = _checked_resume_log(options.get("resumeSessionLog"))
+        self.resume_contract_version = _checked_resume_version(
+            options.get("resumeContractVersion")
+        )
         self.max_model_calls = _bounded_int(options["maxModelCalls"], 0, _MAX_MODEL_CALLS)
         self.max_work_units = _bounded_int(options["maxWorkUnits"], 1, _MAX_WORK_UNITS)
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
