@@ -8,6 +8,7 @@
 
 import type { P1AdmissionDecision } from "@astra/protocol";
 
+export * from "./p3-admission.js";
 export const MATH_GATEWAY_VERSION = "0.0.0-p1" as const;
 export * from "./p2-gate.js";
 export * from "./p3-parser.js";

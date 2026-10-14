@@ -49,6 +49,7 @@ import {
   P3EffectGate,
   P4RecheckModelGate,
   chooseP2ReadyTask,
+  monotonicToolGuard,
   parseP3Action,
   p3EffectKey,
 } from "@astra/math-gateway";
@@ -637,6 +638,20 @@ export async function runAgentLoop(
           contextHash: context.contextHash,
           contextBytes: context.contextBytes,
         });
+        if (outcome.receipt.transportStatus !== "COMPLETE") {
+          // Pi truncated-tool-barrier (E08/E09): a reply that is not COMPLETE
+          // never yields a tool/method action, an artifact or a candidate. An
+          // explicit length/TRUNCATED is marked TRUNCATED; a missing finish
+          // reason stays COMPLETENESS_UNKNOWN and conservatively bans actions.
+          sessionLog.append("TRUNCATION", {
+            phase: "WORK",
+            transportStatus: outcome.receipt.transportStatus,
+            completeness:
+              outcome.receipt.transportStatus === "TRUNCATED"
+                ? "TRUNCATED"
+                : "COMPLETENESS_UNKNOWN",
+          });
+        }
         if (
           outcome.receipt.transportStatus !== "COMPLETE" ||
           outcome.code !== "WORK" ||
@@ -654,15 +669,17 @@ export async function runAgentLoop(
         if (action !== null && (action.action === "tool" || action.action === "method")) {
           const isMethod = action.action === "method";
           const methodId = action.action === "method" ? action.id : null;
-          if (isMethod && (!allowMethods || catalog === null || methodId === null)) {
-            stop = "CONTROL_REJECTED";
-            break;
-          }
-          if (!(isMethod ? allowMethods : allowTools) || subGate === null || callsLeft() < 1 + opts.maxReviews) {
-            stop = "CONTROL_REJECTED";
-            break;
-          }
-          if (isMethod && !catalog!.entries.some((entry) => entry.id === methodId)) {
+          // DSH monotonic tool-guard pipeline: pre -> guards, irreversible.
+          const guard = monotonicToolGuard({
+            action,
+            allowTools,
+            allowMethods,
+            methodId,
+            catalogIds: catalog === null ? [] : catalog.entries.map((entry) => entry.id),
+            callsLeft: callsLeft(),
+            maxReviews: opts.maxReviews,
+          });
+          if (!guard.admitted || subGate === null || (isMethod && catalog === null)) {
             stop = "CONTROL_REJECTED";
             break;
           }

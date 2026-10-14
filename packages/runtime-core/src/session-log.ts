@@ -30,6 +30,7 @@ export const SESSION_LOG_KIND = [
   "METHOD_LOAD",
   "REVIEW_CHALLENGE",
   "REPAIR",
+  "TRUNCATION",
   "FINAL",
 ] as const;
 export type SessionLogKind = (typeof SESSION_LOG_KIND)[number];
