@@ -31,7 +31,7 @@ import type { P4S1Assessment } from "./p4-repair.js";
  * R2 review of a protected candidate. It is not a new solver: it only re-states
  * the same answer obligation after a challenge.
  */
-export const AGENT_MODEL_PHASE = Object.freeze(["WORK", "R2", "REPAIR"] as const);
+export const AGENT_MODEL_PHASE = Object.freeze(["WORK", "R2", "REPAIR", "R0"] as const);
 export type AgentModelPhase = (typeof AGENT_MODEL_PHASE)[number];
 
 /** Fixed per-request output ceiling; the host enforces it, not the model. */
@@ -116,6 +116,15 @@ export interface AgentLoopOptions {
   readonly maxMethodLoads?: number;
   /** G3/PR4: at most one evidence-triggered S2 revision after the R2 review. */
   readonly maxRepairs?: number;
+  /**
+   * B1 (DECISION-0150): explicitly enable the bounded R0 planning review. With
+   * the default 0 the R0 phase is dead and the run is byte-identical to before.
+   * With 1 the loop runs one R0 review before any WORK, and on ISSUES at most
+   * one `reviseGoals` contract revision (version 1 -> 2); if the single
+   * revision still does not pass it falls back to the fixed deterministic
+   * UNKNOWN template. Never a second bump and never extra planning budget.
+   */
+  readonly maxR0?: number;
   readonly remainingMs: number;
   readonly policy?: P4DeliveryPolicy;
   readonly now?: () => number;

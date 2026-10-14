@@ -241,6 +241,11 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 1
+          },
+          "maxR0": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         }
       },
@@ -737,7 +742,8 @@
                 "enum": [
                   "WORK",
                   "R2",
-                  "REPAIR"
+                  "REPAIR",
+                  "R0"
                 ]
               },
               "taskId": {

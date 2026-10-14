@@ -34,6 +34,7 @@ const OPTION_FIELDS = [
   "maxReviews",
   "maxMethodLoads",
   "maxRepairs",
+  "maxR0",
   "remainingMs",
   "policy",
   "now",
@@ -159,6 +160,8 @@ export interface CapturedAgentOptions {
   readonly maxReviews: number;
   readonly maxMethodLoads: number;
   readonly maxRepairs: number;
+  /** B1 (DECISION-0150): bounded R0 planning review (0 or 1). */
+  readonly maxR0: number;
   readonly remainingMs: number;
   readonly policy: "BEST_EFFORT" | "STRICT";
   readonly goalSpecs: readonly P2GoalSpec[];
@@ -187,6 +190,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const rawMaxReviews = source.maxReviews;
   const rawMaxMethodLoads = source.maxMethodLoads;
   const rawMaxRepairs = source.maxRepairs;
+  const rawMaxR0 = source.maxR0;
   const rawRemainingMs = source.remainingMs;
   const rawPolicy = source.policy;
   const rawNow = source.now;
@@ -201,6 +205,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const maxMethodLoads =
     rawMaxMethodLoads === undefined ? 0 : boundedInt(rawMaxMethodLoads, 0, 1);
   const maxRepairs = rawMaxRepairs === undefined ? 0 : boundedInt(rawMaxRepairs, 0, 1);
+  const maxR0 = rawMaxR0 === undefined ? 0 : boundedInt(rawMaxR0, 0, 1);
   const remainingMs = boundedInt(rawRemainingMs, 1, AGENT_IO_MAX_REMAINING_MS);
   const policy = rawPolicy === undefined ? "BEST_EFFORT" : rawPolicy;
   if (policy !== "BEST_EFFORT" && policy !== "STRICT") {
@@ -226,6 +231,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     maxReviews,
     maxMethodLoads,
     maxRepairs,
+    maxR0,
     remainingMs,
     policy,
     goalSpecs: p2Snapshot(goalSpecs) as readonly P2GoalSpec[],

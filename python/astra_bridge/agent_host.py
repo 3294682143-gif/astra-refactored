@@ -135,7 +135,7 @@ class AgentHost(_Host):
             options,
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
-                "maxMethodLoads", "maxRepairs", "policy", "deriveBudget",
+                "maxMethodLoads", "maxRepairs", "maxR0", "policy", "deriveBudget",
             ),
         )
         if not isinstance(options["deriveBudget"], bool):
@@ -147,6 +147,7 @@ class AgentHost(_Host):
         self.max_reviews = _bounded_int(options["maxReviews"], 0, _MAX_REVIEWS)
         self.max_method_loads = _bounded_int(options["maxMethodLoads"], 0, _MAX_METHOD_LOADS)
         self.max_repairs = _bounded_int(options["maxRepairs"], 0, 1)
+        self.max_r0 = _bounded_int(options["maxR0"], 0, 1)
         if options["policy"] not in _POLICIES:
             _fail()
         self.policy = options["policy"]
