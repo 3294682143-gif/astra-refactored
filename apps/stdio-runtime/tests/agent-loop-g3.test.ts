@@ -61,10 +61,13 @@ interface Scenario {
   readonly firstCandidate: string;
   readonly revisedCandidate: string;
   readonly tool: boolean;
+  /** Where the checker runs: on the candidate task, or on a foreign task. */
+  readonly toolOnCandidateTask?: boolean;
 }
 
 function portsFor(scenario: Scenario) {
   let toolDone = false;
+  const toolOnCandidate = scenario.toolOnCandidateTask ?? true;
   const options: ReactivePortsOptions = {
     effect: (request) => {
       const observation = JSON.stringify({ checked: "x=0 gives 0*(0-1)=0" });
@@ -88,14 +91,13 @@ function portsFor(scenario: Scenario) {
           derivation: "Split the zero product: x=0 or x=1.",
         });
       }
-      // One independent checker action on the first work turn (any task of the
-      // same goal scope); it is the Host-accepted grounding for the revision.
-      if (scenario.tool && !toolDone) {
+      const taskId = (body.task as Record<string, unknown>).taskId;
+      const onAnswer = taskId === ANSWER_TASK;
+      if (scenario.tool && !toolDone && onAnswer === toolOnCandidate) {
         toolDone = true;
         return reactiveTool();
       }
-      const taskId = (body.task as Record<string, unknown>).taskId;
-      if (taskId === ANSWER_TASK) {
+      if (onAnswer) {
         return reactiveWork(request, {
           candidate: scenario.firstCandidate,
           claim: "x=1 only",
@@ -196,4 +198,37 @@ test("the revision path is opt-in: maxRepairs=0 keeps the pre-G3 behaviour", asy
   assert.equal(result.summary.finalResponse, "{1}");
   assert.equal(result.summary.reason, "BEST_EFFORT_CANDIDATE");
   assert.equal(ports.requests.some((request) => request.phase === "REPAIR"), false);
+});
+
+test("E07: a checker bound to a foreign task cannot ground a revision (S1 refuses)", async () => {
+  // The checker runs on a different task of the same goal scope. The M5 S1
+  // original-problem mapping gate refuses it (the effect binding is not the
+  // candidate task), so the challenge can never replace the candidate.
+  const ports = portsFor({
+    firstCandidate: "{1}",
+    revisedCandidate: "{0,1}",
+    tool: true,
+    toolOnCandidateTask: false,
+  });
+  const result = await runAgentLoop(
+    PROBLEM,
+    SESSION,
+    {
+      remainingMs: 5000,
+      maxModelCalls: 12,
+      maxWorkUnits: 8,
+      maxEffects: 1,
+      maxReviews: 1,
+      maxRepairs: 1,
+      now: () => 0,
+    },
+    portsOf(ports),
+  );
+  assert.equal(result.summary.status, "candidate");
+  assert.equal(result.summary.finalResponse, "{1}");
+  assert.equal(result.summary.reason, "BEST_EFFORT_CANDIDATE");
+  assert.equal(result.summary.candidateVerified, false);
+  assert.equal(ports.requests.some((request) => request.phase === "REPAIR"), false);
+  // The S1 gate did not record a structural match for the foreign checker.
+  assert.equal(result.privateState.s1Assessment, null);
 });

@@ -46,18 +46,20 @@ class G3FlagshipClient(FakeClient):
     def _work(self, body):
         if body.get("stage") == "REPAIR":
             return self._packet(body, "the real solution set is {0,1}", "Split the zero product: x=0 or x=1.", "{0,1}")
-        if not self.tool_done:
-            self.tool_done = True
-            return json.dumps(
-                {
-                    "action": "tool",
-                    "name": "polynomial_expand_coefficients",
-                    "args": TOOL_ARGS,
-                    "scope": "check the supplied polynomial at the zero branch",
-                }
-            )
         task = body["task"]
         if task["taskId"] == ANSWER_TASK:
+            # The S1 mapping gate requires the checker to be bound to the
+            # candidate task itself, so the tool is issued on this task.
+            if not self.tool_done:
+                self.tool_done = True
+                return json.dumps(
+                    {
+                        "action": "tool",
+                        "name": "polynomial_expand_coefficients",
+                        "args": TOOL_ARGS,
+                        "scope": "check the supplied polynomial at the zero branch",
+                    }
+                )
             return self._packet(body, "x=1 only", "Take the root x=1.", "{1}")
         return self._packet(body, "prerequisite", "prerequisite", None)
 

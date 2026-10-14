@@ -102,6 +102,15 @@ function copyReceipt(receipt: P3EffectReceipt): P3EffectReceipt {
   return p2Snapshot(receipt);
 }
 
+/**
+ * The S1 checked-property of one registered checker tool, or null when the tool
+ * is not an S1 checker. Exported so the control side can build one S1 check plan
+ * for a real effect request without re-implementing the mapping.
+ */
+export function p4CheckedPropertyForTool(name: string): P4CheckedProperty | null {
+  return propertyOf(name);
+}
+
 function propertyOf(name: string): P4CheckedProperty | null {
   if (name === "polynomial_expand_coefficients") {
     return "SUPPLIED_POLYNOMIAL_COEFFICIENTS";

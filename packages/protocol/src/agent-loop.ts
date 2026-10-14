@@ -23,6 +23,7 @@ import type {
 import type { P2MethodCatalog } from "./p2-methods.js";
 import type { P3EffectReceipt, P3EffectRequest } from "./p3.js";
 import type { P4DeliveryPolicy, P4FinalDecision, P4ReviewSnapshot } from "./p4.js";
+import type { P4S1Assessment } from "./p4-repair.js";
 
 /**
  * Fixed phase of one model request. WORK and R2 share one root budget; REPAIR
@@ -235,6 +236,8 @@ export interface AgentLoopPrivateState {
   readonly revisions?: readonly AgentRevisionRecord[];
   readonly readyTasks?: readonly P2Task[];
   readonly progressEvents?: readonly AgentProgressEvent[];
+  /** G3/PR4 Slice 3a: the M5 S1 mapping assessment of the last repair attempt. */
+  readonly s1Assessment?: P4S1Assessment | null;
 }
 
 /** Fixed schema version of one private progress event record. */

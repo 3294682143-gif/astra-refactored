@@ -98,3 +98,27 @@ threaded from the Host options through the Node `agent-host-flow` into
 - `tsc -b` — 0.
 
 
+
+## Slice 3a (part 1) — M5 S1 original-problem mapping gate
+
+Before a `PROGRAM_OBSERVATION` receipt may be promoted to a `P4ReviseBasis`
+(`CHECKED_SCOPE` / `PASS`), the loop now runs the M5 S1 structural mapping check
+(`P4DiagnosticLedger.precheck`) against the trusted target. The check plan is
+control-built from the trusted candidate (scope, declared assumptions, tool
+checked-property, `tool-registry-v1`) plus the challenged obligations.
+
+- The checker must be bound to the **candidate task**; a checker executed on a
+  foreign task (or with an unknown checker tool, or an obligation outside the
+  target goal/scope) fails S1 and can never ground a revision (E07). The loop
+  records the assessment in `privateState.s1Assessment`.
+- `p4CheckedPropertyForTool` is exported from `@astra/math-audit` so the control
+  side builds the S1 plan without re-implementing the tool→property mapping.
+
+Tests: `apps/stdio-runtime/tests/agent-loop-g3.test.ts` — the flagship (checker
+on the candidate task) still releases `{0,1}`; the new E07 negative (checker on a
+foreign task) keeps `{1}` and makes no `REPAIR` call.
+
+Still pending for Slice 3 (next increments): S2 M1 local obligation reopen on an
+accepted revision; bounded R0 planning revision + R1 rule risk trigger; the
+trusted `boundaryCases` versioned schema (3b); the multi-counterexample flagship
+and formal G3/PR4 closure (3c).

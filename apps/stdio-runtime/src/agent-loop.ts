@@ -34,6 +34,7 @@ import {
   type P4Challenge,
   type P4DeliveryPolicy,
   type P4ReviseBasis,
+  type P4S1Assessment,
   type P4Target,
 } from "@astra/protocol";
 import { ContractLedger, compileP2Contract } from "@astra/math-contract";
@@ -46,7 +47,7 @@ import {
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4ReviewSession } from "@astra/math-review";
-import { P4CandidateGate, reviseCandidate } from "@astra/math-audit";
+import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
 import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
@@ -164,6 +165,7 @@ export async function runAgentLoop(
   let firstReviewOrdinal = 2;
   let candidateTask: P2Task | null = null;
   let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
+  let s1Assessment: P4S1Assessment | null = null;
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
   const reserve = (): number =>
@@ -949,7 +951,44 @@ export async function runAgentLoop(
       const answerObligation = snapshot.obligations.find(
         (row) => row.goalId === candidateTask!.goalId && row.kind === answerKind,
       );
-      if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined) {
+      // G3/PR4 Slice 3a: M5 S1 original-problem mapping gate. A
+      // PROGRAM_OBSERVATION receipt may be promoted to a CHECKED_SCOPE/PASS
+      // P4ReviseBasis ONLY after the S1 structural mapping check passes against
+      // the trusted target: the checker's tool/checked-property, scope,
+      // assumptions and challenged obligations must all be the target's own.
+      // An E07 wrong mapping (unknown checker tool, foreign obligation, scope or
+      // assumption mismatch) is refused, so the receipt can never ground a
+      // revision and can never upgrade the candidate.
+      const challenge0 = challenges[0];
+      if (challenge0 !== undefined && checker !== undefined && answerObligation !== undefined) {
+        try {
+          s1Assessment = new P4DiagnosticLedger(ledger.snapshot(), target, 1).precheck({
+            checkId: "check-1",
+            target: target.binding,
+            targetHash: target.targetHash,
+            scope: target.artifact.scope,
+            assumptions: target.artifact.packet?.assumptions ?? [],
+            checkedProperty:
+              checker.request.action.action === "tool"
+                ? p4CheckedPropertyForTool(checker.request.action.name) ??
+                  "SUPPLIED_POLYNOMIAL_COEFFICIENTS"
+                : "SUPPLIED_POLYNOMIAL_COEFFICIENTS",
+            methodOrToolVersion: "tool-registry-v1",
+            obligationIds: challenge0.issue.obligationIds,
+            request: checker.request,
+          });
+        } catch (error) {
+          if (!(error instanceof P2Error)) {
+            throw error;
+          }
+          s1Assessment = null;
+        }
+      }
+      const s1Ok =
+        s1Assessment !== null &&
+        s1Assessment.structuralMatch &&
+        s1Assessment.reason === "STRUCTURAL_MATCH_ONLY";
+      if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok) {
         // `challenges[0]` is defined by the length guard above.
         const challenge = challenges[0]!;
         const route = workflow.forTask(candidateTask);
@@ -1105,6 +1144,7 @@ export async function runAgentLoop(
     routeAdmissions: workflow.snapshot().routeAdmissions,
     dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
     revisions: revision.snapshot(),
+    s1Assessment,
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
   });
