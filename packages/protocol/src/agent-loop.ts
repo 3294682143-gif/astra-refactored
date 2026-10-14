@@ -212,6 +212,15 @@ export interface AgentLoopSummary {
   readonly catalogCalls: number;
   readonly methodLoads: number;
   readonly stopReason: AgentTraceCode;
+  /**
+   * B2 (DECISION-0150): the auxiliary obligations still unclosed when the
+   * candidate is released — a proof's `PREMISES` (E05: un-discharged
+   * provisional/contrapositive assumptions) and an optimization's `ATTAINMENT`
+   * (E06: an attainment witness with no equality case). Their presence never
+   * blocks the BEST_EFFORT candidate but keeps `candidateVerified` false and is
+   * reported honestly instead of being silently dropped.
+   */
+  readonly unresolvedObligations: readonly string[];
 }
 
 /**

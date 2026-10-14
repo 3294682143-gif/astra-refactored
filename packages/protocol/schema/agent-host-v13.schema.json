@@ -467,7 +467,8 @@
               "repairCalls",
               "stopReason",
               "catalogCalls",
-              "methodLoads"
+              "methodLoads",
+              "unresolvedObligations"
             ],
             "properties": {
               "mode": {
@@ -584,6 +585,15 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 1
+              },
+              "unresolvedObligations": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
               }
             }
           }

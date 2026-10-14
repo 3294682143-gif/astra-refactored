@@ -26,6 +26,7 @@ import {
   type P2Artifact,
   type P2ArtifactRef,
   type P2GoalKind,
+  type P2ObligationKind,
   type P2MethodAsset,
   type P2MethodCatalog,
   type P2Task,
@@ -64,6 +65,15 @@ import {
 } from "./agent-loop-io.js";
 
 const MIN_MS = 25;
+
+/**
+ * B2 (DECISION-0150): auxiliary (non-answer) obligations whose open state must
+ * be reported honestly. A proof's `PREMISES` (E05) and an optimization's
+ * `ATTAINMENT` (E06) never carry the whole-problem candidate, but while they
+ * are unclosed the delivered candidate stays unverified. The frozen
+ * `P2_ANSWER_OBLIGATION_BY_GOAL` authority is untouched.
+ */
+const AUX_OBLIGATION_KINDS: readonly P2ObligationKind[] = ["PREMISES", "ATTAINMENT"];
 
 /**
  * The declared goal kind of one goal id, or `UNKNOWN` when the goal is not
@@ -1119,6 +1129,14 @@ export async function runAgentLoop(
   if (!root.stopped()) {
     root.stop(stop);
   }
+  const unresolvedObligations: readonly string[] = Object.freeze(
+    ledger
+      .snapshot()
+      .obligations.filter(
+        (row) => AUX_OBLIGATION_KINDS.includes(row.kind) && row.status !== "SATISFIED",
+      )
+      .map((row) => row.obligationId),
+  );
   const summary: AgentLoopSummary = p2Snapshot({
     mode: "TS_PREVIEW" as const,
     targetEnvironment: "TARGET_UNVERIFIED" as const,
@@ -1137,6 +1155,7 @@ export async function runAgentLoop(
     catalogCalls,
     methodLoads,
     stopReason: stop,
+    unresolvedObligations,
   }) as AgentLoopSummary;
   const privateState = p2Snapshot({
     contract: ledger.snapshot(),

@@ -72,7 +72,7 @@ _SUMMARY_FIELDS = (
     "mode", "targetEnvironment", "sessionId", "status", "finalResponse",
     "candidateVerified", "strictAcceptance", "policy", "reason", "modelCalls",
     "effectCalls", "workUnits", "reviewCalls", "repairCalls", "catalogCalls",
-    "methodLoads", "stopReason",
+    "methodLoads", "stopReason", "unresolvedObligations",
 )
 _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
 
@@ -806,6 +806,14 @@ class AgentHost(_Host):
         if not _is_int(summary["methodLoads"]) or summary["methodLoads"] != self.method_loads:
             _fail()
         if summary["methodLoads"] > self.max_method_loads:
+            _fail()
+        unresolved = summary["unresolvedObligations"]
+        if not isinstance(unresolved, list) or len(unresolved) > 32:
+            _fail()
+        for item in unresolved:
+            if not isinstance(item, str) or not item or len(item) > 256:
+                _fail()
+        if len(set(unresolved)) != len(unresolved):
             _fail()
         if not isinstance(summary["finalResponse"], str) or not summary["finalResponse"]:
             _fail()
