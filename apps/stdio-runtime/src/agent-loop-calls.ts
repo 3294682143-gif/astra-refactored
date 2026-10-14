@@ -57,7 +57,7 @@ export interface AgentModelCallOutcome {
 
 export interface AgentModelCallInput {
   readonly task: P2Task;
-  readonly phase: "WORK" | "R2";
+  readonly phase: "WORK" | "R2" | "REPAIR";
   readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
   readonly contextHash: string;
   readonly contextBytes: number;
@@ -101,7 +101,7 @@ export class AgentCalls {
   async model(input: AgentModelCallInput): Promise<AgentModelCallOutcome> {
     const task = p2Snapshot(input.task) as P2Task;
     const phase = input.phase;
-    if (phase !== "WORK" && phase !== "R2") {
+    if (phase !== "WORK" && phase !== "R2" && phase !== "REPAIR") {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const messages = p2Snapshot(input.messages) as readonly {

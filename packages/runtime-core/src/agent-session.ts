@@ -35,13 +35,14 @@ export const AGENT_MAX_TRACE_EVENTS = 64 as const;
 // just uses a smaller budget. No fixed four-id table any more.
 const modelIdFor = (index: number): string => `model-${index + 1}`;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
-const PHASES = ["WORK", "R2"] as const;
+const PHASES = ["WORK", "R2", "REPAIR"] as const;
 const TRANSPORTS = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"] as const;
 const TRACE_KINDS = ["MODEL", "EFFECT", "CONTROL"] as const;
 const TRACE_STATES = ["DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED"] as const;
 const TRACE_CODES = [
   "WORK",
   "R2",
+  "REPAIR",
   "COMPLETE",
   "TRUNCATED",
   "ERROR",
@@ -58,6 +59,8 @@ const TRACE_CODES = [
   "REVIEW_STOP",
   "REVIEWS_COMPLETE",
   "WORK_UNITS_COMPLETE",
+  "REVISED_CANDIDATE",
+  "REVISE_REJECTED",
   "PORT_REJECTED",
   "STOPPED",
 ] as const;

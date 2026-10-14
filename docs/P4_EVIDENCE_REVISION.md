@@ -43,22 +43,39 @@ substitution do not close global exhaustiveness.
 
 ## Evidence (supervisor-run)
 
-- `node --test` — **291 pass / 0 fail** (adds `apps/stdio-runtime/tests/p4-revise.test.ts`:
-  flagship `{1} -> {0,1}`, the full refusal matrix, stale/forged negatives, and
-  the "revision is the only sanctioned replacement" guard).
+- `node --test` — **294 pass / 0 fail** (adds `p4-revise.test.ts` and
+  `agent-loop-g3.test.ts`).
 - `python -m pytest tests/e2e -q` — **188 passed** (adds
-  `tests/e2e/test_ts_g3_negatives.py`: unparseable R2 is `REVIEW_STOP` not a
-  PASS; an upstream change without a counterexample is `STALE`, never `REFUTED`).
+  `test_ts_g3_negatives.py`: unparseable R2 is `REVIEW_STOP` not a PASS; an
+  upstream change without a counterexample is `STALE`, never `REFUTED`).
 - `python -m pytest -q` — **574 passed / 24 skipped** (old WASI skips).
 - `tsc -b` — 0.
 
-## Not yet wired (next slice)
+## Online closure (slice 1b) — the loop wiring
 
-The *online* closure — an independent review/check that raises the challenge,
-an S2 repair turn that produces the child, and the M1 obligation reopen — is not
-yet connected to `runAgentLoop`. Doing so needs a coordinated Node + Python Host
-change: the Host currently forbids any `WORK` after the single `R2` review
-(`agent_host.py` `if self.review_calls > 0: _fail()`), so the repair turn needs a
-new provenance-gated slot. That wire change is the next PR4 slice; it is
+The closure is now wired into the unique main loop for the opt-in
+`maxRepairs >= 1` path (default 0 keeps every existing run byte-identical):
+
+- After the R2 review settles with an ACTIVE `CHALLENGED` challenge on the
+  answer obligation, the loop issues **one** `REPAIR` model call on the
+  candidate task (a new additive `AgentModelPhase`), accepts the reply as a new
+  `repair-1` artifact, and calls `reviseCandidate`.
+- The grounding basis is a **Host-accepted `PROGRAM_OBSERVATION` checker receipt
+  already bound to the goal scope** — a model opinion can never ground it. With
+  no such checker, no repair call is made and the parent candidate stays.
+- `agent-loop-g3.test.ts` proves the real loop run: `x(x-1)=0` first answers
+  `{1}`, the R2 challenge + checker evidence revises to `{0,1}`
+  (`reason=REVISED_CANDIDATE`), the `x=1` parent artifact is retained, and the
+  no-checker / `maxRepairs=0` negatives stay `{1}` / `BEST_EFFORT_CANDIDATE`.
+
+## Not yet wired (remaining slice)
+
+The **real public entry** (`engine="ts"` through the Python Host) still refuses
+the `REPAIR` phase: `python/astra_bridge/agent_host.py` only accepts `WORK`/`R2`
+and forbids any `WORK` after the R2 review. Exposing the loop closure end to end
+therefore needs a **coordinated Node+Host REPAIR slot**: a `validate_context`
+REPAIR branch, a `repairCalls` summary field, the widened `_STOP_REASONS`, and a
+new public-entry flagship + negatives. That is the final step and is
 deliberately kept out of this slice so the 287/186/572 baseline keeps zero
 regressions.
+

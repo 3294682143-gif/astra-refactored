@@ -39,6 +39,11 @@ const MAX_QUOTE_CHARS = 4096;
 const MAX_SHORT_CHARS = 256;
 const MAX_COVERAGE = 32;
 const MAX_ISSUES = 8;
+// The review ordinal is bounded by the same shared root ceiling the session and
+// the candidate gate use. The old preview value (4) assumed a four-call profile;
+// the graph-derived root budget (G2 capability package) runs more calls before
+// the review, so a review at `model-N` (N up to the shared ceiling) is legal.
+const MAX_REQUEST_ORDINAL = 32;
 
 const REPORT_FIELDS = [
   "schemaVersion",
@@ -126,7 +131,7 @@ export function parseP4ReviewReport(
       typeof firstRequestOrdinal !== "number" ||
       !Number.isSafeInteger(firstRequestOrdinal) ||
       firstRequestOrdinal < 2 ||
-      firstRequestOrdinal > 4
+      firstRequestOrdinal > MAX_REQUEST_ORDINAL
     ) {
       throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
@@ -170,7 +175,7 @@ export function parseP4ReviewReport(
     if (report.stage !== "R2") {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
-    const lastAllowed = Math.min(firstRequestOrdinal + 1, 4);
+    const lastAllowed = Math.min(firstRequestOrdinal + 1, MAX_REQUEST_ORDINAL);
     let ordinalOk = false;
     for (let ordinal = firstRequestOrdinal; ordinal <= lastAllowed; ordinal += 1) {
       if (requestId === `model-${ordinal}`) {

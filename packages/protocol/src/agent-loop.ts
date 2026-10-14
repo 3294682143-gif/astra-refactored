@@ -24,8 +24,13 @@ import type { P2MethodCatalog } from "./p2-methods.js";
 import type { P3EffectReceipt, P3EffectRequest } from "./p3.js";
 import type { P4DeliveryPolicy, P4FinalDecision, P4ReviewSnapshot } from "./p4.js";
 
-/** Fixed phase of one model request. WORK and R2 share one root budget. */
-export const AGENT_MODEL_PHASE = Object.freeze(["WORK", "R2"] as const);
+/**
+ * Fixed phase of one model request. WORK and R2 share one root budget; REPAIR
+ * is the single G3/PR4 S2 evidence-triggered revision call that may follow one
+ * R2 review of a protected candidate. It is not a new solver: it only re-states
+ * the same answer obligation after a challenge.
+ */
+export const AGENT_MODEL_PHASE = Object.freeze(["WORK", "R2", "REPAIR"] as const);
 export type AgentModelPhase = (typeof AGENT_MODEL_PHASE)[number];
 
 /** Fixed per-request output ceiling; the host enforces it, not the model. */
@@ -108,6 +113,8 @@ export interface AgentLoopOptions {
   readonly maxEffects?: number;
   readonly maxReviews?: number;
   readonly maxMethodLoads?: number;
+  /** G3/PR4: at most one evidence-triggered S2 revision after the R2 review. */
+  readonly maxRepairs?: number;
   readonly remainingMs: number;
   readonly policy?: P4DeliveryPolicy;
   readonly now?: () => number;
@@ -136,6 +143,7 @@ export type AgentTraceState = (typeof AGENT_TRACE_STATE)[number];
 export const AGENT_TRACE_CODE = Object.freeze([
   "WORK",
   "R2",
+  "REPAIR",
   "COMPLETE",
   "TRUNCATED",
   "ERROR",
@@ -152,6 +160,8 @@ export const AGENT_TRACE_CODE = Object.freeze([
   "REVIEW_STOP",
   "REVIEWS_COMPLETE",
   "WORK_UNITS_COMPLETE",
+  "REVISED_CANDIDATE",
+  "REVISE_REJECTED",
   "PORT_REJECTED",
   "STOPPED",
 ] as const);

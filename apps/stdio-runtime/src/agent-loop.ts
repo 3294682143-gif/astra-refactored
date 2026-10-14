@@ -13,6 +13,7 @@
 import {
   P2_ERROR_CODES,
   P2Error,
+  p2AnswerObligationForGoal,
   p2IsAnswerObligationKindForGoal,
   p2Snapshot,
   p4Hash,
@@ -30,7 +31,9 @@ import {
   type P2Task,
   type P3Action,
   type P3EffectReceipt,
+  type P4Challenge,
   type P4DeliveryPolicy,
+  type P4ReviseBasis,
   type P4Target,
 } from "@astra/protocol";
 import { ContractLedger, compileP2Contract } from "@astra/math-contract";
@@ -43,7 +46,7 @@ import {
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4ReviewSession } from "@astra/math-review";
-import { P4CandidateGate } from "@astra/math-audit";
+import { P4CandidateGate, reviseCandidate } from "@astra/math-audit";
 import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
@@ -159,6 +162,7 @@ export async function runAgentLoop(
   let review: P4ReviewSession | null = null;
   let firstReviewOrdinal = 2;
   let candidateTask: P2Task | null = null;
+  let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
   const reserve = (): number =>
@@ -907,6 +911,122 @@ export async function runAgentLoop(
         }
       }
     }
+
+    // G3/PR4 S2: at most one evidence-triggered revision after the R2 review.
+    // A protected candidate whose answer (global) obligation drew a challenge is
+    // re-stated once, and the revised child may replace it ONLY when the
+    // replacement is grounded by an independent, Host-accepted checker
+    // observation already bound to the original problem. This is opt-in
+    // (`maxRepairs`); with the default 0 the whole block is dead and the run is
+    // byte-identical to before.
+    if (
+      opts.maxRepairs >= 1 &&
+      stop === "REVIEWS_COMPLETE" &&
+      target !== null &&
+      target.availability === "ACTIVE" &&
+      review !== null &&
+      candidateTask !== null &&
+      !root.stopped() &&
+      root.remainingMs() > MIN_MS &&
+      callsLeft() >= 1
+    ) {
+      const challenges: readonly P4Challenge[] = review
+        .snapshot()
+        .challenges.filter((item) => item.status === "CHALLENGED" && item.availability === "ACTIVE");
+      const checker = calls.effects.find(
+        (item) =>
+          item.receipt.status === "COMPLETE" &&
+          item.receipt.source === "PROGRAM_OBSERVATION" &&
+          item.receipt.binding.scopeId === candidateTask!.scopeId,
+      );
+      const snapshot = ledger.snapshot();
+      const goalKind = goalKindOf(
+        snapshot.goals as readonly { readonly goalId: string; readonly kind: P2GoalKind; readonly subgoals: readonly unknown[] }[],
+        candidateTask.goalId,
+      );
+      const answerKind = p2AnswerObligationForGoal(goalKind);
+      const answerObligation = snapshot.obligations.find(
+        (row) => row.goalId === candidateTask!.goalId && row.kind === answerKind,
+      );
+      if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined) {
+        // `challenges[0]` is defined by the length guard above.
+        const challenge = challenges[0]!;
+        const route = workflow.forTask(candidateTask);
+        const repairTask = candidateTask;
+        const requestId = root.nextModelId();
+        if (requestId !== null) {
+          const body = {
+            sessionId: session,
+            problemHash,
+            contractVersion: contract.contractVersion,
+            stage: "REPAIR" as const,
+            task: p2Snapshot({
+              taskId: repairTask.taskId,
+              goalId: repairTask.goalId,
+              scopeId: repairTask.scopeId,
+              inputArtifactRefs: repairTask.inputArtifactRefs,
+            }),
+            route: { routeId: route.routeId },
+            sourceRequestId: requestId,
+            answerObligationId: answerObligation.obligationId,
+            challenge,
+            parentCandidate: target.artifact.packet?.candidateProposal ?? null,
+          };
+          const messages = [
+            {
+              role: "system" as const,
+              content:
+                "You are a strict single revision reviser. Reply with exactly one JSON work packet and nothing else. You cannot declare anything verified.",
+            },
+            { role: "user" as const, content: JSON.stringify(body) },
+          ];
+          const contextBytes = Buffer.byteLength(JSON.stringify(messages), "utf8");
+          const before = root.modelCalls();
+          const outcome = await calls.model({
+            task: repairTask,
+            phase: "REPAIR",
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes,
+          });
+          if (root.modelCalls() > before && outcome.receipt.transportStatus === "COMPLETE") {
+            try {
+              const childArtifact = store.accept(repairTask, {
+                artifactId: "repair-1",
+                routeId: route.routeId,
+                sourceRequestId: requestId,
+                transportStatus: outcome.receipt.transportStatus,
+                text: outcome.receipt.text,
+                eventSeq: ledger.nextEventSeq(),
+                supersedes: null,
+              });
+              const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
+              const basis: P4ReviseBasis = {
+                source: "CHECKER_COUNTEREXAMPLE",
+                level: "CHECKED_SCOPE",
+                checkResult: "PASS",
+                scopeId: target.binding.scopeId,
+                witness: checker.receipt.observation.slice(0, 2048),
+                obligatedObligationIds: [answerObligation.obligationId],
+                childCoverage: [answerObligation.obligationId],
+              };
+              const revision = reviseCandidate(
+                ledger.snapshot(),
+                { parent: target, child, challenge, basis },
+                root.remainingMs(),
+              );
+              revisedDecision = revision.decision;
+              stop = revision.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              stop = "CONTROL_REJECTED";
+            }
+          }
+        }
+      }
+    }
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;
@@ -936,7 +1056,7 @@ export async function runAgentLoop(
       stop = "CONTROL_REJECTED";
     }
   }
-  const decision = candidateGate.finalize(
+  const decision = revisedDecision ?? candidateGate.finalize(
     ledger.snapshot(),
     target,
     review === null ? null : review.snapshot(),

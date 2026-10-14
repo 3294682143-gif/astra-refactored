@@ -95,9 +95,9 @@ export class P4RecheckModelGate {
     task: P2Task,
     requestId: string,
     remainingMs: number,
-    phase: "WORK" | "R2" = "WORK",
+    phase: "WORK" | "R2" | "REPAIR" = "WORK",
   ): P2ModelPermit {
-    if (phase !== "WORK" && phase !== "R2") {
+    if (phase !== "WORK" && phase !== "R2" && phase !== "REPAIR") {
       throw new P2Error("PACKET_BINDING");
     }
     if (typeof task !== "object" || task === null) {
@@ -137,7 +137,7 @@ export class P4RecheckModelGate {
     }
 
     const deliveryOk =
-      phase === "R2"
+      phase === "R2" || phase === "REPAIR"
         ? frozen.delivery === "RUNNING" || frozen.delivery === "DELIVERED"
         : frozen.delivery === "RUNNING";
     if (
