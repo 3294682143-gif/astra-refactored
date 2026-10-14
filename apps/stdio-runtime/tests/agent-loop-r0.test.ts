@@ -112,3 +112,66 @@ test("B1 R0 is inert by default (maxR0 omitted)", async () => {
   assert.equal(ports.requests[0]?.phase, "WORK");
   assert.equal(result.summary.status, "candidate");
 });
+
+/** One literal `p4-r0-plan-revision-v1` report bound to the real revision context. */
+function r0RevisionReply(request: AgentModelRequest): string {
+  const body = bodyOf(request);
+  const leaves = body.allowedLeaves as readonly {
+    readonly goalId: string;
+    readonly kind: string;
+    readonly goalJson: string;
+  }[];
+  const issueRows = body.issueRows as readonly { readonly dimension: string }[];
+  const problem = body.problemFullText as string;
+  const planText = body.planText as string;
+  const leaf = leaves[0]!;
+  const toKind = leaf.kind === "VALUE" ? "PROOF" : "VALUE";
+  // The plan span must quote exactly the JSON of the old leaf goal, as a real
+  // slice of the template plan text.
+  const planSpanStart = planText.indexOf(leaf.goalJson);
+  const planSpan = {
+    start: planSpanStart,
+    end: planSpanStart + [...leaf.goalJson].length,
+    quote: leaf.goalJson,
+  };
+  return JSON.stringify({
+    schemaVersion: "p4-r0-plan-revision-v1",
+    requestId: "model-2",
+    parent: body.parent,
+    reviewHash: body.reviewHash,
+    changes: [
+      {
+        goalId: leaf.goalId,
+        fromKind: leaf.kind,
+        toKind,
+        issueDimension: issueRows[0]?.dimension ?? "PROBLEM_ALIGNMENT",
+        rationale: "the initial template class is too narrow for the problem",
+        problemSpan: { start: 0, end: 1, quote: [...problem][0] },
+        planSpan,
+      },
+    ],
+  });
+}
+
+test("B1 R0 ISSUES with a certified revision raises the contract to version 2", async () => {
+  const ports = reactivePorts({
+    work: (request) => {
+      if (request.phase !== "R0") {
+        return reactiveWork(request);
+      }
+      const body = bodyOf(request);
+      return body.requestId === "model-1" ? r0ReviewReply(request, "ISSUES") : r0RevisionReply(request);
+    },
+  });
+  const result = await runAgentLoop(
+    PROBLEM,
+    "r0-revision-v2",
+    { remainingMs: 5000, maxModelCalls: 6, maxWorkUnits: 3, maxEffects: 0, maxReviews: 0, maxR0: 1 },
+    portsOf(ports),
+  );
+  // The single bounded revision was certified: the contract advanced to v2 and
+  // the run continued on it.
+  assert.equal(ports.requests[0]?.phase, "R0");
+  assert.equal(ports.requests[1]?.phase, "R0");
+  assert.equal(result.privateState.contract.contractVersion, 2);
+});

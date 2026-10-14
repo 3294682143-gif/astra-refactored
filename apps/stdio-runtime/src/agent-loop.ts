@@ -242,7 +242,17 @@ async function runBoundedR0(
     revision.settle(rReceipt.transportStatus, rReceipt.text, root.remainingMs());
     const snapshot = revision.snapshot();
     if (snapshot.revisedContract !== null) {
-      return snapshot.revisedContract;
+      // The revision session records a *proposal* against a private ledger; it
+      // is not itself an activatable contract. Recompile a clean version-2
+      // contract from the revised goal tree so the main ledger sees OPEN
+      // obligations and READY tasks (the single bounded bump is now applied).
+      return compileP2Contract(
+        problemText,
+        session,
+        snapshot.revisedContract.goals,
+        snapshot.revisedContract.envelope.eventSeq,
+        2,
+      );
     }
     return fallback();
   } catch (error) {
