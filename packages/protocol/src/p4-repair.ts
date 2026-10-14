@@ -192,3 +192,30 @@ export interface P4RepairTarget {
   readonly parent: P4Target;
   readonly challenge: P4Challenge;
 }
+
+/**
+ * Grounded, independent basis for replacing a protected candidate (G3/PR4
+ * `CandidateManager.revise`). This is deliberately NOT a model opinion: the
+ * only accepted levels are `CHECKED_SCOPE`/`PASS`, and the witness must be a
+ * concrete counterexample or a proven coverage gap. A model review conclusion
+ * (`REVIEWED`) and an `S1 MATCH` opinion can never appear here. This DTO is a
+ * declaration only; the runtime validation lives in the M5 audit module.
+ */
+export const P4_REVISE_BASIS_SOURCE = Object.freeze([
+  "CHECKER_COUNTEREXAMPLE",
+  "PROVEN_COVERAGE_GAP",
+] as const);
+export type P4ReviseBasisSource = (typeof P4_REVISE_BASIS_SOURCE)[number];
+
+export interface P4ReviseBasis {
+  readonly source: P4ReviseBasisSource;
+  readonly level: "CHECKED_SCOPE";
+  readonly checkResult: "PASS";
+  readonly scopeId: string;
+  /** Concrete witness (a counterexample or the proven missing branch). */
+  readonly witness: string;
+  /** Obligation ids the grounded basis is scoped to. */
+  readonly obligatedObligationIds: readonly string[];
+  /** Obligation ids the revised child candidate covers. */
+  readonly childCoverage: readonly string[];
+}

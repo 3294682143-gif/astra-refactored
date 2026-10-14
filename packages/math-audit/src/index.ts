@@ -20,6 +20,7 @@ import {
 
 export const MATH_AUDIT_VERSION = "0.0.0-p1" as const;
 export * from "./p4-candidate.js";
+export * from "./p4-revise.js";
 export * from "./p4-s1.js";
 export * from "./p4-repair.js";
 

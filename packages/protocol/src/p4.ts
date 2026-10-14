@@ -198,6 +198,13 @@ export const P4_FINAL_REASON = Object.freeze([
   "NO_CANDIDATE",
   "STALE_CANDIDATE",
   "DEADLINE_EXCEEDED",
+  // G3/PR4: an evidence-gated replacement of a protected candidate. The
+  // `REVISED_CANDIDATE` reason is only ever produced when a grounded,
+  // independent basis replaces an under-supported global claim; the
+  // `REVISE_REJECTED` reason records a refused replacement attempt so a failed
+  // revision never silently looks like an ordinary best-effort candidate.
+  "REVISED_CANDIDATE",
+  "REVISE_REJECTED",
 ] as const);
 export type P4FinalReason = (typeof P4_FINAL_REASON)[number];
 
