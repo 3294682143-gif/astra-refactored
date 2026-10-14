@@ -244,3 +244,32 @@ Still open: **B1b stage 2** (wire the R0 review + one `reviseGoals`→v2 + fixed
 public-entry E2E); **B1c** (S2→M1 ledger local obligation sync); **B3** (the
 general multi-counterexample flagship; the trusted gap source and the
 `coveredGaps` derivation remain the open design point).
+
+## Slice 3e — G3 / PR4 CLOSED (DECISION-0150 fully resolved)
+
+`G3 / PR4` is **CLOSED at v4 head `651cb04`**. Every DECISION-0150 ruling is
+landed and locally verified:
+
+- **B1** — `contractVersion{1,2}` (schema + Python Host, byte-identical v1);
+  bounded R0 planning review with one `reviseGoals` revision activated as a clean
+  version-2 contract and a fixed-deterministic-template fallback under the same
+  root budget (`agent-loop-r0.test.ts`, `tests/e2e/test_ts_g3_r0.py`); B1c M1
+  ledger local-obligation sync on an accepted S2 revision
+  (`ContractLedger.recordLocalRevision`, `agent-loop-g3.test.ts`).
+- **B2** — E05/E06 unclosed auxiliary obligations reported in
+  `AgentLoopSummary.unresolvedObligations`; the frozen
+  `P2_ANSWER_OBLIGATION_BY_GOAL`/`test_ts_candidate_kinds.py` untouched
+  (`tests/e2e/test_ts_g3_evidence.py`).
+- **B3** — PARAMETER two-gap multi-gap REPAIR flagship: partial -> `REVISE_REJECTED`
+  (parent kept), complete -> `REVISED_CANDIDATE` (`tests/e2e/test_ts_g3_flagship.py`).
+- **Ruling 4** — E14 empty-delivery reject (`test_ts_g3_negatives.py`); atomic
+  B1/B2/B3 commits; `docs/MIGRATION_MATRIX.csv` G3/PR4 evidence rows (260 paths, 0
+  unmatched, all REVIEW_REQUIRED); this doc + `docs/GATEBOARD.md`; `CURRENT_GATE`
+  advanced to **G4 / PR5**.
+- **Ruling 5** — push deferred until all-green; performed as a one-shot URL with
+  no token written to any file, log or `.git/config`.
+
+Local acceptance at closure: `tsc 0`; `node --test` 304 pass / 0 fail;
+`pytest -q tests/e2e` 201; `pytest -q` 587 passed / 24 skipped. L1 and L2 remain
+NOT_COMPLETE; formal Node/official-client/WASI/API evaluation remains
+BLOCKED_EXTERNAL.
