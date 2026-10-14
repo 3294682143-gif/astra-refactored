@@ -126,3 +126,17 @@ def test_upstream_change_without_counterexample_is_stale_not_refuted(monkeypatch
     assert ("artifact-1", 1, "STALE") in availabilities
     assert all(availability != "REFUTED" for _, _, availability in availabilities)
     assert process_tracker
+
+
+def test_e15_no_verification_budget_returns_honest_best_effort(process_tracker):
+    """E15: with no review budget a real candidate is still released ONLY as an
+    unverified best-effort candidate (never strictly verified)."""
+    client = FakeClient()
+    result = _solve(client, max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=0)
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    assert result["reason"] == "BEST_EFFORT_CANDIDATE"
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert result["metrics"]["review_calls"] == 0
+    assert process_tracker
