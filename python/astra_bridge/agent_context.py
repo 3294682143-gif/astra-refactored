@@ -105,6 +105,13 @@ _ACCEPTED_CONTRACT_VERSIONS = (1, 2)
 def _contract_version_ok(value):
     return _is_int(value) and value in _ACCEPTED_CONTRACT_VERSIONS
 
+def _is_hash64(value):
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
 
 def _fail():
     raise ProbeError("FIELD_VALUE")
@@ -1077,6 +1084,42 @@ def _check_repair(body, request_id, problem, session_id, problem_hash, history):
     return copy.deepcopy(body)
 
 
+def _check_r0(body, request_id, problem, session_id, problem_hash):
+    """Validate one bounded R0 planning-review context (identity only).
+
+    The R0 review and its single bounded revision are parsed and settled by the
+    Node ``P4R0ReviewSession``/``P4R0PlanRevisionSession``; the Host only
+    re-checks the identity binding (session/problem/contract version) and never
+    makes a mathematical decision, dispatches a tool or promotes evidence.
+    """
+    if not isinstance(body, dict):
+        _fail()
+    if body.get("stage") != "R0":
+        _fail()
+    if body.get("requestId") != request_id:
+        _fail()
+    if body.get("problemFullText") != problem:
+        _fail()
+    binding = body.get("target")
+    if not isinstance(binding, dict):
+        binding = body.get("parent")
+    if not isinstance(binding, dict):
+        _fail()
+    if binding.get("sessionId") != session_id or binding.get("problemHash") != problem_hash:
+        _fail()
+    if not _contract_version_ok(binding.get("contractVersion")):
+        _fail()
+    plan_hash = binding.get("planHash")
+    if not _is_hash64(plan_hash):
+        _fail()
+    if body.get("planHash") is not None and body.get("planHash") != plan_hash:
+        _fail()
+    review_hash = body.get("reviewHash")
+    if review_hash is not None and not _is_hash64(review_hash):
+        _fail()
+    return copy.deepcopy(body)
+
+
 def validate_context(request, problem, session_id, problem_hash, history, effects,
                      catalog=None, method_assets=None):
     """Validate one Host-built model request against its own records.
@@ -1119,6 +1162,8 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
         _check_repair(body, request_id, problem, session_id, problem_hash, history)
+    elif request["phase"] == "R0":
+        _check_r0(body, request_id, problem, session_id, problem_hash)
     else:
         _fail()
     return copy.deepcopy(body)

@@ -62,11 +62,14 @@ export class P4RecheckModelGate {
   private readonly records: P2ModelRecord[] = [];
   private stopped = false;
 
+  private readonly startOrdinal: number;
+
   constructor(
     sessionId: string,
     problemHash: string,
     contractVersion: number,
     maxCalls: number = P4_RECHECK_DEFAULT_MODEL_CALLS,
+    startOrdinal: number = 0,
   ) {
     this.sessionId = requireShortString(sessionId);
     if (typeof problemHash !== "string" || !HEX64.test(problemHash)) {
@@ -78,9 +81,16 @@ export class P4RecheckModelGate {
     if (!Number.isSafeInteger(maxCalls) || maxCalls < 0 || maxCalls > P4_RECHECK_MAX_MODEL_CALLS) {
       throw new P2Error("PACKET_BINDING");
     }
+    // B1: the number of root ordinals already consumed before this gate opened
+    // (e.g. by the bounded R0 pre-phase). The gate's own call sequence still
+    // starts at `model-(startOrdinal+1)`.
+    if (!Number.isSafeInteger(startOrdinal) || startOrdinal < 0) {
+      throw new P2Error("PACKET_BINDING");
+    }
     this.problemHash = problemHash;
     this.contractVersion = contractVersion;
     this.maxCalls = maxCalls;
+    this.startOrdinal = startOrdinal;
   }
 
   /**
@@ -115,7 +125,7 @@ export class P4RecheckModelGate {
     if (this.records.some((record) => record.requestId === request)) {
       throw new P2Error("DUPLICATE_REQUEST_ID");
     }
-    if (request !== `model-${this.records.length + 1}`) {
+    if (request !== `model-${this.records.length + 1 + this.startOrdinal}`) {
       throw new P2Error("PACKET_BINDING");
     }
     if (!Number.isSafeInteger(remainingMs) || remainingMs < 0 || remainingMs > 5000) {
@@ -156,7 +166,7 @@ export class P4RecheckModelGate {
       requestId: request,
       taskId,
       scopeId,
-      ordinal: this.records.length + 1,
+      ordinal: this.records.length + 1 + this.startOrdinal,
       state: "ADMITTED",
       transport: null,
     });

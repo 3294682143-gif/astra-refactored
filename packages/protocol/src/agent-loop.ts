@@ -154,6 +154,7 @@ export const AGENT_TRACE_CODE = Object.freeze([
   "WORK",
   "R2",
   "REPAIR",
+  "R0",
   "COMPLETE",
   "TRUNCATED",
   "ERROR",

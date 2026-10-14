@@ -38,7 +38,13 @@ import {
   type P4S1Assessment,
   type P4Target,
 } from "@astra/protocol";
-import { ContractLedger, compileP2Contract } from "@astra/math-contract";
+import type {
+  AgentModelReceipt,
+  AgentModelRequest,
+  P2Contract,
+  P4R0RevisionTrigger,
+} from "@astra/protocol";
+import { ContractLedger, P4R0PlanRevisionSession, compileP2Contract, prepareP4R0 } from "@astra/math-contract";
 import {
   P3EffectGate,
   P4RecheckModelGate,
@@ -47,7 +53,7 @@ import {
   p3EffectKey,
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
-import { P4ReviewSession } from "@astra/math-review";
+import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
 import { AgentSession, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
@@ -60,8 +66,10 @@ import {
   boundedAwait,
   captureAgentOptions,
   captureAgentPorts,
+  checkedAgentReceipt,
   deriveRootBudget,
   type CapturedAgentOptions,
+  type CapturedAgentPorts,
 } from "./agent-loop-io.js";
 
 const MIN_MS = 25;
@@ -117,6 +125,138 @@ function boundedSession(value: unknown): string {
   return value;
 }
 
+/**
+ * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
+ * injected model port using only the shared root budget. R0 has no work task,
+ * so it bypasses the P4RecheckModelGate; the root still owns the ordinal and
+ * the deadline. Returns an UNKNOWN receipt on any port/validation failure.
+ */
+async function r0Generate(
+  root: AgentSession,
+  ports: CapturedAgentPorts,
+  context: {
+    readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
+    readonly contextHash: string;
+    readonly contextBytes: number;
+  },
+  scopeId: string,
+): Promise<AgentModelReceipt> {
+  const remaining = root.remainingMs();
+  if (remaining <= MIN_MS) {
+    fail(P2_ERROR_CODES.DEADLINE_EXCEEDED);
+  }
+  const requestId = root.nextModelId();
+  if (requestId === null) {
+    fail(P2_ERROR_CODES.BUDGET_EXHAUSTED);
+  }
+  const request = p2Snapshot({
+    sessionId: root.sessionId,
+    problemHash: root.problemHash,
+    requestId,
+    phase: "R0" as const,
+    taskId: "r0",
+    scopeId,
+    messages: context.messages,
+    contextHash: context.contextHash,
+    contextBytes: context.contextBytes,
+    remainingMs: remaining,
+    maxTokens: 8192 as const,
+  }) as AgentModelRequest;
+  root.reserveModel("R0");
+  let raw: unknown;
+  try {
+    raw = await boundedAwait(() => ports.model.generate(request), remaining);
+  } catch {
+    root.settleModel(requestId, "UNKNOWN");
+    return Object.freeze({ transportStatus: "UNKNOWN" as const, text: "" }) as AgentModelReceipt;
+  }
+  let receipt: AgentModelReceipt;
+  try {
+    receipt = checkedAgentReceipt(raw);
+  } catch {
+    root.settleModel(requestId, "UNKNOWN");
+    return Object.freeze({ transportStatus: "UNKNOWN" as const, text: "" }) as AgentModelReceipt;
+  }
+  root.settleModel(requestId, receipt.transportStatus);
+  return receipt;
+}
+
+/**
+ * B1: the bounded R0 planning review. Exactly one review; on a recorded ISSUES
+ * conclusion exactly one `reviseGoals` revision (contractVersion 1 -> 2). Any
+ * inconclusive, unparseable or illegal path falls back to the fixed
+ * deterministic template under the same root budget — never a second bump and
+ * never extra planning budget.
+ */
+async function runBoundedR0(
+  initial: P2Contract,
+  root: AgentSession,
+  ports: CapturedAgentPorts,
+  opts: CapturedAgentOptions,
+  problemText: string,
+  session: string,
+): Promise<P2Contract> {
+  const fallback = (): P2Contract => compileP2Contract(problemText, session, undefined);
+  try {
+    if (root.stopped() || root.remainingMs() <= MIN_MS) {
+      return initial;
+    }
+    // prepareP4R0 caps the frozen planning view at four root calls; the real
+    // root budget is unchanged (R0 only ever spends the calls it actually makes).
+    const r0RootCalls = Math.min(opts.maxModelCalls, 4);
+    const prep = prepareP4R0(initial, {
+      enabled: true,
+      planningModelCalls: 1,
+      remainingRootCalls: r0RootCalls,
+      remainingMs: root.remainingMs(),
+    });
+    if (prep.action !== "REQUEST_REVIEW") {
+      return initial;
+    }
+    const review = new P4R0ReviewSession(prep, 1);
+    const admitted = review.admit(root.remainingMs(), r0RootCalls);
+    const receipt = await r0Generate(root, ports, admitted.context, prep.target.binding.planHash);
+    review.markDispatched();
+    const settled = review.settle(receipt.transportStatus, receipt.text, root.remainingMs());
+    if (settled.code !== "OK" || settled.report === null || settled.report.conclusion !== "ISSUES") {
+      return initial;
+    }
+    const reviewSnapshot = review.snapshot();
+    const checks = reviewSnapshot.record?.report?.checks ?? [];
+    const issueDimensions = [
+      ...new Set(checks.filter((row) => row.verdict === "ISSUES").map((row) => row.dimension)),
+    ];
+    if (issueDimensions.length === 0) {
+      return initial;
+    }
+    const trigger = p2Snapshot({
+      parent: prep.target.binding,
+      reviewHash: p4Hash(JSON.stringify(reviewSnapshot)),
+      issueDimensions,
+      review: reviewSnapshot,
+    }) as P4R0RevisionTrigger;
+    const revision = new P4R0PlanRevisionSession(prep, trigger, 1);
+    const rAdmitted = revision.admit(root.remainingMs(), 2, 3);
+    const rReceipt = await r0Generate(root, ports, rAdmitted.context, prep.target.binding.planHash);
+    revision.markDispatched();
+    revision.settle(rReceipt.transportStatus, rReceipt.text, root.remainingMs());
+    const snapshot = revision.snapshot();
+    if (snapshot.revisedContract !== null) {
+      return snapshot.revisedContract;
+    }
+    return fallback();
+  } catch (error) {
+    if (!(error instanceof P2Error)) {
+      throw error;
+    }
+    try {
+      return fallback();
+    } catch {
+      return initial;
+    }
+  }
+}
+
 export async function runAgentLoop(
   problem: string,
   sessionId: string,
@@ -128,7 +268,7 @@ export async function runAgentLoop(
   const opts0 = captureAgentOptions(options);
   const captured = captureAgentPorts(ports);
   const problemHash = p4Hash(problemText);
-  const contract = compileP2Contract(
+  let contract = compileP2Contract(
     problemText,
     session,
     opts0.goalSpecs.length > 0 ? opts0.goalSpecs : undefined,
@@ -153,11 +293,24 @@ export async function runAgentLoop(
     remainingMs: opts.remainingMs,
     now: opts.now,
   });
+  // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
+  // any WORK, shares the same root budget, and may change the contract to
+  // version 2 via at most one `reviseGoals`. With the default `maxR0=0` this is
+  // a no-op and the run is byte-identical to before.
+  if (opts.maxR0 >= 1) {
+    contract = await runBoundedR0(contract, root, captured, opts, problemText, session);
+  }
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
   const workflow = new AgentWorkflowRoutes(ledger, store);
   const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
-  const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls);
+  const gate = new P4RecheckModelGate(
+    session,
+    problemHash,
+    contract.contractVersion,
+    opts.maxModelCalls,
+    root.modelCalls(),
+  );
   const calls = new AgentCalls(root, gate, captured);
   const progress = new AgentProgressPolicy();
 
