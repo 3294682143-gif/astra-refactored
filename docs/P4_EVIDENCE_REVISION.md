@@ -180,3 +180,21 @@ reconciled against trusted counterparts:
 Tests: `apps/stdio-runtime/tests/p2-scope-coverage.test.ts` — the PARAMETER
 exact/missing/extra/duplicate matrix and the scoped/backward-compat assertion;
 the public-entry E04 remains in `tests/e2e/test_ts_boundary.py`.
+
+## Slice 3c (part 2) — E13 fixed-template fallback + E14 byte-verbatim release
+
+- `E13` (structural): an unclassifiable problem compiles to the fixed
+  deterministic `UNKNOWN` template (single `ANSWER_REQUEST` answer obligation);
+  replaying the same problem yields identical goals/obligations/tasks, so a
+  planning review that certifies no bounded revision falls back to this fixed
+  template under the same root budget.
+  Test: `apps/stdio-runtime/tests/p2-template-fallback.test.ts`.
+- `E14` (public entry): S3 releases the delivered answer byte-verbatim — a
+  candidate proposal with distinctive spacing comes back unchanged in
+  `final_response` (no reformatting that could change the answer's meaning).
+  Test: `tests/e2e/test_ts_g3_negatives.py::test_e14_released_candidate_is_byte_verbatim`.
+
+Still open for Slice 3: the R0 bounded contract revision half of `E13` (needs an
+R0 phase wired through the production chain, sharing the root budget); `E05`/`E06`
+math-semantics rows; the general multi-counterexample public-entry flagship; the
+`MIGRATION_MATRIX.csv` evidence rows; formal `G3 / PR4` CLOSED.

@@ -140,3 +140,26 @@ def test_e15_no_verification_budget_returns_honest_best_effort(process_tracker):
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert result["metrics"]["review_calls"] == 0
     assert process_tracker
+
+
+def test_e14_released_candidate_is_byte_verbatim(process_tracker):
+    """E14: S3 never reformats the delivered answer; the candidate string is
+    released byte-verbatim (formatting is not distorted on the way out)."""
+    class VerbatimClient(FakeClient):
+        def _work(self, body):
+            packet = json.loads(super()._work(body))
+            packet["candidateProposal"] = "  4  "
+            return json.dumps(packet)
+
+    result = _solve(
+        VerbatimClient(),
+        max_model_calls=4,
+        max_work_units=2,
+        max_effects=1,
+        max_reviews=0,
+    )
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "  4  "
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert process_tracker
