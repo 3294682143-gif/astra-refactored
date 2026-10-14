@@ -195,6 +195,52 @@ the public-entry E04 remains in `tests/e2e/test_ts_boundary.py`.
   Test: `tests/e2e/test_ts_g3_negatives.py::test_e14_released_candidate_is_byte_verbatim`.
 
 Still open for Slice 3: the R0 bounded contract revision half of `E13` (needs an
-R0 phase wired through the production chain, sharing the root budget); `E05`/`E06`
-math-semantics rows; the general multi-counterexample public-entry flagship; the
-`MIGRATION_MATRIX.csv` evidence rows; formal `G3 / PR4` CLOSED.
+R0 phase wired through the production chain, sharing the root budget); the
+general multi-counterexample public-entry flagship; the `MIGRATION_MATRIX.csv`
+evidence rows; formal `G3 / PR4` CLOSED.
+
+## Slice 3d — DECISION-0150 resolution landed pieces
+
+The USER's official resolution of `DECISION-0150` is recorded as `DECISION-0151`.
+The following bounded, additive pieces are landed (the gate is still NOT closed):
+
+### B1a — `contractVersion ∈ {1,2}` (commit `67391d6`)
+
+`packages/protocol/schema/agent-host-v13.schema.json` widens the four
+`tool.execute` / `method.load` P3 bindings' `contractVersion` from `const: 1` to
+`enum: [1, 2]`. The Python Host accepts `{1,2}` everywhere the previous guard
+hard-rejected `!= 1` (`agent_context._ACCEPTED_CONTRACT_VERSIONS` +
+`_contract_version_ok`; the `agent_context`/`agent_history`/`agent_workflow`/
+`agent_progress` sites). A default run still compiles `contractVersion` 1, so the
+v1 replay is byte-identical; same-round reference consistency is still enforced
+by the existing `same_json` projections (no field was loosened beyond the value
+set). No run emits version 2 yet.
+
+### B2 — E05/E06 unclosed auxiliary obligations (commit `5958142`)
+
+`AgentLoopSummary.unresolvedObligations` lists the still-open `PREMISES`
+(a proof's un-discharged provisional/contrapositive assumption, E05) and
+`ATTAINMENT` (an optimization's missing equality witness, E06) obligations when
+the whole-problem candidate is released. The frozen candidate authority
+(`P2_ANSWER_OBLIGATION_BY_GOAL`, `tests/e2e/test_ts_candidate_kinds.py`) is
+untouched; `candidateVerified` stays false and strict acceptance is never
+performed. Public-entry tests: `tests/e2e/test_ts_g3_evidence.py`.
+
+### B1b stage 1 — R0 phase / `maxR0` plumbing (commit `b531b4b`)
+
+Inert prerequisite: `AGENT_MODEL_PHASE` gains `R0`; `maxR0` (0|1, default 0) is
+threaded `AgentLoopOptions` → `agent-loop-io` → schema `runtime.initialize` →
+`agent_runtime` → `AgentHost`; `agent_client._PHASES` gains `R0`. No run emits
+`R0` yet, so every existing path is unchanged.
+
+### E14 empty delivery (commit `a1a1428`)
+
+A delivered candidate that is empty breaks the non-empty contract and is never
+released by S3; locked by
+`tests/e2e/test_ts_g3_negatives.py::test_e14_empty_delivered_text_is_never_released`.
+
+Still open: **B1b stage 2** (wire the R0 review + one `reviseGoals`→v2 + fixed
+`UNKNOWN` fallback through `runAgentLoop` and the Python Host `R0` branch, with a
+public-entry E2E); **B1c** (S2→M1 ledger local obligation sync); **B3** (the
+general multi-counterexample flagship; the trusted gap source and the
+`coveredGaps` derivation remain the open design point).
