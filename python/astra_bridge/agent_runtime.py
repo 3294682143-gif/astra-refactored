@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .agent_client import AgentClient
 from .agent_host import AgentHost
+from . import host_carriers
 from .agent_protocol import AGENT_HOST_VERSION, load_manifest, payload
 from .p0_probe import ProbeError, _child_env, _close_streams, _reap
 from .p0_protocol import ProtocolError
@@ -94,6 +95,7 @@ class AgentRuntime:
         policy="BEST_EFFORT",
         derive_budget=False,
         node="node",
+        mode="platform",
     ):
         if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 32:
             raise ValueError("invalid max_model_calls")
@@ -119,6 +121,8 @@ class AgentRuntime:
             raise ValueError("invalid policy")
         if not isinstance(node, str) or not node:
             raise ValueError("invalid node")
+        if mode not in host_carriers.MODES:
+            raise ValueError("invalid mode")
         self.max_model_calls = max_model_calls
         self.max_work_units = max_work_units
         self.max_effects = max_effects
@@ -130,6 +134,7 @@ class AgentRuntime:
         self.problem_seconds = float(problem_seconds)
         self.policy = policy
         self.node = node
+        self.mode = mode
         self.client = AgentClient(client)
         self._solve_lock = threading.Lock()
         self.last_journal = None
@@ -188,6 +193,15 @@ class AgentRuntime:
             return self._unsolved(started, "CHILD_FAILED", False)
         problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
         session_id = uuid.uuid4().hex
+        try:
+            host_carriers.bind_carrier(
+                self.mode, problem_hash, session_id, _PROFILE_ID,
+                max_model_calls=self.max_model_calls, max_work_units=self.max_work_units,
+                max_effects=self.max_effects,
+                root_deadline_ms=max(1, min(5000, int(self.problem_seconds * 1000))),
+            )
+        except host_carriers.CarrierError as exc:
+            return self._unsolved(started, exc.code, False)
         host_options = {
             "maxModelCalls": options["maxModelCalls"],
             "maxWorkUnits": options["maxWorkUnits"],
@@ -415,6 +429,8 @@ class AgentRuntime:
             "stopReason": summary["stopReason"],
             "reason": summary["reason"],
             "unresolvedObligations": list(summary["unresolvedObligations"]),
+            "carrier": self.mode,
+            "sessionId": host.session_id,
             "trace": trace,
             "metrics": metrics,
             "finishReason": finish,
