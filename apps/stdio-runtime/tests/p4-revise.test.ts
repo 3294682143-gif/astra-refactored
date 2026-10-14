@@ -284,3 +284,55 @@ test("the revision path is the only sanctioned replacement of a protected candid
   // Revising never mutates the parent target object.
   assert.equal(p4JsonEqual(p2Snapshot(built.parent), before), true);
 });
+
+test("multi-counterexample: a revision covering every challenged gap is accepted", () => {
+  const built = build();
+  const result = reviseCandidate(
+    built.contract,
+    {
+      parent: built.parent,
+      child: built.child,
+      challenge: built.challenge,
+      basis: grounded(built, {
+        requiredGaps: ["x=0", "x=2"],
+        coveredGaps: ["x=0", "x=1", "x=2"],
+      }),
+    },
+    1000,
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(result.reason, "REVISED_CANDIDATE");
+  assert.equal(result.decision.finalResponse, "{0,1}");
+});
+
+test("multi-counterexample: a partial repair that leaves a proven gap fails closed", () => {
+  const built = build();
+  const partial = reviseCandidate(
+    built.contract,
+    {
+      parent: built.parent,
+      child: built.child,
+      challenge: built.challenge,
+      basis: grounded(built, { requiredGaps: ["x=0", "x=2"], coveredGaps: ["x=0"] }),
+    },
+    1000,
+  );
+  assert.equal(partial.accepted, false);
+  assert.equal(partial.reason, "REVISE_REJECTED");
+  assert.equal(partial.decision.finalResponse, "x=1");
+  assert.equal(partial.decision.protectedCandidate?.artifactId, "artifact-1");
+
+  // An empty, duplicated or over-broad required-gap set is also refused.
+  for (const bad of [
+    { requiredGaps: [], coveredGaps: [] },
+    { requiredGaps: ["x=0", "x=0"], coveredGaps: ["x=0"] },
+    { requiredGaps: ["x=0"], coveredGaps: undefined as unknown as readonly string[] },
+  ]) {
+    const result = reviseCandidate(
+      built.contract,
+      { parent: built.parent, child: built.child, challenge: built.challenge, basis: grounded(built, bad) },
+      1000,
+    );
+    assert.equal(result.accepted, false);
+  }
+});

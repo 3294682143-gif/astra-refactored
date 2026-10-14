@@ -101,6 +101,40 @@ function answerObligationOf(contract: P2Contract, goalId: string): P2Obligation 
 }
 
 /**
+ * Multi-counterexample coverage (Slice 3c). When the basis lists the challenged
+ * gaps (`requiredGaps`), every one of them must be covered by the revised child
+ * (`coveredGaps`). A partial repair that leaves an active proven gap fails
+ * closed. When `requiredGaps` is absent the single-obligation rule applies.
+ */
+function gapsCovered(basis: P4ReviseBasis): boolean {
+  const required = basis.requiredGaps;
+  if (required === undefined) {
+    return true;
+  }
+  if (!Array.isArray(required) || required.length === 0 || required.length > 8) {
+    return false;
+  }
+  const covered = basis.coveredGaps;
+  if (!Array.isArray(covered) || covered.length > 16) {
+    return false;
+  }
+  const seen = new Set<string>();
+  for (const gap of required) {
+    if (typeof gap !== "string" || gap.trim().length === 0 || [...gap].length > 128) {
+      return false;
+    }
+    if (seen.has(gap)) {
+      return false;
+    }
+    seen.add(gap);
+    if (!(covered as readonly string[]).includes(gap)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Attempt one evidence-gated replacement. A structurally invalid input throws a
  * fixed `P2Error`; a well-formed attempt that does not meet the replacement
  * conditions returns `accepted:false` with a `REVISE_REJECTED` parent decision.
@@ -177,7 +211,8 @@ export function reviseCandidate(
       Array.isArray(basis.obligatedObligationIds) &&
       (basis.obligatedObligationIds as readonly string[]).includes(requiredId) &&
       Array.isArray(basis.childCoverage) &&
-      (basis.childCoverage as readonly string[]).includes(requiredId)
+      (basis.childCoverage as readonly string[]).includes(requiredId) &&
+      gapsCovered(basis)
     );
   })();
 

@@ -37,29 +37,35 @@ TOOL_ARGS = {"expression": "2+2", "variables": ["x"], "parameters": []}
 
 
 class G3FlagshipClient(FakeClient):
-    """FakeClient: one checker tool, ``{1}`` answer, R2 challenge, ``{0,1}`` repair."""
+    """FakeClient: one checker tool, ``{1}`` answer, R2 challenge, ``{0,1}`` repair.
 
-    def __init__(self):
+    ``tool_on_candidate`` chooses whether the checker runs on the candidate task
+    (S1 passes -> revision) or on a foreign task (S1 refuses -> E07 negative).
+    """
+
+    def __init__(self, tool_on_candidate=True):
         super().__init__()
         self.tool_done = False
+        self.tool_on_candidate = tool_on_candidate
 
     def _work(self, body):
         if body.get("stage") == "REPAIR":
             return self._packet(body, "the real solution set is {0,1}", "Split the zero product: x=0 or x=1.", "{0,1}")
         task = body["task"]
-        if task["taskId"] == ANSWER_TASK:
-            # The S1 mapping gate requires the checker to be bound to the
-            # candidate task itself, so the tool is issued on this task.
-            if not self.tool_done:
-                self.tool_done = True
-                return json.dumps(
-                    {
-                        "action": "tool",
-                        "name": "polynomial_expand_coefficients",
-                        "args": TOOL_ARGS,
-                        "scope": "check the supplied polynomial at the zero branch",
-                    }
-                )
+        on_answer = task["taskId"] == ANSWER_TASK
+        # The S1 mapping gate requires the checker to be bound to the candidate
+        # task; a checker on a foreign task is a proven E07 mapping failure.
+        if not self.tool_done and on_answer == self.tool_on_candidate:
+            self.tool_done = True
+            return json.dumps(
+                {
+                    "action": "tool",
+                    "name": "polynomial_expand_coefficients",
+                    "args": TOOL_ARGS,
+                    "scope": "check the supplied polynomial against the original problem",
+                }
+            )
+        if on_answer:
             return self._packet(body, "x=1 only", "Take the root x=1.", "{1}")
         return self._packet(body, "prerequisite", "prerequisite", None)
 
@@ -150,4 +156,28 @@ def test_public_entry_without_repair_budget_keeps_the_first_candidate(process_tr
     assert result["final_response"] == "{1}"
     assert result["reason"] == "BEST_EFFORT_CANDIDATE"
     assert result["candidate_verified"] is False
+    assert process_tracker
+
+
+def test_public_entry_e07_foreign_checker_cannot_ground_a_revision(process_tracker):
+    """E07: the M5 S1 mapping gate refuses a checker bound to a foreign task.
+
+    The checker returns a COMPLETE PROGRAM_OBSERVATION, but it is not bound to
+    the candidate task, so S1 records no structural match: no REPAIR call is
+    made, the candidate is not upgraded and strict acceptance is not performed.
+    """
+    client = G3FlagshipClient(tool_on_candidate=False)
+    result = _solve(
+        client,
+        max_reviews=1,
+        max_repairs=1,
+        max_effects=1,
+        max_model_calls=7,
+        max_work_units=4,
+    )
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "{1}"
+    assert result["reason"] == "BEST_EFFORT_CANDIDATE"
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert process_tracker

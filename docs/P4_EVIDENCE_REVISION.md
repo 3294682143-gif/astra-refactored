@@ -122,3 +122,25 @@ Still pending for Slice 3 (next increments): S2 M1 local obligation reopen on an
 accepted revision; bounded R0 planning revision + R1 rule risk trigger; the
 trusted `boundaryCases` versioned schema (3b); the multi-counterexample flagship
 and formal G3/PR4 closure (3c).
+
+## Slice 3c (part 1) — multi-counterexample fail-closed + E07 public entry
+
+- `P4ReviseBasis` gains optional `requiredGaps` / `coveredGaps`. When the review
+  proves several missing branches/counterexamples (`requiredGaps`), the revised
+  child must cover **every** one of them (`coveredGaps` superset) or the revision
+  is fail-closed `REVISE_REJECTED`. An empty, duplicated or over-broad required
+  set is refused. Absent `requiredGaps` keeps the single-obligation rule
+  (byte-compatible).
+  Tests: `apps/stdio-runtime/tests/p4-revise.test.ts` (multi-counterexample
+  positive; partial-repair refusal).
+- E07 is now exercised at the real public entry:
+  `tests/e2e/test_ts_g3_flagship.py::test_public_entry_e07_foreign_checker_cannot_ground_a_revision`
+  — a checker bound to a foreign task is refused by S1, no `REPAIR` runs, the
+  candidate stays `{1}` and strict acceptance is not performed.
+
+Still pending for Slice 3 (not claimed done): 3a S2 M1 obligation reopen + bounded
+R0/R1 (`E13`); 3b trusted `boundaryCases` versioned schema (`E04`); the
+multi-counterexample **public-entry flagship** `(x-0)(x-1)(x-2)=0` (needs 3b's
+trusted branch set); the remaining §6.1 E2E matrix rows (`E05`, `E06`, `E14`,
+`E15`); `MIGRATION_MATRIX.csv` evidence rows; and the formal `G3 / PR4` CLOSED
+decision.

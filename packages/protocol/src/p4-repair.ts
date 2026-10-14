@@ -218,4 +218,13 @@ export interface P4ReviseBasis {
   readonly obligatedObligationIds: readonly string[];
   /** Obligation ids the revised child candidate covers. */
   readonly childCoverage: readonly string[];
+  /**
+   * G3/PR4 Slice 3c multi-counterexample coverage. When present, the challenged
+   * counterexample/gap identifiers the review proved missing; the revised child
+   * must cover EVERY one of them (``coveredGaps`` is a superset) or the revision
+   * is fail-closed refused. Absent means the single-obligation rule applies.
+   */
+  readonly requiredGaps?: readonly string[];
+  /** The counterexample/gap identifiers the revised child candidate covers. */
+  readonly coveredGaps?: readonly string[];
 }
