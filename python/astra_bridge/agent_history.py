@@ -506,7 +506,7 @@ def check_revision_context(body, history, session_id, problem_hash,
         _fail()
     if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
         _fail()
-    if not _is_int(body.get("contractVersion")) or body["contractVersion"] != 1:
+    if not _is_int(body.get("contractVersion")) or body["contractVersion"] not in (1, 2):
         _fail()
     request_id = body.get("sourceRequestId")
     _ordinal(request_id)

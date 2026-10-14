@@ -229,9 +229,9 @@ def _partial_packet(history, request_id, body, session_id, problem_hash):
         return False
     if packet["deliveryStatus"] not in _PARTIAL_DELIVERY:
         return False
-    if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
+    if not _is_int(packet["contractVersion"]) or packet["contractVersion"] not in (1, 2):
         return False
-    if not _is_int(body.get("contractVersion")) or body["contractVersion"] != 1:
+    if not _is_int(body.get("contractVersion")) or body["contractVersion"] not in (1, 2):
         return False
     task = body.get("task")
     scope = body.get("scope")

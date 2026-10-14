@@ -448,9 +448,9 @@ def _source_record(history, source_id, session_id, problem_hash, *, require_comp
     # both the COMPLETE source path and the projection-only partial path.
     if not _trim(packet["claim"]) or not _trim(packet["derivation"]):
         _fail()
-    if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
+    if not _is_int(packet["contractVersion"]) or packet["contractVersion"] not in (1, 2):
         _fail()
-    if not _is_int(body.get("contractVersion")) or body["contractVersion"] != 1:
+    if not _is_int(body.get("contractVersion")) or body["contractVersion"] not in (1, 2):
         _fail()
     if packet["contractVersion"] != body["contractVersion"]:
         _fail()
@@ -653,7 +653,7 @@ def _admitted_task_count(history, session_id, problem_hash, upto_ordinal):
             continue
         if body.get("sessionId") != session_id or body.get("problemHash") != problem_hash:
             continue
-        if not _is_int(body.get("contractVersion")) or body["contractVersion"] != 1:
+        if not _is_int(body.get("contractVersion")) or body["contractVersion"] not in (1, 2):
             continue
         if body.get("sourceRequestId") != request_id:
             continue

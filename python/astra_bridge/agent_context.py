@@ -94,6 +94,17 @@ _TASK_SCOPE_COVERAGE_FIELDS = ("taskId", "scopeId", "coverage")
 _MAX_COVERAGE_ITEMS = 32
 _MAX_COVERAGE_CHARS = 256
 
+# B1 (DECISION-0150): the Host accepts both contract versions. A default run
+# compiles ``contractVersion`` 1 and stays 100% byte-identical; an explicit,
+# bounded R0 planning revision may raise it to 2 exactly once via M1
+# ``reviseGoals``. The version referenced inside one round must still agree,
+# which the existing ``same_json`` projections already enforce.
+_ACCEPTED_CONTRACT_VERSIONS = (1, 2)
+
+
+def _contract_version_ok(value):
+    return _is_int(value) and value in _ACCEPTED_CONTRACT_VERSIONS
+
 
 def _fail():
     raise ProbeError("FIELD_VALUE")
@@ -304,7 +315,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         packet = checked_packet(receipt["text"])
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
-        if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
+        if not _contract_version_ok(packet["contractVersion"]):
             return None
         if packet["sourceRequestId"] != request_id:
             return None
@@ -394,7 +405,7 @@ def _work_packet(entry, problem, session_id, problem_hash,
         packet = checked_packet(receipt["text"])
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
-        if not _is_int(packet["contractVersion"]) or packet["contractVersion"] != 1:
+        if not _contract_version_ok(packet["contractVersion"]):
             return None
         if packet["sourceRequestId"] != request_id:
             return None
@@ -504,7 +515,7 @@ def _projection_for_source(history, problem, session_id, problem_hash, source_id
         binding = {
             "sessionId": session_id,
             "problemHash": problem_hash,
-            "contractVersion": 1,
+            "contractVersion": packet["contractVersion"],
             "artifactId": row["artifactId"],
             "artifactVersion": row["envelope"]["artifactVersion"],
             "taskId": task.get("taskId"),
@@ -624,7 +635,7 @@ def check_inputs(inner, history, current_request_id):
             _fail()
         if source_packet.get("problemHash") != inner["problemHash"]:
             _fail()
-        if not _is_int(source_packet.get("contractVersion")) or source_packet["contractVersion"] != 1:
+        if not _contract_version_ok(source_packet.get("contractVersion")):
             _fail()
         if source_packet.get("taskId") != source_task.get("taskId"):
             _fail()
@@ -651,7 +662,7 @@ def check_inputs(inner, history, current_request_id):
             _fail()
         if not _is_int(envelope.get("artifactVersion")) or envelope["artifactVersion"] < 1:
             _fail()
-        if not _is_int(envelope.get("contractVersion")) or envelope["contractVersion"] != 1:
+        if not _contract_version_ok(envelope.get("contractVersion")):
             _fail()
     return None
 
@@ -715,7 +726,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _fail()
     if body["problemHash"] != problem_hash or body["sessionId"] != session_id:
         _fail()
-    if not _is_int(body["contractVersion"]) or body["contractVersion"] != 1:
+    if not _contract_version_ok(body["contractVersion"]):
         _fail()
     if body["sourceRequestId"] != request_id:
         _fail()
@@ -738,7 +749,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _fail()
     if envelope.get("taskId") != task["taskId"] or envelope.get("scopeId") != task["scopeId"]:
         _fail()
-    if not _is_int(envelope.get("contractVersion")) or envelope["contractVersion"] != 1:
+    if not _contract_version_ok(envelope.get("contractVersion")):
         _fail()
     scope = body["scope"]
     if not isinstance(scope, dict) or scope.get("scopeId") != task["scopeId"]:
@@ -844,7 +855,7 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
             _exact_keys(binding, _TARGET_FIELDS)
             if binding["sessionId"] != session_id or binding["problemHash"] != problem_hash:
                 _fail()
-            if not _is_int(binding["contractVersion"]) or binding["contractVersion"] != 1:
+            if not _contract_version_ok(binding["contractVersion"]):
                 _fail()
             _text(binding["artifactId"], 256)
             if not _is_int(binding["artifactVersion"]) or binding["artifactVersion"] < 1:
@@ -937,7 +948,7 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
     _exact_keys(target, _TARGET_FIELDS)
     if target["sessionId"] != session_id or target["problemHash"] != problem_hash:
         _fail()
-    if not _is_int(target["contractVersion"]) or target["contractVersion"] != 1:
+    if not _contract_version_ok(target["contractVersion"]):
         _fail()
     if not _is_int(target["artifactVersion"]) or target["artifactVersion"] < 1:
         _fail()
@@ -1030,7 +1041,7 @@ def _check_repair(body, request_id, problem, session_id, problem_hash, history):
         _fail()
     if body["sessionId"] != session_id or body["problemHash"] != problem_hash:
         _fail()
-    if not _is_int(body["contractVersion"]) or body["contractVersion"] != 1:
+    if not _contract_version_ok(body["contractVersion"]):
         _fail()
     if body["sourceRequestId"] != request_id:
         _fail()

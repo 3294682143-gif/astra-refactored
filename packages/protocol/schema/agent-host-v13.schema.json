@@ -939,7 +939,10 @@
                   },
                   "contractVersion": {
                     "type": "integer",
-                    "const": 1
+                    "enum": [
+                      1,
+                      2
+                    ]
                   },
                   "taskId": {
                     "type": "string",
@@ -1065,7 +1068,10 @@
                   },
                   "contractVersion": {
                     "type": "integer",
-                    "const": 1
+                    "enum": [
+                      1,
+                      2
+                    ]
                   },
                   "taskId": {
                     "type": "string",
@@ -1282,7 +1288,10 @@
                   },
                   "contractVersion": {
                     "type": "integer",
-                    "const": 1
+                    "enum": [
+                      1,
+                      2
+                    ]
                   },
                   "taskId": {
                     "type": "string",
@@ -1396,7 +1405,10 @@
                   },
                   "contractVersion": {
                     "type": "integer",
-                    "const": 1
+                    "enum": [
+                      1,
+                      2
+                    ]
                   },
                   "taskId": {
                     "type": "string",
