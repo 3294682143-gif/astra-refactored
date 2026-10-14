@@ -162,3 +162,21 @@ Still pending for Slice 3: bounded R0 planning revision + R1 rule trigger
 (`E13`); the trusted `boundaryCases` version marker (3b); the multi-counterexample
 public-entry flagship; matrix rows `E05`/`E06`/`E14`; `MIGRATION_MATRIX` evidence
 rows; formal `G3 / PR4` CLOSED.
+
+## Slice 3b — trusted `boundaryCases`: versioned schema + backward compat
+
+The trusted scope-coverage contract is now explicitly versioned:
+`P2_SCOPE_COVERAGE_SCHEMA_VERSION = "p2-scope-coverage-v1"` (exported from
+`@astra/math-workunit`). The v5 scope proposal's four declared lists are
+reconciled against trusted counterparts:
+
+- a **PARAMETER** goal's `boundaryCases` must equal its trusted parameter
+  branches (`<p>=0`, `<p>!=0`) — a missing, forged/extra or duplicated set is a
+  fixed `SCOPE_MISMATCH` and registers nothing (E04);
+- a **MULTIPART** root's `goalExhaustion` must equal its trusted child-goal set;
+- a goal with no trusted counterpart (e.g. `VALUE`) keeps its declared lists as
+  data, and v1..v4 packets (which carry no scope proposal) replay unchanged.
+
+Tests: `apps/stdio-runtime/tests/p2-scope-coverage.test.ts` — the PARAMETER
+exact/missing/extra/duplicate matrix and the scoped/backward-compat assertion;
+the public-entry E04 remains in `tests/e2e/test_ts_boundary.py`.

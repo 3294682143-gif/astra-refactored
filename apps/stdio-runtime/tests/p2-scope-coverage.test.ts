@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { P2Error, p2Snapshot, type P2Task } from "@astra/protocol";
-import { compileP2Contract } from "@astra/math-contract";
-import { P2WorkunitStore } from "@astra/math-workunit";
+import { compileP2Contract, parameterBranches } from "@astra/math-contract";
+import { P2WorkunitStore, P2_SCOPE_COVERAGE_SCHEMA_VERSION } from "@astra/math-workunit";
 
 const HEX64 = /^[0-9a-f]{64}$/u;
 
@@ -186,4 +186,49 @@ test("a MULTIPART exhaustion claim with a foreign extra child is a fixed SCOPE_M
     "SCOPE_MISMATCH",
   );
   assert.equal(store.scopeCoverageSnapshot().length, 0);
+});
+
+function paramFixture(problem: string): { contract: ReturnType<typeof compileP2Contract>; store: P2WorkunitStore; task: P2Task } {
+  const contract = compileP2Contract(problem, "param-boundary-unit");
+  const store = new P2WorkunitStore(contract);
+  const task = p2Snapshot({ ...(contract.tasks[0] as P2Task), delivery: "RUNNING" as const }) as P2Task;
+  return { contract, store, task };
+}
+
+test("E04: a PARAMETER boundary claim must equal the trusted parameter branches", () => {
+  const problem = "Classify the parameter a in the equation a*x=1";
+  const branches = parameterBranches(problem);
+  assert.deepEqual([...branches], ["a=0", "a!=0"]);
+  const proposal = (boundaryCases: readonly string[]): Record<string, unknown> => ({
+    quantifiers: [],
+    branchConditions: [],
+    boundaryCases: [...boundaryCases],
+    goalExhaustion: [],
+  });
+
+  const exact = paramFixture(problem);
+  const coverage = exact.store.declareScopeCoverage(exact.task, proposal(branches));
+  assert.match(coverage.coverageHash, HEX64);
+
+  // A missing, forged/extra or duplicated boundary set is a fixed rejection.
+  for (const bad of [["a=0"], ["a=0", "a!=0", "a=1"], ["a=0", "a=0"]]) {
+    const { store, task } = paramFixture(problem);
+    assert.equal(codeOf(() => store.declareScopeCoverage(task, proposal(bad))), "SCOPE_MISMATCH");
+    // The rejection registers nothing.
+    assert.equal(store.scopeCoverageSnapshot().length, 0);
+  }
+});
+
+test("3b backward compat: the trusted counterpart is scoped; a VALUE goal is unaffected", () => {
+  // The trusted scope-coverage contract is explicitly versioned.
+  assert.equal(P2_SCOPE_COVERAGE_SCHEMA_VERSION, "p2-scope-coverage-v1");
+  // A goal with no trusted counterpart (VALUE) keeps its declared lists as data.
+  const { store, task } = fixture();
+  const coverage = store.declareScopeCoverage(task, {
+    quantifiers: [],
+    branchConditions: [],
+    boundaryCases: ["any declared case"],
+    goalExhaustion: ["any declared exhaustion"],
+  });
+  assert.match(coverage.coverageHash, HEX64);
 });

@@ -36,6 +36,17 @@ export const P2_SCOPE_COVERAGE_FIELDS = [
 ] as const;
 
 /**
+ * Explicit schema version of the trusted scope-coverage contract (G3/PR4 slice
+ * 3b). The v5 scope proposal's four declared lists are reconciled against
+ * trusted counterparts: a PARAMETER goal's `boundaryCases` must equal its
+ * trusted parameter branches (ordinary + special value) and a MULTIPART root's
+ * `goalExhaustion` must equal its trusted child-goal set. Recording the version
+ * here keeps the evolution explicit while the v1..v4 packets (which carry no
+ * scope proposal) replay unchanged.
+ */
+export const P2_SCOPE_COVERAGE_SCHEMA_VERSION = "p2-scope-coverage-v1" as const;
+
+/**
  * One task's declared scope coverage. Every list is normalized declared data:
  * trimming is only an emptiness check and never rewrites the raw item, and the
  * hash is an identity of the same bytes, never a coverage proof.

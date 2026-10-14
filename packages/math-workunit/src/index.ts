@@ -30,6 +30,7 @@ export * from "./p2-a2-context.js";
 export * from "./p3-context.js";
 export {
   P2_SCOPE_COVERAGE_FIELDS,
+  P2_SCOPE_COVERAGE_SCHEMA_VERSION,
   p2ScopeCoverage,
   checkScopeCoverage,
   checkScopeCoverageAgainstScope,
