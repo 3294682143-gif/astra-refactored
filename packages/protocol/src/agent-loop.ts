@@ -238,6 +238,12 @@ export interface AgentLoopPrivateState {
   readonly progressEvents?: readonly AgentProgressEvent[];
   /** G3/PR4 Slice 3a: the M5 S1 mapping assessment of the last repair attempt. */
   readonly s1Assessment?: P4S1Assessment | null;
+  /** G3/PR4 Slice 3a S2: the local repair transaction of the last revision. */
+  readonly s2Transaction?: {
+    readonly supersededObligationIds: readonly string[];
+    readonly preservedObligationIds: readonly string[];
+    readonly preservedParentArtifactId: string | null;
+  } | null;
 }
 
 /** Fixed schema version of one private progress event record. */

@@ -166,6 +166,11 @@ export async function runAgentLoop(
   let candidateTask: P2Task | null = null;
   let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
   let s1Assessment: P4S1Assessment | null = null;
+  let s2Transaction: {
+    readonly supersededObligationIds: readonly string[];
+    readonly preservedObligationIds: readonly string[];
+    readonly preservedParentArtifactId: string | null;
+  } | null = null;
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
   const reserve = (): number =>
@@ -1060,6 +1065,11 @@ export async function runAgentLoop(
                 root.remainingMs(),
               );
               revisedDecision = revision.decision;
+              s2Transaction = {
+                supersededObligationIds: revision.supersededObligationIds,
+                preservedObligationIds: revision.preservedObligationIds,
+                preservedParentArtifactId: revision.preservedParentArtifactId,
+              };
               stop = revision.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
             } catch (error) {
               if (!(error instanceof P2Error)) {
@@ -1145,6 +1155,7 @@ export async function runAgentLoop(
     dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
     revisions: revision.snapshot(),
     s1Assessment,
+    s2Transaction,
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
   });

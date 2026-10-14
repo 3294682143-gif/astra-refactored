@@ -214,6 +214,20 @@ test("flagship: a grounded {1} -> {0,1} revision replaces the protected candidat
   const row = result.decision.coverage.find((item) => item.obligationId === built.answerObligationId);
   assert.equal(row?.deliveryCovered, true);
   assert.equal(Object.isFrozen(result.decision), true);
+  // S2 local repair transaction: only the challenged answer obligation is
+  // superseded; the parent artifact and all other obligations are preserved.
+  assert.deepEqual([...result.supersededObligationIds], [built.answerObligationId]);
+  assert.equal(result.preservedObligationIds.includes(built.answerObligationId), false);
+  assert.equal(result.preservedObligationIds.length, built.contract.obligations.length - 1);
+  assert.equal(result.preservedParentArtifactId, "artifact-1");
+  // A refusal supersedes nothing and preserves nothing as a transaction.
+  const refused = reviseCandidate(
+    built.contract,
+    { parent: built.parent, child: built.child, challenge: built.challenge, basis: grounded(built, { witness: " " }) },
+    1000,
+  );
+  assert.deepEqual([...refused.supersededObligationIds], []);
+  assert.equal(refused.preservedParentArtifactId, null);
 });
 
 test("refusal keeps the parent candidate and records REVISE_REJECTED", () => {

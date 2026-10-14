@@ -56,6 +56,15 @@ export interface P4CandidateRevisionResult {
   readonly accepted: boolean;
   readonly reason: P4FinalReason;
   readonly decision: P4FinalDecision;
+  /**
+   * G3/PR4 Slice 3a S2: the local repair transaction. On an accepted revision
+   * ONLY the challenged answer obligation is superseded; every other obligation
+   * and the parent artifact keep their prior status (the valid local derivation
+   * such as `x=1` is preserved, unaffected routes stay ACTIVE).
+   */
+  readonly supersededObligationIds: readonly string[];
+  readonly preservedObligationIds: readonly string[];
+  readonly preservedParentArtifactId: string | null;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -282,6 +291,16 @@ function finalizeRevision(
     ),
   );
   const reason: P4FinalReason = accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
+  // S2 local repair transaction: only the challenged answer obligation is
+  // superseded; every other obligation and the parent artifact are preserved.
+  const supersededObligationIds: readonly string[] =
+    accepted && answerObligation !== null ? Object.freeze([answerObligation.obligationId]) : Object.freeze([]);
+  const preservedObligationIds: readonly string[] = Object.freeze(
+    contract.obligations
+      .map((obligation) => obligation.obligationId)
+      .filter((obligationId) => !(supersededObligationIds as readonly string[]).includes(obligationId)),
+  );
+  const preservedParentArtifactId = accepted ? parent.artifact.artifactId : null;
   const decision = p2Snapshot({
     mode: "MOCK_ONLY" as const,
     targetEnvironment: "TARGET_UNVERIFIED" as const,
@@ -299,5 +318,12 @@ function finalizeRevision(
     coverage,
     reason,
   }) as P4FinalDecision;
-  return Object.freeze({ accepted, reason, decision });
+  return Object.freeze({
+    accepted,
+    reason,
+    decision,
+    supersededObligationIds,
+    preservedObligationIds,
+    preservedParentArtifactId,
+  });
 }

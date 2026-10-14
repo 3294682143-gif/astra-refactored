@@ -151,6 +151,12 @@ test("flagship: R2 challenge + Host checker evidence revises {1} -> {0,1} in the
   const parent = artifacts.find((row) => row.artifact.envelope.taskId === ANSWER_TASK);
   assert.ok(parent !== undefined);
   assert.equal(parent.artifact.packet?.candidateProposal, "{1}");
+  // S2 local repair transaction recorded on the private state.
+  const tx = result.privateState.s2Transaction;
+  assert.ok(tx !== null && tx !== undefined);
+  assert.equal(tx!.supersededObligationIds.includes("goal-1:EXHAUSTIVENESS"), true);
+  assert.equal(tx!.preservedObligationIds.includes("goal-1:EXHAUSTIVENESS"), false);
+  assert.match(String(tx!.preservedParentArtifactId), /^artifact-\d+$/);
 });
 
 test("no checker grounding means no replacement: the parent candidate stays", async () => {

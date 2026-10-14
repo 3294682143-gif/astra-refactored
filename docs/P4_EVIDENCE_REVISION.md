@@ -144,3 +144,21 @@ multi-counterexample **public-entry flagship** `(x-0)(x-1)(x-2)=0` (needs 3b's
 trusted branch set); the remaining §6.1 E2E matrix rows (`E05`, `E06`, `E14`,
 `E15`); `MIGRATION_MATRIX.csv` evidence rows; and the formal `G3 / PR4` CLOSED
 decision.
+
+## Slice 3a (part 2) — S2 local repair transaction
+
+`P4CandidateRevisionResult` now reports the S2 local repair transaction of an
+accepted revision: `supersededObligationIds` (only the challenged answer
+obligation — its global claim is the one the child replaces),
+`preservedObligationIds` (every other obligation keeps its prior status) and
+`preservedParentArtifactId` (the replaced parent artifact, e.g. the valid local
+`x=1` derivation, is preserved). A refused revision supersedes nothing. The loop
+records it in `privateState.s2Transaction`.
+
+Tests: `apps/stdio-runtime/tests/p4-revise.test.ts` (accepted vs refused
+transaction) and `agent-loop-g3.test.ts` (the loop records the transaction).
+
+Still pending for Slice 3: bounded R0 planning revision + R1 rule trigger
+(`E13`); the trusted `boundaryCases` version marker (3b); the multi-counterexample
+public-entry flagship; matrix rows `E05`/`E06`/`E14`; `MIGRATION_MATRIX` evidence
+rows; formal `G3 / PR4` CLOSED.
