@@ -126,6 +126,33 @@ function boundedSession(value: unknown): string {
 }
 
 /**
+ * B3 (DECISION-0150): the trusted parameter branches of a PARAMETER goal, or
+ * an empty list for a non-PARAMETER (or unknown) goal. These are the bounded
+ * trusted gap source for the multi-gap REPAIR flagship: a revised child must
+ * restate every trusted branch or the revision fails closed.
+ */
+function parameterGapsOf(
+  goals: readonly {
+    readonly goalId: string;
+    readonly kind: P2GoalKind;
+    readonly scope?: { readonly branchConditions?: readonly string[] };
+    readonly subgoals: readonly unknown[];
+  }[],
+  goalId: string,
+): readonly string[] {
+  for (const goal of goals) {
+    if (goal.goalId === goalId) {
+      return goal.kind === "PARAMETER" ? (goal.scope?.branchConditions ?? []) : [];
+    }
+    const nested = parameterGapsOf(goal.subgoals as never, goalId);
+    if (nested.length > 0) {
+      return nested;
+    }
+  }
+  return [];
+}
+
+/**
  * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
  * injected model port using only the shared root budget. R0 has no work task,
  * so it bypasses the P4RecheckModelGate; the root still owns the ordinal and
@@ -1223,6 +1250,15 @@ export async function runAgentLoop(
                 supersedes: null,
               });
               const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
+              // B3 (DECISION-0150): for a PARAMETER goal the trusted parameter
+              // branches are the required gap set (the bounded "PARAMETER two
+              // gaps" flagship); the revised child must restate every branch or
+              // the revision fails closed (REVISE_REJECTED).
+              const gapSet =
+                goalKind === "PARAMETER"
+                  ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId)
+                  : [];
+              const answerText = child.artifact.packet?.candidateProposal ?? "";
               const basis: P4ReviseBasis = {
                 source: "CHECKER_COUNTEREXAMPLE",
                 level: "CHECKED_SCOPE",
@@ -1231,6 +1267,12 @@ export async function runAgentLoop(
                 witness: checker.receipt.observation.slice(0, 2048),
                 obligatedObligationIds: [answerObligation.obligationId],
                 childCoverage: [answerObligation.obligationId],
+                ...(gapSet.length > 0
+                  ? {
+                      requiredGaps: gapSet,
+                      coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
+                    }
+                  : {}),
               };
               const revision = reviseCandidate(
                 ledger.snapshot(),

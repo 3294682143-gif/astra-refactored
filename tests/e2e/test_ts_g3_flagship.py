@@ -181,3 +181,140 @@ def test_public_entry_e07_foreign_checker_cannot_ground_a_revision(process_track
     assert result["candidate_verified"] is False
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert process_tracker
+
+
+# ---------------------------------------------------------------------------
+# G3/PR4 Slice 3c — the multi-gap (PARAMETER two-gap) public-entry flagship.
+#
+# DECISION-0150 ruling B3 (option b): the trusted gap source is a PARAMETER
+# goal's trusted branches (`<p>=0`, `<p>!=0`). The single REPAIR call must
+# restate EVERY trusted branch; a partial revision that leaves a proven branch
+# open is refused (`REVISE_REJECTED`, parent candidate kept), a complete one is
+# accepted (`REVISED_CANDIDATE`).
+# ---------------------------------------------------------------------------
+
+PARAM_PROBLEM = "Classify the number of solutions of x^2=p in terms of the parameter p"
+PARAM_ANSWER_TASK = "goal-1:OUTPUT_COVERAGE"
+PARAM_TOOL_ARGS = {"expression": "2+2", "variables": ["x"], "parameters": []}
+
+
+class MultiGapParamClient(FakeClient):
+    """FakeClient: one checker, a partial ``p=0`` candidate, R2 challenge, repair."""
+
+    def __init__(self, repair_answer):
+        super().__init__()
+        self.tool_done = False
+        self.repair_answer = repair_answer
+
+    def _work(self, body):
+        if body.get("stage") == "REPAIR":
+            return self._packet(
+                body,
+                "classification of x^2=p",
+                "split on the parameter p",
+                self.repair_answer,
+            )
+        task = body["task"]
+        on_answer = task["taskId"] == PARAM_ANSWER_TASK
+        if not self.tool_done and on_answer:
+            self.tool_done = True
+            return json.dumps(
+                {
+                    "action": "tool",
+                    "name": "polynomial_expand_coefficients",
+                    "args": PARAM_TOOL_ARGS,
+                    "scope": "check the supplied polynomial against the original problem",
+                }
+            )
+        if on_answer:
+            # The initial answer covers only one trusted branch (partial).
+            return self._packet(body, "classification", "branch analysis", "p=0: zero solutions")
+        return self._packet(body, "prerequisite", "prerequisite", None)
+
+    def _packet(self, body, claim, derivation, candidate):
+        return json.dumps(
+            {
+                "schemaVersion": "p2a-work-v1",
+                "sessionId": body["sessionId"],
+                "problemHash": body["problemHash"],
+                "contractVersion": body["contractVersion"],
+                "taskId": body["task"]["taskId"],
+                "goalId": body["task"]["goalId"],
+                "scopeId": body["task"]["scopeId"],
+                "routeId": body["route"]["routeId"],
+                "sourceRequestId": body["sourceRequestId"],
+                "claim": claim,
+                "derivation": derivation,
+                "assumptions": [],
+                "dependencies": body["task"]["inputArtifactRefs"],
+                "pendingObligations": [],
+                "suggestedChecks": [],
+                "deliveryStatus": "COMPLETE",
+                "candidateProposal": candidate,
+            }
+        )
+
+    def _review(self, body):
+        return json.dumps(
+            {
+                "schemaVersion": "p4-review-v1",
+                "requestId": body["requestId"],
+                "target": body["target"],
+                "targetHash": body["targetHash"],
+                "stage": "R2",
+                "conclusion": "ISSUES",
+                "reviewCoverage": [PARAM_ANSWER_TASK],
+                "issues": [
+                    {
+                        "stepLocator": {"start": 0, "end": 4, "quote": body["derivation"][:4]},
+                        "suspectedIssue": "MISSING_CASE",
+                        "rationale": "the p!=0 branch is not classified",
+                        "requestedCheck": "classify the parameter branch p!=0",
+                        "obligationIds": [PARAM_ANSWER_TASK],
+                    }
+                ],
+            }
+        )
+
+
+def _solve_param(client, **kwargs):
+    agent = user_agent.ReasoningAgent(client=client, engine="ts", **kwargs)
+    return agent.solve(PARAM_PROBLEM, {"source": "e2e"})
+
+
+def test_public_entry_multi_gap_complete_repair_revises_the_candidate(process_tracker):
+    client = MultiGapParamClient("p!=0: two solutions; p=0: one solution")
+    result = _solve_param(
+        client,
+        max_reviews=1,
+        max_repairs=1,
+        max_effects=1,
+        max_model_calls=8,
+        max_work_units=3,
+    )
+    assert result["engine"] == "ts"
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "p!=0: two solutions; p=0: one solution"
+    assert result["reason"] == "REVISED_CANDIDATE"
+    assert result["candidate_verified"] is False
+    assert result["strictAcceptance"] == "NOT_PERFORMED"
+    assert process_tracker
+
+
+def test_public_entry_multi_gap_partial_repair_is_refused(process_tracker):
+    client = MultiGapParamClient("p=0: one solution only")
+    result = _solve_param(
+        client,
+        max_reviews=1,
+        max_repairs=1,
+        max_effects=1,
+        max_model_calls=8,
+        max_work_units=3,
+    )
+    assert result["engine"] == "ts"
+    # The partial repair leaves the p!=0 branch uncovered: fail-closed, the
+    # parent candidate is kept and strict acceptance is not performed.
+    assert result["final_response"] == "p=0: zero solutions"
+    assert result["reason"] == "REVISE_REJECTED"
+    assert result["candidate_verified"] is False
+    assert process_tracker
