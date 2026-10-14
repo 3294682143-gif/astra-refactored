@@ -1,0 +1,78 @@
+"""G7/PR7 (Slice 7b) — Host-side scoped asset call enforcement.
+
+The TS M2/M3/M5 side may only reference a registered math asset **within a
+trusted scope and contract version**. This module turns such a reference into a
+bounded, integrity-checked descriptor or refuses it with a fixed code. It is the
+Host half of the "范围化调用" (scoped call): the TS side never passes an arbitrary
+path or reads an asset directly.
+
+Scoped here means: the asset must be in the Host registry, the scope id must be a
+canonical scope hash, and the contract version must be one the Host accepts
+(``{1,2}``, per the G3/PR4 contractVersion relaxation). No I/O beyond reading the
+registry/integrity; no execution.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+from .host_assets_registry import ASSET_GROUPS, registry_snapshot
+
+__all__ = ["AssetCallError", "scoped_asset_call"]
+
+_ACCEPTED_CONTRACT_VERSIONS = (1, 2)
+
+
+class AssetCallError(Exception):
+    """Fixed-code scoped-asset failure; never carries raw input."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def _is_hash64(value):
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def scoped_asset_call(group, asset_id, *, scope_id, contract_version, root):
+    """Return a bounded scoped descriptor for one registered math asset.
+
+    Refuses an unknown group/asset, a non-canonical scope id or a contract
+    version the Host does not accept.
+    """
+    if group not in ASSET_GROUPS:
+        raise AssetCallError("UNKNOWN_GROUP")
+    if not isinstance(asset_id, str) or not asset_id:
+        raise AssetCallError("UNKNOWN_ASSET")
+    if not _is_hash64(scope_id):
+        raise AssetCallError("BAD_SCOPE")
+    if contract_version not in _ACCEPTED_CONTRACT_VERSIONS:
+        raise AssetCallError("BAD_VERSION")
+
+    root = Path(root)
+    snapshot = registry_snapshot(root)
+    entries = snapshot[group]["entries"]
+    if asset_id not in entries:
+        raise AssetCallError("UNKNOWN_ASSET")
+
+    descriptor = {
+        "group": group,
+        "assetId": asset_id,
+        "scopeId": scope_id,
+        "contractVersion": contract_version,
+    }
+    if group == "outputCheckers":
+        descriptor["sha256"] = _sha256(root / "mathagent" / "output_checks" / asset_id)
+    elif group == "skills":
+        descriptor["sha256"] = _sha256(root / "mathagent" / "resources" / "skills" / asset_id)
+    elif group == "prompts":
+        descriptor["sha256"] = _sha256(root / "mathagent" / "prompts" / asset_id)
+    else:  # mathFamilies: the family catalog identity is the integrity anchor
+        descriptor["sha256"] = snapshot["mathFamilies"]["catalogSha256"]
+    return descriptor
