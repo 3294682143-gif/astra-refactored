@@ -77,7 +77,7 @@ def bind_carrier(mode, problem_hash, session_id, profile_id, *, max_model_calls,
         max_model_calls=_bounded_int(max_model_calls, 0, 32),
         max_work_units=_bounded_int(max_work_units, 1, 32),
         max_effects=_bounded_int(max_effects, 0, 2),
-        root_deadline_ms=_bounded_int(root_deadline_ms, 1, 5000),
+        root_deadline_ms=_bounded_int(root_deadline_ms, 1, 3600000),
     )
 
 
