@@ -22,7 +22,7 @@ Pending evidence by classification (160): {'CONFIG': 3, 'DOC': 9, 'MATH': 60, 'A
 
 ## Slice status at this report
 - Slice 7d — DONE, committed `5510160`.
-- Slice 7e host+registry layer — committed `f2c794d`; **TS caller pending**.
+- Slice 7e — host+registry layer `f2c794d`; TS caller plumbing `219c6f7`/`240b092`; **S1 checker binding `e3bf2e1`**; **S3 binding + M2/M3 mathFamilies/skills/prompts consumption still pending -> not complete**.
 - Slice 7f — partial (GATEBOARD rows + this report); 260-row evidence back-fill not finished.
 - Local acceptance remains green: `tsc -b` 0; Node **311/0**; `pytest tests/e2e` >=213; `pytest -q` **619 passed / 24 skipped**.
 
