@@ -80,6 +80,13 @@ def scoped_asset_call(group, asset_id, *, scope_id, contract_version, root):
     live = _sha256(path)
     if expected is None or live != expected:
         raise AssetCallError("ASSET_INTEGRITY_ERROR")
+    # Deep freeze: a mathFamilies reference also verifies every concrete algorithm
+    # file under math_families/** against the frozen baseline.
+    if group == "mathFamilies":
+        for rel, want in (baseline.get("mathFamilies", {}).get("files") or {}).items():
+            member = root / rel
+            if not member.is_file() or _sha256(member) != want:
+                raise AssetCallError("ASSET_INTEGRITY_ERROR")
 
     descriptor = {
         "group": group,

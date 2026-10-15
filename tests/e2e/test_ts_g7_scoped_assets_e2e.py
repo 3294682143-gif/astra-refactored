@@ -113,6 +113,23 @@ def test_real_entry_consumes_scoped_assets_for_the_revision(process_tracker):
     assert process_tracker
 
 
+def test_tampered_math_family_algorithm_is_detected(tmp_path):
+    """Step 3: a single-byte change to any math_families/** algorithm file fails."""
+    root = tmp_path / "fam"
+    shutil.copytree(
+        ROOT / "math_families",
+        root / "math_families",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    victim = next(p for p in (root / "math_families").rglob("*.py"))
+    victim.write_bytes(victim.read_bytes() + b"\n# tampered by the test\n")
+    assert registry.verify_integrity(root)["ok"] is False
+    entries = registry.registry_snapshot(root)["mathFamilies"]["entries"]
+    with pytest.raises(sac.AssetCallError) as e:
+        sac.scoped_asset_call("mathFamilies", entries[0], scope_id=_SCOPE, contract_version=1, root=root)
+    assert e.value.code == "ASSET_INTEGRITY_ERROR"
+
+
 def test_tampered_checker_is_detected_against_the_frozen_baseline(process_tracker, tmp_path, monkeypatch):
     root = _registry_roots(tmp_path / "assets")
     target = root / "mathagent" / "output_checks" / "symbolic.py"

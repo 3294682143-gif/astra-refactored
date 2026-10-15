@@ -132,6 +132,12 @@ def verify_integrity(root, snapshot=None, baseline=None) -> dict:
     expected_catalog = baseline.get("mathFamilies", {}).get("catalogSha256")
     if not catalog.is_file() or _sha256(catalog) != expected_catalog:
         errors.append("ASSET_INTEGRITY_ERROR:mathFamilies:catalog")
+    # Deep freeze: every concrete algorithm file under math_families/** (not just
+    # the catalog) is compared to the frozen baseline.
+    for rel, expected in (baseline.get("mathFamilies", {}).get("files") or {}).items():
+        path = root / rel
+        if not path.is_file() or _sha256(path) != expected:
+            errors.append(f"ASSET_INTEGRITY_ERROR:mathFamilies:{rel}")
     return {
         "ok": not errors,
         "errors": errors,

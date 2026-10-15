@@ -87,6 +87,10 @@ def build() -> dict:
         if not path.is_file():
             raise SystemExit(f"missing bundle artifact: {rel} (run the esbuild bundle step)")
         bundle[name] = {"path": rel, "sha256": _sha256(path)}
+    family_files = {}
+    for path in sorted((ROOT / "math_families").rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+            family_files[str(path.relative_to(ROOT))] = _sha256(path)
     return {
         "manifestVersion": MANIFEST_VERSION,
         "profileId": PROFILE_ID,
@@ -96,6 +100,7 @@ def build() -> dict:
         "js": js,
         "assets": assets,
         "bundle": bundle,
+        "mathFamilyFiles": family_files,
         "lockedRunProfile": LOCKED_RUN_PROFILE,
         "precompiled": True,
         "requiresNpmInstall": False,
@@ -124,6 +129,10 @@ def verify(manifest_path: Path) -> int:
         path = ROOT / row["path"]
         if not path.is_file() or _sha256(path) != row["sha256"]:
             errors.append(f"bundle:{name}")
+    for rel, expected in (manifest.get("mathFamilyFiles") or {}).items():
+        path = ROOT / rel
+        if not path.is_file() or _sha256(path) != expected:
+            errors.append(f"mathFamilyFile:{rel}")
     commit = manifest.get("source", {}).get("commit", "")
     # The recorded source commit must still be an ancestor of HEAD (the manifest
     # commit itself may move HEAD forward).

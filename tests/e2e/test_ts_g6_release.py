@@ -76,3 +76,40 @@ def test_precompiled_bundle_runs_without_node_modules(tmp_path, monkeypatch, pro
     assert result["final_response"] == "4"
     assert any(str(arg).endswith("stdio-runtime.bundle.mjs") for arg in process_tracker[0].args)
     assert process_tracker
+
+
+def test_bundle_rejects_tampered_resume_without_node_modules(tmp_path, monkeypatch, process_tracker):
+    """Step 2/3: the precompiled bundle also rejects a forged FINAL resume."""
+    import copy
+
+    from python.astra_bridge import host_checkpoint
+
+    work = tmp_path / "clean_tamper"
+    work.mkdir()
+    shutil.copy(BUNDLE, work / "stdio-runtime.bundle.mjs")
+    shutil.copytree(BUNDLE_SCHEMA, work / "schema")
+    assert not (work / "node_modules").exists()
+    monkeypatch.setattr(agent_runtime, "_default_script", lambda: work / "stdio-runtime.bundle.mjs")
+
+    agent = user_agent.ReasoningAgent(
+        client=FakeClient(), engine="ts", mode="local",
+        max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1,
+    )
+    agent.solve("Compute 2+2", {"source": "release"})
+    checkpoint = agent._impl.export_checkpoint("Compute 2+2")
+    assert checkpoint is not None
+    forged = copy.deepcopy(checkpoint)
+    for row in forged["sessionLog"]:
+        if row["kind"] == "FINAL":
+            row["data"] = {**row["data"], "finalResponse": "FORGED"}
+    forged.pop("digest", None)
+    forged["digest"] = host_checkpoint._digest(forged)
+
+    resumed = user_agent.ReasoningAgent(
+        client=FakeClient(), engine="ts", mode="local",
+        max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1,
+    )
+    result = resumed.solve("Compute 2+2", {"source": "release"}, resume_checkpoint=forged)
+    assert result.get("final_response") != "FORGED"
+    assert result["status"] == "unsolved"
+    assert any(str(arg).endswith("stdio-runtime.bundle.mjs") for arg in process_tracker[-1].args)
