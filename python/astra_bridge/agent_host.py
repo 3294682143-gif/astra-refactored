@@ -41,7 +41,7 @@ from .scoped_asset_call import AssetCallError, scoped_asset_call
 __all__ = ["AgentHost"]
 
 _MIN_REMAINING_MS = 25
-_MAX_REMAINING_MS = 5000
+_MAX_REMAINING_MS = 3600000
 _MAX_MODEL_CALLS = 32
 _MAX_WORK_UNITS = 32
 _MAX_EFFECTS = 2

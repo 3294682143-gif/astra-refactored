@@ -21,7 +21,7 @@ import {
 } from "@astra/protocol";
 
 export const AGENT_IO_MIN_REMAINING_MS = 25 as const;
-export const AGENT_IO_MAX_REMAINING_MS = 5000 as const;
+export const AGENT_IO_MAX_REMAINING_MS = 3600000 as const;
 export const AGENT_IO_MAX_TEXT_CHARS = 20000;
 export const AGENT_IO_MAX_TEXT_BYTES = 65536;
 

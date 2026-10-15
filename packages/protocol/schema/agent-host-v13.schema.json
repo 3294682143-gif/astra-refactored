@@ -203,7 +203,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 5000
+            "maximum": 3600000
           },
           "maxModelCalls": {
             "type": "integer",
@@ -342,7 +342,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 5000
+            "maximum": 3600000
           },
           "resumeSessionLog": {
             "type": "array",
@@ -858,7 +858,7 @@
               "remainingMs": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 5000
+                "maximum": 3600000
               },
               "maxTokens": {
                 "type": "integer",
@@ -949,7 +949,7 @@
               "remainingMs": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 5000
+                "maximum": 3600000
               }
             }
           }
@@ -1077,7 +1077,7 @@
               "remainingMs": {
                 "type": "integer",
                 "minimum": 26,
-                "maximum": 5000
+                "maximum": 3600000
               }
             }
           }
@@ -1207,7 +1207,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 5000
+            "maximum": 3600000
           }
         }
       }
@@ -1236,7 +1236,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 5000
+            "maximum": 3600000
           }
         }
       },
@@ -1262,7 +1262,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 5000
+            "maximum": 3600000
           },
           "catalog": {
             "type": "object",
@@ -1414,7 +1414,7 @@
               "remainingMs": {
                 "type": "integer",
                 "minimum": 26,
-                "maximum": 5000
+                "maximum": 3600000
               }
             }
           }
@@ -1544,7 +1544,7 @@
           "remainingMs": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 5000
+            "maximum": 3600000
           }
         }
       }

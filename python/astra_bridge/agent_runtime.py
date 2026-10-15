@@ -28,7 +28,8 @@ from .p0_protocol import ProtocolError
 
 __all__ = ["AgentRuntime"]
 
-_MAX_TIMEOUT = 5.0
+_MAX_TIMEOUT = 3600.0
+_MAX_REMAINING_MS = 3600000
 _REAP_SECONDS = 1.0
 _MAX_PROBLEM_CHARS = 8192
 _MAX_TOKENS = 8192
@@ -203,7 +204,7 @@ class AgentRuntime:
         reported as ``OUTCOME_UNKNOWN`` and never replayed.
         """
         problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
-        root_deadline_ms = max(1, min(5000, int(self.problem_seconds * 1000)))
+        root_deadline_ms = max(1, min(_MAX_REMAINING_MS, int(self.problem_seconds * 1000)))
         try:
             prior = host_carriers.bind_carrier(
                 self.mode, problem_hash, uuid.uuid4().hex, _PROFILE_ID,
@@ -267,7 +268,7 @@ class AgentRuntime:
             spent_model += 1
             if state == "OUTCOME_UNKNOWN":
                 unknown.append(row.get("requestId"))
-        root_deadline_ms = max(1, min(5000, int(self.problem_seconds * 1000)))
+        root_deadline_ms = max(1, min(_MAX_REMAINING_MS, int(self.problem_seconds * 1000)))
         try:
             carrier = host_carriers.bind_carrier(
                 self.mode, problem_hash, uuid.uuid4().hex, _PROFILE_ID,
@@ -305,7 +306,7 @@ class AgentRuntime:
                 self.mode, problem_hash, session_id, _PROFILE_ID,
                 max_model_calls=self.max_model_calls, max_work_units=self.max_work_units,
                 max_effects=self.max_effects,
-                root_deadline_ms=max(1, min(5000, int(self.problem_seconds * 1000))),
+                root_deadline_ms=max(1, min(_MAX_REMAINING_MS, int(self.problem_seconds * 1000))),
             )
         except host_carriers.CarrierError as exc:
             return self._unsolved(started, exc.code, False)
@@ -354,7 +355,7 @@ class AgentRuntime:
                     "journal": "IN_MEMORY_ONLY",
                     "requireExplicitFinishForTools": True,
                 },
-                "remainingMs": max(1, min(5000, int(host.remaining() * 1000))),
+                "remainingMs": max(1, min(_MAX_REMAINING_MS, int(host.remaining() * 1000))),
                 "maxModelCalls": options["maxModelCalls"],
                 "maxWorkUnits": options["maxWorkUnits"],
                 "maxEffects": options["maxEffects"],
@@ -369,7 +370,7 @@ class AgentRuntime:
                 **common,
                 "problem": problem,
                 "problemHash": problem_hash,
-                "remainingMs": max(1, min(5000, int(host.remaining() * 1000))),
+                "remainingMs": max(1, min(_MAX_REMAINING_MS, int(host.remaining() * 1000))),
             }
             if resume is not None:
                 solve["resumeSessionLog"] = resume["sessionLog"]

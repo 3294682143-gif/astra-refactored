@@ -47,7 +47,7 @@ const MAX_WORK_UNITS = 32;
 const MAX_EFFECTS = 2;
 const MAX_REVIEWS = 1;
 const MAX_METHOD_LOADS = 1;
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3600000;
 const HASH = /^[0-9a-f]{64}$/u;
 const CATALOG_FRAME_ID = "node-catalog-1";
 
