@@ -22,6 +22,8 @@ import {
   type AgentHostMethod,
   type AgentModelReceipt,
   type AgentModelRequest,
+  type AgentAssetDescriptor,
+  type AgentAssetRequest,
   type AgentPorts,
   type JsonRpcMessage,
   type P2MethodCatalog,
@@ -62,7 +64,7 @@ export interface AgentHostIo {
 
 interface Pending {
   readonly id: string;
-  readonly method: "model.generate" | "tool.execute" | "method.catalog" | "method.load";
+  readonly method: "model.generate" | "tool.execute" | "method.catalog" | "method.load" | "asset.scoped";
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: unknown) => void;
   readonly requestId?: string;
@@ -252,6 +254,10 @@ export class AgentHostFlow {
       this.settleCatalog(pending, result);
       return;
     }
+    if (pending.method === "asset.scoped") {
+      this.settleAsset(pending, result);
+      return;
+    }
     this.settleEffect(pending, result);
   }
 
@@ -378,6 +384,7 @@ export class AgentHostFlow {
         ? { execute: (request: P3EffectRequest) => this.callEffect(request) }
         : null,
       catalog: this.methodAvailable ? { read: (remainingMs: number) => this.callCatalog(remainingMs) } : null,
+      asset: { call: (request: AgentAssetRequest) => this.callAsset(request) },
     };
     let result: Awaited<ReturnType<typeof runAgentLoop>>;
     try {
@@ -446,6 +453,52 @@ export class AgentHostFlow {
         stopped: true,
       },
     });
+  }
+
+  private callAsset(request: AgentAssetRequest): Promise<AgentAssetDescriptor> {
+    if (this.pending !== null) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    if (this.io.remainingMs() <= MIN_REMAINING_MS) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
+    const id = `node-asset-${request.assetId}`;
+    return new Promise<AgentAssetDescriptor>((resolve, reject) => {
+      this.pending = { id, method: "asset.scoped", resolve: resolve as (value: unknown) => void, reject };
+      try {
+        this.io.send(
+          {
+            jsonrpc: "2.0",
+            id,
+            method: "asset.scoped",
+            params: {
+              protocolVersion: AGENT_HOST_VERSION,
+              sessionId: this.sessionId,
+              assetGroup: request.group,
+              assetId: request.assetId,
+              scopeId: request.scopeId,
+              contractVersion: request.contractVersion,
+            },
+          },
+          "asset.scoped",
+        );
+      } catch (error) {
+        this.pending = null;
+        reject(error);
+      }
+    });
+  }
+
+  private settleAsset(pending: Pending, result: Record<string, unknown>): void {
+    agentHostPayload(this.manifest, "asset.scoped", "result", result, this.sessionId ?? undefined);
+    const descriptor = result["descriptor"];
+    if (!isPlainObject(descriptor)) {
+      this.pending = null;
+      pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
+      return;
+    }
+    this.pending = null;
+    pending.resolve(p2Snapshot(descriptor));
   }
 
   private callModel(request: AgentModelRequest): Promise<AgentModelReceipt> {

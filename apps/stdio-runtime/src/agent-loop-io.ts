@@ -43,7 +43,7 @@ const OPTION_FIELDS = [
   "resumeSessionLog",
   "resumeContractVersion",
 ] as const;
-const PORT_FIELDS = ["model", "effect", "catalog"] as const;
+const PORT_FIELDS = ["model", "effect", "catalog", "asset"] as const;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
@@ -330,6 +330,7 @@ export interface CapturedAgentPorts {
   readonly model: { generate: (request: unknown) => Promise<unknown> };
   readonly effect: { execute: (request: unknown) => Promise<unknown> } | null;
   readonly catalog: { read: (remainingMs: number) => Promise<unknown> } | null;
+  readonly asset: { call: (request: unknown) => Promise<unknown> } | null;
 }
 
 /**
@@ -350,6 +351,7 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
   const rawModel = source.model;
   const rawEffect = source.effect;
   const rawCatalog = source.catalog;
+  const rawAsset = source.asset;
   if (!isPlainObject(rawModel)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -370,8 +372,20 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
     const read = rawRead.bind(rawCatalog) as (remainingMs: number) => Promise<unknown>;
     catalog = Object.freeze({ read });
   }
+  let asset: { call: (request: unknown) => Promise<unknown> } | null = null;
+  if (rawAsset !== null && rawAsset !== undefined) {
+    if (!isPlainObject(rawAsset)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const rawCall = (rawAsset as Record<string, unknown>).call;
+    if (typeof rawCall !== "function") {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const call = rawCall.bind(rawAsset) as (request: unknown) => Promise<unknown>;
+    asset = Object.freeze({ call });
+  }
   if (rawEffect === null || rawEffect === undefined) {
-    return Object.freeze({ model: Object.freeze({ generate }), effect: null, catalog });
+    return Object.freeze({ model: Object.freeze({ generate }), effect: null, catalog, asset });
   }
   if (!isPlainObject(rawEffect)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
@@ -385,5 +399,6 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
     model: Object.freeze({ generate }),
     effect: Object.freeze({ execute }),
     catalog,
+    asset,
   });
 }

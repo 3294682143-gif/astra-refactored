@@ -98,10 +98,33 @@ export interface AgentCatalogPort {
 }
 
 /** The two injected ports of one AgentLoop run. */
+/** G7/PR7 Slice 7e: one scoped math-asset reference from the TS M2/M3/M5 side. */
+export interface AgentAssetRequest {
+  readonly group: "outputCheckers" | "mathFamilies" | "skills" | "prompts";
+  readonly assetId: string;
+  readonly scopeId: string;
+  readonly contractVersion: number;
+}
+
+/** Bounded integrity descriptor returned by the Host for a scoped asset call. */
+export interface AgentAssetDescriptor {
+  readonly group: string;
+  readonly assetId: string;
+  readonly scopeId: string;
+  readonly contractVersion: number;
+  readonly sha256: string;
+}
+
+/** Optional port: the loop resolves a registered math asset through the Host. */
+export interface AgentAssetPort {
+  readonly call: (request: AgentAssetRequest) => Promise<AgentAssetDescriptor>;
+}
+
 export interface AgentPorts {
   readonly model: AgentModelPort;
   readonly effect: AgentEffectPort | null;
   readonly catalog?: AgentCatalogPort | null;
+  readonly asset?: AgentAssetPort | null;
 }
 
 /**
