@@ -306,6 +306,12 @@ async function runBoundedR0(
   }
 }
 
+// G7/PR7 Slice 7e: the S1 checker tool -> registered output_checker asset key.
+const S1_CHECKER_ASSET: Readonly<Record<string, string>> = Object.freeze({
+  polynomial_expand_coefficients: "symbolic.py",
+  linear_system_solution_set: "algebraic.py",
+});
+
 export async function runAgentLoop(
   problem: string,
   sessionId: string,
@@ -400,6 +406,7 @@ export async function runAgentLoop(
   let candidateTask: P2Task | null = null;
   let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
   let s1Assessment: P4S1Assessment | null = null;
+  let s1AssetDescriptor: string | null = null;
   let s2Transaction: {
     readonly supersededObligationIds: readonly string[];
     readonly preservedObligationIds: readonly string[];
@@ -1261,10 +1268,35 @@ export async function runAgentLoop(
           s1Assessment = null;
         }
       }
-      const s1Ok =
+      let s1Ok =
         s1Assessment !== null &&
         s1Assessment.structuralMatch &&
         s1Assessment.reason === "STRUCTURAL_MATCH_ONLY";
+      if (s1Ok && captured.asset !== null && checker !== undefined) {
+        // G7/PR7 Slice 7e: bind the S1 checker to the Host registry through one
+        // scoped asset call within the current scope + contract version. A
+        // refused descriptor is fail-closed (never promote the checker).
+        const toolName = checker.request.action.action === "tool" ? checker.request.action.name : "";
+        const assetKey = S1_CHECKER_ASSET[toolName];
+        if (assetKey !== undefined) {
+          const scopeHash = p4Hash(JSON.stringify({ scope: target.binding.scopeId, check: assetKey }));
+          try {
+            const descriptor = (await captured.asset.call({
+              group: "outputCheckers",
+              assetId: assetKey,
+              scopeId: scopeHash,
+              contractVersion: contract.contractVersion,
+            })) as { assetId: string; scopeId: string; sha256: string };
+            if (descriptor.assetId !== assetKey || descriptor.scopeId !== scopeHash) {
+              s1Ok = false;
+            } else {
+              s1AssetDescriptor = descriptor.sha256;
+            }
+          } catch {
+            s1Ok = false;
+          }
+        }
+      }
       if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok) {
         // `challenges[0]` is defined by the length guard above.
         const challenge = challenges[0]!;
@@ -1474,6 +1506,7 @@ export async function runAgentLoop(
     dependencyAdmissions: workflow.snapshot().dependencyAdmissions,
     revisions: revision.snapshot(),
     s1Assessment,
+    s1AssetDescriptor,
     s2Transaction,
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
