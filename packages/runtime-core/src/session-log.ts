@@ -150,8 +150,26 @@ export class ContextProjector {
     const phase = data.phase;
     const requestId = data.requestId;
     const messages = data.messages;
-    if (typeof phase !== "string" || typeof requestId !== "string" || !Array.isArray(messages)) {
+    if (typeof phase !== "string" || typeof requestId !== "string") {
       throw new Error("SESSION_LOG_DATA");
+    }
+    // A transported/checkpointed log replaces the bulky `messages` with the
+    // recorded context hash; identity is then the declared hash (which can no
+    // longer be recomputed, so it is compared as declared, never silently).
+    if (!Array.isArray(messages)) {
+      const declaredOnly = data.contextHash;
+      if (typeof declaredOnly !== "string" || !/^[0-9a-f]{64}$/u.test(declaredOnly)) {
+        throw new Error("SESSION_LOG_DATA");
+      }
+      const declaredBytes = data.contextBytes;
+      return Object.freeze({
+        seq: event.seq,
+        phase,
+        requestId,
+        contextHash: declaredOnly,
+        contextBytes: typeof declaredBytes === "number" ? declaredBytes : 0,
+        visibleRoles: Object.freeze([] as string[]),
+      });
     }
     const { contextHash, contextBytes } = hashOfMessages(messages);
     const declared = data.contextHash;

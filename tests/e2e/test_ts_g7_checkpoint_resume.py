@@ -90,6 +90,23 @@ def test_completed_resume_rebuilds_without_any_model_call(process_tracker):
     assert resumed_client.calls == 0
 
 
+def test_tampered_final_resume_is_rejected_never_forged(process_tracker):
+    """Step 2: a resumed log whose FINAL answer was forged is rejected, not trusted."""
+    _, checkpoint = _first_with_checkpoint("local")
+    forged = copy.deepcopy(checkpoint)
+    for row in forged["sessionLog"]:
+        if row["kind"] == "FINAL":
+            row["data"] = {**row["data"], "finalResponse": "FORGED"}
+    forged.pop("digest", None)
+    forged["digest"] = host_checkpoint._digest(forged)
+
+    resumed, resumed_client = _agent("local")
+    result = resumed.solve(_PROBLEM, {"source": "e2e"}, resume_checkpoint=forged)
+    assert result.get("final_response") != "FORGED"
+    assert result["status"] == "unsolved"
+    assert resumed_client.calls == 0
+
+
 def test_resume_budget_only_tightens(process_tracker):
     _, checkpoint = _first_with_checkpoint("shared_public")
 

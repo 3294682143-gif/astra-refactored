@@ -56,7 +56,7 @@ import {
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
-import { AgentSession, SessionLog, SESSION_LOG_KIND, SESSION_LOG_SCHEMA_VERSION, p3MethodCatalog, readAsset } from "@astra/runtime-core";
+import { AgentSession, SessionLog, SESSION_LOG_KIND, SESSION_LOG_SCHEMA_VERSION, ReplayRunner, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
@@ -557,6 +557,18 @@ export async function runAgentLoop(
   // model/effect calls. A prefix without a FINAL event falls through to the
   // normal bounded continuation.
   if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
+    // Step 2: any non-empty resume prefix is first re-checked with the SAME
+    // tamper detector as read-only replay (event sequence, request hashes, and a
+    // FINAL answer that must equal the candidate rebuilt from the WORKUNIT/
+    // REPAIR events). A tampered prefix is rejected, never trusted.
+    const replay = new ReplayRunner().replay({
+      schemaVersion: SESSION_LOG_SCHEMA_VERSION,
+      version: opts.resumeSessionLog.length,
+      events: opts.resumeSessionLog as never,
+    });
+    if (!replay.ok) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
     const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
     if (resumed !== null) {
       return resumed;

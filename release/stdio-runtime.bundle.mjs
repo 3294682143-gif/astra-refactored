@@ -3981,7 +3981,14 @@ function isPlainObject9(value) {
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
-var SESSION_LOG_SCHEMA_VERSION, SESSION_LOG_KIND, MAX_EVENTS, MAX_DATA_BYTES, SessionLog;
+function hashOfMessages(messages) {
+  const serialized = JSON.stringify(messages);
+  return {
+    contextHash: p4Hash(serialized),
+    contextBytes: Buffer.byteLength(serialized, "utf8")
+  };
+}
+var SESSION_LOG_SCHEMA_VERSION, SESSION_LOG_KIND, MAX_EVENTS, MAX_DATA_BYTES, SessionLog, ContextProjector, ReplayRunner;
 var init_session_log = __esm({
   "packages/runtime-core/dist/src/session-log.js"() {
     "use strict";
@@ -4041,6 +4048,118 @@ var init_session_log = __esm({
           version: this.records.length,
           events: this.records
         });
+      }
+    };
+    ContextProjector = class {
+      /** Project one MODEL_REQUEST event into its request identity. */
+      prepareRequest(event) {
+        if (event.kind !== "MODEL_REQUEST") {
+          throw new Error("SESSION_LOG_KIND");
+        }
+        const data = event.data;
+        const phase = data.phase;
+        const requestId = data.requestId;
+        const messages = data.messages;
+        if (typeof phase !== "string" || typeof requestId !== "string") {
+          throw new Error("SESSION_LOG_DATA");
+        }
+        if (!Array.isArray(messages)) {
+          const declaredOnly = data.contextHash;
+          if (typeof declaredOnly !== "string" || !/^[0-9a-f]{64}$/u.test(declaredOnly)) {
+            throw new Error("SESSION_LOG_DATA");
+          }
+          const declaredBytes = data.contextBytes;
+          return Object.freeze({
+            seq: event.seq,
+            phase,
+            requestId,
+            contextHash: declaredOnly,
+            contextBytes: typeof declaredBytes === "number" ? declaredBytes : 0,
+            visibleRoles: Object.freeze([])
+          });
+        }
+        const { contextHash, contextBytes } = hashOfMessages(messages);
+        const declared = data.contextHash;
+        if (typeof declared !== "string" || declared !== contextHash) {
+          throw new Error("SESSION_LOG_HASH_MISMATCH");
+        }
+        const visibleRoles = messages.map((row) => isPlainObject9(row) && typeof row.role === "string" ? row.role : "");
+        return Object.freeze({
+          seq: event.seq,
+          phase,
+          requestId,
+          contextHash,
+          contextBytes,
+          visibleRoles: Object.freeze(visibleRoles)
+        });
+      }
+      /** Project every request in order; the whole-request projection of one log. */
+      projectAll(snapshot) {
+        const out = [];
+        for (const event of snapshot.events) {
+          if (event.kind === "MODEL_REQUEST") {
+            out.push(this.prepareRequest(event));
+          }
+        }
+        return Object.freeze(out);
+      }
+    };
+    ReplayRunner = class {
+      projector = new ContextProjector();
+      replay(snapshot) {
+        const mismatches = [];
+        const requests = [];
+        let final = null;
+        let finalSeq = 0;
+        let derivedAnswer = null;
+        let expectedSeq = 1;
+        for (const event of snapshot.events) {
+          if (event.seq !== expectedSeq) {
+            mismatches.push(event.seq);
+          }
+          expectedSeq = event.seq + 1;
+          if (event.kind === "MODEL_REQUEST") {
+            try {
+              requests.push(this.projector.prepareRequest(event));
+            } catch {
+              mismatches.push(event.seq);
+            }
+          } else if (event.kind === "WORKUNIT" || event.kind === "REPAIR") {
+            const data = event.data;
+            const proposal = data.candidateProposal;
+            const delivered = event.kind === "WORKUNIT" ? data.deliveryStatus === "COMPLETE" : data.accepted === true;
+            if (delivered && typeof proposal === "string" && proposal.trim().length > 0) {
+              derivedAnswer = proposal;
+            }
+          } else if (event.kind === "FINAL") {
+            final = event.data;
+            finalSeq = event.seq;
+          }
+        }
+        if (final !== null) {
+          const declaredStatus = final["status"];
+          const declaredResponse = final["finalResponse"];
+          if (typeof declaredResponse !== "string") {
+            mismatches.push(finalSeq);
+          } else if (declaredStatus === "candidate") {
+            if (derivedAnswer === null || declaredResponse !== derivedAnswer) {
+              mismatches.push(finalSeq);
+            }
+          } else if (derivedAnswer !== null && declaredResponse === derivedAnswer) {
+            mismatches.push(finalSeq);
+          }
+        }
+        return Object.freeze({
+          ok: mismatches.length === 0,
+          schemaVersion: snapshot.schemaVersion,
+          requests: Object.freeze(requests),
+          mismatches: Object.freeze(mismatches),
+          final
+        });
+      }
+      /** Public safe trace: only request identities, never the raw private text. */
+      publicTrace(snapshot) {
+        return this.projector.projectAll(snapshot);
       }
     };
   }
@@ -13976,6 +14095,14 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
   }
   if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
+    const replay = new ReplayRunner().replay({
+      schemaVersion: SESSION_LOG_SCHEMA_VERSION,
+      version: opts.resumeSessionLog.length,
+      events: opts.resumeSessionLog
+    });
+    if (!replay.ok) {
+      fail20(P2_ERROR_CODES.PACKET_BINDING);
+    }
     const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
     if (resumed !== null) {
       return resumed;

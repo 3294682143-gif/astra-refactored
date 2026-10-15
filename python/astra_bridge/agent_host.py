@@ -237,6 +237,25 @@ class AgentHost(_Host):
         """True when this run was handed an authenticated SessionLog prefix."""
         return bool(self.resume_session_log)
 
+    def _resumed_candidate(self):
+        """The candidate rebuilt from the resumed log's delivered events, or None."""
+        proposal = None
+        for row in self.resume_session_log or ():
+            if not isinstance(row, dict):
+                continue
+            kind = row.get("kind")
+            data = row.get("data")
+            if not isinstance(data, dict):
+                continue
+            candidate = data.get("candidateProposal")
+            if not isinstance(candidate, str) or not candidate:
+                continue
+            if kind == "WORKUNIT" and data.get("deliveryStatus") == "COMPLETE":
+                proposal = candidate
+            elif kind == "REPAIR" and data.get("accepted") is True:
+                proposal = candidate
+        return proposal
+
     def _last_model(self):
         if self.last_model_id is None:
             return None
@@ -924,7 +943,15 @@ class AgentHost(_Host):
                 _fail()
             if self.policy == "STRICT":
                 _fail()
-            if not self._is_resuming():
+            if self._is_resuming():
+                # Step 2: a resumed run must NOT be trusted blindly. The final
+                # answer has to equal the candidate rebuilt from the restored
+                # SessionLog's own WORKUNIT/REPAIR events (Candidate Provenance
+                # Check); a forged FINAL is rejected instead of returned.
+                rebuilt = self._resumed_candidate()
+                if rebuilt is None or summary["finalResponse"] != rebuilt:
+                    _fail()
+            else:
                 if candidate not in self.history:
                     _fail()
                 packet = candidate_packet(
@@ -950,10 +977,6 @@ class AgentHost(_Host):
                     _fail()
                 if summary["finalResponse"] != packet["candidateProposal"]:
                     _fail()
-            # else: a COMPLETE resumed run rebuilds the protected candidate from
-            # its authenticated SessionLog prefix (no live model history exists in
-            # this process). Node still decides the protected candidate; the Host
-            # relaxes the live-packet re-check for exactly this resume path.
             # Node decides which eligible candidate is protected (by goal-kind
             # answer obligation); the Host only VERIFIES that the recorded
             # candidate is a real ACTIVE, latest-version, eligible packet, which
