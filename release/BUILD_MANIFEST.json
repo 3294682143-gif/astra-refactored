@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "be85e1deabe986fe26a60264e5c83a90af07fd94",
-    "tree": "53bf795dbe040d3131cafe9a497aef2d3d612f0a"
+    "commit": "21d16d2f7e7cade9787480a16a50dfe036e55527",
+    "tree": "038a5198c219ccfcbb6219ba6af8bd1b3b9c5986"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "9dbd6538f39af94cb019945f03b3a06f569d9ec1680ffa48a8d169b770d862f7",
-      "bytes": 67998
+      "sha256": "549e4c01c96121c02ee70c0c605b86b2595a0771472d311290f3dfc4229b9df1",
+      "bytes": 72570
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -45,7 +45,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "9b80de64ca7496ac87e0c83ca01a32dad87f0705d796e4d6e563da7284b8e683"
+      "sha256": "30d47bccdbd188c64e0ec2e5d8f3e59381f6ee76a230638ed4eb6351c59f1e6b"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",

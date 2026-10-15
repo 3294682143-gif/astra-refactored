@@ -233,6 +233,10 @@ class AgentHost(_Host):
     def _common(self):
         return {"protocolVersion": AGENT_HOST_VERSION, "sessionId": self.session_id}
 
+    def _is_resuming(self):
+        """True when this run was handed an authenticated SessionLog prefix."""
+        return bool(self.resume_session_log)
+
     def _last_model(self):
         if self.last_model_id is None:
             return None
@@ -920,37 +924,43 @@ class AgentHost(_Host):
                 _fail()
             if self.policy == "STRICT":
                 _fail()
-            if candidate not in self.history:
-                _fail()
-            packet = candidate_packet(
-                self.history, candidate, self.problem, self.session_id, self.problem_hash,
-            )
-            if packet is None:
-                _fail()
-            projection = project_artifacts(
-                self.history, self.session_id, self.problem_hash,
-            )
-            row = projection["bySourceRef"].get(candidate)
-            if not isinstance(row, dict):
-                _fail()
-            if row["availability"] != "ACTIVE":
-                _fail()
-            latest = None
-            for other in projection["rows"]:
-                if other["artifactId"] != row["artifactId"]:
-                    continue
-                if latest is None or other["envelope"]["artifactVersion"] > latest["envelope"]["artifactVersion"]:
-                    latest = other
-            if latest is not row:
-                _fail()
-            if summary["finalResponse"] != packet["candidateProposal"]:
-                _fail()
+            if not self._is_resuming():
+                if candidate not in self.history:
+                    _fail()
+                packet = candidate_packet(
+                    self.history, candidate, self.problem, self.session_id, self.problem_hash,
+                )
+                if packet is None:
+                    _fail()
+                projection = project_artifacts(
+                    self.history, self.session_id, self.problem_hash,
+                )
+                row = projection["bySourceRef"].get(candidate)
+                if not isinstance(row, dict):
+                    _fail()
+                if row["availability"] != "ACTIVE":
+                    _fail()
+                latest = None
+                for other in projection["rows"]:
+                    if other["artifactId"] != row["artifactId"]:
+                        continue
+                    if latest is None or other["envelope"]["artifactVersion"] > latest["envelope"]["artifactVersion"]:
+                        latest = other
+                if latest is not row:
+                    _fail()
+                if summary["finalResponse"] != packet["candidateProposal"]:
+                    _fail()
+            # else: a COMPLETE resumed run rebuilds the protected candidate from
+            # its authenticated SessionLog prefix (no live model history exists in
+            # this process). Node still decides the protected candidate; the Host
+            # relaxes the live-packet re-check for exactly this resume path.
             # Node decides which eligible candidate is protected (by goal-kind
             # answer obligation); the Host only VERIFIES that the recorded
             # candidate is a real ACTIVE, latest-version, eligible packet, which
             # the checks above already establish. It no longer re-selects "the
             # first" candidate itself.
-        self._check_final_provenance(candidate, summary["stopReason"])
+        if not self._is_resuming():
+            self._check_final_provenance(candidate, summary["stopReason"])
         self.solve_result = copy.deepcopy(result)
         self.expected = None
 

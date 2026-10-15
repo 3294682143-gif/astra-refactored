@@ -15,7 +15,7 @@ import { P3EffectGate, P4RecheckModelGate, chooseP2ReadyTask, monotonicToolGuard
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
-import { AgentSession, SessionLog, SESSION_LOG_KIND, p3MethodCatalog, readAsset } from "@astra/runtime-core";
+import { AgentSession, SessionLog, SESSION_LOG_KIND, SESSION_LOG_SCHEMA_VERSION, p3MethodCatalog, readAsset } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
@@ -133,6 +133,101 @@ function checkerArgsRelevant(action, problemVars) {
         }
     }
     return true;
+}
+/**
+ * Defect 3(b) (Trusted RC): rebuild a COMPLETE resumed run from its authenticated
+ * SessionLog prefix. The prefix already records the terminal FINAL decision, so
+ * the returned result re-states that verdict and the delivered candidate with no
+ * new model/effect call; `null` means "no FINAL, continue normally". This process
+ * made zero calls, so every counter it reports is honestly zero.
+ */
+function reconstructResumedResult(events, session, problemHash, opts) {
+    const finalEvent = events.find((row) => row.kind === "FINAL");
+    if (finalEvent === undefined) {
+        return null;
+    }
+    const data = finalEvent.data;
+    const status = data.status;
+    const reason = data.reason;
+    const finalResponse = data.finalResponse;
+    if ((status !== "candidate" && status !== "unsolved") ||
+        typeof finalResponse !== "string" ||
+        finalResponse.length === 0 ||
+        typeof reason !== "string") {
+        return null;
+    }
+    let binding = null;
+    for (const row of events) {
+        if (row.kind !== "WORKUNIT" && row.kind !== "REPAIR") {
+            continue;
+        }
+        const eventData = row.data;
+        const delivered = row.kind === "WORKUNIT" ? eventData.deliveryStatus === "COMPLETE" : eventData.accepted === true;
+        const proposal = eventData.candidateProposal;
+        if (!delivered || typeof proposal !== "string" || proposal.trim().length === 0) {
+            continue;
+        }
+        binding = {
+            sessionId: session,
+            problemHash,
+            contractVersion: 1,
+            artifactId: typeof eventData.artifactId === "string" ? eventData.artifactId : "resumed-1",
+            artifactVersion: typeof eventData.artifactVersion === "number" ? eventData.artifactVersion : 1,
+            taskId: typeof eventData.taskId === "string" ? eventData.taskId : "resumed",
+            goalId: typeof eventData.goalId === "string" ? eventData.goalId : "goal-1",
+            scopeId: typeof eventData.scopeId === "string" ? eventData.scopeId : problemHash,
+            sourceRequestId: typeof eventData.sourceRequestId === "string" ? eventData.sourceRequestId : "model-1",
+        };
+    }
+    const unresolvedRaw = data.unresolvedObligations;
+    const unresolved = Array.isArray(unresolvedRaw)
+        ? unresolvedRaw.filter((item) => typeof item === "string")
+        : [];
+    const summary = p2Snapshot({
+        mode: "TS_PREVIEW",
+        targetEnvironment: "TARGET_UNVERIFIED",
+        sessionId: session,
+        status,
+        finalResponse,
+        candidateVerified: false,
+        strictAcceptance: "NOT_PERFORMED",
+        policy: opts.policy,
+        reason,
+        modelCalls: 0,
+        effectCalls: 0,
+        workUnits: 0,
+        reviewCalls: 0,
+        repairCalls: 0,
+        catalogCalls: 0,
+        methodLoads: 0,
+        stopReason: status === "candidate" ? "WORK_UNITS_COMPLETE" : "NO_CANDIDATE",
+        unresolvedObligations: unresolved,
+    });
+    const decision = p2Snapshot({
+        mode: "MOCK_ONLY",
+        targetEnvironment: "TARGET_UNVERIFIED",
+        stage: "S3",
+        policy: opts.policy,
+        status,
+        finalResponse,
+        candidateVerified: false,
+        strictAcceptance: "NOT_PERFORMED",
+        submissionEligibility: status === "candidate" ? "BEST_EFFORT" : "WITHHELD",
+        protectedCandidate: binding,
+        targetHash: null,
+        unresolvedChallenges: 0,
+        openObligations: 0,
+        coverage: [],
+        reason,
+    });
+    return p2Snapshot({
+        summary,
+        privateState: {
+            session: { events: [], sessionId: session, code: "WORK_UNITS_COMPLETE" },
+            sessionLog: { schemaVersion: SESSION_LOG_SCHEMA_VERSION, version: events.length, events },
+            decision,
+        },
+    });
 }
 /**
  * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
@@ -313,6 +408,17 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     }
     else {
         sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
+    }
+    // Defect 3(b) (Trusted RC): a resumed run whose authenticated prefix already
+    // records a FINAL decision is COMPLETE. Rebuild the delivered candidate and
+    // the recorded verdict from the event stream and return it with ZERO new
+    // model/effect calls. A prefix without a FINAL event falls through to the
+    // normal bounded continuation.
+    if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
+        const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
+        if (resumed !== null) {
+            return resumed;
+        }
     }
     // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
     // any WORK, shares the same root budget, and may change the contract to
@@ -846,6 +952,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         artifactId: ref.artifactId,
                         artifactVersion: ref.artifactVersion,
                         deliveryStatus: accepted.deliveryStatus,
+                        sourceRequestId: outcome.requestId,
                         // Defect 3: the delivered candidate text is recorded in the private
                         // log so a checkpoint/resume can rebuild the artifact and candidate,
                         // and the ReplayRunner can re-derive the final answer.
@@ -1234,6 +1341,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             sessionLog.append("REPAIR", {
                                 accepted: revision.accepted,
                                 reason: revision.decision.reason,
+                                sourceRequestId: requestId,
                                 // Defect 3: record the revised candidate so resume/replay can
                                 // rebuild the current candidate and re-derive the final answer.
                                 candidateProposal: child.artifact.packet?.candidateProposal ?? null,
@@ -1311,6 +1419,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
         reason: decision.reason,
         finalResponse: decision.finalResponse,
         candidateVerified: false,
+        unresolvedObligations,
     });
     // G7/PR7 Slice 7e: bind the S3 decision scope to the Host registry through one
     // scoped asset call, gated to evidence/repair profiles (maxRepairs>=1) so the

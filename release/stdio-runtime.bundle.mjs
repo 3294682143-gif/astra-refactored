@@ -13441,6 +13441,89 @@ function checkerArgsRelevant(action, problemVars) {
   }
   return true;
 }
+function reconstructResumedResult(events, session, problemHash, opts) {
+  const finalEvent = events.find((row) => row.kind === "FINAL");
+  if (finalEvent === void 0) {
+    return null;
+  }
+  const data = finalEvent.data;
+  const status = data.status;
+  const reason = data.reason;
+  const finalResponse = data.finalResponse;
+  if (status !== "candidate" && status !== "unsolved" || typeof finalResponse !== "string" || finalResponse.length === 0 || typeof reason !== "string") {
+    return null;
+  }
+  let binding = null;
+  for (const row of events) {
+    if (row.kind !== "WORKUNIT" && row.kind !== "REPAIR") {
+      continue;
+    }
+    const eventData = row.data;
+    const delivered = row.kind === "WORKUNIT" ? eventData.deliveryStatus === "COMPLETE" : eventData.accepted === true;
+    const proposal = eventData.candidateProposal;
+    if (!delivered || typeof proposal !== "string" || proposal.trim().length === 0) {
+      continue;
+    }
+    binding = {
+      sessionId: session,
+      problemHash,
+      contractVersion: 1,
+      artifactId: typeof eventData.artifactId === "string" ? eventData.artifactId : "resumed-1",
+      artifactVersion: typeof eventData.artifactVersion === "number" ? eventData.artifactVersion : 1,
+      taskId: typeof eventData.taskId === "string" ? eventData.taskId : "resumed",
+      goalId: typeof eventData.goalId === "string" ? eventData.goalId : "goal-1",
+      scopeId: typeof eventData.scopeId === "string" ? eventData.scopeId : problemHash,
+      sourceRequestId: typeof eventData.sourceRequestId === "string" ? eventData.sourceRequestId : "model-1"
+    };
+  }
+  const unresolvedRaw = data.unresolvedObligations;
+  const unresolved = Array.isArray(unresolvedRaw) ? unresolvedRaw.filter((item) => typeof item === "string") : [];
+  const summary = p2Snapshot({
+    mode: "TS_PREVIEW",
+    targetEnvironment: "TARGET_UNVERIFIED",
+    sessionId: session,
+    status,
+    finalResponse,
+    candidateVerified: false,
+    strictAcceptance: "NOT_PERFORMED",
+    policy: opts.policy,
+    reason,
+    modelCalls: 0,
+    effectCalls: 0,
+    workUnits: 0,
+    reviewCalls: 0,
+    repairCalls: 0,
+    catalogCalls: 0,
+    methodLoads: 0,
+    stopReason: status === "candidate" ? "WORK_UNITS_COMPLETE" : "NO_CANDIDATE",
+    unresolvedObligations: unresolved
+  });
+  const decision = p2Snapshot({
+    mode: "MOCK_ONLY",
+    targetEnvironment: "TARGET_UNVERIFIED",
+    stage: "S3",
+    policy: opts.policy,
+    status,
+    finalResponse,
+    candidateVerified: false,
+    strictAcceptance: "NOT_PERFORMED",
+    submissionEligibility: status === "candidate" ? "BEST_EFFORT" : "WITHHELD",
+    protectedCandidate: binding,
+    targetHash: null,
+    unresolvedChallenges: 0,
+    openObligations: 0,
+    coverage: [],
+    reason
+  });
+  return p2Snapshot({
+    summary,
+    privateState: {
+      session: { events: [], sessionId: session, code: "WORK_UNITS_COMPLETE" },
+      sessionLog: { schemaVersion: SESSION_LOG_SCHEMA_VERSION, version: events.length, events },
+      decision
+    }
+  });
+}
 async function r0Generate(root, ports, sessionLog, context, scopeId) {
   const remaining = root.remainingMs();
   if (remaining <= MIN_MS) {
@@ -13581,6 +13664,12 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     }
   } else {
     sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
+  }
+  if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
+    const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
+    if (resumed !== null) {
+      return resumed;
+    }
   }
   if (opts.maxR0 >= 1) {
     contract = await runBoundedR0(contract, root, captured, opts, problemText, session, sessionLog);
@@ -14022,6 +14111,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             artifactId: ref.artifactId,
             artifactVersion: ref.artifactVersion,
             deliveryStatus: accepted.deliveryStatus,
+            sourceRequestId: outcome.requestId,
             // Defect 3: the delivered candidate text is recorded in the private
             // log so a checkpoint/resume can rebuild the artifact and candidate,
             // and the ReplayRunner can re-derive the final answer.
@@ -14321,6 +14411,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               sessionLog.append("REPAIR", {
                 accepted: revision2.accepted,
                 reason: revision2.decision.reason,
+                sourceRequestId: requestId,
                 // Defect 3: record the revised candidate so resume/replay can
                 // rebuild the current candidate and re-derive the final answer.
                 candidateProposal: child.artifact.packet?.candidateProposal ?? null,
@@ -14382,7 +14473,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     status: decision.status,
     reason: decision.reason,
     finalResponse: decision.finalResponse,
-    candidateVerified: false
+    candidateVerified: false,
+    unresolvedObligations
   });
   if (captured.asset !== null && target !== null && (opts.maxRepairs ?? 0) >= 1) {
     const scopeHash = p4Hash(JSON.stringify({ scope: target.binding.scopeId, stage: "S3" }));

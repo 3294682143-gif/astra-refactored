@@ -74,6 +74,22 @@ def test_local_resume_continues_without_replaying_settled_calls(process_tracker)
     assert resumed_client.calls <= remaining
 
 
+def test_completed_resume_rebuilds_without_any_model_call(process_tracker):
+    """Defect 3(b): a COMPLETE resumed run rebuilds from the log, no new calls."""
+    client, checkpoint = _first_with_checkpoint("local")
+    assert client.calls >= 1
+
+    resumed, resumed_client = _agent("local")
+    result = resumed.solve(_PROBLEM, {"source": "e2e"}, resume_checkpoint=checkpoint)
+
+    assert result["engine"] == "ts"
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    assert result["metrics"]["logical_model_calls"] == 0
+    # The settled WORK is never re-issued from the first WORK.
+    assert resumed_client.calls == 0
+
+
 def test_resume_budget_only_tightens(process_tracker):
     _, checkpoint = _first_with_checkpoint("shared_public")
 
