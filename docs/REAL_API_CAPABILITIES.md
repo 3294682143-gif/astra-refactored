@@ -32,11 +32,16 @@ tools, rate limits and true max output are **NOT_RUN (BLOCKED_EXTERNAL)** — th
 require the separately authorized real API run and the target environment. No
 benefit is claimed from any real-model measurement.
 
-
 ## Smoke log — 2026-10-15 (engine session)
-- Outbound HTTPS via the local proxy (`127.0.0.1:9999`) is reachable; a direct POST to
-  `https://chat.intern-ai.org.cn/api/v1/chat/completions` (model `intern-s2`) returned
-  **HTTP 401 `user token expired` (msgCode A0211)** with the supplied credential.
-- Therefore no real Intern S2 request/usage structure could be measured. Real API remains
-  **NOT_RUN**; the capability table above is unchanged. A valid, unexpired Intern S2
-  credential is required (process-internal one-shot only; never persisted).
+- Endpoint `https://discovery-api.intern-ai.org.cn/v1/chat/completions` (OpenAI-compatible), model `intern-s2`
+  (server reports `model: "Intern-S2"`); outbound via local proxy works.
+- Verified with one live call (HTTP 200): response carries
+  `choices[0].message.content` (may be `null` when only reasoning is produced),
+  `choices[0].message.reasoning_content` (thinking text), `choices[0].finish_reason`
+  (`stop` / `length` / ...), and `usage` = {`prompt_tokens`,`completion_tokens`,`total_tokens`,
+  `prompt_tokens_details.cached_tokens`}; top-level `id`/`request_id`/`model`/`object`.
+- Caveat: with a small `max_tokens` the model may emit only `reasoning_content` and
+  `finish_reason=length` with `content=null` — consumers must treat `content=null` + `length`
+  as a truncated/thinking-only reply (never a complete answer).
+- A prior credential from an earlier round returned HTTP 401 `user token expired`; superseded by the
+  working credential above. No credential is persisted here.
