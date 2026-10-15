@@ -143,7 +143,7 @@ export function reactiveTool(): string {
   return JSON.stringify({
     action: "tool",
     name: "polynomial_expand_coefficients",
-    args: { expression: "(x+1)**2", variables: ["x"], parameters: [] },
+    args: { expression: "x*(x-1)", variables: ["x"], parameters: [] },
     scope: "expand the supplied polynomial",
   });
 }

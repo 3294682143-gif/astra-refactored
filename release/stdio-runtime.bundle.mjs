@@ -13367,6 +13367,305 @@ var init_agent_revision = __esm({
   }
 });
 
+// apps/stdio-runtime/dist/src/agent-semantics.js
+function monoParts(key) {
+  const out = /* @__PURE__ */ new Map();
+  if (key === "") {
+    return out;
+  }
+  for (const part of key.split("*")) {
+    const [name, exponent] = part.split("^");
+    out.set(name, Number(exponent ?? "1"));
+  }
+  return out;
+}
+function keyOf(parts) {
+  const rows = [...parts.entries()].filter(([, exponent]) => exponent !== 0).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  return rows.map(([name, exponent]) => exponent === 1 ? name : `${name}^${exponent}`).join("*");
+}
+function clean(source) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [key, value] of source) {
+    if (Math.abs(value) > EPS) {
+      out.set(key, value);
+    }
+  }
+  return out;
+}
+function polyAdd(a, b) {
+  const out = new Map(a);
+  for (const [key, value] of b) {
+    out.set(key, (out.get(key) ?? 0) + value);
+  }
+  return clean(out);
+}
+function polyNeg(a) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [key, value] of a) {
+    out.set(key, -value);
+  }
+  return out;
+}
+function polyScale(a, factor) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [key, value] of a) {
+    out.set(key, value * factor);
+  }
+  return clean(out);
+}
+function polyMul(a, b) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [ka, ca] of a) {
+    for (const [kb, cb] of b) {
+      const parts = monoParts(ka);
+      for (const [name, exponent] of monoParts(kb)) {
+        parts.set(name, (parts.get(name) ?? 0) + exponent);
+      }
+      const key = keyOf(parts);
+      out.set(key, (out.get(key) ?? 0) + ca * cb);
+    }
+  }
+  return clean(out);
+}
+function polyPow(base, exponent) {
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 16) {
+    return null;
+  }
+  let result = /* @__PURE__ */ new Map([["", 1]]);
+  for (let index = 0; index < exponent; index += 1) {
+    result = polyMul(result, base);
+  }
+  return result;
+}
+function tokenize(source) {
+  const tokens = [];
+  let index = 0;
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === " ") {
+      index += 1;
+      continue;
+    }
+    if (/[0-9]/.test(ch)) {
+      let end = index;
+      while (end < source.length && /[0-9]/.test(source[end])) {
+        end += 1;
+      }
+      tokens.push(source.slice(index, end));
+      index = end;
+      continue;
+    }
+    if (/[A-Za-z]/.test(ch)) {
+      let end = index;
+      while (end < source.length && /[A-Za-z0-9_]/.test(source[end])) {
+        end += 1;
+      }
+      tokens.push(source.slice(index, end));
+      index = end;
+      continue;
+    }
+    if (ch === "*" && source[index + 1] === "*") {
+      tokens.push("^");
+      index += 2;
+      continue;
+    }
+    if ("+-*/^()".includes(ch)) {
+      tokens.push(ch);
+      index += 1;
+      continue;
+    }
+    return null;
+  }
+  return tokens.length > 0 && tokens.length <= 4096 ? tokens : null;
+}
+function polynomialOf(source) {
+  const tokens = tokenize(source);
+  if (tokens === null) {
+    return null;
+  }
+  return new Parser(tokens).parse();
+}
+function problemRelationPolynomial(problem) {
+  const match = /[A-Za-z0-9_+\-*/^().]+\s*=\s*[A-Za-z0-9_+\-*/^().]+/.exec(problem);
+  if (match === null) {
+    return null;
+  }
+  const parts = match[0].split("=");
+  const left = polynomialOf(parts[0]);
+  const right = polynomialOf(parts[1]);
+  if (left === null || right === null) {
+    return null;
+  }
+  return polyAdd(left, polyNeg(right));
+}
+function samePolynomial(a, b) {
+  if (a === null || b === null || a.size !== b.size) {
+    return false;
+  }
+  for (const [key, value] of a) {
+    const other = b.get(key);
+    if (other === void 0 || Math.abs(value - other) > EPS) {
+      return false;
+    }
+  }
+  return true;
+}
+function polynomialVanishesAt(poly, value) {
+  if (poly === null) {
+    return false;
+  }
+  let total = 0;
+  for (const [key, coefficient] of poly) {
+    let term = coefficient;
+    for (const [name, exponent] of monoParts(key)) {
+      term *= Math.pow(value, exponent);
+    }
+    total += term;
+  }
+  return Math.abs(total) < 1e-9;
+}
+function numericSetElements(proposal) {
+  const match = /^\s*\{([^}]*)\}\s*$/.exec(proposal);
+  if (match === null) {
+    return null;
+  }
+  const body = match[1].trim();
+  if (body.length === 0) {
+    return [];
+  }
+  const out = [];
+  for (const part of body.split(",")) {
+    const text6 = part.trim();
+    if (!/^-?\d+(?:\.\d+)?$/.test(text6)) {
+      return null;
+    }
+    out.push(Number(text6));
+  }
+  return out;
+}
+var EPS, Parser;
+var init_agent_semantics = __esm({
+  "apps/stdio-runtime/dist/src/agent-semantics.js"() {
+    "use strict";
+    EPS = 1e-9;
+    Parser = class {
+      tokens;
+      #index = 0;
+      constructor(tokens) {
+        this.tokens = tokens;
+      }
+      #peek() {
+        return this.tokens[this.#index] ?? null;
+      }
+      #next() {
+        return this.tokens[this.#index++] ?? null;
+      }
+      parse() {
+        const value = this.#expr();
+        return value !== null && this.#peek() === null ? value : null;
+      }
+      #expr() {
+        let left = this.#term();
+        if (left === null) {
+          return null;
+        }
+        while (this.#peek() === "+" || this.#peek() === "-") {
+          const op = this.#next();
+          const right = this.#term();
+          if (right === null) {
+            return null;
+          }
+          left = op === "+" ? polyAdd(left, right) : polyAdd(left, polyNeg(right));
+        }
+        return left;
+      }
+      #term() {
+        let left = this.#factor();
+        if (left === null) {
+          return null;
+        }
+        for (; ; ) {
+          const token = this.#peek();
+          if (token === "*" || token === "/") {
+            this.#next();
+            const right = this.#factor();
+            if (right === null) {
+              return null;
+            }
+            if (token === "*") {
+              left = polyMul(left, right);
+            } else {
+              const divisor = this.#constant(right);
+              if (divisor === null || divisor === 0) {
+                return null;
+              }
+              left = polyScale(left, 1 / divisor);
+            }
+            continue;
+          }
+          if (token !== null && (token === "(" || /^[A-Za-z0-9]/.test(token))) {
+            const right = this.#factor();
+            if (right === null) {
+              return null;
+            }
+            left = polyMul(left, right);
+            continue;
+          }
+          return left;
+        }
+      }
+      #factor() {
+        if (this.#peek() === "-") {
+          this.#next();
+          const value = this.#factor();
+          return value === null ? null : polyNeg(value);
+        }
+        if (this.#peek() === "+") {
+          this.#next();
+          return this.#factor();
+        }
+        const base = this.#atom();
+        if (base === null) {
+          return null;
+        }
+        if (this.#peek() === "^") {
+          this.#next();
+          const exponent = this.#next();
+          if (exponent === null || !/^[0-9]+$/.test(exponent)) {
+            return null;
+          }
+          return polyPow(base, Number(exponent));
+        }
+        return base;
+      }
+      #atom() {
+        const token = this.#peek();
+        if (token === "(") {
+          this.#next();
+          const value = this.#expr();
+          if (value === null || this.#next() !== ")") {
+            return null;
+          }
+          return value;
+        }
+        if (token !== null && /^[0-9]+$/.test(token)) {
+          this.#next();
+          return /* @__PURE__ */ new Map([["", Number(token)]]);
+        }
+        if (token !== null && /^[A-Za-z][A-Za-z0-9_]*$/.test(token)) {
+          this.#next();
+          return /* @__PURE__ */ new Map([[token, 1]]);
+        }
+        return null;
+      }
+      #constant(value) {
+        const rows = [...value.entries()];
+        return rows.length === 1 && rows[0][0] === "" ? rows[0][1] : null;
+      }
+    };
+  }
+});
+
 // apps/stdio-runtime/dist/src/agent-loop.js
 function goalKindOf(goals, goalId) {
   for (const goal of goals) {
@@ -13523,6 +13822,17 @@ function reconstructResumedResult(events, session, problemHash, opts) {
       decision
     }
   });
+}
+function checkerSupportsObligation(action, problemText) {
+  if (action.action !== "tool" || !checkerArgsRelevant(action, problemVariableSet(problemText))) {
+    return false;
+  }
+  const args = action.args;
+  const expression = typeof args.expression === "string" ? args.expression : null;
+  if (expression === null) {
+    return false;
+  }
+  return samePolynomial(polynomialOf(expression), problemRelationPolynomial(problemText));
 }
 async function r0Generate(root, ports, sessionLog, context, scopeId) {
   const remaining = root.remainingMs();
@@ -14311,7 +14621,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         }
       }
       let s1Ok = s1Assessment !== null && s1Assessment.structuralMatch && s1Assessment.reason === "STRUCTURAL_MATCH_ONLY";
-      if (s1Ok && checker !== void 0 && !checkerArgsRelevant(checker.request.action, problemVariableSet(problemText))) {
+      if (s1Ok && checker !== void 0 && !checkerSupportsObligation(checker.request.action, problemText)) {
         s1Ok = false;
       }
       if (s1Ok && captured.asset !== null && checker !== void 0) {
@@ -14335,6 +14645,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             s1Ok = false;
           }
         }
+      }
+      if (!s1Ok && checker !== void 0 && challenges.length > 0) {
+        stop = "REVISE_REJECTED";
       }
       if (challenges.length > 0 && checker !== void 0 && answerObligation !== void 0 && s1Ok) {
         const challenge = challenges[0];
@@ -14393,7 +14706,19 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
               const gapSet = goalKind === "PARAMETER" ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId) : [];
               const answerText = child.artifact.packet?.candidateProposal ?? "";
-              const basis = {
+              const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
+              const childElements = numericSetElements(answerText);
+              let basisSupported = true;
+              if (parentElements !== null && childElements !== null) {
+                const relation = problemRelationPolynomial(problemText);
+                const known = new Set(parentElements);
+                for (const element of childElements) {
+                  if (!known.has(element) && !polynomialVanishesAt(relation, element)) {
+                    basisSupported = false;
+                  }
+                }
+              }
+              const basis = basisSupported ? {
                 source: "CHECKER_COUNTEREXAMPLE",
                 level: "CHECKED_SCOPE",
                 checkResult: "PASS",
@@ -14405,30 +14730,37 @@ async function runAgentLoop(problem, sessionId, options, ports) {
                   requiredGaps: gapSet,
                   coveredGaps: gapSet.filter((gap) => answerText.includes(gap))
                 } : {}
-              };
-              const revision2 = reviseCandidate(ledger.snapshot(), { parent: target, child, challenge, basis }, root.remainingMs());
-              revisedDecision = revision2.decision;
-              sessionLog.append("REPAIR", {
-                accepted: revision2.accepted,
-                reason: revision2.decision.reason,
-                sourceRequestId: requestId,
-                // Defect 3: record the revised candidate so resume/replay can
-                // rebuild the current candidate and re-derive the final answer.
-                candidateProposal: child.artifact.packet?.candidateProposal ?? null,
-                finalResponse: revision2.decision.finalResponse
-              });
-              if (revision2.accepted) {
+              } : null;
+              const revision2 = basis === null ? null : reviseCandidate(ledger.snapshot(), { parent: target, child, challenge, basis }, root.remainingMs());
+              if (revision2 === null) {
+                stop = "REVISE_REJECTED";
+              }
+              revisedDecision = revision2 === null ? null : revision2.decision;
+              if (revision2 !== null) {
+                sessionLog.append("REPAIR", {
+                  accepted: revision2.accepted,
+                  reason: revision2.decision.reason,
+                  sourceRequestId: requestId,
+                  // Defect 3: record the revised candidate so resume/replay can
+                  // rebuild the current candidate and re-derive the final answer.
+                  candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+                  finalResponse: revision2.decision.finalResponse
+                });
+              }
+              if (revision2 !== null && revision2.accepted) {
                 ledger.recordLocalRevision(repairTask.taskId, {
                   artifactId: childArtifact.artifactId,
                   artifactVersion: childArtifact.envelope.artifactVersion ?? 1
                 }, childArtifact.envelope.eventSeq);
               }
-              s2Transaction = {
-                supersededObligationIds: revision2.supersededObligationIds,
-                preservedObligationIds: revision2.preservedObligationIds,
-                preservedParentArtifactId: revision2.preservedParentArtifactId
-              };
-              stop = revision2.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
+              if (revision2 !== null) {
+                s2Transaction = {
+                  supersededObligationIds: revision2.supersededObligationIds,
+                  preservedObligationIds: revision2.preservedObligationIds,
+                  preservedParentArtifactId: revision2.preservedParentArtifactId
+                };
+              }
+              stop = revision2 !== null && revision2.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
             } catch (error) {
               if (!(error instanceof P2Error)) {
                 throw error;
@@ -14556,6 +14888,7 @@ var init_agent_loop2 = __esm({
     init_agent_revision();
     init_agent_progress();
     init_agent_loop_io();
+    init_agent_semantics();
     MIN_MS = 25;
     AUX_OBLIGATION_KINDS = ["PREMISES", "ATTAINMENT"];
     S1_CHECKER_ASSET = Object.freeze({

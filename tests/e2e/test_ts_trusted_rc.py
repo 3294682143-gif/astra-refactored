@@ -149,3 +149,64 @@ def test_strict_also_blocks_the_ordinary_candidate(process_tracker):
     assert result["final_response"] != "{0,1}"
     assert result["reason"] == "STRICT_NOT_VERIFIED"
     assert process_tracker
+
+
+# --- Deep defect 1: a variable-but-unrelated expression must not ground {999} ---
+
+
+class UnrelatedVarRepair999Client(G3FlagshipClient):
+    """A checker on `x+999` (mentions x but is not the problem relation)."""
+
+    def _work(self, body):
+        if body.get("stage") == "REPAIR":
+            return self._packet(body, "x+999", "unrelated variable expression", "{999}")
+        task = body["task"]
+        on_answer = task["taskId"] == ANSWER_TASK
+        if not self.tool_done and on_answer:
+            self.tool_done = True
+            return json.dumps(
+                {
+                    "action": "tool",
+                    "name": "polynomial_expand_coefficients",
+                    "args": {"expression": "x+999", "variables": ["x"], "parameters": []},
+                    "scope": "unrelated variable expression (x+999)",
+                }
+            )
+        if on_answer:
+            return self._packet(body, "x=1 only", "Take the root x=1.", "{1}")
+        return self._packet(body, "prerequisite", "prerequisite", None)
+
+
+def test_unrelated_variable_expression_is_rejected_best_effort(process_tracker):
+    """BEST_EFFORT must NOT replace the protected {1} with an unverified {999}."""
+    client = UnrelatedVarRepair999Client()
+    result = _solve(
+        client,
+        G3_PROBLEM,
+        max_reviews=1,
+        max_repairs=1,
+        max_effects=1,
+        max_model_calls=6,
+        max_work_units=3,
+    )
+    assert result["final_response"] == "{1}"
+    assert result["final_response"] != "{999}"
+    assert result["stopReason"] == "REVISE_REJECTED"
+    assert process_tracker
+
+
+def test_unrelated_variable_expression_is_rejected_strict(process_tracker):
+    client = UnrelatedVarRepair999Client()
+    result = _solve(
+        client,
+        G3_PROBLEM,
+        policy="STRICT",
+        max_reviews=1,
+        max_repairs=1,
+        max_effects=1,
+        max_model_calls=6,
+        max_work_units=3,
+    )
+    assert result["final_response"] != "{999}"
+    assert result["stopReason"] == "REVISE_REJECTED"
+    assert process_tracker

@@ -23,6 +23,7 @@ import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts, checkedAgentReceipt, deriveRootBudget, } from "./agent-loop-io.js";
+import { numericSetElements, polynomialOf, polynomialVanishesAt, problemRelationPolynomial, samePolynomial, } from "./agent-semantics.js";
 const MIN_MS = 25;
 /**
  * B2 (DECISION-0150): auxiliary (non-answer) obligations whose open state must
@@ -228,6 +229,24 @@ function reconstructResumedResult(events, session, problemHash, opts) {
             decision,
         },
     });
+}
+/**
+ * Step 1 hard gate: a checker supports the challenged answer obligation ONLY
+ * when the relation it checks is the original problem's own relation (polynomial-
+ * equivalent) AND its request is bound to the problem's variables. `x+999` or a
+ * constant is never equivalent to the problem relation, so it can never ground a
+ * revision; `x*(x-1)` for `x(x-1)=0` is.
+ */
+function checkerSupportsObligation(action, problemText) {
+    if (action.action !== "tool" || !checkerArgsRelevant(action, problemVariableSet(problemText))) {
+        return false;
+    }
+    const args = action.args;
+    const expression = typeof args.expression === "string" ? args.expression : null;
+    if (expression === null) {
+        return false;
+    }
+    return samePolynomial(polynomialOf(expression), problemRelationPolynomial(problemText));
 }
 /**
  * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
@@ -1225,9 +1244,10 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             let s1Ok = s1Assessment !== null &&
                 s1Assessment.structuralMatch &&
                 s1Assessment.reason === "STRUCTURAL_MATCH_ONLY";
-            // Defect 2(a): a structural match alone is never enough — the checker's
-            // actual tool request must be bound to the original problem's variables.
-            if (s1Ok && checker !== undefined && !checkerArgsRelevant(checker.request.action, problemVariableSet(problemText))) {
+            // Step 1 hard gate 1: a structural match + variable domain is never enough.
+            // The checker must substantively support the challenged obligation; any
+            // UNKNOWN / unrelated relation is fail-closed for EVERY policy.
+            if (s1Ok && checker !== undefined && !checkerSupportsObligation(checker.request.action, problemText)) {
                 s1Ok = false;
             }
             if (s1Ok && captured.asset !== null && checker !== undefined) {
@@ -1256,6 +1276,12 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         s1Ok = false;
                     }
                 }
+            }
+            // Step 1 hard gate 1: a checker present but NOT substantively supporting
+            // the challenged obligation is a fail-closed REVISE_REJECTED for EVERY
+            // policy (BEST_EFFORT included); the protected parent candidate is kept.
+            if (!s1Ok && checker !== undefined && challenges.length > 0) {
+                stop = "REVISE_REJECTED";
             }
             if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok) {
                 // `challenges[0]` is defined by the length guard above.
@@ -1321,33 +1347,57 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId)
                                 : [];
                             const answerText = child.artifact.packet?.candidateProposal ?? "";
-                            const basis = {
-                                source: "CHECKER_COUNTEREXAMPLE",
-                                level: "CHECKED_SCOPE",
-                                checkResult: "PASS",
-                                scopeId: target.binding.scopeId,
-                                witness: checker.receipt.observation.slice(0, 2048),
-                                obligatedObligationIds: [answerObligation.obligationId],
-                                childCoverage: [answerObligation.obligationId],
-                                ...(gapSet.length > 0
-                                    ? {
-                                        requiredGaps: gapSet,
-                                        coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
+                            // Step 1 hard gate 2: any NEW element of a numeric-set revision must
+                            // be a genuine root of the problem relation the checker verified;
+                            // otherwise no basis is built and reviseCandidate is never called.
+                            const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
+                            const childElements = numericSetElements(answerText);
+                            let basisSupported = true;
+                            if (parentElements !== null && childElements !== null) {
+                                const relation = problemRelationPolynomial(problemText);
+                                const known = new Set(parentElements);
+                                for (const element of childElements) {
+                                    if (!known.has(element) && !polynomialVanishesAt(relation, element)) {
+                                        basisSupported = false;
                                     }
-                                    : {}),
-                            };
-                            const revision = reviseCandidate(ledger.snapshot(), { parent: target, child, challenge, basis }, root.remainingMs());
-                            revisedDecision = revision.decision;
-                            sessionLog.append("REPAIR", {
-                                accepted: revision.accepted,
-                                reason: revision.decision.reason,
-                                sourceRequestId: requestId,
-                                // Defect 3: record the revised candidate so resume/replay can
-                                // rebuild the current candidate and re-derive the final answer.
-                                candidateProposal: child.artifact.packet?.candidateProposal ?? null,
-                                finalResponse: revision.decision.finalResponse,
-                            });
-                            if (revision.accepted) {
+                                }
+                            }
+                            const basis = basisSupported
+                                ? {
+                                    source: "CHECKER_COUNTEREXAMPLE",
+                                    level: "CHECKED_SCOPE",
+                                    checkResult: "PASS",
+                                    scopeId: target.binding.scopeId,
+                                    witness: checker.receipt.observation.slice(0, 2048),
+                                    obligatedObligationIds: [answerObligation.obligationId],
+                                    childCoverage: [answerObligation.obligationId],
+                                    ...(gapSet.length > 0
+                                        ? {
+                                            requiredGaps: gapSet,
+                                            coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
+                                        }
+                                        : {}),
+                                }
+                                : null;
+                            const revision = basis === null
+                                ? null
+                                : reviseCandidate(ledger.snapshot(), { parent: target, child, challenge, basis }, root.remainingMs());
+                            if (revision === null) {
+                                stop = "REVISE_REJECTED";
+                            }
+                            revisedDecision = revision === null ? null : revision.decision;
+                            if (revision !== null) {
+                                sessionLog.append("REPAIR", {
+                                    accepted: revision.accepted,
+                                    reason: revision.decision.reason,
+                                    sourceRequestId: requestId,
+                                    // Defect 3: record the revised candidate so resume/replay can
+                                    // rebuild the current candidate and re-derive the final answer.
+                                    candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+                                    finalResponse: revision.decision.finalResponse,
+                                });
+                            }
+                            if (revision !== null && revision.accepted) {
                                 // B1c (DECISION-0150): sync the M1 ledger to the local update of
                                 // the affected (challenged) answer obligation's task; every other
                                 // obligation/task keeps its prior state.
@@ -1356,12 +1406,14 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                     artifactVersion: childArtifact.envelope.artifactVersion ?? 1,
                                 }, childArtifact.envelope.eventSeq);
                             }
-                            s2Transaction = {
-                                supersededObligationIds: revision.supersededObligationIds,
-                                preservedObligationIds: revision.preservedObligationIds,
-                                preservedParentArtifactId: revision.preservedParentArtifactId,
-                            };
-                            stop = revision.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
+                            if (revision !== null) {
+                                s2Transaction = {
+                                    supersededObligationIds: revision.supersededObligationIds,
+                                    preservedObligationIds: revision.preservedObligationIds,
+                                    preservedParentArtifactId: revision.preservedParentArtifactId,
+                                };
+                            }
+                            stop = revision !== null && revision.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
                         }
                         catch (error) {
                             if (!(error instanceof P2Error)) {
