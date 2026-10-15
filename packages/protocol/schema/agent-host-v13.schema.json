@@ -279,6 +279,33 @@
         }
       }
     },
+    "asset.scoped": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion","sessionId","assetGroup","assetId","scopeId","contractVersion"],
+        "properties": {
+          "protocolVersion": {"type": "string","const": "1.3-agent-loop-preview"},
+          "sessionId": {"type": "string","minLength": 1,"maxLength": 128},
+          "assetGroup": {"type": "string","enum": ["outputCheckers","mathFamilies","skills","prompts"]},
+          "assetId": {"type": "string","minLength": 1,"maxLength": 256},
+          "scopeId": {"type": "string","minLength": 64,"maxLength": 64},
+          "contractVersion": {"type": "integer","enum": [1,2]}
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion","sessionId","descriptor"],
+        "properties": {
+          "protocolVersion": {"type": "string","const": "1.3-agent-loop-preview"},
+          "sessionId": {"type": "string","minLength": 1,"maxLength": 128},
+          "descriptor": {"type": "object"}
+        }
+      }
+    },
     "session.solve": {
       "direction": "host-to-node",
       "kind": "request",

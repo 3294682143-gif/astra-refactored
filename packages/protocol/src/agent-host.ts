@@ -25,7 +25,7 @@ export type AgentHostVersion = typeof AGENT_HOST_VERSION;
 /** The frozen 1.2 preview version, kept for read-only legacy replay only. */
 export const AGENT_HOST_LEGACY_VERSION = "1.2-agent-loop-preview" as const;
 
-/** The seven methods of this local Host slice, in fixed order. */
+/** The eight methods of this local Host slice, in fixed order. */
 export const AGENT_HOST_METHODS = Object.freeze([
   "runtime.initialize",
   "session.solve",
@@ -34,6 +34,7 @@ export const AGENT_HOST_METHODS = Object.freeze([
   "tool.execute",
   "method.catalog",
   "method.load",
+  "asset.scoped",
 ] as const);
 export type AgentHostMethod = (typeof AGENT_HOST_METHODS)[number];
 
@@ -82,6 +83,7 @@ const HOST_DIRECTION: Readonly<Record<string, "host-to-node" | "node-to-host">> 
   "tool.execute": "node-to-host",
   "method.catalog": "node-to-host",
   "method.load": "node-to-host",
+  "asset.scoped": "node-to-host",
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

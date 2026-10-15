@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import time
+from pathlib import Path
 
 from .agent_client import AgentClient
 from .agent_context import (
@@ -35,6 +36,7 @@ from .p3_host_protocol import payload as p3_payload
 from .agent_protocol import AGENT_HOST_VERSION, payload
 from .p2_methods import fixture_catalog
 from .p3_host_methods import checked_catalog
+from .scoped_asset_call import AssetCallError, scoped_asset_call
 
 __all__ = ["AgentHost"]
 
@@ -79,6 +81,9 @@ _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
 
 def _fail(code="FIELD_VALUE"):
     raise ProbeError(code)
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _is_int(value):
@@ -253,7 +258,7 @@ class AgentHost(_Host):
 
     def on_request(self, message):
         method = message["method"]
-        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load"):
+        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load", "asset.scoped"):
             _fail()
         if self.expected is None or self.expected != (_HOST_SOLVE_ID, "session.solve"):
             _fail()
@@ -271,6 +276,9 @@ class AgentHost(_Host):
             return
         if method == "method.load":
             self.on_effect(message["id"], params, "method.load")
+            return
+        if method == "asset.scoped":
+            self.on_asset(message["id"], params)
             return
         self.on_tool(message["id"], params)
 
@@ -324,6 +332,36 @@ class AgentHost(_Host):
             "method.catalog",
         )
         self.pending_is_callback = True
+
+    def on_asset(self, frame_id, params):
+        """G7/PR7 Slice 7e: scoped math-asset descriptor within a trusted scope."""
+        _exact_keys(
+            params,
+            ("protocolVersion", "sessionId", "assetGroup", "assetId", "scopeId", "contractVersion"),
+        )
+        if params["sessionId"] != self.session_id:
+            _fail()
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            _fail()
+        try:
+            descriptor = scoped_asset_call(
+                params["assetGroup"],
+                params["assetId"],
+                scope_id=params["scopeId"],
+                contract_version=params["contractVersion"],
+                root=_REPO_ROOT,
+            )
+        except AssetCallError as exc:
+            _fail(exc.code)
+        self.send(
+            self.proc,
+            {
+                "jsonrpc": "2.0",
+                "id": frame_id,
+                "result": {**self._common(), "descriptor": descriptor},
+            },
+            "asset.scoped",
+        )
 
     def on_model(self, frame_id, params):
         ordinal = self.model_requests + 1

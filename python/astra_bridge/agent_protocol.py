@@ -49,6 +49,7 @@ AGENT_HOST_METHODS = (
     "tool.execute",
     "method.catalog",
     "method.load",
+    "asset.scoped",
 )
 
 AGENT_HOST_LEGACY_METHODS = (
@@ -67,6 +68,7 @@ AGENT_HOST_METHOD_DIRECTION = {
     "tool.execute": "node-to-host",
     "method.catalog": "node-to-host",
     "method.load": "node-to-host",
+    "asset.scoped": "node-to-host",
 }
 
 
