@@ -26,7 +26,7 @@ export const AGENT_SESSION_VERSION = "0.0.0-agent" as const;
 
 /** Below this remaining time no model call or effect is admitted. */
 export const AGENT_MIN_REMAINING_MS = 25 as const;
-export const AGENT_MAX_REMAINING_MS = 5000 as const;
+export const AGENT_MAX_REMAINING_MS = 3_600_000 as const;
 export const AGENT_MAX_MODEL_CALLS = 32 as const;
 export const AGENT_MAX_EFFECTS = 2 as const;
 export const AGENT_MAX_TRACE_EVENTS = 64 as const;

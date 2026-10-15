@@ -44,7 +44,7 @@ class P2HostCallback(_Host):
         return {"protocolVersion": P2_HOST_VERSION, "sessionId": self.session_id}
 
     def remaining_ms(self):
-        return max(0, min(5000, int(self.remaining() * 1000)))
+        return max(0, min(3600000, int(self.remaining() * 1000)))
 
     def _budget(self):
         return self.remaining() * 1000 > _RESERVE_MS

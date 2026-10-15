@@ -41,7 +41,7 @@ import {
   type P4Target,
 } from "@astra/protocol";
 
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 const MAX_REVIEWS = 2;
 const MAX_REQUEST_ORDINAL = 32;
 const MAX_CHALLENGES = 16;

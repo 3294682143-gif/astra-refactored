@@ -128,7 +128,7 @@ export class P4RecheckModelGate {
     if (request !== `model-${this.records.length + 1 + this.startOrdinal}`) {
       throw new P2Error("PACKET_BINDING");
     }
-    if (!Number.isSafeInteger(remainingMs) || remainingMs < 0 || remainingMs > 5000) {
+    if (!Number.isSafeInteger(remainingMs) || remainingMs < 0 || remainingMs > 3_600_000) {
       throw new P2Error("PACKET_BINDING");
     }
     if (remainingMs < P4_RECHECK_MIN_REMAINING_MS) {

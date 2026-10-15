@@ -152,7 +152,7 @@ test("session constructor rejects a mismatched target, plan or request", () => {
   }
   const review = session(built);
   expectCode(() => review.admit(25), "BOUND_EXCEEDED");
-  expectCode(() => review.admit(5001), "BOUND_EXCEEDED");
+  expectCode(() => review.admit(3600001), "BOUND_EXCEEDED");
   expectCode(() => review.settle("COMPLETE", reportMapping(built), 1000), "ILLEGAL_TRANSITION");
   const admitted = review.admit(26);
   assert.equal(admitted.state, "ADMITTED");

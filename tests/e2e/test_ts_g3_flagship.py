@@ -33,7 +33,7 @@ __all__ = ["no_legacy_solver", "process_tracker"]
 
 PROBLEM = "Find all real solutions x(x-1)=0"
 ANSWER_TASK = "goal-1:EXHAUSTIVENESS"
-TOOL_ARGS = {"expression": "2+2", "variables": ["x"], "parameters": []}
+TOOL_ARGS = {"expression": "x*(x-1)", "variables": ["x"], "parameters": []}
 
 
 class G3FlagshipClient(FakeClient):
@@ -195,7 +195,7 @@ def test_public_entry_e07_foreign_checker_cannot_ground_a_revision(process_track
 
 PARAM_PROBLEM = "Classify the number of solutions of x^2=p in terms of the parameter p"
 PARAM_ANSWER_TASK = "goal-1:OUTPUT_COVERAGE"
-PARAM_TOOL_ARGS = {"expression": "2+2", "variables": ["x"], "parameters": []}
+PARAM_TOOL_ARGS = {"expression": "x^2-p", "variables": ["x"], "parameters": ["p"]}
 
 
 class MultiGapParamClient(FakeClient):

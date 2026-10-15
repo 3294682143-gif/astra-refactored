@@ -135,7 +135,7 @@ test("caps 0..4 bound the ledger and bad caps or times are refused without mutat
   }
   const gate = gateFor(ledger, 4);
   const before = gate.snapshot();
-  for (const bad of [25, Number.NaN, -1, 5001]) {
+  for (const bad of [25, Number.NaN, -1, 3600001]) {
     assert.throws(() => gate.admit(task, "model-1", bad as never), (error: unknown) => {
       assert.ok(error instanceof P2Error);
       assert.ok(error.code === "DEADLINE_EXCEEDED" || error.code === "PACKET_BINDING");

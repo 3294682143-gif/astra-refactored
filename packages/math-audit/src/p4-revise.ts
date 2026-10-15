@@ -33,7 +33,7 @@ import {
   type P4Target,
 } from "@astra/protocol";
 
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 const HASH = /^[0-9a-f]{64}$/u;
 const CHALLENGE_ID = /^challenge-(?:[1-9]|1[0-6])$/u;
 const BASIS_SOURCES: readonly P4ReviseBasis["source"][] = [
@@ -106,6 +106,22 @@ function answerObligationOf(contract: P2Contract, goalId: string): P2Obligation 
   const kind = p2AnswerObligationForGoal(goal.kind);
   return (
     contract.obligations.find((row) => row.goalId === goalId && row.kind === kind) ?? null
+  );
+}
+
+/**
+ * Defect 2(a) substantive verification: the basis must name EXACTLY the single
+ * challenged answer obligation it grounds, in both the obligated set and the
+ * child coverage. A basis that merely lists the obligation among unrelated
+ * entries (or duplicates it) is not a grounded, single-obligation basis and is
+ * refused fail-closed.
+ */
+function isExactSingleObligation(value: unknown, requiredId: string): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === 1 &&
+    typeof value[0] === "string" &&
+    value[0] === requiredId
   );
 }
 
@@ -217,10 +233,8 @@ export function reviseCandidate(
       typeof basis.witness === "string" &&
       basis.witness.trim().length > 0 &&
       [...basis.witness].length <= 2048 &&
-      Array.isArray(basis.obligatedObligationIds) &&
-      (basis.obligatedObligationIds as readonly string[]).includes(requiredId) &&
-      Array.isArray(basis.childCoverage) &&
-      (basis.childCoverage as readonly string[]).includes(requiredId) &&
+      isExactSingleObligation(basis.obligatedObligationIds, requiredId) &&
+      isExactSingleObligation(basis.childCoverage, requiredId) &&
       gapsCovered(basis)
     );
   })();

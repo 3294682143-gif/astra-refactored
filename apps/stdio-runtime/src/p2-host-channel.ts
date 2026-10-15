@@ -16,7 +16,7 @@ import {
 } from "@astra/protocol";
 import type { ManifestEnvelopes } from "@astra/protocol";
 
-const MAX_DEADLINE_MS = 5000;
+const MAX_DEADLINE_MS = 3_600_000;
 const FIXED_CODES: ReadonlySet<string> = new Set<string>([
   ...Object.values(ERROR_CODES),
   ...Object.values(P2_ERROR_CODES),

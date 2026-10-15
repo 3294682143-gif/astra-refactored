@@ -142,7 +142,7 @@ test("AgentSession tightenRemaining only shrinks and a zero tighten is permanent
   assert.equal(root.remainingMs(), 0);
   now = 0;
   assert.equal(root.remainingMs(), 0);
-  expectCode(() => root.tightenRemaining(5001), "BOUND_EXCEEDED");
+  expectCode(() => root.tightenRemaining(3600001), "BOUND_EXCEEDED");
   expectCode(() => root.tightenRemaining(-1), "BOUND_EXCEEDED");
 });
 

@@ -48,7 +48,7 @@ _MAX_TEXT_CHARS = 20000
 _MAX_TEXT_BYTES = 65536
 _SETTLE_SECONDS = 0.025
 _MIN_REMAINING_MS = 25
-_MAX_REMAINING_MS = 5000
+_MAX_REMAINING_MS = 3600000
 _REQUEST_IDS = tuple("model-" + str(n) for n in range(1, 33))
 _PHASES = ("WORK", "R2", "REPAIR", "R0")
 _TRANSPORT = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
@@ -291,7 +291,7 @@ def _bounded_text(text):
 
 
 def _remaining_ms(deadline):
-    """Real remaining milliseconds of the original deadline, clamped to 5000."""
+    """Real remaining milliseconds of the original deadline, clamped to 3600000."""
     left = int(max(0.0, deadline - time.monotonic()) * 1000)
     if left < 0:
         return 0

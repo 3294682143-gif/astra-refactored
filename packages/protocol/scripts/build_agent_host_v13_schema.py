@@ -143,7 +143,7 @@ def _catalog_method(p3):
         properties["remainingMs"] = {
             "type": "integer",
             "minimum": 1,
-            "maximum": 5000,
+            "maximum": 3600000,
         }
     required = params["required"]
     if "remainingMs" not in required:

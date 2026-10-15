@@ -154,6 +154,63 @@ function parameterGapsOf(
 }
 
 /**
+ * Defect 2(a) (Trusted RC Package): the standalone single-letter variables the
+ * original problem declares. The compiled scope carries an empty
+ * `variableBindings`, so the problem text is the only structural variable
+ * source; a letter counts only as a whole token, so prose letters never
+ * masquerade as variables.
+ */
+function problemVariableSet(problem: string): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const match of problem.matchAll(/(^|[^A-Za-z])([A-Za-z])(?=[^A-Za-z]|$)/gu)) {
+    out.add(match[2] as string);
+  }
+  return out;
+}
+
+/** True when `name` appears in `expression` as a whole identifier, not as a substring. */
+function identifierUsed(expression: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`(^|[^A-Za-z0-9_])${escaped}([^A-Za-z0-9_]|$)`, "u").test(expression);
+}
+
+/**
+ * Defect 2(a) hardening: an S1 checker may ground a REPAIR only when its actual
+ * tool request is bound to the original problem's variables. A declared
+ * variable must be one the problem declares and must actually appear in the
+ * checker expression, so a valid-but-unrelated observation (e.g. `2+2=4`) can
+ * never become a revision basis.
+ */
+function checkerArgsRelevant(action: P3Action, problemVars: ReadonlySet<string>): boolean {
+  if (
+    action.action !== "tool" ||
+    typeof action.args !== "object" ||
+    action.args === null ||
+    Array.isArray(action.args)
+  ) {
+    return false;
+  }
+  const args = action.args as Record<string, unknown>;
+  const vars = args.variables;
+  if (!Array.isArray(vars) || vars.length === 0) {
+    return false;
+  }
+  const expression = typeof args.expression === "string" ? args.expression : null;
+  for (const variable of vars) {
+    if (typeof variable !== "string" || variable.trim().length === 0) {
+      return false;
+    }
+    if (!problemVars.has(variable)) {
+      return false;
+    }
+    if (expression !== null && !identifierUsed(expression, variable)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
  * injected model port using only the shared root budget. R0 has no work task,
  * so it bypasses the P4RecheckModelGate; the root still owns the ordinal and
@@ -1273,6 +1330,11 @@ export async function runAgentLoop(
         s1Assessment !== null &&
         s1Assessment.structuralMatch &&
         s1Assessment.reason === "STRUCTURAL_MATCH_ONLY";
+      // Defect 2(a): a structural match alone is never enough — the checker's
+      // actual tool request must be bound to the original problem's variables.
+      if (s1Ok && checker !== undefined && !checkerArgsRelevant(checker.request.action, problemVariableSet(problemText))) {
+        s1Ok = false;
+      }
       if (s1Ok && captured.asset !== null && checker !== undefined) {
         // G7/PR7 Slice 7e: bind the S1 checker to the Host registry through one
         // scoped asset call within the current scope + contract version. A
@@ -1447,12 +1509,20 @@ export async function runAgentLoop(
       stop = "CONTROL_REJECTED";
     }
   }
-  const decision = revisedDecision ?? candidateGate.finalize(
+  // Defect 2(b): a REPAIR-produced revision must pass through exactly the same
+  // final acceptance policy gate as the initial candidate. Under STRICT
+  // (REQUIRE_SCOPE_CHECKS) an unverified revision (candidateVerified is always
+  // false) can never be returned as a passing answer: the STRICT gate runs and
+  // returns the honest UNSOLVED / STRICT_NOT_VERIFIED decision instead.
+  let decision = candidateGate.finalize(
     ledger.snapshot(),
     target,
     review === null ? null : review.snapshot(),
     root.remainingMs(),
   );
+  if (revisedDecision !== null && policy !== "STRICT") {
+    decision = revisedDecision;
+  }
   if (!root.stopped()) {
     root.stop(stop);
   }

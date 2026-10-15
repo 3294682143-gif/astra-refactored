@@ -32,7 +32,7 @@ from .p3_host_protocol import P3_HOST_VERSION, payload
 __all__ = ["P3HostCallback"]
 
 _MIN_REMAINING_MS = 25
-_MAX_REMAINING_MS = 5000
+_MAX_REMAINING_MS = 3600000
 _MAX_MODEL_CALLS = 3
 _MAX_EFFECTS = 2
 _MAX_METHOD_LOADS = 1

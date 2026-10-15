@@ -28,7 +28,7 @@ const MAX_CONTEXT_BYTES = 65536;
 const MAX_TEXT_CHARS = 20000;
 const MAX_REVIEWS = 1;
 const MIN_REMAINING_MS = 26;
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 const LATE_MS = 25;
 const CONTEXT_SCHEMA_VERSION = "p4-r0-context-v1" as const;
 

@@ -19,7 +19,7 @@ import { p3EffectReceipt, p3EffectRequest } from "./p3-effect-data.js";
 export const P4_DIAGNOSTIC_GATE_VERSION = "0.0.0-p4a" as const;
 export const P4_DIAGNOSTIC_MAX_CHECKS = 1 as const;
 export const P4_DIAGNOSTIC_MIN_REMAINING_MS = 26 as const;
-export const P4_DIAGNOSTIC_MAX_REMAINING_MS = 5000 as const;
+export const P4_DIAGNOSTIC_MAX_REMAINING_MS = 3_600_000 as const;
 export const P4_DIAGNOSTIC_LATE_MS = 25 as const;
 
 export const P4_DIAGNOSTIC_STATE = [

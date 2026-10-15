@@ -372,7 +372,7 @@ test("admission enforces the cap, the 26/25ms boundary and single-flight", () =>
   expectCode(() => zero.admit(plan(built), 5000), "BUDGET_EXHAUSTED");
   const ledger = new P4DiagnosticLedger(built.contract, built.target, 2);
   expectCode(() => ledger.admit(plan(built), 25), "BOUND_EXCEEDED");
-  expectCode(() => ledger.admit(plan(built), 5001), "BOUND_EXCEEDED");
+  expectCode(() => ledger.admit(plan(built), 3600001), "BOUND_EXCEEDED");
   const admitted = ledger.admit(plan(built), 26);
   assert.equal(admitted.state, "ADMITTED");
   assert.equal(admitted.code, "STRUCTURAL_ONLY");

@@ -27,7 +27,7 @@ import {
 import type { ContractLedger, P2RedoTicket } from "@astra/math-contract";
 import type { P2WorkReceipt, P2WorkunitStore } from "@astra/math-workunit";
 
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 const MIN_REMAINING_MS = 25;
 import { AGENT_MAX_MODEL_CALLS } from "@astra/runtime-core";
 

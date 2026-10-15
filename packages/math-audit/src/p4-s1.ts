@@ -40,7 +40,7 @@ const MAX_SCOPE_WORDING = 256;
 const MAX_OBLIGATIONS = 32;
 const MAX_ASSUMPTIONS = 32;
 const MIN_REMAINING_MS = 26;
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 const LATE_MS = 25;
 const HASH = /^[0-9a-f]{64}$/u;
 

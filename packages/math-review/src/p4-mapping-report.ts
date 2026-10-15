@@ -48,7 +48,7 @@ const MAX_RATIONALE_CHARS = 2048;
 const MAX_QUOTE_CHARS = 4096;
 const MAX_SHORT_CHARS = 256;
 const MIN_REMAINING_MS = 26;
-const MAX_REMAINING_MS = 5000;
+const MAX_REMAINING_MS = 3_600_000;
 
 const REPORT_FIELDS = [
   "schemaVersion",

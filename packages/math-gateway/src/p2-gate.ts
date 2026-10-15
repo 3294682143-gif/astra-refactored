@@ -120,7 +120,7 @@ export class P2ModelGate {
     if (request !== `model-${this.records.length + 1}`) {
       throw new P2Error("PACKET_BINDING");
     }
-    if (!Number.isSafeInteger(remainingMs) || remainingMs < 0 || remainingMs > 5000) {
+    if (!Number.isSafeInteger(remainingMs) || remainingMs < 0 || remainingMs > 3_600_000) {
       throw new P2Error("PACKET_BINDING");
     }
     if (remainingMs <= P2_MIN_REMAINING_MS) {

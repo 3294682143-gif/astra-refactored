@@ -29,7 +29,7 @@ export function admitModelCall(remainingMs: number, remainingCalls: number): P1A
   if (!Number.isSafeInteger(remainingMs) || !Number.isSafeInteger(remainingCalls)) {
     return { admitted: false, reason: "BUDGET_EXHAUSTED" };
   }
-  if (remainingCalls > 1 || remainingMs > 5000) {
+  if (remainingCalls > 1 || remainingMs > 3_600_000) {
     return { admitted: false, reason: "BUDGET_EXHAUSTED" };
   }
   if (remainingCalls <= 0) {

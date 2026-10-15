@@ -76,7 +76,7 @@ function requireTransport(value: unknown): P2TransportStatus {
 }
 
 function requireRemainingMs(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 5000) {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 3_600_000) {
     throw new P2Error("PACKET_BINDING");
   }
   if ((value as number) <= P4_R0_MIN_REMAINING_MS) {
@@ -211,7 +211,7 @@ export class P4R0ModelGate {
       frozen.remainingRootCalls > this.maxModelCalls ||
       !Number.isSafeInteger(frozen.remainingMs) ||
       frozen.remainingMs < remaining ||
-      frozen.remainingMs > 5000
+      frozen.remainingMs > 3_600_000
     ) {
       throw new P2Error("PACKET_BINDING");
     }

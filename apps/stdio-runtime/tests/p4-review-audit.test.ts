@@ -260,7 +260,7 @@ test("review session enforces the cap, the 26/25ms boundary and atomic replay re
   expectCode(() => zero.admit("model-2", 1000), "BUDGET_EXHAUSTED");
   const session = new P4ReviewSession(built.contract, built.target, 2);
   expectCode(() => session.admit("model-2", 25), "BOUND_EXCEEDED");
-  expectCode(() => session.admit("model-2", 5001), "BOUND_EXCEEDED");
+  expectCode(() => session.admit("model-2", 3600001), "BOUND_EXCEEDED");
   const admitted = session.admit("model-2", 26);
   assert.equal(admitted.state, "ADMITTED");
   assert.equal(admitted.code, "NOT_DISPATCHED");

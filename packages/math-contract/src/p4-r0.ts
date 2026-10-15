@@ -77,7 +77,7 @@ function readOptions(options: unknown): {
   if (!isBoundedInteger(options.remainingRootCalls, 4)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  if (!isBoundedInteger(options.remainingMs, 5000)) {
+  if (!isBoundedInteger(options.remainingMs, 3_600_000)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   return {
