@@ -407,6 +407,7 @@ export async function runAgentLoop(
   let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
   let s1Assessment: P4S1Assessment | null = null;
   let s1AssetDescriptor: string | null = null;
+  let s3AssetDescriptor: string | null = null;
   let s2Transaction: {
     readonly supersededObligationIds: readonly string[];
     readonly preservedObligationIds: readonly string[];
@@ -1469,6 +1470,26 @@ export async function runAgentLoop(
     finalResponse: decision.finalResponse,
     candidateVerified: false,
   });
+  // G7/PR7 Slice 7e: bind the S3 decision scope to the Host registry through one
+  // scoped asset call, gated to evidence/repair profiles (maxRepairs>=1) so the
+  // default and redo/preview paths stay byte-identical. A refusal just leaves the
+  // descriptor unset; no evidence is fabricated.
+  if (captured.asset !== null && target !== null && (opts.maxRepairs ?? 0) >= 1) {
+    const scopeHash = p4Hash(JSON.stringify({ scope: target.binding.scopeId, stage: "S3" }));
+    try {
+      const descriptor = (await captured.asset.call({
+        group: "outputCheckers",
+        assetId: "computation.py",
+        scopeId: scopeHash,
+        contractVersion: contract.contractVersion,
+      })) as { assetId: string; scopeId: string; sha256: string };
+      if (descriptor.assetId === "computation.py" && descriptor.scopeId === scopeHash) {
+        s3AssetDescriptor = descriptor.sha256;
+      }
+    } catch {
+      s3AssetDescriptor = null;
+    }
+  }
   const summary: AgentLoopSummary = p2Snapshot({
     mode: "TS_PREVIEW" as const,
     targetEnvironment: "TARGET_UNVERIFIED" as const,
@@ -1507,6 +1528,7 @@ export async function runAgentLoop(
     revisions: revision.snapshot(),
     s1Assessment,
     s1AssetDescriptor,
+    s3AssetDescriptor,
     s2Transaction,
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
