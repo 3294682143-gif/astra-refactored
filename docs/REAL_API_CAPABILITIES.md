@@ -31,3 +31,12 @@ The real provider's thinking/usage/finish_reason fields, streaming, native
 tools, rate limits and true max output are **NOT_RUN (BLOCKED_EXTERNAL)** — they
 require the separately authorized real API run and the target environment. No
 benefit is claimed from any real-model measurement.
+
+
+## Smoke log — 2026-10-15 (engine session)
+- Outbound HTTPS via the local proxy (`127.0.0.1:9999`) is reachable; a direct POST to
+  `https://chat.intern-ai.org.cn/api/v1/chat/completions` (model `intern-s2`) returned
+  **HTTP 401 `user token expired` (msgCode A0211)** with the supplied credential.
+- Therefore no real Intern S2 request/usage structure could be measured. Real API remains
+  **NOT_RUN**; the capability table above is unchanged. A valid, unexpired Intern S2
+  credential is required (process-internal one-shot only; never persisted).
