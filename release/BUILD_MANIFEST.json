@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "fcdee19c2c67028d8f9f4c717d8e4b86a8994a64",
-    "tree": "6e1d6b830b7604f8bba7c2280ba963420c77d07b"
+    "commit": "809ac06a85bb6470be8cdd064b13b35d08502293",
+    "tree": "2192766523bb19c45df2255b9ae17b99204c5fa0"
   },
   "js": [
     {
