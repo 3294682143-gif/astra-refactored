@@ -17,7 +17,8 @@
     "test:ts": "node node_modules/typescript/bin/tsc -b && node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
-    "@types/node": "22.20.0"
+    "@types/node": "22.20.0",
+    "esbuild": "^0.28.2",
+    "typescript": "6.0.3"
   }
 }
