@@ -1,0 +1,1581 @@
+{
+  "format": "astra-agent-host-manifest-v1",
+  "schemaDialect": "astra-p0-schema-subset-v1",
+  "title": "Astra unified AgentLoop local Host<->Node protocol manifest",
+  "description": "Single normative field specification for the unified AgentLoop local Host<->Node NDJSON channel. Preview profile: explicit engine=ts, no provider access from Node, no arbitrary code; bounded method capabilities are advisory only and never a mathematical obligation.",
+  "protocolVersion": "1.3-agent-loop-preview",
+  "limits": {
+    "maxFrameBytes": 65536,
+    "maxFramesPerSession": 64,
+    "maxDepth": 24,
+    "maxSafeInteger": 9007199254740991,
+    "maxIdChars": 128,
+    "maxSessionIdChars": 128
+  },
+  "envelopes": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "type": "object"
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "error"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      }
+    }
+  },
+  "methods": {
+    "runtime.initialize": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "profileId",
+          "capabilities",
+          "remainingMs",
+          "maxModelCalls",
+          "maxWorkUnits",
+          "maxEffects",
+          "maxReviews",
+          "policy",
+          "maxMethodLoads"
+        ],
+        "properties": {
+          "deriveBudget": {
+            "type": "boolean"
+          },
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "profileId": {
+            "type": "string",
+            "const": "math-agent-preview-v2"
+          },
+          "capabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "modelGenerate",
+              "toolExecute",
+              "methodLoad",
+              "generatedPython",
+              "maxTokens",
+              "maxTokensVerified",
+              "journal",
+              "requireExplicitFinishForTools"
+            ],
+            "properties": {
+              "modelGenerate": {
+                "type": "string",
+                "const": "AVAILABLE"
+              },
+              "toolExecute": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "UNAVAILABLE"
+                ]
+              },
+              "methodLoad": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "UNAVAILABLE"
+                ]
+              },
+              "generatedPython": {
+                "type": "string",
+                "const": "UNAVAILABLE"
+              },
+              "maxTokens": {
+                "type": "integer",
+                "const": 8192
+              },
+              "maxTokensVerified": {
+                "type": "boolean",
+                "const": false
+              },
+              "journal": {
+                "type": "string",
+                "const": "IN_MEMORY_ONLY"
+              },
+              "requireExplicitFinishForTools": {
+                "type": "boolean",
+                "const": true
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          },
+          "maxModelCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 32
+          },
+          "maxWorkUnits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "maxEffects": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "maxReviews": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "BEST_EFFORT",
+              "STRICT"
+            ]
+          },
+          "maxMethodLoads": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxRepairs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxR0": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "engine",
+          "mode"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "engine": {
+            "type": "string",
+            "const": "ts"
+          },
+          "mode": {
+            "type": "string",
+            "const": "TS_PREVIEW"
+          }
+        }
+      }
+    },
+    "asset.scoped": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion","sessionId","assetGroup","assetId","scopeId","contractVersion"],
+        "properties": {
+          "protocolVersion": {"type": "string","const": "1.3-agent-loop-preview"},
+          "sessionId": {"type": "string","minLength": 1,"maxLength": 128},
+          "assetGroup": {"type": "string","enum": ["outputCheckers","mathFamilies","skills","prompts"]},
+          "assetId": {"type": "string","minLength": 1,"maxLength": 256},
+          "scopeId": {"type": "string","minLength": 64,"maxLength": 64},
+          "contractVersion": {"type": "integer","enum": [1,2]}
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion","sessionId","descriptor"],
+        "properties": {
+          "protocolVersion": {"type": "string","const": "1.3-agent-loop-preview"},
+          "sessionId": {"type": "string","minLength": 1,"maxLength": 128},
+          "descriptor": {"type": "object"}
+        }
+      }
+    },
+    "session.solve": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "problem",
+          "problemHash",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "problemHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          },
+          "resumeSessionLog": {
+            "type": "array",
+            "maxItems": 512,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "data"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "resumeContractVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "summary",
+          "candidateRequestId",
+          "trace",
+          "sessionLog"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sessionLog": {
+            "type": "array",
+            "maxItems": 1024,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "data"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "candidateRequestId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "model-1",
+              "model-2",
+              "model-3",
+              "model-4",
+              "model-5",
+              "model-6",
+              "model-7",
+              "model-8",
+              "model-9",
+              "model-10",
+              "model-11",
+              "model-12",
+              "model-13",
+              "model-14",
+              "model-15",
+              "model-16",
+              "model-17",
+              "model-18",
+              "model-19",
+              "model-20",
+              "model-21",
+              "model-22",
+              "model-23",
+              "model-24",
+              "model-25",
+              "model-26",
+              "model-27",
+              "model-28",
+              "model-29",
+              "model-30",
+              "model-31",
+              "model-32"
+            ]
+          },
+          "trace": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "id",
+                "state",
+                "code"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "MODEL",
+                    "EFFECT",
+                    "CONTROL"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "DISPATCHED",
+                    "RETURNED",
+                    "OUTCOME_UNKNOWN",
+                    "RECORDED"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "WORK",
+                    "R2",
+                    "REPAIR",
+                    "R0",
+                    "COMPLETE",
+                    "TRUNCATED",
+                    "ERROR",
+                    "UNKNOWN",
+                    "ADMITTED",
+                    "BUDGET_EXHAUSTED",
+                    "DEADLINE_EXCEEDED",
+                    "ILLEGAL_TRANSITION",
+                    "NO_CANDIDATE",
+                    "NO_REVIEW",
+                    "CONTROL_REJECTED",
+                    "PACKET_REJECTED",
+                    "CONTEXT_REJECTED",
+                    "REVIEW_STOP",
+                    "REVIEWS_COMPLETE",
+                    "WORK_UNITS_COMPLETE",
+                    "REVISED_CANDIDATE",
+                    "REVISE_REJECTED",
+                    "PORT_REJECTED",
+                    "STOPPED"
+                  ]
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "targetEnvironment",
+              "sessionId",
+              "status",
+              "finalResponse",
+              "candidateVerified",
+              "strictAcceptance",
+              "policy",
+              "reason",
+              "modelCalls",
+              "effectCalls",
+              "workUnits",
+              "reviewCalls",
+              "repairCalls",
+              "stopReason",
+              "catalogCalls",
+              "methodLoads",
+              "unresolvedObligations"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "const": "TS_PREVIEW"
+              },
+              "targetEnvironment": {
+                "type": "string",
+                "const": "TARGET_UNVERIFIED"
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "candidate",
+                  "unsolved"
+                ]
+              },
+              "finalResponse": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "candidateVerified": {
+                "type": "boolean",
+                "const": false
+              },
+              "strictAcceptance": {
+                "type": "string",
+                "const": "NOT_PERFORMED"
+              },
+              "policy": {
+                "type": "string",
+                "enum": [
+                  "BEST_EFFORT",
+                  "STRICT"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "BEST_EFFORT_CANDIDATE",
+                  "STRICT_NOT_VERIFIED",
+                  "NO_CANDIDATE",
+                  "STALE_CANDIDATE",
+                  "DEADLINE_EXCEEDED",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED"
+                ]
+              },
+              "modelCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 32
+              },
+              "effectCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "workUnits": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 32
+              },
+              "reviewCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "repairCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "stopReason": {
+                "type": "string",
+                "enum": [
+                  "WORK",
+                  "R2",
+                  "REPAIR",
+                  "R0",
+                  "COMPLETE",
+                  "TRUNCATED",
+                  "ERROR",
+                  "UNKNOWN",
+                  "ADMITTED",
+                  "BUDGET_EXHAUSTED",
+                  "DEADLINE_EXCEEDED",
+                  "ILLEGAL_TRANSITION",
+                  "NO_CANDIDATE",
+                  "NO_REVIEW",
+                  "CONTROL_REJECTED",
+                  "PACKET_REJECTED",
+                  "CONTEXT_REJECTED",
+                  "REVIEW_STOP",
+                  "REVIEWS_COMPLETE",
+                  "WORK_UNITS_COMPLETE",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED",
+                  "PORT_REJECTED",
+                  "STOPPED"
+                ]
+              },
+              "catalogCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "methodLoads": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "unresolvedObligations": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "session.stop": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "stopped"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "stopped": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      }
+    },
+    "model.generate": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sessionId",
+              "problemHash",
+              "requestId",
+              "phase",
+              "taskId",
+              "scopeId",
+              "messages",
+              "contextHash",
+              "contextBytes",
+              "remainingMs",
+              "maxTokens"
+            ],
+            "properties": {
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "problemHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "requestId": {
+                "type": "string",
+                "enum": [
+                  "model-1",
+                  "model-2",
+                  "model-3",
+                  "model-4",
+                  "model-5",
+                  "model-6",
+                  "model-7",
+                  "model-8",
+                  "model-9",
+                  "model-10",
+                  "model-11",
+                  "model-12",
+                  "model-13",
+                  "model-14",
+                  "model-15",
+                  "model-16",
+                  "model-17",
+                  "model-18",
+                  "model-19",
+                  "model-20",
+                  "model-21",
+                  "model-22",
+                  "model-23",
+                  "model-24",
+                  "model-25",
+                  "model-26",
+                  "model-27",
+                  "model-28",
+                  "model-29",
+                  "model-30",
+                  "model-31",
+                  "model-32"
+                ]
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "WORK",
+                  "R2",
+                  "REPAIR",
+                  "R0"
+                ]
+              },
+              "taskId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "scopeId": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "messages": {
+                "type": "array",
+                "maxItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system",
+                        "user"
+                      ]
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 65536
+                    }
+                  }
+                }
+              },
+              "contextHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "contextBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65536
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3600000
+              },
+              "maxTokens": {
+                "type": "integer",
+                "const": 8192
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "requestId",
+          "receipt"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requestId": {
+            "type": "string",
+            "enum": [
+              "model-1",
+              "model-2",
+              "model-3",
+              "model-4",
+              "model-5",
+              "model-6",
+              "model-7",
+              "model-8",
+              "model-9",
+              "model-10",
+              "model-11",
+              "model-12",
+              "model-13",
+              "model-14",
+              "model-15",
+              "model-16",
+              "model-17",
+              "model-18",
+              "model-19",
+              "model-20",
+              "model-21",
+              "model-22",
+              "model-23",
+              "model-24",
+              "model-25",
+              "model-26",
+              "model-27",
+              "model-28",
+              "model-29",
+              "model-30",
+              "model-31",
+              "model-32"
+            ]
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "transportStatus",
+              "text",
+              "remainingMs"
+            ],
+            "properties": {
+              "transportStatus": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "TRUNCATED",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      }
+    },
+    "tool.execute": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "action",
+              "remainingMs"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3"
+                    ]
+                  }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "name",
+                  "args",
+                  "scope"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "tool"
+                  },
+                  "name": {
+                    "type": "string",
+                    "enum": [
+                      "polynomial_expand_coefficients",
+                      "linear_system_solution_set"
+                    ]
+                  },
+                  "args": {
+                    "type": "object"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 26,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "receipt",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "status",
+              "source",
+              "observation",
+              "observationHash",
+              "level",
+              "checkResult"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3"
+                    ]
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "const": "PROGRAM_OBSERVATION"
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "observationHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "level": {
+                "type": "string",
+                "const": "PROVISIONAL"
+              },
+              "checkResult": {
+                "type": "string",
+                "const": "UNKNOWN"
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          }
+        }
+      }
+    },
+    "method.catalog": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "remainingMs",
+          "catalog"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          },
+          "catalog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "entries"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "const": "1.1.0"
+              },
+              "entries": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "method.load": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "action",
+              "remainingMs"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3"
+                    ]
+                  }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "id"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "method"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                }
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 26,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "receipt",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.3-agent-loop-preview"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "status",
+              "source",
+              "observation",
+              "observationHash",
+              "level",
+              "checkResult"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3"
+                    ]
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "const": "METHOD_REFERENCE"
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "observationHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "level": {
+                "type": "string",
+                "const": "PROVISIONAL"
+              },
+              "checkResult": {
+                "type": "string",
+                "const": "UNKNOWN"
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          }
+        }
+      }
+    }
+  }
+}

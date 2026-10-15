@@ -32,6 +32,12 @@ JS_ARTIFACTS = (
     "apps/stdio-runtime/dist/src/agent-loop.js",
     "apps/stdio-runtime/dist/src/agent-host-flow.js",
 )
+# The self-contained precompiled bundle (esbuild) plus the schema it reads next
+# to itself; together they run engine="ts" with no node_modules and no compile.
+BUNDLE_ARTIFACTS = {
+    "bundle": "release/stdio-runtime.bundle.mjs",
+    "bundleSchema": "release/schema/agent-host-v13.schema.json",
+}
 ASSET_ARTIFACTS = {
     "protocolSchema": "packages/protocol/schema/agent-host-v13.schema.json",
     "methodRegistry": "mathagent/resources/tool-registry.json",
@@ -75,6 +81,12 @@ def build() -> dict:
         if not path.is_file():
             raise SystemExit(f"missing asset: {rel}")
         assets[name] = {"path": rel, "sha256": _sha256(path)}
+    bundle = {}
+    for name, rel in BUNDLE_ARTIFACTS.items():
+        path = ROOT / rel
+        if not path.is_file():
+            raise SystemExit(f"missing bundle artifact: {rel} (run the esbuild bundle step)")
+        bundle[name] = {"path": rel, "sha256": _sha256(path)}
     return {
         "manifestVersion": MANIFEST_VERSION,
         "profileId": PROFILE_ID,
@@ -83,6 +95,7 @@ def build() -> dict:
         "source": {"commit": commit, "tree": tree},
         "js": js,
         "assets": assets,
+        "bundle": bundle,
         "lockedRunProfile": LOCKED_RUN_PROFILE,
         "precompiled": True,
         "requiresNpmInstall": False,
@@ -107,6 +120,10 @@ def verify(manifest_path: Path) -> int:
         path = ROOT / row["path"]
         if not path.is_file() or _sha256(path) != row["sha256"]:
             errors.append(f"asset:{name}")
+    for name, row in (manifest.get("bundle") or {}).items():
+        path = ROOT / row["path"]
+        if not path.is_file() or _sha256(path) != row["sha256"]:
+            errors.append(f"bundle:{name}")
     commit = manifest.get("source", {}).get("commit", "")
     # The recorded source commit must still be an ancestor of HEAD (the manifest
     # commit itself may move HEAD forward).
@@ -118,7 +135,7 @@ def verify(manifest_path: Path) -> int:
     if errors:
         print("VERIFY_FAILED", json.dumps(errors))
         return 1
-    print("VERIFY_OK", json.dumps({"js": len(manifest["js"]), "assets": len(manifest["assets"]),
+    print("VERIFY_OK", json.dumps({"js": len(manifest["js"]), "assets": len(manifest["assets"]), "bundle": len(manifest.get("bundle") or {}),
                                    "commit": commit}))
     return 0
 

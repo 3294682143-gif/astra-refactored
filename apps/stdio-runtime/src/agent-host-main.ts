@@ -7,7 +7,7 @@
  * here, and this module never auto-executes: `main.ts` selects it explicitly
  * for the `--agent-loop` profile.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   agentHostPayload,
   parseAgentHostFrame,
@@ -19,11 +19,21 @@ import {
 import { P2HostChannel, type HostChannelCodec } from "./p2-host-channel.js";
 import { AgentHostFlow } from "./agent-host-flow.js";
 
+/**
+ * The manifest URL. A self-contained precompiled bundle ships the schema next
+ * to it (`./schema/...`); a normal in-repo build falls back to the workspace
+ * package export. This keeps the bundle runnable without node_modules.
+ */
+function manifestUrl(): URL {
+  const sibling = new URL("./schema/agent-host-v13.schema.json", import.meta.url);
+  if (existsSync(sibling)) {
+    return sibling;
+  }
+  return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v13.schema.json"));
+}
+
 function loadManifest(): AgentHostManifest {
-  const MANIFEST_URL = new URL(
-    import.meta.resolve("@astra/protocol/schema/agent-host-v13.schema.json"),
-  );
-  const raw = JSON.parse(readFileSync(MANIFEST_URL, "utf8")) as unknown;
+  const raw = JSON.parse(readFileSync(manifestUrl(), "utf8")) as unknown;
   return validateAgentHostManifest(raw);
 }
 

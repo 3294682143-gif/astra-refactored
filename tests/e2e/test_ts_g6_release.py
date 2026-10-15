@@ -1,6 +1,7 @@
 """G6/PR6 (local) — precompiled release manifest verify + no-compile launch E2E."""
 from __future__ import annotations
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -8,12 +9,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 import user_agent  # noqa: E402
+from python.astra_bridge import agent_runtime  # noqa: E402
 from test_ts_entry import FakeClient, no_legacy_solver, process_tracker  # noqa: E402
 from scripts.build_release_manifest import verify  # noqa: E402
 
 __all__ = ["no_legacy_solver", "process_tracker"]
 
 MANIFEST = ROOT / "release" / "BUILD_MANIFEST.json"
+BUNDLE = ROOT / "release" / "stdio-runtime.bundle.mjs"
+BUNDLE_SCHEMA = ROOT / "release" / "schema"
 
 
 def test_release_manifest_verifies_offline():
@@ -45,4 +49,30 @@ def test_precompiled_js_launches_ts_multiturn_without_compiling(process_tracker)
     assert result["status"] == "candidate"
     # The real Node child ran the precompiled main.js (no runtime tsc/npm).
     assert any(str(arg).endswith("main.js") for arg in process_tracker[0].args)
+    assert process_tracker
+
+
+def test_precompiled_bundle_runs_without_node_modules(tmp_path, monkeypatch, process_tracker):
+    """A self-contained precompiled bundle runs with NO node_modules and NO compile."""
+    assert BUNDLE.is_file() and BUNDLE_SCHEMA.is_dir()
+    work = tmp_path / "clean"
+    work.mkdir()
+    shutil.copy(BUNDLE, work / "stdio-runtime.bundle.mjs")
+    shutil.copytree(BUNDLE_SCHEMA, work / "schema")
+    # No node_modules anywhere under `work`: the bundle inlines every dependency
+    # and resolves its manifest from the sibling schema directory.
+    assert not (work / "node_modules").exists()
+    text = (work / "stdio-runtime.bundle.mjs").read_text(encoding="utf-8")
+    assert 'from "@astra' not in text and 'import("@astra' not in text
+
+    monkeypatch.setattr(agent_runtime, "_default_script", lambda: work / "stdio-runtime.bundle.mjs")
+    agent = user_agent.ReasoningAgent(
+        client=FakeClient(), engine="ts",
+        max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1,
+    )
+    result = agent.solve("Compute 2+2", {"source": "release"})
+    assert result["engine"] == "ts"
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    assert any(str(arg).endswith("stdio-runtime.bundle.mjs") for arg in process_tracker[0].args)
     assert process_tracker
