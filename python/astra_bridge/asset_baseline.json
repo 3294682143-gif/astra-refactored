@@ -1,0 +1,50 @@
+{
+  "assets": {
+    "outputCheckers": {
+      "algebraic.py": "d0257228360bd72bfd6527c14e7fad2f835a005264365737f31e62ebb38b1e8c",
+      "common.py": "00af248c3f5f288fb71e30e2e96abcee589878a82f946a7712c609b1b2b5139a",
+      "computation.py": "289f402bed24c5e5ecaa88a36d3b29cb6776d68730fd8ddde76a72c6ac4d1546",
+      "diophantine.py": "fc968d77c164f46edc50ea8f7f655081ed0614e40c5048630280348f52c80978",
+      "discrete.py": "dd03f57699697fb35132844cc5408c9986eb704564ac7f4a3ab341983181087c",
+      "expressions.py": "8c95a67d778920ea5053c316423a8d9836b595c93a45f98f50ed27e4706ddef7",
+      "geometry.py": "23507a4f9bb3fd808c221942aa6bb123e94fbea4fce3885cf2f3b7d0f6187db4",
+      "numerical.py": "97ef185b63f05282e2850fa51a4171e3f67ebc625ca6d349c7b9d95fe87b65ec",
+      "symbolic.py": "f7eb5a22e6a22c640a554ab43601bfbcefdf7b1d9628ef108e655f1b885e49da",
+      "tiling.py": "1d3bff9d192a61e9edce0f3f1d62e3325c87fc1e6f62da763b0d8d20d125098c"
+    },
+    "prompts": {
+      "planning.py": "bdf2342417e8caf3738a2897cd00de20cd10e90731c0791ebe0f7234c46597f1",
+      "protocol.py": "b3e7f49bafc3e8033f0bde864794ae38beb45ed723915146b5d8bea997454272",
+      "review.py": "aa81647204be51d4022093b3f650aa47eb54d6a32308c66e83ec0cd3fed4a76a",
+      "workflows.py": "e2ab6865db20683c7c171491aa47922f230734dc1df69a06752da66779339218"
+    },
+    "skills": {
+      "algorithm_simulation.md": "a66c56cf7b89936a80bbe64dcbb8463524f69558bd761b0b23adcf9c417f9c76",
+      "classical_geometry_compute.md": "bdeeee550be751a3dc494ac19dd8115a1309e25e2358b5305bdec2b0c3631420",
+      "combinatorial_geometry.md": "e02b8e3fedb4a133dc4a443ca735cf326f9c7cfb9abbc7d79188681b2338f39d",
+      "concept_recall.md": "29fbb270f10fd7c3b050af72da33224a981ece81f5269dc6726ca275e24cb7f9",
+      "constrained_tiling.md": "bc1e3cef20b59c9c49e212ed456af64ff496bd285cc8c24480070cd68da7a7fc",
+      "digit_dp.md": "0fcf4acfd22bcddf0637e71f064446959dfda685c06e5a2f025b1d8a31327dff",
+      "diophantine.md": "03a5aa3f4ee9547bc19d5a95770825a7d91af0b06add4eec1d3026b33161a92f",
+      "extremal_construction.md": "f84f1091fecc0f687685355d12071e465f762b0784e5a1b85068d8519895138a",
+      "functional_equation.md": "0cb2f178a7199f54f6d503d6e097236aef43299a437f3dcf0f317d2793941469",
+      "game_strategy_proof.md": "f416628300bc2e170c51d1db70f7e3eebddda6b0cfd370a3d321e8334d998f56",
+      "graph_extremal.md": "e1c70a86852f267e13eda2f39733f3f1d94be03ed79b6f8229f0cadd87ace58d",
+      "inclusion_exclusion_counting.md": "9b23609561c79793e0f2a945df5164a4b8499d1550ea1f27263ae0c421566796",
+      "inequality_extremum.md": "124578a1f230251f263a61ac2926c4fb18fe34f0b8c2d4017e7ad40aa01243ca",
+      "lattice_counting.md": "7070886a008131df810bf0b0ae24c29bf72ca4c67b9983b3993f49f0e8579da5",
+      "linear_algebra_game.md": "396747015bb368226fff31978428452dd559db5bf7cc0f9fb0a61211db211e22",
+      "minimax_dp.md": "2c6aa37a610dc32e2c31d829591bffe66c7dfabc556773d7f453f1fe32638e3a",
+      "number_theory_structure.md": "acb4b50d050bf4539ce5a07cac087ea91003b99b5d72d12f6aff2f1f756b19ba",
+      "numerical_methods.md": "0ff8e11739a0954037b58e5781b4c1aaef9472a4a2295d1d75627672c170b1d4",
+      "probabilistic_model.md": "e22ed9344f81c9199c2437d2aa9173fa5c79e4c999b5230054c30942eb42ed9c",
+      "symbolic_algebra.md": "8816b72b6881e4360c578a6b5ab876ceac651c83a0927dd003f57b361822a3d4",
+      "symbolic_calculus.md": "615a4ea563887371e689efd16da489b91166f08e1b7e6a71178db93b030d0e6d",
+      "transfer_matrix.md": "7f66b8ee83586d64b974df2b81ec4d325ff2497eb00bd2b4f1d9caf424c04461"
+    }
+  },
+  "mathFamilies": {
+    "catalogSha256": "eb97e20d7e6421a10f3a3c66e42b24c9a65c283882134d3127111c0a0dde2874"
+  },
+  "schemaVersion": "astra-asset-baseline-v1"
+}

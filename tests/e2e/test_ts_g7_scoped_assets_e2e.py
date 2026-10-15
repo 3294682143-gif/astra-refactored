@@ -1,17 +1,23 @@
-"""G7/PR7 Slice 7e — scoped math-asset calls (TS<=>Host) registry-layer E2E.
+"""G7/PR7 Slice 7e — scoped math-asset consumption at the real engine="ts" entry.
 
-The TS M2/M3/M5 side may only reference a registered math asset within a trusted
-scope and contract version; the Host turns such a reference into a bounded,
-integrity-checked descriptor or refuses it with a fixed code. This test exercises
-that contract for every registered asset (the 10 exact output checkers and the
-math-family catalog entries) plus the fail-closed refusals, and asserts the
-online-IPC wiring (``asset.scoped`` in the frame schema and ``AgentHost.on_asset``).
+This is a REAL TS<=>Host subprocess test: the only fake is the injected public
+client; the real ``ReasoningAgent(client=..., engine="ts")`` path, the real
+Python Host, the real Node ``main.js --agent-loop`` profile and the real
+registered tool executor all run.
 
-Offline: reads the working tree only; no network, no model call.
+Covered:
+* positive: the flagship run issues a real ``asset.scoped`` for the S1 checker
+  and the S3 scope; the bounded, integrity-checked descriptor is what lets the
+  revision be released (a refused descriptor is fail-closed, so no revision).
+* registry enumeration of the 10 output checkers and the math families.
+* negative: a checker whose bytes are tampered (a temp working tree) is detected
+  against the FROZEN baseline SHA list as ``ASSET_INTEGRITY_ERROR`` (fail-closed),
+  both directly and through the real entry (the candidate is NOT upgraded).
 """
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -19,13 +25,31 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import user_agent  # noqa: E402
 from python.astra_bridge import agent_host as host_module  # noqa: E402
 from python.astra_bridge import host_assets_registry as registry  # noqa: E402
 from python.astra_bridge import scoped_asset_call as sac  # noqa: E402
+from test_ts_entry import FakeClient, no_legacy_solver, process_tracker  # noqa: E402
+from test_ts_g3_flagship import G3FlagshipClient  # noqa: E402
+
+__all__ = ["no_legacy_solver", "process_tracker"]
 
 _SCOPE = "a" * 64
 _SCHEMA = ROOT / "packages" / "protocol" / "schema" / "agent-host-v13.schema.json"
+_G3_PROBLEM = "Find all real solutions x(x-1)=0"
+
+
+def _registry_roots(tmp: Path) -> Path:
+    """A minimal but complete copy of the registered asset tree."""
+    tmp.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "mathagent" / "output_checks", tmp / "mathagent" / "output_checks")
+    shutil.copytree(ROOT / "mathagent" / "resources", tmp / "mathagent" / "resources")
+    shutil.copytree(ROOT / "mathagent" / "prompts", tmp / "mathagent" / "prompts")
+    (tmp / "math_families").mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "math_families" / "catalog.json", tmp / "math_families" / "catalog.json")
+    return tmp
 
 
 def test_all_output_checkers_are_scoped_acceptable():
@@ -70,3 +94,49 @@ def test_asset_scoped_is_wired_into_the_online_ipc_schema_and_host():
         "protocolVersion", "sessionId", "assetGroup", "assetId", "scopeId", "contractVersion"}
     assert section["params"]["additionalProperties"] is False
     assert hasattr(host_module.AgentHost, "on_asset")
+
+
+def test_real_entry_consumes_scoped_assets_for_the_revision(process_tracker):
+    """The real subprocess run issues asset.scoped; a refused descriptor blocks."""
+    client = G3FlagshipClient()
+    agent = user_agent.ReasoningAgent(
+        client=client, engine="ts",
+        max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+    )
+    result = agent.solve(_G3_PROBLEM, {"source": "e2e"})
+    assert result["engine"] == "ts"
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "{0,1}"
+    assert result["reason"] == "REVISED_CANDIDATE"
+    # A real TS->Host asset.scoped was served by the Host within a trusted scope.
+    assert result["metrics"]["asset_calls"] >= 1
+    assert process_tracker
+
+
+def test_tampered_checker_is_detected_against_the_frozen_baseline(process_tracker, tmp_path, monkeypatch):
+    root = _registry_roots(tmp_path / "assets")
+    target = root / "mathagent" / "output_checks" / "symbolic.py"
+    target.write_bytes(target.read_bytes() + b"\n# tampered by the test\n")
+
+    # Direct: the frozen baseline comparison detects the 1-byte change.
+    with pytest.raises(sac.AssetCallError) as e:
+        sac.scoped_asset_call("outputCheckers", "symbolic.py", scope_id=_SCOPE, contract_version=1, root=root)
+    assert e.value.code == "ASSET_INTEGRITY_ERROR"
+    assert registry.verify_integrity(root)["ok"] is False
+
+    # Through the real entry: the tampered tree is the Host asset root, so the
+    # S1 checker descriptor is refused fail-closed and the candidate is not
+    # upgraded to the revised answer.
+    monkeypatch.setattr(host_module, "_REPO_ROOT", root)
+    client = G3FlagshipClient()
+    agent = user_agent.ReasoningAgent(
+        client=client, engine="ts",
+        max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+    )
+    result = agent.solve(_G3_PROBLEM, {"source": "e2e"})
+    # The tampered checker can never ground a revision: the run fails closed and
+    # never releases the revised answer.
+    assert result["reason"] != "REVISED_CANDIDATE"
+    assert result["final_response"] != "{0,1}"
+    assert result["metrics"]["asset_calls"] == 0
+    assert process_tracker

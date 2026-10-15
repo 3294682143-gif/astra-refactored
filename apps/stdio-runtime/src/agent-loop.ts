@@ -1021,9 +1021,14 @@ export async function runAgentLoop(
           sessionLog.append("WORKUNIT", {
             taskId: running.taskId,
             goalId: running.goalId,
+            scopeId: running.scopeId,
             artifactId: ref.artifactId,
             artifactVersion: ref.artifactVersion,
             deliveryStatus: accepted.deliveryStatus,
+            // Defect 3: the delivered candidate text is recorded in the private
+            // log so a checkpoint/resume can rebuild the artifact and candidate,
+            // and the ReplayRunner can re-derive the final answer.
+            candidateProposal: accepted.packet?.candidateProposal ?? null,
           });
           workUnits += 1;
           if (accepted.deliveryStatus !== "COMPLETE") {
@@ -1450,6 +1455,10 @@ export async function runAgentLoop(
               sessionLog.append("REPAIR", {
                 accepted: revision.accepted,
                 reason: revision.decision.reason,
+                // Defect 3: record the revised candidate so resume/replay can
+                // rebuild the current candidate and re-derive the final answer.
+                candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+                finalResponse: revision.decision.finalResponse,
               });
               if (revision.accepted) {
                 // B1c (DECISION-0150): sync the M1 ledger to the local update of

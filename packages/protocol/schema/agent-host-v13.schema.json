@@ -388,7 +388,8 @@
           "sessionId",
           "summary",
           "candidateRequestId",
-          "trace"
+          "trace",
+          "sessionLog"
         ],
         "properties": {
           "protocolVersion": {
@@ -399,6 +400,33 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128
+          },
+          "sessionLog": {
+            "type": "array",
+            "maxItems": 1024,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "data"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "candidateRequestId": {
             "type": [

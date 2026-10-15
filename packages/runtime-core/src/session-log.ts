@@ -205,6 +205,8 @@ export class ReplayRunner {
     const mismatches: number[] = [];
     const requests: ProjectedRequest[] = [];
     let final: Readonly<Record<string, unknown>> | null = null;
+    let finalSeq = 0;
+    let derivedAnswer: string | null = null;
     let expectedSeq = 1;
     for (const event of snapshot.events) {
       if (event.seq !== expectedSeq) {
@@ -212,10 +214,40 @@ export class ReplayRunner {
       }
       expectedSeq = event.seq + 1;
       if (event.kind === "MODEL_REQUEST") {
-        const projected = this.projector.prepareRequest(event);
-        requests.push(projected);
+        try {
+          requests.push(this.projector.prepareRequest(event));
+        } catch {
+          // A tampered request hash/messages is a mismatch, never a throw.
+          mismatches.push(event.seq);
+        }
+      } else if (event.kind === "WORKUNIT" || event.kind === "REPAIR") {
+        const data = event.data;
+        const proposal = data.candidateProposal;
+        const delivered =
+          event.kind === "WORKUNIT" ? data.deliveryStatus === "COMPLETE" : data.accepted === true;
+        if (delivered && typeof proposal === "string" && proposal.trim().length > 0) {
+          derivedAnswer = proposal;
+        }
       } else if (event.kind === "FINAL") {
         final = event.data;
+        finalSeq = event.seq;
+      }
+    }
+    // Re-derive the final answer from the log and compare it byte-for-byte with
+    // the FINAL event. Tampering the FINAL answer, an intermediate delivered
+    // candidate, or any request hash is detected as a mismatch (ok=false).
+    if (final !== null) {
+      const declaredStatus = final["status"];
+      const declaredResponse = final["finalResponse"];
+      if (typeof declaredResponse !== "string") {
+        mismatches.push(finalSeq);
+      } else if (declaredStatus === "candidate") {
+        if (derivedAnswer === null || declaredResponse !== derivedAnswer) {
+          mismatches.push(finalSeq);
+        }
+      } else if (derivedAnswer !== null && declaredResponse === derivedAnswer) {
+        // An UNSOLVED verdict must never restate a delivered candidate answer.
+        mismatches.push(finalSeq);
       }
     }
     return Object.freeze({

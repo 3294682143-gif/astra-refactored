@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .host_assets_registry import ASSET_GROUPS, registry_snapshot
+from .host_assets_registry import ASSET_GROUPS, load_frozen_baseline, registry_snapshot
 
 __all__ = ["AssetCallError", "scoped_asset_call"]
 
@@ -61,18 +61,31 @@ def scoped_asset_call(group, asset_id, *, scope_id, contract_version, root):
     if asset_id not in entries:
         raise AssetCallError("UNKNOWN_ASSET")
 
+    # Frozen-baseline tamper detection: the live hash must equal the committed
+    # baseline SHA. A single-byte change to any registered asset (or the family
+    # catalog) is a fail-closed ASSET_INTEGRITY_ERROR.
+    baseline = load_frozen_baseline()
+    if group == "mathFamilies":
+        path = root / "math_families" / "catalog.json"
+        expected = baseline.get("mathFamilies", {}).get("catalogSha256")
+    else:
+        path = {
+            "outputCheckers": root / "mathagent" / "output_checks" / asset_id,
+            "skills": root / "mathagent" / "resources" / "skills" / asset_id,
+            "prompts": root / "mathagent" / "prompts" / asset_id,
+        }[group]
+        expected = baseline.get("assets", {}).get(group, {}).get(asset_id)
+    if not path.is_file():
+        raise AssetCallError("ASSET_INTEGRITY_ERROR")
+    live = _sha256(path)
+    if expected is None or live != expected:
+        raise AssetCallError("ASSET_INTEGRITY_ERROR")
+
     descriptor = {
         "group": group,
         "assetId": asset_id,
         "scopeId": scope_id,
         "contractVersion": contract_version,
+        "sha256": live,
     }
-    if group == "outputCheckers":
-        descriptor["sha256"] = _sha256(root / "mathagent" / "output_checks" / asset_id)
-    elif group == "skills":
-        descriptor["sha256"] = _sha256(root / "mathagent" / "resources" / "skills" / asset_id)
-    elif group == "prompts":
-        descriptor["sha256"] = _sha256(root / "mathagent" / "prompts" / asset_id)
-    else:  # mathFamilies: the family catalog identity is the integrity anchor
-        descriptor["sha256"] = snapshot["mathFamilies"]["catalogSha256"]
     return descriptor

@@ -140,6 +140,12 @@ class AgentRuntime:
         self.client = AgentClient(client)
         self._solve_lock = threading.Lock()
         self.last_journal = None
+        # Defect 3: the real immutable SessionLog events and the real accumulated
+        # model/effect/repair spend of the last successful run, so a checkpoint is
+        # exported with a non-empty log and real counters (never [] / 0).
+        self.last_session_log = None
+        self.last_counts = None
+        self.last_problem_hash = None
 
     # -- public surface ---------------------------------------------------
 
@@ -242,20 +248,25 @@ class AgentRuntime:
         }
 
     def export_checkpoint(self, problem, contract_version=1):
-        """Export one controlled checkpoint of the last run; None when unusable.
+        """Export one controlled checkpoint of the last *successful* run.
 
-        Only the settled request ledger of the last run is exported, with an
-        empty SessionLog prefix and no effect spend. A non-resumable carrier, a
-        malformed problem or a rejected export yields ``None`` rather than a
-        partial checkpoint.
+        The checkpoint carries the real, non-empty SessionLog event sequence the
+        Node run produced and the real accumulated model/effect spend (never a
+        hard-coded empty log or ``effectCalls=0``). A non-resumable carrier, a
+        malformed problem, a different problem hash or a rejected export yields
+        ``None`` rather than a partial checkpoint.
         """
         if self.mode not in _RESUME_MODES:
             return None
         if not isinstance(problem, str) or not problem.strip():
             return None
+        if self.last_session_log is None or not self.last_counts:
+            return None
         problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
+        if problem_hash != self.last_problem_hash:
+            return None
         journal = self.last_journal if isinstance(self.last_journal, list) else []
-        ledger, unknown, spent_model = [], [], 0
+        ledger, unknown = [], []
         for row in journal:
             if not isinstance(row, dict):
                 continue
@@ -265,7 +276,6 @@ class AgentRuntime:
             if row.get("phase") not in ("WORK", "R2", "REPAIR", "R0"):
                 continue
             ledger.append(row)
-            spent_model += 1
             if state == "OUTCOME_UNKNOWN":
                 unknown.append(row.get("requestId"))
         root_deadline_ms = max(1, min(_MAX_REMAINING_MS, int(self.problem_seconds * 1000)))
@@ -280,8 +290,13 @@ class AgentRuntime:
             return host_checkpoint.export_checkpoint(
                 carrier=carrier, problem_hash=problem_hash,
                 contract_version=contract_version,
-                spent={"modelCalls": spent_model, "effectCalls": 0},
-                ledger=ledger, session_log=[], unknown_request_ids=unknown,
+                spent={
+                    "modelCalls": self.last_counts.get("modelCalls", 0),
+                    "effectCalls": self.last_counts.get("effectCalls", 0),
+                },
+                ledger=ledger,
+                session_log=list(self.last_session_log),
+                unknown_request_ids=unknown,
             )
         except (host_checkpoint.CheckpointError, host_carriers.CarrierError):
             return None
@@ -505,6 +520,7 @@ class AgentRuntime:
             "review_calls": host.review_calls,
             "catalog_calls": host.catalog_calls,
             "method_loads": host.method_loads,
+            "asset_calls": getattr(host, "asset_calls", 0),
             "work_units": None,
             "frames": host.frames,
             "remote_outcome_unknown": self.client.blocked,
@@ -535,6 +551,16 @@ class AgentRuntime:
             )
         metrics["logical_model_calls"] = summary["modelCalls"]
         metrics["work_units"] = summary["workUnits"]
+        # Defect 3: retain the run's real SessionLog prefix and accumulated spend
+        # for a later checkpoint export.
+        session_log_rows = result.get("sessionLog")
+        self.last_session_log = copy.deepcopy(session_log_rows) if isinstance(session_log_rows, list) else None
+        self.last_counts = {
+            "modelCalls": summary["modelCalls"],
+            "effectCalls": summary["effectCalls"],
+            "repairCalls": summary["repairCalls"],
+        }
+        self.last_problem_hash = host.problem_hash
         return {
             "engine": "ts",
             "status": summary["status"],

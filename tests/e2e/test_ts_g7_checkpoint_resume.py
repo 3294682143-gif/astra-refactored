@@ -44,6 +44,13 @@ def _first_with_checkpoint(mode="local"):
     checkpoint = agent._impl.export_checkpoint(_PROBLEM)
     assert checkpoint is not None
     assert checkpoint["schemaVersion"] == host_checkpoint.CHECKPOINT_SCHEMA_VERSION
+    # Defect 3: the checkpoint carries the real, non-empty SessionLog sequence
+    # and the real accumulated spend (never an empty log / zero effect count).
+    assert isinstance(checkpoint["sessionLog"], list) and len(checkpoint["sessionLog"]) >= 1
+    assert checkpoint["sessionLog"][0]["seq"] == 1
+    assert any(row["kind"] == "FINAL" for row in checkpoint["sessionLog"])
+    assert checkpoint["spent"]["modelCalls"] >= 1
+    assert checkpoint["spent"]["effectCalls"] >= 0
     return client, checkpoint
 
 

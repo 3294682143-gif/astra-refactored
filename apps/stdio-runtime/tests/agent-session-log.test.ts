@@ -104,6 +104,49 @@ test("Slice 4a: the log records the R0 revision v1 -> v2", async () => {
   assert.equal(firstRequest?.data.phase, "R0");
 });
 
+test("Trusted RC defect 4: ReplayRunner rejects any tampered answer/hash", async () => {
+  const ports = reactivePorts();
+  const result = await runAgentLoop(
+    PROBLEM,
+    "replay-tamper",
+    { remainingMs: 5000, maxModelCalls: 4, maxWorkUnits: 2, maxEffects: 0, maxReviews: 0 },
+    portsOf(ports),
+  );
+  const log = result.privateState.sessionLog as unknown as {
+    schemaVersion: string;
+    version: number;
+    events: { seq: number; kind: string; data: Record<string, unknown> }[];
+  };
+  const runner = new ReplayRunner();
+  assert.equal(runner.replay(log as never).ok, true);
+
+  const withFinal = {
+    ...log,
+    events: log.events.map((event) =>
+      event.kind === "FINAL" ? { ...event, data: { ...event.data, finalResponse: "{999}" } } : event,
+    ),
+  };
+  assert.equal(runner.replay(withFinal as never).ok, false);
+
+  const withWork = {
+    ...log,
+    events: log.events.map((event) =>
+      event.kind === "WORKUNIT" ? { ...event, data: { ...event.data, candidateProposal: "{999}" } } : event,
+    ),
+  };
+  assert.equal(runner.replay(withWork as never).ok, false);
+
+  const withRequest = {
+    ...log,
+    events: log.events.map((event) =>
+      event.kind === "MODEL_REQUEST"
+        ? { ...event, data: { ...event.data, messages: [{ role: "user", content: "forged" }] } }
+        : event,
+    ),
+  };
+  assert.equal(runner.replay(withRequest as never).ok, false);
+});
+
 // Minimal R0 review reply helper (kept local; the projector test only needs a
 // valid NO_ISSUE report bound to the real R0 context).
 function r0Review(request: { readonly messages: readonly { readonly content: string }[] }, conclusion: string): string {

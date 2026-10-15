@@ -421,6 +421,23 @@ export class AgentHostFlow {
         ? result.privateState.decision.protectedCandidate?.sourceRequestId ?? null
         : null;
     this.phase = "DONE";
+    // Defect 3: hand the immutable SessionLog back to the Host so a checkpoint
+    // can export the real event sequence instead of an empty prefix. The bulky
+    // model-visible `messages` are replaced by their recorded context hash so the
+    // frame stays within the fixed IPC frame bound while every event identity
+    // (seq/kind/hash/size) is preserved.
+    const sessionLog = (result.privateState.sessionLog?.events ?? []).map((event) => {
+      if (event.kind === "MODEL_REQUEST") {
+        const { phase, requestId, contextHash, contextBytes } = event.data as {
+          phase?: unknown;
+          requestId?: unknown;
+          contextHash?: unknown;
+          contextBytes?: unknown;
+        };
+        return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes } };
+      }
+      return { seq: event.seq, kind: event.kind, data: event.data };
+    });
     this.io.send(
       {
         jsonrpc: "2.0",
@@ -431,6 +448,7 @@ export class AgentHostFlow {
           summary: p2Snapshot(summary),
           candidateRequestId,
           trace: p2Snapshot(result.privateState.session.events),
+          sessionLog: p2Snapshot(sessionLog),
         },
       },
       "session.solve",

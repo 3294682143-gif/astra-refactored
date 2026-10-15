@@ -207,6 +207,7 @@ class AgentHost(_Host):
         self.repair_calls = 0
         self.catalog_calls = 0
         self.method_loads = 0
+        self.asset_calls = 0
         self.catalog = None
         self.method_assets = []
         self.method_catalog = None
@@ -353,6 +354,7 @@ class AgentHost(_Host):
             )
         except AssetCallError as exc:
             _fail(exc.code)
+        self.asset_calls += 1
         self.send(
             self.proc,
             {

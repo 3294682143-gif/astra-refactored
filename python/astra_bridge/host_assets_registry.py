@@ -19,6 +19,8 @@ from pathlib import Path
 
 __all__ = [
     "ASSET_GROUPS",
+    "FROZEN_BASELINE_PATH",
+    "load_frozen_baseline",
     "registry_snapshot",
     "verify_integrity",
 ]
@@ -29,6 +31,17 @@ ASSET_GROUPS = {
     "skills": "mathagent/resources/skills",
     "prompts": "mathagent/prompts",
 }
+
+# The committed frozen baseline SHA list. The integrity check compares the live
+# tree against this file, never against a freshly self-computed value, so a
+# single-byte change to any registered asset is detected fail-closed.
+FROZEN_BASELINE_PATH = Path(__file__).resolve().parent / "asset_baseline.json"
+
+
+def load_frozen_baseline(path=None) -> dict:
+    """Read the frozen baseline (committed; never derived from the working tree)."""
+    target = Path(path) if path is not None else FROZEN_BASELINE_PATH
+    return json.loads(target.read_text(encoding="utf-8"))
 
 
 def _sha256(path: Path) -> str:
@@ -88,26 +101,37 @@ def registry_snapshot(root) -> dict:
     return out
 
 
-def verify_integrity(root, snapshot=None) -> dict:
-    """Re-check that every enumerated asset still resolves to the same hash."""
+def _asset_path(root: Path, group: str, name: str) -> Path:
+    if group == "outputCheckers":
+        return root / "mathagent" / "output_checks" / name
+    if group == "skills":
+        return root / "mathagent" / "resources" / "skills" / name
+    if group == "prompts":
+        return root / "mathagent" / "prompts" / name
+    raise KeyError(group)
+
+
+def verify_integrity(root, snapshot=None, baseline=None) -> dict:
+    """Re-check every registered asset against the FROZEN baseline SHA list.
+
+    A missing asset or a single-byte change fails closed with a fixed
+    ``ASSET_INTEGRITY_ERROR``; the live hash is compared to the committed
+    baseline, never to a value recomputed from the same tree.
+    """
     root = Path(root)
     snapshot = snapshot or registry_snapshot(root)
+    baseline = baseline or load_frozen_baseline()
     errors = []
-    for name in snapshot["outputCheckers"]["entries"]:
-        path = root / "mathagent" / "output_checks" / name
-        if not path.is_file():
-            errors.append(f"outputCheckers:{name}")
-    for name in snapshot["skills"]["entries"]:
-        path = root / "mathagent" / "resources" / "skills" / name
-        if not path.is_file():
-            errors.append(f"skills:{name}")
-    for name in snapshot["prompts"]["entries"]:
-        path = root / "mathagent" / "prompts" / name
-        if not path.is_file():
-            errors.append(f"prompts:{name}")
+    for group in ("outputCheckers", "skills", "prompts"):
+        expected = baseline.get("assets", {}).get(group, {})
+        for name in snapshot[group]["entries"]:
+            path = _asset_path(root, group, name)
+            if not path.is_file() or expected.get(name) != _sha256(path):
+                errors.append(f"ASSET_INTEGRITY_ERROR:{group}:{name}")
     catalog = root / "math_families" / "catalog.json"
-    if not catalog.is_file() or _sha256(catalog) != snapshot["mathFamilies"]["catalogSha256"]:
-        errors.append("mathFamilies:catalog")
+    expected_catalog = baseline.get("mathFamilies", {}).get("catalogSha256")
+    if not catalog.is_file() or _sha256(catalog) != expected_catalog:
+        errors.append("ASSET_INTEGRITY_ERROR:mathFamilies:catalog")
     return {
         "ok": not errors,
         "errors": errors,
