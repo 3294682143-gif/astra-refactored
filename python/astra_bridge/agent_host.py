@@ -238,9 +238,12 @@ class AgentHost(_Host):
         self.model_requests = 0
         self.effect_calls = 0
         self.resume_model_offset = 0
+        self.resume_effect_offset = 0
         if self.resume_session_log:
             self.resume_model_offset = sum(1 for r in self.resume_session_log if isinstance(r, dict) and r.get("kind") == "MODEL_REQUEST" and not any(isinstance(x,dict) and x.get("kind")=="FINAL" for x in self.resume_session_log))
             self.model_requests = self.resume_model_offset
+            self.resume_effect_offset = sum(1 for r in self.resume_session_log if isinstance(r, dict) and r.get("kind") in ("TOOL_OBSERVATION", "METHOD_LOAD"))
+            self.effect_calls = self.resume_effect_offset
         self.review_calls = 0
         self.repair_calls = 0
         self.catalog_calls = 0

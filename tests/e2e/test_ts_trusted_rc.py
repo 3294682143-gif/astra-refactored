@@ -266,3 +266,101 @@ def test_s1_complete_revision_is_accepted_best_effort(process_tracker):
     assert result["final_response"] == "{0,1}"
     assert result["reason"] == "REVISED_CANDIDATE"
     assert process_tracker
+
+
+# --- P0-1: exact solution-set acceptance (dedup, completeness, fail-closed) ---
+
+
+class RepairCaseClient(G3FlagshipClient):
+    """Flagship with a chosen checker expression, parent candidate and repair."""
+
+    def __init__(self, expression, parent, proposal, answer_task="goal-1:EXHAUSTIVENESS"):
+        super().__init__()
+        self.expression = expression
+        self.parent = parent
+        self.proposal = proposal
+        self.answer_task = answer_task
+
+    def _review(self, body):
+        obligation_id = self.answer_task
+        derivation = body["derivation"]
+        return json.dumps(
+            {
+                "schemaVersion": "p4-review-v1",
+                "requestId": body["requestId"],
+                "target": body["target"],
+                "targetHash": body["targetHash"],
+                "stage": "R2",
+                "conclusion": "ISSUES",
+                "reviewCoverage": [obligation_id],
+                "issues": [
+                    {
+                        "stepLocator": {"start": 0, "end": 4, "quote": derivation[:4]},
+                        "suspectedIssue": "MISSING_CASE",
+                        "rationale": "a required case was omitted",
+                        "requestedCheck": "substitute the missing value into the original equation",
+                        "obligationIds": [obligation_id],
+                    }
+                ],
+            }
+        )
+
+    def _work(self, body):
+        if body.get("stage") == "REPAIR":
+            return self._packet(body, "claim", "derivation", self.proposal)
+        on_answer = body["task"]["taskId"] == self.answer_task
+        if not self.tool_done and on_answer:
+            self.tool_done = True
+            return json.dumps(
+                {
+                    "action": "tool",
+                    "name": "polynomial_expand_coefficients",
+                    "args": {"expression": self.expression, "variables": ["x"], "parameters": []},
+                    "scope": "check the supplied polynomial against the original problem",
+                }
+            )
+        if on_answer:
+            return self._packet(body, "claim", "derivation", self.parent)
+        return self._packet(body, "prerequisite", "prerequisite", None)
+
+
+def _solve_problem(client, problem, **kwargs):
+    agent = user_agent.ReasoningAgent(client=client, engine="ts", **kwargs)
+    return agent.solve(problem, {"source": "e2e"})
+
+
+_KW = dict(max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3)
+
+# (problem, relation expression, parent, repair proposal, expected)
+_EX = "goal-1:EXHAUSTIVENESS"
+_OC = "goal-1:OUTPUT_COVERAGE"
+_SOLUTION_CASES = [
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{0,1}", "candidate", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{1,0,1}", "candidate", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{1,1}", "reject", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{0}", "reject", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{}", "reject", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "{1}", "{0,1,1/2}", "reject", _EX),
+    ("Find all real solutions x(x-1)=0", "x*(x-1)", "x=1", "999", "reject", _EX),
+    ("Find all real solutions x(x-1)(x-2)=0", "x*(x-1)*(x-2)", "{1}", "{1,2}", "reject", _EX),
+    ("Find all real solutions x(x-1)(x-2)=0", "x*(x-1)*(x-2)", "{1}", "{0,1,2}", "candidate", _EX),
+    ("Find all real solutions 2x-1=0", "2*x-1", "{0}", "{1/2}", "candidate", _EX),
+    ("Find all real solutions 2x-1=0", "2*x-1", "{0}", "{0.5}", "candidate", _EX),
+    ("Find all real solutions 2x-1=0", "2*x-1", "{0}", "{1}", "reject", _EX),
+    ("Find all real solutions x^2+1=0", "x^2+1", "{0}", "{0}", "reject", _EX),
+]
+
+
+@pytest.mark.parametrize("problem,expression,parent,proposal,expected,answer_task", _SOLUTION_CASES)
+def test_solution_set_acceptance(process_tracker, problem, expression, parent, proposal, expected, answer_task):
+    client = RepairCaseClient(expression, parent, proposal, answer_task)
+    result = _solve_problem(client, problem, **_KW)
+    if expected == "candidate":
+        assert result["status"] == "candidate", (problem, proposal, result.get("stopReason"))
+        assert result["reason"] == "REVISED_CANDIDATE"
+    else:
+        assert result["stopReason"] == "REVISE_REJECTED", (problem, proposal, result.get("reason"))
+        assert result["final_response"] == parent
+    # A repair never promotes the global verification level.
+    assert result["candidate_verified"] is False
+    assert process_tracker

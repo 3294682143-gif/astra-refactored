@@ -13647,38 +13647,211 @@ function samePolynomial(a, b) {
   }
   return true;
 }
-function polynomialVanishesAt(poly, value) {
-  if (poly === null) {
-    return false;
-  }
-  let total = 0;
-  for (const [key, coefficient] of poly) {
-    let term = coefficient;
-    for (const [name, exponent] of monoParts(key)) {
-      term *= Math.pow(value, exponent);
-    }
-    total += term;
-  }
-  return Math.abs(total) < 1e-9;
+function bigAbs(value) {
+  return value < 0n ? -value : value;
 }
-function numericSetElements(proposal) {
-  const match = /^\s*\{([^}]*)\}\s*$/.exec(proposal);
-  if (match === null) {
-    return null;
+function bigGcd(a, b) {
+  let x = bigAbs(a);
+  let y = bigAbs(b);
+  while (y) {
+    const next = x % y;
+    x = y;
+    y = next;
   }
-  const body = match[1].trim();
-  if (body.length === 0) {
-    return [];
+  return x;
+}
+function rat(n, d) {
+  if (d === 0n) {
+    throw new Error("RAT_ZERO_DEN");
   }
-  const out = [];
-  for (const part of body.split(",")) {
-    const text6 = part.trim();
-    if (!/^-?\d+(?:\.\d+)?$/.test(text6)) {
+  let num2 = n;
+  let den = d;
+  if (den < 0n) {
+    num2 = -num2;
+    den = -den;
+  }
+  const g = bigGcd(num2, den) || 1n;
+  return { n: num2 / g, d: den / g };
+}
+function ratAdd(a, b) {
+  return rat(a.n * b.d + b.n * a.d, a.d * b.d);
+}
+function ratMul(a, b) {
+  return rat(a.n * b.n, a.d * b.d);
+}
+function ratIsZero(a) {
+  return a.n === 0n;
+}
+function ratKey(a) {
+  return `${a.n}/${a.d}`;
+}
+function parseRat(text6) {
+  const t = text6.trim();
+  let m = /^([+-]?\d+)\/([+-]?\d+)$/.exec(t);
+  if (m) {
+    const den = BigInt(m[2]);
+    if (den === 0n) {
       return null;
     }
-    out.push(Number(text6));
+    return rat(BigInt(m[1]), den);
+  }
+  m = /^([+-]?\d+)$/.exec(t);
+  if (m) {
+    return rat(BigInt(m[1]), 1n);
+  }
+  m = /^([+-]?)(\d+)\.(\d+)$/.exec(t);
+  if (m) {
+    const sign = m[1] === "-" ? -1n : 1n;
+    const frac = m[3];
+    const den = 10n ** BigInt(frac.length);
+    const num2 = BigInt(m[2]) * den + BigInt(frac);
+    return rat(sign * num2, den);
+  }
+  return null;
+}
+function rationalSetElements(proposal) {
+  const m = /^\s*\{([^}]*)\}\s*$/.exec(proposal);
+  if (m === null) {
+    return null;
+  }
+  const body = m[1].trim();
+  if (body === "") {
+    return [];
+  }
+  const seen = /* @__PURE__ */ new Map();
+  for (const part of body.split(",")) {
+    const value = parseRat(part);
+    if (value === null) {
+      return null;
+    }
+    seen.set(ratKey(value), value);
+  }
+  return [...seen.values()];
+}
+function singleVariable(poly) {
+  const vars = /* @__PURE__ */ new Set();
+  for (const key of poly.keys()) {
+    for (const [name] of monoParts(key)) {
+      vars.add(name);
+    }
+  }
+  return vars.size === 1 ? [...vars][0] : null;
+}
+function integerCoefficients(poly, variable) {
+  let degree = 0;
+  const rows = [];
+  for (const [key, value] of poly) {
+    const parts = monoParts(key);
+    for (const [name] of parts) {
+      if (name !== variable) {
+        return null;
+      }
+    }
+    if (!Number.isInteger(value)) {
+      return null;
+    }
+    const e = parts.get(variable) ?? 0;
+    rows.push({ e, c: value });
+    if (e > degree) {
+      degree = e;
+    }
+  }
+  const out = new Array(degree + 1).fill(0n);
+  for (const row of rows) {
+    out[row.e] = out[row.e] + BigInt(row.c);
   }
   return out;
+}
+function divisors(value) {
+  const m = bigAbs(value);
+  const out = [];
+  for (let i = 1n; i * i <= m; i += 1n) {
+    if (m % i === 0n) {
+      out.push(i);
+      if (i * i !== m) {
+        out.push(m / i);
+      }
+    }
+  }
+  return out;
+}
+function ratPow(base, exponent) {
+  let out = rat(1n, 1n);
+  for (let i = 0; i < exponent; i += 1) {
+    out = ratMul(out, base);
+  }
+  return out;
+}
+function evalRat(coefficients, x) {
+  let acc = rat(0n, 1n);
+  for (let e = 0; e < coefficients.length; e += 1) {
+    if (coefficients[e] === 0n) {
+      continue;
+    }
+    acc = ratAdd(acc, ratMul(rat(coefficients[e], 1n), ratPow(x, e)));
+  }
+  return acc;
+}
+function solutionSetOf(poly) {
+  if (poly === null) {
+    return null;
+  }
+  const variable = singleVariable(poly);
+  if (variable === null) {
+    return null;
+  }
+  const coefficients = integerCoefficients(poly, variable);
+  if (coefficients === null) {
+    return null;
+  }
+  let hi = coefficients.length - 1;
+  while (hi >= 0 && coefficients[hi] === 0n) {
+    hi -= 1;
+  }
+  if (hi < 0) {
+    return null;
+  }
+  const working = coefficients.slice(0, hi + 1);
+  const roots = /* @__PURE__ */ new Map();
+  let zeroShift = 0;
+  while (working.length > 1 && working[0] === 0n) {
+    working.shift();
+    zeroShift += 1;
+  }
+  if (zeroShift > 0) {
+    roots.set(ratKey(rat(0n, 1n)), rat(0n, 1n));
+  }
+  if (working.length === 1) {
+    return [...roots.values()];
+  }
+  const constant = working[0];
+  const leading = working[working.length - 1];
+  if (bigAbs(constant) > 1000000n || bigAbs(leading) > 1000000n) {
+    return null;
+  }
+  for (const p of divisors(constant)) {
+    for (const q of divisors(leading)) {
+      for (const sign of [1n, -1n]) {
+        const candidate = rat(sign * p, q);
+        if (ratIsZero(evalRat(working, candidate))) {
+          roots.set(ratKey(candidate), candidate);
+        }
+      }
+    }
+  }
+  return [...roots.values()];
+}
+function sameRationalSet(a, b) {
+  if (a === null || b === null || a.length !== b.length) {
+    return false;
+  }
+  const right = new Set(b.map(ratKey));
+  for (const value of a) {
+    if (!right.has(ratKey(value))) {
+      return false;
+    }
+  }
+  return true;
 }
 var EPS, Parser;
 var init_agent_semantics = __esm({
@@ -14135,6 +14308,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         break;
       const settledId = root.reserveModel("WORK");
       root.settleModel(settledId, "COMPLETE");
+    }
+    const carriedEffects = opts.resumeSessionLog.filter((row) => row.kind === "TOOL_OBSERVATION" || row.kind === "METHOD_LOAD").length;
+    for (let index = 0; index < carriedEffects; index += 1) {
+      if (root.effectCalls() >= opts.maxEffects)
+        break;
+      const settledEffect = root.reserveEffect(`effect-${index + 1}`);
+      root.settleEffect(settledEffect, "COMPLETE");
     }
   }
   if (opts.maxR0 >= 1) {
@@ -14901,27 +15081,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
               const gapSet = goalKind === "PARAMETER" ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId) : [];
               const answerText = child.artifact.packet?.candidateProposal ?? "";
-              const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
-              const childElements = numericSetElements(answerText);
               const relation = problemRelationPolynomial(problemText);
+              const trueRoots = solutionSetOf(relation);
               let basisSupported = true;
-              if (parentElements !== null && relation !== null) {
-                if (childElements === null || childElements.length === 0) {
+              if (relation !== null && trueRoots !== null) {
+                const childRats = rationalSetElements(answerText);
+                if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
                   basisSupported = false;
-                } else {
-                  for (const element of childElements) {
-                    if (!polynomialVanishesAt(relation, element)) {
-                      basisSupported = false;
-                    }
-                  }
-                  for (const element of parentElements) {
-                    if (polynomialVanishesAt(relation, element) && !childElements.includes(element)) {
-                      basisSupported = false;
-                    }
-                  }
-                  if (childElements.length <= parentElements.length) {
-                    basisSupported = false;
-                  }
                 }
               }
               const basis = basisSupported ? {

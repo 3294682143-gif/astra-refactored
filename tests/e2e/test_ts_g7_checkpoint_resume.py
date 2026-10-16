@@ -209,3 +209,80 @@ def test_midrun_resume_skips_completed_work_and_runs_review(process_tracker):
     bodies = [json.loads(messages[1]["content"]) for (messages, _t, _m) in resumed_client.seen]
     assert all(body.get("stage") == "R2" for body in bodies)
     assert process_tracker
+
+
+def test_resume_inherits_effect_budget_and_ids(process_tracker):
+    """P0-2: a run that already spent its only effect resumes with 0 new tools."""
+    from test_ts_g3_flagship import PROBLEM as G3_PROBLEM, G3FlagshipClient
+
+    first = G3FlagshipClient()
+    agent = user_agent.ReasoningAgent(
+        client=first, engine="ts", mode="local",
+        max_model_calls=6, max_work_units=3, max_effects=1, max_reviews=1, max_repairs=1,
+    )
+    agent.solve(G3_PROBLEM, {"source": "e2e"})
+    checkpoint = agent._impl.export_checkpoint(G3_PROBLEM)
+    assert checkpoint is not None
+    cut = None
+    for index, row in enumerate(checkpoint["sessionLog"]):
+        if row["kind"] == "WORKUNIT":
+            cut = index + 1
+    assert cut is not None
+    partial = copy.deepcopy(checkpoint)
+    partial["sessionLog"] = partial["sessionLog"][:cut]
+    partial["spent"] = {
+        "modelCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "MODEL_REQUEST"),
+        "effectCalls": sum(
+            1 for row in partial["sessionLog"] if row["kind"] in ("TOOL_OBSERVATION", "METHOD_LOAD")
+        ),
+    }
+    assert partial["spent"]["effectCalls"] == 1
+    partial.pop("digest", None)
+    partial["digest"] = host_checkpoint._digest(partial)
+
+    resumed = G3FlagshipClient()
+    resumed_agent = user_agent.ReasoningAgent(
+        client=resumed, engine="ts", mode="local",
+        max_model_calls=6, max_work_units=3, max_effects=1, max_reviews=1, max_repairs=1,
+    )
+    result = resumed_agent.solve(G3_PROBLEM, {"source": "e2e"}, resume_checkpoint=partial)
+
+    assert result["status"] == "candidate"
+    # The carried effect budget is exhausted: no new effect is charged (total 1).
+    assert result["metrics"]["effect_calls"] == 1
+    assert result["final_response"] == "{1}"
+    assert process_tracker
+
+
+def test_zero_effect_budget_never_executes_tools(process_tracker):
+    """P0-2: with maxEffects=0 neither the first run nor a resume executes a tool."""
+    from test_ts_g3_flagship import PROBLEM as G3_PROBLEM, G3FlagshipClient
+
+    def _agent(client, checkpoint=None):
+        agent = user_agent.ReasoningAgent(
+            client=client, engine="ts", mode="local",
+            max_model_calls=6, max_work_units=3, max_effects=0, max_reviews=1, max_repairs=1,
+        )
+        return agent, agent.solve(G3_PROBLEM, {"source": "e2e"}, resume_checkpoint=checkpoint)
+
+    first = G3FlagshipClient()
+    agent, first_result = _agent(first)
+    assert first_result["metrics"]["effect_calls"] == 0
+    checkpoint = agent._impl.export_checkpoint(G3_PROBLEM)
+    cut = None
+    for index, row in enumerate(checkpoint["sessionLog"]):
+        if row["kind"] == "WORKUNIT":
+            cut = index + 1
+    partial = copy.deepcopy(checkpoint)
+    partial["sessionLog"] = partial["sessionLog"][:cut]
+    partial["spent"] = {
+        "modelCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "MODEL_REQUEST"),
+        "effectCalls": 0,
+    }
+    partial.pop("digest", None)
+    partial["digest"] = host_checkpoint._digest(partial)
+
+    resumed = G3FlagshipClient()
+    _, resumed_result = _agent(resumed, checkpoint=partial)
+    assert resumed_result["metrics"]["effect_calls"] == 0
+    assert process_tracker

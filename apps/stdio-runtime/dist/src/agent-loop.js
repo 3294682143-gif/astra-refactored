@@ -23,7 +23,7 @@ import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts, checkedAgentReceipt, deriveRootBudget, } from "./agent-loop-io.js";
-import { numericSetElements, polynomialOf, polynomialVanishesAt, problemRelationPolynomial, samePolynomial, } from "./agent-semantics.js";
+import { polynomialOf, problemRelationPolynomial, rationalSetElements, samePolynomial, sameRationalSet, solutionSetOf, } from "./agent-semantics.js";
 const MIN_MS = 25;
 /**
  * B2 (DECISION-0150): auxiliary (non-answer) obligations whose open state must
@@ -460,6 +460,16 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 break;
             const settledId = root.reserveModel("WORK");
             root.settleModel(settledId, "COMPLETE");
+        }
+        // P0-2: carry the already-spent tool/effect budget too, so a resumed run can
+        // use only the remaining allowance and continues the effect id namespace
+        // (effect-2, ...). A replayed effect is not re-run.
+        const carriedEffects = opts.resumeSessionLog.filter((row) => row.kind === "TOOL_OBSERVATION" || row.kind === "METHOD_LOAD").length;
+        for (let index = 0; index < carriedEffects; index += 1) {
+            if (root.effectCalls() >= opts.maxEffects)
+                break;
+            const settledEffect = root.reserveEffect(`effect-${index + 1}`);
+            root.settleEffect(settledEffect, "COMPLETE");
         }
     }
     // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
@@ -1417,28 +1427,21 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             // strictly larger (it must cover the checker-verified missing roots).
                             // Any other format (e.g. `999`, `x = 999`) or a degenerate set (`{}`,
                             // `{0}`) is fail-closed; reviseCandidate is never called.
-                            const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
-                            const childElements = numericSetElements(answerText);
                             const relation = problemRelationPolynomial(problemText);
+                            const trueRoots = solutionSetOf(relation);
+                            // P0-1: for a problem with an independently determinable finite
+                            // single-variable solution set, a revision is accepted ONLY when the
+                            // revised answer is a well-formed, deduplicated set EXACTLY equal to
+                            // the independently solved set (exact rational arithmetic). Any
+                            // other case — unparseable/unsupported representation, empty set,
+                            // stale/extra/missing elements, or an undeterminable relation — is
+                            // fail-closed: reviseCandidate is never called and the parent
+                            // candidate is kept. A model claim of "fixed" is never a basis.
                             let basisSupported = true;
-                            if (parentElements !== null && relation !== null) {
-                                if (childElements === null || childElements.length === 0) {
+                            if (relation !== null && trueRoots !== null) {
+                                const childRats = rationalSetElements(answerText);
+                                if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
                                     basisSupported = false;
-                                }
-                                else {
-                                    for (const element of childElements) {
-                                        if (!polynomialVanishesAt(relation, element)) {
-                                            basisSupported = false;
-                                        }
-                                    }
-                                    for (const element of parentElements) {
-                                        if (polynomialVanishesAt(relation, element) && !childElements.includes(element)) {
-                                            basisSupported = false;
-                                        }
-                                    }
-                                    if (childElements.length <= parentElements.length) {
-                                        basisSupported = false;
-                                    }
                                 }
                             }
                             const basis = basisSupported

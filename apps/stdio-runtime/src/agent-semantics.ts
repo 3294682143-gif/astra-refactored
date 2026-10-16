@@ -329,3 +329,247 @@ export function numericSetElements(proposal: string): readonly number[] | null {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// P0-1: exact rational solution-set semantics (no float approximation, exact
+// dedup, explicit parse-failure, independent rational-root solving).
+// ---------------------------------------------------------------------------
+
+export interface Rat {
+  readonly n: bigint;
+  readonly d: bigint;
+}
+
+function bigAbs(value: bigint): bigint {
+  return value < 0n ? -value : value;
+}
+
+function bigGcd(a: bigint, b: bigint): bigint {
+  let x = bigAbs(a);
+  let y = bigAbs(b);
+  while (y) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x;
+}
+
+function rat(n: bigint, d: bigint): Rat {
+  if (d === 0n) {
+    throw new Error("RAT_ZERO_DEN");
+  }
+  let num = n;
+  let den = d;
+  if (den < 0n) {
+    num = -num;
+    den = -den;
+  }
+  const g = bigGcd(num, den) || 1n;
+  return { n: num / g, d: den / g };
+}
+
+function ratAdd(a: Rat, b: Rat): Rat {
+  return rat(a.n * b.d + b.n * a.d, a.d * b.d);
+}
+
+function ratMul(a: Rat, b: Rat): Rat {
+  return rat(a.n * b.n, a.d * b.d);
+}
+
+function ratIsZero(a: Rat): boolean {
+  return a.n === 0n;
+}
+
+function ratKey(a: Rat): string {
+  return `${a.n}/${a.d}`;
+}
+
+function parseRat(text: string): Rat | null {
+  const t = text.trim();
+  let m = /^([+-]?\d+)\/([+-]?\d+)$/.exec(t);
+  if (m) {
+    const den = BigInt(m[2] as string);
+    if (den === 0n) {
+      return null;
+    }
+    return rat(BigInt(m[1] as string), den);
+  }
+  m = /^([+-]?\d+)$/.exec(t);
+  if (m) {
+    return rat(BigInt(m[1] as string), 1n);
+  }
+  m = /^([+-]?)(\d+)\.(\d+)$/.exec(t);
+  if (m) {
+    const sign = m[1] === "-" ? -1n : 1n;
+    const frac = m[3] as string;
+    const den = 10n ** BigInt(frac.length);
+    const num = BigInt(m[2] as string) * den + BigInt(frac);
+    return rat(sign * num, den);
+  }
+  return null;
+}
+
+/**
+ * Parse an answer set `{a,b,c}` into EXACT reduced rationals with silent-free
+ * deduplication. Returns null when the text is not a set or any element is not
+ * an exact rational (no partial parsing, no dropped elements).
+ */
+export function rationalSetElements(proposal: string): readonly Rat[] | null {
+  const m = /^\s*\{([^}]*)\}\s*$/.exec(proposal);
+  if (m === null) {
+    return null;
+  }
+  const body = (m[1] as string).trim();
+  if (body === "") {
+    return [];
+  }
+  const seen = new Map<string, Rat>();
+  for (const part of body.split(",")) {
+    const value = parseRat(part);
+    if (value === null) {
+      return null;
+    }
+    seen.set(ratKey(value), value);
+  }
+  return [...seen.values()];
+}
+
+function singleVariable(poly: Poly): string | null {
+  const vars = new Set<string>();
+  for (const key of poly.keys()) {
+    for (const [name] of monoParts(key)) {
+      vars.add(name);
+    }
+  }
+  return vars.size === 1 ? [...vars][0]! : null;
+}
+
+function integerCoefficients(poly: Poly, variable: string): bigint[] | null {
+  let degree = 0;
+  const rows: { readonly e: number; readonly c: number }[] = [];
+  for (const [key, value] of poly) {
+    const parts = monoParts(key);
+    for (const [name] of parts) {
+      if (name !== variable) {
+        return null;
+      }
+    }
+    if (!Number.isInteger(value)) {
+      return null;
+    }
+    const e = parts.get(variable) ?? 0;
+    rows.push({ e, c: value });
+    if (e > degree) {
+      degree = e;
+    }
+  }
+  const out: bigint[] = new Array(degree + 1).fill(0n);
+  for (const row of rows) {
+    out[row.e] = (out[row.e] as bigint) + BigInt(row.c);
+  }
+  return out;
+}
+
+function divisors(value: bigint): bigint[] {
+  const m = bigAbs(value);
+  const out: bigint[] = [];
+  for (let i = 1n; i * i <= m; i += 1n) {
+    if (m % i === 0n) {
+      out.push(i);
+      if (i * i !== m) {
+        out.push(m / i);
+      }
+    }
+  }
+  return out;
+}
+
+function ratPow(base: Rat, exponent: number): Rat {
+  let out = rat(1n, 1n);
+  for (let i = 0; i < exponent; i += 1) {
+    out = ratMul(out, base);
+  }
+  return out;
+}
+
+function evalRat(coefficients: readonly bigint[], x: Rat): Rat {
+  let acc = rat(0n, 1n);
+  for (let e = 0; e < coefficients.length; e += 1) {
+    if (coefficients[e] === 0n) {
+      continue;
+    }
+    acc = ratAdd(acc, ratMul(rat(coefficients[e] as bigint, 1n), ratPow(x, e)));
+  }
+  return acc;
+}
+
+/**
+ * The EXACT finite rational solution set of a single-variable relation, or null
+ * when it cannot be determined (multi-variable, non-integer coefficients, zero
+ * polynomial, or too-large coefficients). This is an independent, verifiable
+ * solving result — never a model self-claim.
+ */
+export function solutionSetOf(poly: Poly | null): readonly Rat[] | null {
+  if (poly === null) {
+    return null;
+  }
+  const variable = singleVariable(poly);
+  if (variable === null) {
+    return null;
+  }
+  const coefficients = integerCoefficients(poly, variable);
+  if (coefficients === null) {
+    return null;
+  }
+  let hi = coefficients.length - 1;
+  while (hi >= 0 && coefficients[hi] === 0n) {
+    hi -= 1;
+  }
+  if (hi < 0) {
+    return null;
+  }
+  const working = coefficients.slice(0, hi + 1);
+  const roots = new Map<string, Rat>();
+  let zeroShift = 0;
+  while (working.length > 1 && working[0] === 0n) {
+    working.shift();
+    zeroShift += 1;
+  }
+  if (zeroShift > 0) {
+    roots.set(ratKey(rat(0n, 1n)), rat(0n, 1n));
+  }
+  if (working.length === 1) {
+    return [...roots.values()];
+  }
+  const constant = working[0] as bigint;
+  const leading = working[working.length - 1] as bigint;
+  if (bigAbs(constant) > 1000000n || bigAbs(leading) > 1000000n) {
+    return null;
+  }
+  for (const p of divisors(constant)) {
+    for (const q of divisors(leading)) {
+      for (const sign of [1n, -1n]) {
+        const candidate = rat(sign * p, q);
+        if (ratIsZero(evalRat(working, candidate))) {
+          roots.set(ratKey(candidate), candidate);
+        }
+      }
+    }
+  }
+  return [...roots.values()];
+}
+
+/** Exact set equality of two (possibly null) rational sets. */
+export function sameRationalSet(a: readonly Rat[] | null, b: readonly Rat[] | null): boolean {
+  if (a === null || b === null || a.length !== b.length) {
+    return false;
+  }
+  const right = new Set(b.map(ratKey));
+  for (const value of a) {
+    if (!right.has(ratKey(value))) {
+      return false;
+    }
+  }
+  return true;
+}
