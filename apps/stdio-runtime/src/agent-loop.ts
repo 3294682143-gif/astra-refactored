@@ -1591,17 +1591,32 @@ export async function runAgentLoop(
                   ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId)
                   : [];
               const answerText = child.artifact.packet?.candidateProposal ?? "";
-              // Step 1 hard gate 2: any NEW element of a numeric-set revision must
-              // be a genuine root of the problem relation the checker verified;
-              // otherwise no basis is built and reviseCandidate is never called.
+              // Step 1 hard gate 2 (completeness): when the protected parent is a
+              // numeric solution set of a solvable relation, the revision must be a
+              // well-formed, NON-empty numeric set that (a) keeps every valid parent
+              // root, (b) contains only genuine roots of the relation, and (c) is
+              // strictly larger (it must cover the checker-verified missing roots).
+              // Any other format (e.g. `999`, `x = 999`) or a degenerate set (`{}`,
+              // `{0}`) is fail-closed; reviseCandidate is never called.
               const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
               const childElements = numericSetElements(answerText);
+              const relation = problemRelationPolynomial(problemText);
               let basisSupported = true;
-              if (parentElements !== null && childElements !== null) {
-                const relation = problemRelationPolynomial(problemText);
-                const known = new Set(parentElements);
-                for (const element of childElements) {
-                  if (!known.has(element) && !polynomialVanishesAt(relation, element)) {
+              if (parentElements !== null && relation !== null) {
+                if (childElements === null || childElements.length === 0) {
+                  basisSupported = false;
+                } else {
+                  for (const element of childElements) {
+                    if (!polynomialVanishesAt(relation, element)) {
+                      basisSupported = false;
+                    }
+                  }
+                  for (const element of parentElements) {
+                    if (polynomialVanishesAt(relation, element) && !childElements.includes(element)) {
+                      basisSupported = false;
+                    }
+                  }
+                  if (childElements.length <= parentElements.length) {
                     basisSupported = false;
                   }
                 }

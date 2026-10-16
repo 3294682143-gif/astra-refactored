@@ -11,6 +11,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
@@ -209,4 +211,58 @@ def test_unrelated_variable_expression_is_rejected_strict(process_tracker):
     )
     assert result["final_response"] != "{999}"
     assert result["stopReason"] == "REVISE_REJECTED"
+    assert process_tracker
+
+
+# --- Step 1: format / empty-set / completeness bypasses -----------------------
+
+
+class RepairProposalClient(G3FlagshipClient):
+    """Flagship with the REPAIR answer freely chosen (to probe S1 semantics)."""
+
+    def __init__(self, proposal):
+        super().__init__()
+        self.proposal = proposal
+
+    def _work(self, body):
+        if body.get("stage") == "REPAIR":
+            return self._packet(body, "claim", "derivation", self.proposal)
+        return super()._work(body)
+
+
+BYPASS_PROPOSALS = ["999", "x = 999", "{}", "{0}", "{0, 999}"]
+
+
+@pytest.mark.parametrize("proposal", BYPASS_PROPOSALS)
+def test_s1_bypass_proposals_rejected_best_effort(process_tracker, proposal):
+    client = RepairProposalClient(proposal)
+    result = _solve(
+        client, G3_PROBLEM,
+        max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+    )
+    assert result["final_response"] == "{1}"
+    assert result["stopReason"] == "REVISE_REJECTED"
+    assert process_tracker
+
+
+@pytest.mark.parametrize("proposal", BYPASS_PROPOSALS)
+def test_s1_bypass_proposals_rejected_strict(process_tracker, proposal):
+    client = RepairProposalClient(proposal)
+    result = _solve(
+        client, G3_PROBLEM, policy="STRICT",
+        max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+    )
+    assert result["final_response"] != proposal
+    assert result["stopReason"] == "REVISE_REJECTED"
+    assert process_tracker
+
+
+def test_s1_complete_revision_is_accepted_best_effort(process_tracker):
+    client = RepairProposalClient("{0,1}")
+    result = _solve(
+        client, G3_PROBLEM,
+        max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+    )
+    assert result["final_response"] == "{0,1}"
+    assert result["reason"] == "REVISED_CANDIDATE"
     assert process_tracker

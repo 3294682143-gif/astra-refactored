@@ -14835,12 +14835,23 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               const answerText = child.artifact.packet?.candidateProposal ?? "";
               const parentElements = numericSetElements(target.artifact.packet?.candidateProposal ?? "");
               const childElements = numericSetElements(answerText);
+              const relation = problemRelationPolynomial(problemText);
               let basisSupported = true;
-              if (parentElements !== null && childElements !== null) {
-                const relation = problemRelationPolynomial(problemText);
-                const known = new Set(parentElements);
-                for (const element of childElements) {
-                  if (!known.has(element) && !polynomialVanishesAt(relation, element)) {
+              if (parentElements !== null && relation !== null) {
+                if (childElements === null || childElements.length === 0) {
+                  basisSupported = false;
+                } else {
+                  for (const element of childElements) {
+                    if (!polynomialVanishesAt(relation, element)) {
+                      basisSupported = false;
+                    }
+                  }
+                  for (const element of parentElements) {
+                    if (polynomialVanishesAt(relation, element) && !childElements.includes(element)) {
+                      basisSupported = false;
+                    }
+                  }
+                  if (childElements.length <= parentElements.length) {
                     basisSupported = false;
                   }
                 }
