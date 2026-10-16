@@ -25,30 +25,25 @@ Two asset classes are distinguished for `math_families/**`:
 | status | count |
 |---|---|
 | total | 260 |
-| CLOSED | 250 |
-| REVIEW_REQUIRED | 10 |
+| CLOSED | 251 |
+| REVIEW_REQUIRED | 9 |
 
-**Closed on a dedicated behaviour test (5)** — `tests/bridge/test_g8_retained_modules.py`
+**Closed on a dedicated behaviour test (6)** — `tests/bridge/test_g8_retained_modules.py`
 exercises the retained Python modules directly (review-input identity, purpose-specific
 review identity, closeout-evidence collection, finalization selector, material-conflict
-rule): `mathagent/closeout_evidence.py`, `mathagent/finalization.py`, `mathagent/review.py`,
-`mathagent/review_context.py`, `mathagent/review_tasks.py`.
+rule, and `CloseoutWorkflow.materials` route selection): `mathagent/closeout_evidence.py`,
+`mathagent/finalization.py`, `mathagent/review.py`, `mathagent/review_context.py`,
+`mathagent/review_tasks.py`, `mathagent/workflows/closeout.py`.
 
-**Still REVIEW_REQUIRED (10)**
-- MATH (1): `mathagent/workflows/closeout.py` — the `CloseoutWorkflow` still needs a
-  dedicated behaviour test (its constructor requires a store/budget/clock/call/registrar/
-  review/experiment graph); not closed on a mapping.
-- DOC (9): `AGENTS.md`, `INSTALL.md`, `RC-INTEGRATION.md`, `README.md`,
-  `docs/architecture_operations_0_8_5.md`, `docs/generated_python_wasi.md`,
-  `docs/runtime_contract_0_8_6.md`, `docs/source_manifest.md`,
-  `docs/target-runtime-capabilities.md` — need either a runbook smoke check or an explicit
-  DOCUMENTED_CONTRACT disposition (documentation is not behaviour evidence).
+**Still REVIEW_REQUIRED (9)** — DOC only: `AGENTS.md`, `INSTALL.md`, `RC-INTEGRATION.md`,
+`README.md`, `docs/architecture_operations_0_8_5.md`, `docs/generated_python_wasi.md`,
+`docs/runtime_contract_0_8_6.md`, `docs/source_manifest.md`,
+`docs/target-runtime-capabilities.md` — need either a runbook smoke check or an explicit
+DOCUMENTED_CONTRACT disposition (documentation is not behaviour evidence).
 
 ## Remaining evidence gaps (next actions)
-1. `mathagent/workflows/closeout.py` needs a dedicated behaviour test naming the retained
-   module (or an explicit "not applicable in the TS engine" decision with its basis).
-2. The 9 DOC rows need either a runbook smoke check or an explicit DOCUMENTED_CONTRACT
+1. The 9 DOC rows need either a runbook smoke check or an explicit DOCUMENTED_CONTRACT
    disposition (documentation is not behaviour evidence).
-3. `math_families/**` `registered`-only rows close on the scoped-call test; no row is
+2. `math_families/**` `registered`-only rows close on the scoped-call test; no row is
    closed on the hash freeze alone. If a scoped-call path does not exist for a family,
    the row must be reopened.

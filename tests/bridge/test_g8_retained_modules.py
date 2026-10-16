@@ -8,12 +8,13 @@ the finalization selector, and the material-conflict rule. No model, no network.
 from __future__ import annotations
 
 from mathagent.closeout_evidence import collect
-from mathagent.domain import ProblemContract
+from mathagent.domain import Artifact, ProblemContract, Scope
 from mathagent.finalization import UNSOLVED, finalize, select
 from mathagent.review import material_conflict
 from mathagent.review_context import ReviewContext
 from mathagent.review_tasks import PURPOSES, ReviewTask
 from mathagent.store import ArtifactStore
+from mathagent.workflows.closeout import CloseoutWorkflow
 
 
 class _Report:
@@ -88,3 +89,29 @@ def test_material_conflict_requires_opposite_positions():
     # Absence of a finding is NOT a conflict.
     assert material_conflict([_Report(), _Report()]) is False
     assert material_conflict([None, affirm]) is False
+
+
+def _workflow(store):
+    return CloseoutWorkflow(
+        store=store, budget=None, clock=None, call=None,
+        register_candidate=None, review=None, experiment=None,
+    )
+
+
+def test_closeout_workflow_materials_empty_store_is_closeout():
+    flow = _workflow(_empty_store())
+    assert flow.store is not None
+    assert flow.materials() == ("closeout", ())
+
+
+def test_closeout_workflow_materials_selects_the_closed_route():
+    store = _empty_store("Solve x=1.")
+    store.append(Artifact(
+        id="a1", problem=store.problem.digest, route="r1", work_unit="w1",
+        text="x=1", request="work", scope=Scope(), dependencies=(),
+        unverified_dependencies=(), closed=True,
+    ))
+    route, deps = _workflow(store).materials()
+    assert route == "r1"
+    assert deps == ("a1",)
+    assert any(e["kind"] == "closeout_materials" for e in store.events)
