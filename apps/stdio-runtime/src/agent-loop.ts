@@ -1663,6 +1663,16 @@ export async function runAgentLoop(
                 if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
                   basisSupported = false;
                 }
+              } else if (goalKind === "ALL_SOLUTIONS") {
+                // An ALL-SOLUTIONS goal whose real solution set is not
+                // independently determinable (multi-variable, non-integer
+                // coefficients, zero polynomial, or a real set that is not
+                // exactly the rational set — e.g. irrational roots) can never
+                // ground a revision: "unable to verify completeness" must never
+                // become an evidence-grounded repair. Fail closed for this goal
+                // class only; other classes such as PARAMETER ground their
+                // revision on the trusted branch/gap coverage.
+                basisSupported = false;
               }
               const basis: P4ReviseBasis | null = basisSupported
                 ? {

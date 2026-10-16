@@ -13679,6 +13679,12 @@ function ratAdd(a, b) {
 function ratMul(a, b) {
   return rat(a.n * b.n, a.d * b.d);
 }
+function ratSub(a, b) {
+  return rat(a.n * b.d - b.n * a.d, a.d * b.d);
+}
+function ratSign(a) {
+  return a.n === 0n ? 0 : a.n < 0n ? -1 : 1;
+}
 function ratIsZero(a) {
   return a.n === 0n;
 }
@@ -13792,6 +13798,129 @@ function evalRat(coefficients, x) {
   }
   return acc;
 }
+function ratDiv(a, b) {
+  return rat(a.n * b.d, a.d * b.n);
+}
+function qTrim(poly) {
+  const out = poly.slice();
+  let hi = out.length - 1;
+  while (hi >= 0 && ratIsZero(out[hi])) {
+    hi -= 1;
+  }
+  return out.slice(0, hi + 1);
+}
+function qScale(poly, factor) {
+  return qTrim(poly.map((value) => ratMul(value, factor)));
+}
+function qSub(a, b) {
+  const size = Math.max(a.length, b.length);
+  const out = [];
+  for (let i = 0; i < size; i += 1) {
+    out.push(ratSub(a[i] ?? Q_ZERO, b[i] ?? Q_ZERO));
+  }
+  return qTrim(out);
+}
+function qMul(a, b) {
+  if (a.length === 0 || b.length === 0) {
+    return [];
+  }
+  const out = new Array(a.length + b.length - 1).fill(Q_ZERO);
+  for (let i = 0; i < a.length; i += 1) {
+    for (let j = 0; j < b.length; j += 1) {
+      out[i + j] = ratAdd(out[i + j], ratMul(a[i], b[j]));
+    }
+  }
+  return qTrim(out);
+}
+function qDerivative(poly) {
+  const out = [];
+  for (let e = 1; e < poly.length; e += 1) {
+    out.push(ratMul(rat(BigInt(e), 1n), poly[e]));
+  }
+  return qTrim(out);
+}
+function qRemainder(a, b) {
+  let rest = qTrim(a);
+  const divisor = qTrim(b);
+  if (divisor.length === 0) {
+    return [];
+  }
+  const divisorDegree = divisor.length - 1;
+  const divisorLead = divisor[divisorDegree];
+  while (rest.length > 0 && rest.length - 1 >= divisorDegree) {
+    const restDegree = rest.length - 1;
+    const factor = ratDiv(rest[restDegree], divisorLead);
+    const term = new Array(restDegree - divisorDegree + 1).fill(Q_ZERO);
+    term[restDegree - divisorDegree] = factor;
+    const next = qSub(rest, qMul(term, divisor));
+    if (next.length - 1 >= restDegree) {
+      return [];
+    }
+    rest = next;
+  }
+  return rest;
+}
+function qSignAtInfinity(poly, negative) {
+  const trimmed = qTrim(poly);
+  const degree = trimmed.length - 1;
+  const sign = ratSign(trimmed[degree]);
+  return negative && degree % 2 === 1 ? -sign : sign;
+}
+function qSignChangesAtInfinity(sequence, negative) {
+  let changes = 0;
+  let previous = 0;
+  for (const poly of sequence) {
+    const sign = qSignAtInfinity(poly, negative);
+    if (sign === 0) {
+      continue;
+    }
+    if (previous !== 0 && sign !== previous) {
+      changes += 1;
+    }
+    previous = sign;
+  }
+  return changes;
+}
+function hasRealRoot(poly) {
+  const base = qTrim(poly);
+  if (base.length <= 1) {
+    return false;
+  }
+  if (base.length === 2) {
+    return true;
+  }
+  const sequence = [base, qDerivative(base)];
+  while (sequence.length <= base.length + 1) {
+    const last = qTrim(sequence[sequence.length - 1]);
+    if (last.length === 0) {
+      break;
+    }
+    const previous = qTrim(sequence[sequence.length - 2]);
+    const next = qScale(qRemainder(previous, last), rat(-1n, 1n));
+    if (next.length === 0) {
+      break;
+    }
+    sequence.push(next);
+  }
+  return qSignChangesAtInfinity(sequence, true) - qSignChangesAtInfinity(sequence, false) > 0;
+}
+function stripLinearRoot(poly, root) {
+  const trimmed = qTrim(poly);
+  const degree = trimmed.length - 1;
+  if (degree < 1) {
+    return null;
+  }
+  const quotient = new Array(degree).fill(Q_ZERO);
+  quotient[degree - 1] = trimmed[degree];
+  for (let i = degree - 1; i >= 1; i -= 1) {
+    quotient[i - 1] = ratAdd(trimmed[i], ratMul(root, quotient[i]));
+  }
+  const remainder = ratAdd(trimmed[0], ratMul(root, quotient[0]));
+  if (!ratIsZero(remainder)) {
+    return null;
+  }
+  return qTrim(quotient);
+}
 function solutionSetOf(poly) {
   if (poly === null) {
     return null;
@@ -13839,6 +13968,17 @@ function solutionSetOf(poly) {
       }
     }
   }
+  let residual = qTrim(working.map((value) => rat(value, 1n)));
+  for (const root of roots.values()) {
+    let reduced = stripLinearRoot(residual, root);
+    while (reduced !== null) {
+      residual = reduced;
+      reduced = stripLinearRoot(residual, root);
+    }
+  }
+  if (residual.length > 1 && hasRealRoot(residual)) {
+    return null;
+  }
   return [...roots.values()];
 }
 function sameRationalSet(a, b) {
@@ -13853,7 +13993,7 @@ function sameRationalSet(a, b) {
   }
   return true;
 }
-var EPS, Parser;
+var EPS, Parser, Q_ZERO;
 var init_agent_semantics = __esm({
   "apps/stdio-runtime/dist/src/agent-semantics.js"() {
     "use strict";
@@ -13973,6 +14113,7 @@ var init_agent_semantics = __esm({
         return rows.length === 1 && rows[0][0] === "" ? rows[0][1] : null;
       }
     };
+    Q_ZERO = { n: 0n, d: 1n };
   }
 });
 
@@ -15089,6 +15230,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
                 if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
                   basisSupported = false;
                 }
+              } else if (goalKind === "ALL_SOLUTIONS") {
+                basisSupported = false;
               }
               const basis = basisSupported ? {
                 source: "CHECKER_COUNTEREXAMPLE",

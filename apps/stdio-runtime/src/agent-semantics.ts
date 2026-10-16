@@ -377,6 +377,14 @@ function ratMul(a: Rat, b: Rat): Rat {
   return rat(a.n * b.n, a.d * b.d);
 }
 
+function ratSub(a: Rat, b: Rat): Rat {
+  return rat(a.n * b.d - b.n * a.d, a.d * b.d);
+}
+
+function ratSign(a: Rat): number {
+  return a.n === 0n ? 0 : a.n < 0n ? -1 : 1;
+}
+
 function ratIsZero(a: Rat): boolean {
   return a.n === 0n;
 }
@@ -504,11 +512,156 @@ function evalRat(coefficients: readonly bigint[], x: Rat): Rat {
   return acc;
 }
 
+const Q_ZERO: Rat = { n: 0n, d: 1n };
+
+function ratDiv(a: Rat, b: Rat): Rat {
+  return rat(a.n * b.d, a.d * b.n);
+}
+
+function qTrim(poly: readonly Rat[]): Rat[] {
+  const out = poly.slice();
+  let hi = out.length - 1;
+  while (hi >= 0 && ratIsZero(out[hi] as Rat)) {
+    hi -= 1;
+  }
+  return out.slice(0, hi + 1);
+}
+
+function qScale(poly: readonly Rat[], factor: Rat): Rat[] {
+  return qTrim(poly.map((value) => ratMul(value, factor)));
+}
+
+function qSub(a: readonly Rat[], b: readonly Rat[]): Rat[] {
+  const size = Math.max(a.length, b.length);
+  const out: Rat[] = [];
+  for (let i = 0; i < size; i += 1) {
+    out.push(ratSub((a[i] ?? Q_ZERO) as Rat, (b[i] ?? Q_ZERO) as Rat));
+  }
+  return qTrim(out);
+}
+
+function qMul(a: readonly Rat[], b: readonly Rat[]): Rat[] {
+  if (a.length === 0 || b.length === 0) {
+    return [];
+  }
+  const out: Rat[] = new Array(a.length + b.length - 1).fill(Q_ZERO);
+  for (let i = 0; i < a.length; i += 1) {
+    for (let j = 0; j < b.length; j += 1) {
+      out[i + j] = ratAdd(out[i + j] as Rat, ratMul(a[i] as Rat, b[j] as Rat));
+    }
+  }
+  return qTrim(out);
+}
+
+function qDerivative(poly: readonly Rat[]): Rat[] {
+  const out: Rat[] = [];
+  for (let e = 1; e < poly.length; e += 1) {
+    out.push(ratMul(rat(BigInt(e), 1n), poly[e] as Rat));
+  }
+  return qTrim(out);
+}
+
+/** Exact polynomial remainder over the rationals (ascending powers). */
+function qRemainder(a: readonly Rat[], b: readonly Rat[]): Rat[] {
+  let rest = qTrim(a);
+  const divisor = qTrim(b);
+  if (divisor.length === 0) {
+    return [];
+  }
+  const divisorDegree = divisor.length - 1;
+  const divisorLead = divisor[divisorDegree] as Rat;
+  while (rest.length > 0 && rest.length - 1 >= divisorDegree) {
+    const restDegree = rest.length - 1;
+    const factor = ratDiv(rest[restDegree] as Rat, divisorLead);
+    const term: Rat[] = new Array(restDegree - divisorDegree + 1).fill(Q_ZERO);
+    term[restDegree - divisorDegree] = factor;
+    const next = qSub(rest, qMul(term, divisor));
+    if (next.length - 1 >= restDegree) {
+      return []; // defensive: never loop on degenerate input
+    }
+    rest = next;
+  }
+  return rest;
+}
+
+function qSignAtInfinity(poly: readonly Rat[], negative: boolean): number {
+  const trimmed = qTrim(poly);
+  const degree = trimmed.length - 1;
+  const sign = ratSign(trimmed[degree] as Rat);
+  return negative && degree % 2 === 1 ? -sign : sign;
+}
+
+function qSignChangesAtInfinity(sequence: readonly (readonly Rat[])[], negative: boolean): number {
+  let changes = 0;
+  let previous = 0;
+  for (const poly of sequence) {
+    const sign = qSignAtInfinity(poly, negative);
+    if (sign === 0) {
+      continue;
+    }
+    if (previous !== 0 && sign !== previous) {
+      changes += 1;
+    }
+    previous = sign;
+  }
+  return changes;
+}
+
 /**
- * The EXACT finite rational solution set of a single-variable relation, or null
- * when it cannot be determined (multi-variable, non-integer coefficients, zero
- * polynomial, or too-large coefficients). This is an independent, verifiable
- * solving result — never a model self-claim.
+ * Exact "does this real polynomial have a real root?" via the Sturm sequence.
+ * Used only to decide whether the rational roots already found are the WHOLE
+ * real solution set; it never claims a numeric root by approximation.
+ */
+function hasRealRoot(poly: readonly Rat[]): boolean {
+  const base = qTrim(poly);
+  if (base.length <= 1) {
+    return false;
+  }
+  if (base.length === 2) {
+    return true;
+  }
+  const sequence: Rat[][] = [base, qDerivative(base)];
+  while (sequence.length <= base.length + 1) {
+    const last = qTrim(sequence[sequence.length - 1] as Rat[]);
+    if (last.length === 0) {
+      break;
+    }
+    const previous = qTrim(sequence[sequence.length - 2] as Rat[]);
+    const next = qScale(qRemainder(previous, last), rat(-1n, 1n));
+    if (next.length === 0) {
+      break;
+    }
+    sequence.push(next);
+  }
+  return qSignChangesAtInfinity(sequence, true) - qSignChangesAtInfinity(sequence, false) > 0;
+}
+
+/** Divide an exact rational polynomial by `(x - root)`; null when not divisible. */
+function stripLinearRoot(poly: readonly Rat[], root: Rat): Rat[] | null {
+  const trimmed = qTrim(poly);
+  const degree = trimmed.length - 1;
+  if (degree < 1) {
+    return null;
+  }
+  const quotient: Rat[] = new Array(degree).fill(Q_ZERO);
+  quotient[degree - 1] = trimmed[degree] as Rat;
+  for (let i = degree - 1; i >= 1; i -= 1) {
+    quotient[i - 1] = ratAdd(trimmed[i] as Rat, ratMul(root, quotient[i] as Rat));
+  }
+  const remainder = ratAdd(trimmed[0] as Rat, ratMul(root, quotient[0] as Rat));
+  if (!ratIsZero(remainder)) {
+    return null;
+  }
+  return qTrim(quotient);
+}
+
+/**
+ * The COMPLETE finite real solution set of a single-variable relation, expressed
+ * exactly, or null when it cannot be determined. It is `null` whenever the real
+ * roots are NOT all rational (a rational-root enumeration alone is never proof
+ * of the whole real solution set), and for multi-variable / non-integer /
+ * oversized / zero relations. This is an independent, verifiable solving result
+ * — never a model self-claim, and never an incomplete set passed off as complete.
  */
 export function solutionSetOf(poly: Poly | null): readonly Rat[] | null {
   if (poly === null) {
@@ -556,6 +709,20 @@ export function solutionSetOf(poly: Poly | null): readonly Rat[] | null {
         }
       }
     }
+  }
+  // Completeness certification: divide out every rational root (with its full
+  // multiplicity). If any real root remains, the rational roots are NOT the whole
+  // real solution set, so the set is undeterminable here and must be null.
+  let residual = qTrim(working.map((value) => rat(value, 1n)));
+  for (const root of roots.values()) {
+    let reduced = stripLinearRoot(residual, root);
+    while (reduced !== null) {
+      residual = reduced;
+      reduced = stripLinearRoot(residual, root);
+    }
+  }
+  if (residual.length > 1 && hasRealRoot(residual)) {
+    return null;
   }
   return [...roots.values()];
 }
