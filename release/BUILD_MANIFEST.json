@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "aaca3f224cfac4773202fbc59ee5863f2698b7a7",
-    "tree": "9c957f601cf590f66790bfd4613126219ed78eec"
+    "commit": "926fa6191a610beaae19f1376b468871c69afbab",
+    "tree": "572ba28e3674717dd73b13dbfe253f58edca174f"
   },
   "js": [
     {
@@ -20,8 +20,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
-      "sha256": "5b410463290f98af4e766f1911e03316236d13b61e4ce3c5bab6f4ce18641c8b",
-      "bytes": 23577
+      "sha256": "17f2700703f898b58c59d178378310fe95bc7035336e7cfa7b5242ccd5a223e2",
+      "bytes": 23609
     }
   ],
   "assets": {
@@ -45,7 +45,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "8e94d99b1cc46b03b17f6583eff069e65c057b9e3473f300176934b235d9c57d"
+      "sha256": "317e9dfa40357a22a22311b2014fd4ad5d63db6e9823ad6c79b9773e20937323"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",

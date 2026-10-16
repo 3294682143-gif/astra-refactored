@@ -145,6 +145,18 @@ test("Trusted RC defect 4: ReplayRunner rejects any tampered answer/hash", async
     ),
   };
   assert.equal(runner.replay(withRequest as never).ok, false);
+
+  // Replacing a valid request context hash with another valid 64-hex value is
+  // detected by the chained integrity digest.
+  const withHash = {
+    ...log,
+    events: log.events.map((event) =>
+      event.kind === "MODEL_REQUEST"
+        ? { ...event, data: { ...event.data, contextHash: "a".repeat(64) } }
+        : event,
+    ),
+  };
+  assert.equal(runner.replay(withHash as never).ok, false);
 });
 
 // Minimal R0 review reply helper (kept local; the projector test only needs a

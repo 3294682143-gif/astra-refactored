@@ -3974,6 +3974,17 @@ var init_agent_session = __esm({
 });
 
 // packages/runtime-core/dist/src/session-log.js
+function chainInput(kind, data) {
+  if (kind === "MODEL_REQUEST") {
+    return JSON.stringify({ phase: data.phase, requestId: data.requestId, contextHash: data.contextHash, contextBytes: data.contextBytes });
+  }
+  const { __chain, ...rest } = data;
+  void __chain;
+  return JSON.stringify(rest);
+}
+function chainedEvent(kind, data, previous) {
+  return p4Hash(previous + "|" + kind + "|" + chainInput(kind, data));
+}
 function isPlainObject9(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -4029,11 +4040,13 @@ var init_session_log = __esm({
         if (this.records.length >= MAX_EVENTS) {
           throw new Error("SESSION_LOG_BOUND");
         }
+        const frozen = p2Snapshot(data);
+        const previous = this.records.length === 0 ? "" : String(this.records[this.records.length - 1].data["__chain"] ?? "");
         const event = Object.freeze({
           seq: this.records.length + 1,
           schemaVersion: SESSION_LOG_SCHEMA_VERSION,
           kind,
-          data: p2Snapshot(data)
+          data: p2Snapshot({ ...frozen, __chain: chainedEvent(kind, frozen, previous) })
         });
         this.records.push(event);
         return event;
@@ -4112,8 +4125,13 @@ var init_session_log = __esm({
         let final = null;
         let finalSeq = 0;
         let derivedAnswer = null;
+        let chain = "";
         let expectedSeq = 1;
         for (const event of snapshot.events) {
+          chain = chainedEvent(event.kind, event.data, chain);
+          if (event.data["__chain"] !== chain) {
+            mismatches.push(event.seq);
+          }
           if (event.seq !== expectedSeq) {
             mismatches.push(event.seq);
           }
@@ -15360,7 +15378,7 @@ var init_agent_host_flow = __esm({
         const sessionLog = (result.privateState.sessionLog?.events ?? []).map((event) => {
           if (event.kind === "MODEL_REQUEST") {
             const { phase, requestId, contextHash, contextBytes } = event.data;
-            return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes } };
+            return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes, __chain: event.data["__chain"] } };
           }
           return { seq: event.seq, kind: event.kind, data: event.data };
         });

@@ -354,7 +354,7 @@ export class AgentHostFlow {
         const sessionLog = (result.privateState.sessionLog?.events ?? []).map((event) => {
             if (event.kind === "MODEL_REQUEST") {
                 const { phase, requestId, contextHash, contextBytes } = event.data;
-                return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes } };
+                return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes, __chain: event.data["__chain"] } };
             }
             return { seq: event.seq, kind: event.kind, data: event.data };
         });

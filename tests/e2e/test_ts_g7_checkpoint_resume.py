@@ -159,3 +159,23 @@ def test_outcome_unknown_blocks_resume_instead_of_replaying(process_tracker):
     assert result["code"] == "OUTCOME_UNKNOWN"
     # the unknown request is never re-dispatched to the public client
     assert other_client.calls == 0
+
+
+def test_replacing_context_hash_is_rejected(process_tracker):
+    """Step 2': a swapped, still-valid 64-hex contextHash is rejected on resume."""
+    _, checkpoint = _first_with_checkpoint("local")
+    forged = copy.deepcopy(checkpoint)
+    replaced = False
+    for row in forged["sessionLog"]:
+        if row["kind"] == "MODEL_REQUEST":
+            row["data"] = {**row["data"], "contextHash": "a" * 64}
+            replaced = True
+            break
+    assert replaced
+    forged.pop("digest", None)
+    forged["digest"] = host_checkpoint._digest(forged)
+
+    resumed, resumed_client = _agent("local")
+    result = resumed.solve(_PROBLEM, {"source": "e2e"}, resume_checkpoint=forged)
+    assert result["status"] == "unsolved"
+    assert resumed_client.calls == 0

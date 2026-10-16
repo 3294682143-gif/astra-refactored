@@ -434,7 +434,7 @@ export class AgentHostFlow {
           contextHash?: unknown;
           contextBytes?: unknown;
         };
-        return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes } };
+        return { seq: event.seq, kind: event.kind, data: { phase, requestId, contextHash, contextBytes, __chain: (event.data as Record<string, unknown>)["__chain"] } };
       }
       return { seq: event.seq, kind: event.kind, data: event.data };
     });

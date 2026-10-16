@@ -44,6 +44,28 @@ export interface SessionLogEvent {
   readonly data: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * Tamper-detection: every event carries an in-band chained digest (`data.__chain`)
+ * over the persisted event form. `MODEL_REQUEST` is projected to
+ * {phase,requestId,contextHash,contextBytes} (its messages are replaced by the
+ * context hash on the wire), so the chain is identical in-process and after
+ * transport; replacing `contextHash` with any other 64-hex value breaks it. The
+ * digest lives inside the free-form `data`, so no schema/transport change is
+ * needed and it survives the checkpoint/resume copy.
+ */
+function chainInput(kind: string, data: Readonly<Record<string, unknown>>): string {
+  if (kind === "MODEL_REQUEST") {
+    return JSON.stringify({ phase: data.phase, requestId: data.requestId, contextHash: data.contextHash, contextBytes: data.contextBytes });
+  }
+  const { __chain, ...rest } = data as Record<string, unknown>;
+  void __chain;
+  return JSON.stringify(rest);
+}
+
+function chainedEvent(kind: string, data: Readonly<Record<string, unknown>>, previous: string): string {
+  return p4Hash(previous + "|" + kind + "|" + chainInput(kind, data));
+}
+
 const MAX_EVENTS = 1024;
 const MAX_DATA_BYTES = 262144;
 
@@ -82,11 +104,14 @@ export class SessionLog {
     if (this.records.length >= MAX_EVENTS) {
       throw new Error("SESSION_LOG_BOUND");
     }
+    const frozen = p2Snapshot(data) as Readonly<Record<string, unknown>>;
+    const previous =
+      this.records.length === 0 ? "" : String((this.records[this.records.length - 1] as SessionLogEvent).data["__chain"] ?? "");
     const event: SessionLogEvent = Object.freeze({
       seq: this.records.length + 1,
       schemaVersion: SESSION_LOG_SCHEMA_VERSION,
       kind,
-      data: p2Snapshot(data) as Readonly<Record<string, unknown>>,
+      data: p2Snapshot({ ...frozen, __chain: chainedEvent(kind, frozen, previous) }) as Readonly<Record<string, unknown>>,
     });
     this.records.push(event);
     return event;
@@ -225,8 +250,13 @@ export class ReplayRunner {
     let final: Readonly<Record<string, unknown>> | null = null;
     let finalSeq = 0;
     let derivedAnswer: string | null = null;
+    let chain = "";
     let expectedSeq = 1;
     for (const event of snapshot.events) {
+      chain = chainedEvent(event.kind, event.data, chain);
+      if (event.data["__chain"] !== chain) {
+        mismatches.push(event.seq);
+      }
       if (event.seq !== expectedSeq) {
         mismatches.push(event.seq);
       }
