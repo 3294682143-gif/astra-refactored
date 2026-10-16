@@ -91,7 +91,7 @@ def test_three_work_units_follow_real_ready_order(process_tracker):
     assert result["metrics"]["effect_calls"] == 0
     assert result["metrics"]["review_calls"] == 1
     assert process_tracker
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
     bodies = _work_bodies(client)
     assert len(bodies) == 3

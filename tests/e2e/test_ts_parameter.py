@@ -59,7 +59,7 @@ def test_parameter_problem_has_a_boundary_duty(process_tracker):
     assert result["engine"] == "ts"
     assert result["childReaped"] is True
     assert process_tracker
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     kinds = _kinds(client)
     assert kinds
     assert "BOUNDARY_EXCEPTIONS" in kinds

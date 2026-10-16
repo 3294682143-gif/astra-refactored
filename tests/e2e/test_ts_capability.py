@@ -76,7 +76,7 @@ def test_multipart_returns_the_complete_two_part_answer(process_tracker):
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert result["childReaped"] is True
     assert process_tracker
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
     # Every branch really ran to the aggregation.
     assert result["metrics"]["work_units"] >= 8

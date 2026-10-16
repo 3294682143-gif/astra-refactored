@@ -155,7 +155,7 @@ def test_answer_obligation_delivers_typed_candidate(name, process_tracker):
     assert client.calls >= 2
     assert process_tracker
     # The real Node agent-loop entry actually ran.
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
 
 

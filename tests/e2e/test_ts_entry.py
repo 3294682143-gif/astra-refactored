@@ -185,7 +185,7 @@ def test_nested_bidirectional_rpc_tool_roundtrip(process_tracker):
     assert review["stage"] == "R2"
     assert "toolObservations" not in review
     assert process_tracker
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
 
 

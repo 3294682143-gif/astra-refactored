@@ -47,8 +47,9 @@ def test_precompiled_js_launches_ts_multiturn_without_compiling(process_tracker)
     result = agent.solve("Compute 2+2", {"source": "release"})
     assert result["engine"] == "ts"
     assert result["status"] == "candidate"
-    # The real Node child ran the precompiled main.js (no runtime tsc/npm).
-    assert any(str(arg).endswith("main.js") for arg in process_tracker[0].args)
+    # The real Node child ran the precompiled release bundle (production default,
+    # P0-3), with no runtime tsc/npm.
+    assert any(str(arg).endswith("stdio-runtime.bundle.mjs") for arg in process_tracker[0].args)
     assert process_tracker
 
 
@@ -177,3 +178,64 @@ def test_bundle_s2b_midrun_resume(tmp_path, monkeypatch, process_tracker):
     assert result["status"] == "candidate"
     assert result["final_response"] == "4"
     assert resumed_client.calls == 1
+
+
+def test_default_release_entry_runs_and_resumes(tmp_path, process_tracker):
+    """P0-3: the PRODUCTION default (no _default_script override) starts the
+    standalone release bundle in a clean env (release files + runtime deps only,
+    no node_modules) and completes a request and a resume."""
+    import os
+    import subprocess
+
+    env_dir = tmp_path / "release_env"
+    (env_dir / "python").mkdir(parents=True)
+    (env_dir / "packages" / "protocol").mkdir(parents=True)
+    (env_dir / "release").mkdir()
+    shutil.copytree(ROOT / "python" / "astra_bridge", env_dir / "python" / "astra_bridge")
+    shutil.copytree(ROOT / "packages" / "protocol" / "schema", env_dir / "packages" / "protocol" / "schema")
+    shutil.copy(BUNDLE, env_dir / "release" / "stdio-runtime.bundle.mjs")
+    shutil.copytree(BUNDLE_SCHEMA, env_dir / "release" / "schema")
+    assert not (env_dir / "node_modules").exists()
+
+    harness = f'''
+import sys, json, copy
+sys.path.insert(0, {str(ROOT)!r})
+sys.path.insert(0, {str(ROOT / "tests" / "e2e")!r})
+sys.path.insert(0, {str(env_dir)!r})
+from python.astra_bridge import agent_runtime, host_checkpoint
+from test_ts_entry import FakeClient
+import user_agent
+print("ENTRY", agent_runtime.resolve_script())
+a = user_agent.ReasoningAgent(client=FakeClient(), engine="ts", mode="local",
+    max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1)
+r = a.solve("Compute 2+2", {{"source": "release"}})
+ck = a._impl.export_checkpoint("Compute 2+2")
+cut = None
+for i, row in enumerate(ck["sessionLog"]):
+    if row["kind"] == "WORKUNIT":
+        cut = i + 1
+p = copy.deepcopy(ck)
+p["sessionLog"] = p["sessionLog"][:cut]
+p["spent"] = {{"modelCalls": sum(1 for x in p["sessionLog"] if x["kind"] == "MODEL_REQUEST"),
+               "effectCalls": sum(1 for x in p["sessionLog"] if x["kind"] in ("TOOL_OBSERVATION", "METHOD_LOAD"))}}
+p.pop("digest", None)
+p["digest"] = host_checkpoint._digest(p)
+b = user_agent.ReasoningAgent(client=FakeClient(), engine="ts", mode="local",
+    max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1)
+r2 = b.solve("Compute 2+2", {{"source": "release"}}, resume_checkpoint=p)
+print("RESULT", json.dumps({{"first": r["status"], "final": r["final_response"],
+                             "resume": r2["status"], "rfinal": r2["final_response"]}}))
+'''
+    env = dict(os.environ)
+    env.pop("ASTRA_STDIO_RUNTIME", None)
+    done = subprocess.run(
+        [sys.executable, "-c", harness], capture_output=True, text=True, cwd=str(env_dir), env=env
+    )
+    assert done.returncode == 0, done.stderr
+    entry_lines = [line for line in done.stdout.splitlines() if line.startswith("ENTRY ")]
+    assert entry_lines and str(env_dir / "release" / "stdio-runtime.bundle.mjs") in entry_lines[0], done.stdout
+    result_lines = [line for line in done.stdout.splitlines() if line.startswith("RESULT ")]
+    parsed = json.loads(result_lines[0][len("RESULT "):])
+    assert parsed["first"] == "candidate" and parsed["final"] == "4"
+    assert parsed["resume"] == "candidate" and parsed["rfinal"] == "4"
+    assert process_tracker

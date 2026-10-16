@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import math
+import os
 import selectors
 import subprocess
 import threading
@@ -95,8 +96,32 @@ def _resume_session_id(resume):
 
 
 def _default_script():
+    """P0-3: the production default entry is the self-contained release bundle.
+
+    It runs without the workspace ``node_modules`` (its only sibling dependency
+    is the schema shipped next to it). A missing artifact is a fixed error at the
+    call site; there is no silent fallback to an unusable path.
+    """
+    root = Path(__file__).resolve().parents[2]
+    return root / "release" / "stdio-runtime.bundle.mjs"
+
+
+def _dev_script():
+    """The workspace TypeScript entry, selected explicitly by a dev config."""
     root = Path(__file__).resolve().parents[2]
     return root / "apps" / "stdio-runtime" / "dist" / "src" / "main.js"
+
+
+def resolve_script():
+    """Resolve the stdio runtime entry.
+
+    ``ASTRA_STDIO_RUNTIME=dev`` explicitly selects the workspace ``dist`` entry;
+    otherwise the published release bundle is used. Enabling TS keeps its meaning
+    (the engine is TS either way) - only the entry artifact changes.
+    """
+    if os.environ.get("ASTRA_STDIO_RUNTIME") == "dev":
+        return _dev_script()
+    return _default_script()
 
 
 class AgentRuntime:
@@ -337,7 +362,7 @@ class AgentRuntime:
             manifest = load_manifest()
         except ProtocolError as exc:
             return self._unsolved(started, exc.code, False)
-        script = _default_script()
+        script = resolve_script()
         if not script.is_file():
             return self._unsolved(started, "CHILD_FAILED", False)
         problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()

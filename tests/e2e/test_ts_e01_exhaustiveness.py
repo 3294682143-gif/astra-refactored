@@ -186,7 +186,7 @@ def test_e01_local_then_exhaustive_answer_delivers_full_set(process_tracker):
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert result["childReaped"] is True
     assert process_tracker
-    assert process_tracker[0].args[1].endswith("main.js")
+    assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
     bodies = _work_bodies(client)
     assert bodies
