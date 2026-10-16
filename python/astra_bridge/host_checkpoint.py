@@ -158,8 +158,22 @@ def _log_events(events):
     return out
 
 
+def _history_rows(history):
+    if not isinstance(history, (list, tuple)) or len(history) > 256:
+        _fail("CHECKPOINT_SHAPE")
+    out = []
+    for rec in history:
+        if not isinstance(rec, dict) or set(rec.keys()) != {"requestId", "request", "receipt"}:
+            _fail("CHECKPOINT_SHAPE")
+        rid = rec["requestId"]; req = rec["request"]; receipt = rec["receipt"]
+        if not isinstance(rid, str) or not isinstance(req, dict) or not isinstance(receipt, dict):
+            _fail("CHECKPOINT_SHAPE")
+        out.append({"requestId": rid, "request": copy.deepcopy(req), "receipt": copy.deepcopy(receipt)})
+    return out
+
+
 def export_checkpoint(*, carrier, problem_hash, contract_version, spent,
-                      ledger, session_log, unknown_request_ids=()):
+                      ledger, session_log, unknown_request_ids=(), history=()):
     """Export one controlled checkpoint of an already-performed run.
 
     ``carrier`` is the bound :class:`host_carriers.RunCarrier`; ``spent`` is the
@@ -213,6 +227,7 @@ def export_checkpoint(*, carrier, problem_hash, contract_version, spent,
         "spent": {"modelCalls": spent_model, "effectCalls": spent_effects},
         "ledger": rows,
         "sessionLog": events,
+        "history": _history_rows(history),
         "unknownRequestIds": unknown,
     }
     body["digest"] = _digest(body)
@@ -316,6 +331,7 @@ def resume_plan(checkpoint, *, prior, session_id, max_model_calls=None,
         "remaining": remaining,
         "sessionLog": [] if blocked else copy.deepcopy(body["sessionLog"]),
         "ledger": copy.deepcopy(body["ledger"]),
+        "history": [] if blocked else copy.deepcopy(body.get("history") or []),
         "unknownRequestIds": unknown,
         "blocked": blocked,
     }

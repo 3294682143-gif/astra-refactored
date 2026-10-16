@@ -433,6 +433,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     // the recorded verdict from the event stream and return it with ZERO new
     // model/effect calls. A prefix without a FINAL event falls through to the
     // normal bounded continuation.
+    let reconstructedPartial = false;
     if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
         // Step 2: any non-empty resume prefix is first re-checked with the SAME
         // tamper detector as read-only replay (event sequence, request hashes, and a
@@ -449,6 +450,16 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
         const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
         if (resumed !== null) {
             return resumed;
+        }
+        reconstructedPartial = true;
+    }
+    if (reconstructedPartial && opts.resumeSessionLog !== null) {
+        const carriedModels = opts.resumeSessionLog.filter((row) => row.kind === "MODEL_REQUEST").length;
+        for (let index = 0; index < carriedModels; index += 1) {
+            if (root.modelCalls() >= opts.maxModelCalls)
+                break;
+            const settledId = root.reserveModel("WORK");
+            root.settleModel(settledId, "COMPLETE");
         }
     }
     // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
@@ -490,6 +501,44 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     let s2Transaction = null;
     const callsLeft = () => opts.maxModelCalls - root.modelCalls();
     const reserve = () => target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
+    if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0 && reconstructedPartial) {
+        for (const row of opts.resumeSessionLog) {
+            if (row.kind !== "WORKUNIT")
+                continue;
+            const data = row.data;
+            const taskId = data.taskId;
+            const receipt = data.workReceipt;
+            const routeInput = data.routeInput;
+            if (typeof taskId !== "string" || typeof receipt !== "object" || receipt === null)
+                continue;
+            try {
+                if (typeof routeInput === "object" && routeInput !== null) {
+                    try {
+                        store.registerRoute(routeInput);
+                    }
+                    catch { /* registered */ }
+                }
+                const runningTask = ledger.startTask(taskId);
+                const artifact = store.accept(runningTask, { ...receipt, eventSeq: ledger.nextEventSeq() });
+                const ref = { artifactId: artifact.artifactId, artifactVersion: artifact.envelope.artifactVersion ?? 1 };
+                ledger.recordDelivery(taskId, ref, artifact.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL", ledger.nextEventSeq());
+                workUnits += 1;
+                const snapR = ledger.snapshot();
+                const obligationR = snapR.obligations.find((row) => row.obligationId === runningTask.obligationId);
+                const rootGoalR = snapR.goals.some((goal) => goal.goalId === runningTask.goalId);
+                if (obligationR !== undefined && rootGoalR && p2IsAnswerObligationKindForGoal(goalKindOf(snapR.goals, runningTask.goalId), obligationR.kind)) {
+                    target = p4Target(snapR, artifact, "ACTIVE");
+                    protectedOrigin = target;
+                    candidateTask = runningTask;
+                }
+            }
+            catch (error) {
+                if (!(error instanceof P2Error))
+                    throw error;
+                fail(P2_ERROR_CODES.PACKET_BINDING);
+            }
+        }
+    }
     const methodsEnabled = opts.maxMethodLoads === 1 &&
         captured.effect !== null &&
         captured.catalog !== null &&
@@ -988,6 +1037,8 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         // log so a checkpoint/resume can rebuild the artifact and candidate,
                         // and the ReplayRunner can re-derive the final answer.
                         candidateProposal: accepted.packet?.candidateProposal ?? null,
+                        workReceipt: p2Snapshot(receiptInput),
+                        routeInput: p2Snapshot({ routeId: route.routeId, representation: route.representation, operation: route.operation, lemmas: route.lemmas, construction: route.construction }),
                     });
                     workUnits += 1;
                     if (accepted.deliveryStatus !== "COMPLETE") {

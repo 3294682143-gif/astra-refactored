@@ -69,6 +69,31 @@ def _code_points(value):
     return count
 
 
+def _history_payload(history):
+    if not isinstance(history, dict):
+        return []
+    out = []
+    for rid, rec in history.items():
+        if not isinstance(rid, str) or not isinstance(rec, dict):
+            continue
+        req = rec.get("request"); receipt = rec.get("receipt")
+        if not isinstance(req, dict) or not isinstance(receipt, dict):
+            continue
+        out.append({"requestId": rid, "request": req, "receipt": receipt})
+    return out
+
+
+def _resume_session_id(resume):
+    if not isinstance(resume, dict):
+        return None
+    for row in resume.get("sessionLog") or []:
+        if isinstance(row, dict) and row.get("kind") == "SESSION_INIT":
+            data = row.get("data")
+            if isinstance(data, dict) and isinstance(data.get("sessionId"), str) and data["sessionId"]:
+                return data["sessionId"]
+    return None
+
+
 def _default_script():
     root = Path(__file__).resolve().parents[2]
     return root / "apps" / "stdio-runtime" / "dist" / "src" / "main.js"
@@ -145,6 +170,7 @@ class AgentRuntime:
         # exported with a non-empty log and real counters (never [] / 0).
         self.last_session_log = None
         self.last_counts = None
+        self.last_history = None
         self.last_problem_hash = None
 
     # -- public surface ---------------------------------------------------
@@ -234,17 +260,16 @@ class AgentRuntime:
         if plan["blocked"]:
             return "OUTCOME_UNKNOWN"
         remaining = plan["remaining"]
+        if remaining["maxModelCalls"] < 0 or remaining["maxEffects"] < 0:
+            return "CHECKPOINT_BUDGET"
         next_options = dict(options)
-        next_options["maxModelCalls"] = min(
-            options["maxModelCalls"], remaining["maxModelCalls"],
-        )
-        next_options["maxEffects"] = min(
-            options["maxEffects"], remaining["maxEffects"],
-        )
+        next_options["maxModelCalls"] = options["maxModelCalls"]
+        next_options["maxEffects"] = options["maxEffects"]
         return {
             "options": next_options,
             "sessionLog": plan["sessionLog"],
             "contractVersion": host_checkpoint.body_contract_version(checkpoint),
+            "history": plan.get("history") or [],
         }
 
     def export_checkpoint(self, problem, contract_version=1):
@@ -296,6 +321,7 @@ class AgentRuntime:
                 },
                 ledger=ledger,
                 session_log=list(self.last_session_log),
+                history=_history_payload(self.last_history),
                 unknown_request_ids=unknown,
             )
         except (host_checkpoint.CheckpointError, host_carriers.CarrierError):
@@ -316,6 +342,10 @@ class AgentRuntime:
             return self._unsolved(started, "CHILD_FAILED", False)
         problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
         session_id = uuid.uuid4().hex
+        if resume is not None:
+            original = _resume_session_id(resume)
+            if original is not None:
+                session_id = original
         try:
             host_carriers.bind_carrier(
                 self.mode, problem_hash, session_id, _PROFILE_ID,
@@ -338,10 +368,12 @@ class AgentRuntime:
             # G7/PR7 Slice 7d: always present; None on the default path.
             "resumeSessionLog": None,
             "resumeContractVersion": None,
+            "resumeHistory": None,
         }
         if resume is not None:
             host_options["resumeSessionLog"] = resume["sessionLog"]
             host_options["resumeContractVersion"] = resume["contractVersion"]
+            host_options["resumeHistory"] = resume.get("history")
         host = AgentHost(
             manifest, session_id, deadline, problem, problem_hash, host_options,
             self.client,
@@ -555,6 +587,7 @@ class AgentRuntime:
         # for a later checkpoint export.
         session_log_rows = result.get("sessionLog")
         self.last_session_log = copy.deepcopy(session_log_rows) if isinstance(session_log_rows, list) else None
+        self.last_history = copy.deepcopy(host.history)
         self.last_counts = {
             "modelCalls": summary["modelCalls"],
             "effectCalls": summary["effectCalls"],

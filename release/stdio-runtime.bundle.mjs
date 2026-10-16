@@ -14112,6 +14112,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   } else {
     sessionLog.append("SESSION_INIT", { sessionId: session, problemHash });
   }
+  let reconstructedPartial = false;
   if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0) {
     const replay = new ReplayRunner().replay({
       schemaVersion: SESSION_LOG_SCHEMA_VERSION,
@@ -14124,6 +14125,16 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     const resumed = reconstructResumedResult(opts.resumeSessionLog, session, problemHash, opts);
     if (resumed !== null) {
       return resumed;
+    }
+    reconstructedPartial = true;
+  }
+  if (reconstructedPartial && opts.resumeSessionLog !== null) {
+    const carriedModels = opts.resumeSessionLog.filter((row) => row.kind === "MODEL_REQUEST").length;
+    for (let index = 0; index < carriedModels; index += 1) {
+      if (root.modelCalls() >= opts.maxModelCalls)
+        break;
+      const settledId = root.reserveModel("WORK");
+      root.settleModel(settledId, "COMPLETE");
     }
   }
   if (opts.maxR0 >= 1) {
@@ -14161,6 +14172,43 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   let s2Transaction = null;
   const callsLeft = () => opts.maxModelCalls - root.modelCalls();
   const reserve = () => target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
+  if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0 && reconstructedPartial) {
+    for (const row of opts.resumeSessionLog) {
+      if (row.kind !== "WORKUNIT")
+        continue;
+      const data = row.data;
+      const taskId = data.taskId;
+      const receipt = data.workReceipt;
+      const routeInput = data.routeInput;
+      if (typeof taskId !== "string" || typeof receipt !== "object" || receipt === null)
+        continue;
+      try {
+        if (typeof routeInput === "object" && routeInput !== null) {
+          try {
+            store.registerRoute(routeInput);
+          } catch {
+          }
+        }
+        const runningTask = ledger.startTask(taskId);
+        const artifact = store.accept(runningTask, { ...receipt, eventSeq: ledger.nextEventSeq() });
+        const ref = { artifactId: artifact.artifactId, artifactVersion: artifact.envelope.artifactVersion ?? 1 };
+        ledger.recordDelivery(taskId, ref, artifact.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL", ledger.nextEventSeq());
+        workUnits += 1;
+        const snapR = ledger.snapshot();
+        const obligationR = snapR.obligations.find((row2) => row2.obligationId === runningTask.obligationId);
+        const rootGoalR = snapR.goals.some((goal) => goal.goalId === runningTask.goalId);
+        if (obligationR !== void 0 && rootGoalR && p2IsAnswerObligationKindForGoal(goalKindOf(snapR.goals, runningTask.goalId), obligationR.kind)) {
+          target = p4Target(snapR, artifact, "ACTIVE");
+          protectedOrigin = target;
+          candidateTask = runningTask;
+        }
+      } catch (error) {
+        if (!(error instanceof P2Error))
+          throw error;
+        fail20(P2_ERROR_CODES.PACKET_BINDING);
+      }
+    }
+  }
   const methodsEnabled = opts.maxMethodLoads === 1 && captured.effect !== null && captured.catalog !== null && opts.maxEffects > 0 && opts.maxModelCalls >= 2 + opts.maxReviews;
   if (methodsEnabled && root.remainingMs() > MIN_MS) {
     const readRemaining = root.remainingMs();
@@ -14570,7 +14618,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             // Defect 3: the delivered candidate text is recorded in the private
             // log so a checkpoint/resume can rebuild the artifact and candidate,
             // and the ReplayRunner can re-derive the final answer.
-            candidateProposal: accepted.packet?.candidateProposal ?? null
+            candidateProposal: accepted.packet?.candidateProposal ?? null,
+            workReceipt: p2Snapshot(receiptInput),
+            routeInput: p2Snapshot({ routeId: route.routeId, representation: route.representation, operation: route.operation, lemmas: route.lemmas, construction: route.construction })
           });
           workUnits += 1;
           if (accepted.deliveryStatus !== "COMPLETE") {

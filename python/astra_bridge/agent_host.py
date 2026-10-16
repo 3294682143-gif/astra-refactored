@@ -9,6 +9,10 @@ starts a process; the runtime owns spawn/reap.
 
 from __future__ import annotations
 
+import hashlib
+
+import json
+
 import copy
 import time
 from pathlib import Path
@@ -77,6 +81,10 @@ _SUMMARY_FIELDS = (
     "methodLoads", "stopReason", "unresolvedObligations",
 )
 _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
+
+
+def _p4_hash(value):
+    return hashlib.sha256(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def _fail(code="FIELD_VALUE"):
@@ -173,7 +181,7 @@ class AgentHost(_Host):
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
                 "maxMethodLoads", "maxRepairs", "maxR0", "policy", "deriveBudget",
-                "resumeSessionLog", "resumeContractVersion",
+                "resumeSessionLog", "resumeContractVersion", "resumeHistory",
             ),
         )
         if not isinstance(options["deriveBudget"], bool):
@@ -201,8 +209,38 @@ class AgentHost(_Host):
         self.stop_acked = False
         self.history = {}
         self.effects = []
+        resume_history = options.get("resumeHistory")
+        if resume_history is not None:
+            if not isinstance(resume_history, list) or len(resume_history) > 256:
+                _fail()
+            prefix_ids = set()
+            for row in (self.resume_session_log or ()):
+                if isinstance(row, dict) and row.get("kind") == "MODEL_REQUEST":
+                    data = row.get("data")
+                    if isinstance(data, dict) and isinstance(data.get("requestId"), str):
+                        prefix_ids.add(data["requestId"])
+            for rec in resume_history:
+                if not isinstance(rec, dict) or set(rec.keys()) != {"requestId", "request", "receipt"}:
+                    _fail()
+                rid = rec["requestId"]; req = rec["request"]; receipt = rec["receipt"]
+                if not isinstance(rid, str) or not isinstance(req, dict) or not isinstance(receipt, dict):
+                    _fail()
+                if rid not in prefix_ids:
+                    continue
+                messages = req.get("messages")
+                if not isinstance(messages, list) or _p4_hash(messages) != req.get("contextHash"):
+                    _fail()
+                if req.get("sessionId") != session_id or req.get("problemHash") != problem_hash:
+                    _fail()
+                if receipt.get("transportStatus") != "COMPLETE" or not isinstance(receipt.get("text"), str):
+                    _fail()
+                self.history[rid] = {"request": copy.deepcopy(req), "receipt": copy.deepcopy(receipt)}
         self.model_requests = 0
         self.effect_calls = 0
+        self.resume_model_offset = 0
+        if self.resume_session_log:
+            self.resume_model_offset = sum(1 for r in self.resume_session_log if isinstance(r, dict) and r.get("kind") == "MODEL_REQUEST" and not any(isinstance(x,dict) and x.get("kind")=="FINAL" for x in self.resume_session_log))
+            self.model_requests = self.resume_model_offset
         self.review_calls = 0
         self.repair_calls = 0
         self.catalog_calls = 0
@@ -288,7 +326,7 @@ class AgentHost(_Host):
             _fail()
         if self.pending is not None or self.stopped:
             _fail()
-        if self.model_requests > 0 and not self.callback_done:
+        if self.model_requests > self.resume_model_offset and not self.callback_done:
             _fail()
         params = message["params"]
         payload(self.manifest, method, "params", params, self.session_id)
@@ -860,7 +898,7 @@ class AgentHost(_Host):
     def on_solve_result(self, message):
         result = message["result"]
         payload(self.manifest, "session.solve", "result", result, self.session_id)
-        if self.model_requests > 0 and not self.callback_done:
+        if self.model_requests > self.resume_model_offset and not self.callback_done:
             _fail()
         summary = result["summary"]
         _exact_keys(summary, _SUMMARY_FIELDS)

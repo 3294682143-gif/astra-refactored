@@ -14,6 +14,7 @@ profile and the real registered tools run):
 from __future__ import annotations
 
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -179,3 +180,32 @@ def test_replacing_context_hash_is_rejected(process_tracker):
     result = resumed.solve(_PROBLEM, {"source": "e2e"}, resume_checkpoint=forged)
     assert result["status"] == "unsolved"
     assert resumed_client.calls == 0
+
+
+def test_midrun_resume_skips_completed_work_and_runs_review(process_tracker):
+    """Step 3 (S2b): WORK delivered but REVIEW not run -> resume skips WORK."""
+    _, checkpoint = _first_with_checkpoint("local")
+    cut = None
+    for index, row in enumerate(checkpoint["sessionLog"]):
+        if row["kind"] == "WORKUNIT":
+            cut = index + 1
+    assert cut is not None
+    partial = copy.deepcopy(checkpoint)
+    partial["sessionLog"] = partial["sessionLog"][:cut]
+    partial["spent"] = {
+        "modelCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "MODEL_REQUEST"),
+        "effectCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "TOOL_OBSERVATION"),
+    }
+    partial.pop("digest", None)
+    partial["digest"] = host_checkpoint._digest(partial)
+
+    resumed, resumed_client = _agent("local")
+    result = resumed.solve(_PROBLEM, {"source": "e2e"}, resume_checkpoint=partial)
+
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    # Zero re-run WORK: the only real model call is the R2 review.
+    assert resumed_client.calls == 1
+    bodies = [json.loads(messages[1]["content"]) for (messages, _t, _m) in resumed_client.seen]
+    assert all(body.get("stage") == "R2" for body in bodies)
+    assert process_tracker
