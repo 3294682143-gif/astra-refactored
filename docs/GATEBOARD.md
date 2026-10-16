@@ -6,11 +6,33 @@ G0 source inventory and deployment facts are supporting work, not a competing
 math-feature stream. DSH authors implementation/tests; the supervisor reviews,
 applies and independently verifies them. No parallel coding agents are used.
 
+## Session update — 2026-10-17 (supervised release run; verified on `5545f25`)
+
+- **Math acceptance (§3)**: `solutionSetOf` now returns the WHOLE real solution set or `null`
+  (exact rational roots + a Sturm real-root check on the residual); the `ALL_SOLUTIONS`
+  revision gate fails closed when completeness is indeterminate. Regression
+  `apps/stdio-runtime/tests/agent-semantics-solutions.test.ts` (11 cases). Commits
+  `d21192e` + manifest `2742cba`.
+- **WASI (local only)**: real acceptance `tests/actual/test_wasi_actual.py` **24/24**
+  `LOCAL_T27_T28_PASSED` at an out-of-repo install path, plus an end-to-end
+  `PythonSandbox` run (`math.comb(13,6)=1716`). Platform acceptance (B3) is still required.
+- **Migration ledger**: **260 = 254 CLOSED / 6 REVIEW_REQUIRED** (6 MATH rows closed on
+  `tests/bridge/test_g8_retained_modules.py`; 3 DOC rows on `tests/bridge/test_g8_doc_runbook.py`;
+  6 DOC rows still need a `DOCUMENTED_CONTRACT` disposition).
+- **Distribution (local)**: wheel `astra_mathagent_s2-0.10.0a2-py3-none-any.whl` builds and
+  installs into a clean venv; the official entry runs from outside the source tree. The wheel
+  does **not** ship the TS bundle, so `engine="ts"` cannot run from a wheel-only install
+  (packaging gap + B2).
+- **Verified baseline (this session)**: `tsc -b` 0; Node **325/0**; `pytest -q`
+  **673 passed / 24 skipped**; `build_release_manifest.py --verify` **VERIFY_OK**.
+- **Release**: still **NOT_RELEASABLE** — default engine `lite`, B1–B4 `BLOCKED_EXTERNAL`,
+  6 DOC rows open, 7e mapping contract pending a ruling.
+
 | Field | Current evidence |
 | --- | --- |
 | Baseline | G1 PR2 head `6e45893`, tree `a457740`; PR2 is open, not merged; main/default frozen; see SOURCE_LOCK.md |
-| ROOT_E2E | LOCAL_PASS: `python -m pytest -q tests/e2e` — **203** real public-entry tests on v4 head (G4/PR5 CLOSED: B1/B2/B3/E14 + E08/E09 truncation barrier, E17 exact IPC), including the G2 complete-whole-problem-answer capability, p2a-work-v5 redo, trusted parameter boundaryCases (E04), E01 `{1}->{0,1}`, text parity, the G3/PR4 negative controls, the public-entry flagship (checker-grounded R2 challenge → one REPAIR call → `{1}->{0,1}`), its `maxRepairs=0` negative, the S1/E07 negative (foreign-task checker refused), the E15 honest best-effort negative, the E14 byte-verbatim release negative, the E05/E06 unclosed-auxiliary-obligation rows (`test_ts_g3_evidence.py`), the E14 empty-delivery negative, the B1b R0 rows (`test_ts_g3_r0.py`), the B3 multi-gap rows, and the G4 E08/E09 truncated-tool-barrier rows (`test_ts_g4_truncation.py`); old Controller/Lite init/solve disabled |
-| RC2_MIGRATION | 260 rows: 245 CLOSED / 15 REVIEW_REQUIRED (recomputed; 6 MATH rows reopened for lacking an executable behaviour test, 9 DOC rows deferred). Method + gaps: docs/MIGRATION_AUDIT.md |
+| ROOT_E2E | LOCAL_PASS: `python -m pytest -q tests/e2e` — **261** real public-entry tests on v4 head (G4/PR5 CLOSED: B1/B2/B3/E14 + E08/E09 truncation barrier, E17 exact IPC), including the G2 complete-whole-problem-answer capability, p2a-work-v5 redo, trusted parameter boundaryCases (E04), E01 `{1}->{0,1}`, text parity, the G3/PR4 negative controls, the public-entry flagship (checker-grounded R2 challenge → one REPAIR call → `{1}->{0,1}`), its `maxRepairs=0` negative, the S1/E07 negative (foreign-task checker refused), the E15 honest best-effort negative, the E14 byte-verbatim release negative, the E05/E06 unclosed-auxiliary-obligation rows (`test_ts_g3_evidence.py`), the E14 empty-delivery negative, the B1b R0 rows (`test_ts_g3_r0.py`), the B3 multi-gap rows, and the G4 E08/E09 truncated-tool-barrier rows (`test_ts_g4_truncation.py`); old Controller/Lite init/solve disabled |
+| RC2_MIGRATION | 260 rows: 254 CLOSED / 6 REVIEW_REQUIRED (recomputed; 6 MATH rows and 3 DOC rows closed on executable behaviour/runbook tests, 6 DOC rows still need a disposition). Method + gaps: docs/MIGRATION_AUDIT.md |
 | math_families freeze | all 60 concrete algorithm files under `math_families/**` (py/md/json, `__pycache__`/`.pyc` excluded) frozen by SHA-256 in `asset_baseline.json` and `release/BUILD_MANIFEST.json`; a 1-byte change fails `ASSET_INTEGRITY_ERROR`; the 20 `general_v11` method cards stay 20/20 |
 | S2b mid-run resume | partial-run resume: completed WORK is never re-run (0 WORK calls); the Host rehydrates its `history` from the checkpoint (full source-WORK `messages`, recomputed `contextHash` compared fail-closed); model ordinal/spend carried over monotonically; only REVIEW and subsequent stages execute. Verified online and via the no-node_modules bundle |
 | G0 source locks | commit/tree identities captured for RC2, a2, TS, DSH and Pi; audit script + five real-Git tests passed |
