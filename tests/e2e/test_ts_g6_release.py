@@ -113,3 +113,67 @@ def test_bundle_rejects_tampered_resume_without_node_modules(tmp_path, monkeypat
     assert result.get("final_response") != "FORGED"
     assert result["status"] == "unsolved"
     assert any(str(arg).endswith("stdio-runtime.bundle.mjs") for arg in process_tracker[-1].args)
+
+
+def _clean_bundle_dir(tmp_path, monkeypatch, name):
+    work = tmp_path / name
+    work.mkdir()
+    shutil.copy(BUNDLE, work / "stdio-runtime.bundle.mjs")
+    shutil.copytree(BUNDLE_SCHEMA, work / "schema")
+    assert not (work / "node_modules").exists()
+    monkeypatch.setattr(agent_runtime, "_default_script", lambda: work / "stdio-runtime.bundle.mjs")
+    return work
+
+
+def test_bundle_s1_blocks_bypass_proposals(tmp_path, monkeypatch, process_tracker):
+    """S1 on the precompiled bundle: format/empty/degenerate sets rejected."""
+    _clean_bundle_dir(tmp_path, monkeypatch, "clean_s1")
+    from test_ts_trusted_rc import RepairProposalClient
+    for proposal in ("999", "x = 999", "{}", "{0}", "{0, 999}"):
+        agent = user_agent.ReasoningAgent(
+            client=RepairProposalClient(proposal), engine="ts",
+            max_reviews=1, max_repairs=1, max_effects=1, max_model_calls=6, max_work_units=3,
+        )
+        result = agent.solve("Find all real solutions x(x-1)=0", {"source": "release"})
+        assert result["final_response"] == "{1}", proposal
+        assert result["stopReason"] == "REVISE_REJECTED", proposal
+
+
+def test_bundle_s2b_midrun_resume(tmp_path, monkeypatch, process_tracker):
+    """S2b on the precompiled bundle: mid-run resume runs 0 WORK, only REVIEW."""
+    import copy
+
+    from python.astra_bridge import host_checkpoint
+
+    _clean_bundle_dir(tmp_path, monkeypatch, "clean_s2b")
+    first = FakeClient()
+    agent = user_agent.ReasoningAgent(
+        client=first, engine="ts", mode="local",
+        max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1,
+    )
+    agent.solve("Compute 2+2", {"source": "release"})
+    checkpoint = agent._impl.export_checkpoint("Compute 2+2")
+    assert checkpoint is not None
+    cut = None
+    for index, row in enumerate(checkpoint["sessionLog"]):
+        if row["kind"] == "WORKUNIT":
+            cut = index + 1
+    assert cut is not None
+    partial = copy.deepcopy(checkpoint)
+    partial["sessionLog"] = partial["sessionLog"][:cut]
+    partial["spent"] = {
+        "modelCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "MODEL_REQUEST"),
+        "effectCalls": sum(1 for row in partial["sessionLog"] if row["kind"] == "TOOL_OBSERVATION"),
+    }
+    partial.pop("digest", None)
+    partial["digest"] = host_checkpoint._digest(partial)
+
+    resumed_client = FakeClient()
+    resumed = user_agent.ReasoningAgent(
+        client=resumed_client, engine="ts", mode="local",
+        max_model_calls=4, max_work_units=2, max_effects=1, max_reviews=1,
+    )
+    result = resumed.solve("Compute 2+2", {"source": "release"}, resume_checkpoint=partial)
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    assert resumed_client.calls == 1
