@@ -25,8 +25,8 @@ Two asset classes are distinguished for `math_families/**`:
 | status | count |
 |---|---|
 | total | 260 |
-| CLOSED | 251 |
-| REVIEW_REQUIRED | 9 |
+| CLOSED | 254 |
+| REVIEW_REQUIRED | 6 |
 
 **Closed on a dedicated behaviour test (6)** — `tests/bridge/test_g8_retained_modules.py`
 exercises the retained Python modules directly (review-input identity, purpose-specific
@@ -35,14 +35,19 @@ rule, and `CloseoutWorkflow.materials` route selection): `mathagent/closeout_evi
 `mathagent/finalization.py`, `mathagent/review.py`, `mathagent/review_context.py`,
 `mathagent/review_tasks.py`, `mathagent/workflows/closeout.py`.
 
-**Still REVIEW_REQUIRED (9)** — DOC only: `AGENTS.md`, `INSTALL.md`, `RC-INTEGRATION.md`,
-`README.md`, `docs/architecture_operations_0_8_5.md`, `docs/generated_python_wasi.md`,
+**Closed on a runbook smoke check (3)** — `tests/bridge/test_g8_doc_runbook.py` verifies the
+executable claims of `README.md` (entry contract), `RC-INTEGRATION.md` (public
+`ReasoningAgent.solve(problem, metadata)` interface) and `INSTALL.md` (documented install/WASI
+runbook scripts present and runnable).
+
+**Still REVIEW_REQUIRED (6)** — DOC only: `AGENTS.md`,
+`docs/architecture_operations_0_8_5.md`, `docs/generated_python_wasi.md`,
 `docs/runtime_contract_0_8_6.md`, `docs/source_manifest.md`,
 `docs/target-runtime-capabilities.md` — need either a runbook smoke check or an explicit
 DOCUMENTED_CONTRACT disposition (documentation is not behaviour evidence).
 
 ## Remaining evidence gaps (next actions)
-1. The 9 DOC rows need either a runbook smoke check or an explicit DOCUMENTED_CONTRACT
+1. The 6 DOC rows need either a runbook smoke check or an explicit DOCUMENTED_CONTRACT
    disposition (documentation is not behaviour evidence).
 2. `math_families/**` `registered`-only rows close on the scoped-call test; no row is
    closed on the hash freeze alone. If a scoped-call path does not exist for a family,
