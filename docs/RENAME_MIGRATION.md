@@ -62,6 +62,13 @@ workflow refs, release config, package source links. Do not infer Actions/publis
 web redirects. Keep history/Issues/version identity; do not create an unrelated repo.
 
 ## Public name checks (do early; record date + source)
+
+**Results recorded 2026-10-17 in [NAMING_VERIFICATION.md](NAMING_VERIFICATION.md)** (GitHub,
+npm, PyPI, CLI, brand/trademark leads + required actions). Summary: all channels are
+**UNKNOWN** pending owner/registry checks; the `zy` CLI name has collision risk; a real
+same-name legal-software brand and an abandoned USPTO `ZYGOS` application are leads (not a
+clearance). Plain search is never a legal no-conflict guarantee.
+
 - **GitHub:** does owner `3294682143-gif` have `zygos` available / rename permission? Goal is
   continuity of the same repo identity.
   - 2026-10-17 read-only probe: `git ls-remote https://github.com/3294682143-gif/zygos.git`
