@@ -204,7 +204,7 @@ def test_ts_entry_three_units_dependencies(process_tracker):
 
 def test_two_solves_distinct_sessions(process_tracker):
     client = FakeClient()
-    agent = user_agent.ReasoningAgent(client=client, engine="ts")
+    agent = user_agent.ReasoningAgent(client=client, engine="ts", max_model_calls=4, max_work_units=2, problem_seconds=5)
     first = agent.solve(PROBLEM, {"source": "e2e"})
     second = agent.solve(PROBLEM, {"source": "e2e"})
     assert first["status"] == "candidate"

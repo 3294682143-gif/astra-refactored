@@ -91,6 +91,7 @@ def test_public_entry_bounded_r0_no_issue_keeps_version_one(process_tracker):
         max_work_units=3,
         max_effects=0,
         max_reviews=0,
+        problem_seconds=5,
     )
     assert result["engine"] == "ts"
     assert result["status"] == "candidate"
@@ -110,6 +111,7 @@ def test_public_entry_bounded_r0_issues_falls_back_without_crashing(process_trac
         max_work_units=3,
         max_effects=0,
         max_reviews=0,
+        problem_seconds=5,
     )
     assert result["engine"] == "ts"
     # The uncertified single revision did not crash the run; it continued under

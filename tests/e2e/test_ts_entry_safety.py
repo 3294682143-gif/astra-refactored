@@ -115,7 +115,7 @@ def test_zero_cap_and_strict_are_unsolved(process_tracker):
     assert zero["final_response"] == "Unsolved."
     assert zero["metrics"]["client_method_calls"] == 0
     assert client.calls == 0
-    strict = _solve(FakeClient(), policy="STRICT")
+    strict = _solve(FakeClient(), policy="STRICT", max_model_calls=4, max_work_units=2, problem_seconds=5)
     assert strict["status"] == "unsolved"
     assert strict["final_response"] == "Unsolved."
     assert strict["candidate_verified"] is False
@@ -311,7 +311,7 @@ def test_tampered_final_answer_is_refused(monkeypatch, process_tracker):
 
     monkeypatch.setattr(host_module.AgentHost, "on_solve_result", wrapper)
     client = FakeClient()
-    result = _solve(client)
+    result = _solve(client, max_model_calls=4, max_work_units=2, problem_seconds=5)
     assert seen == ["solve"]
     assert result["status"] == "unsolved"
     assert result["final_response"] == "Unsolved."
