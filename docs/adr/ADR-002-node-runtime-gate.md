@@ -2,6 +2,9 @@
 
 Status: local prototype only; official target gate is TARGET_UNVERIFIED.
 
+> Amended by ADR-011 (2026-10-17): Zygos naming + two-phase migration and the formal
+> default entry `engine="ts"`. The Node deployment gate itself is unchanged.
+
 The supplied preliminary rules require root `user_agent.py`,
 `ReasoningAgent(client=official_client)`, and
 `solve(problem: str, metadata: dict) -> dict` with nonempty `final_response`.

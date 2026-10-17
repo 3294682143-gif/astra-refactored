@@ -25,8 +25,9 @@ applies and independently verifies them. No parallel coding agents are used.
   (packaging gap + B2).
 - **Verified baseline (this session)**: `tsc -b` 0; Node **325/0**; `pytest -q`
   **673 passed / 24 skipped**; `build_release_manifest.py --verify` **VERIFY_OK**.
-- **Release**: still **NOT_RELEASABLE** — default engine `lite`, B1–B4 `BLOCKED_EXTERNAL`,
-  6 DOC rows open, 7e mapping contract pending a ruling.
+- **Release**: still **NOT_RELEASABLE** — B1–B4 `BLOCKED_EXTERNAL`, 6 DOC rows open,
+  7e mapping contract pending. (Formal default entry is now `engine="ts"` per ADR-011;
+  Zygos naming/migration recorded in `docs/NAMING.md` + `docs/RENAME_MIGRATION.md`.)
 
 | Field | Current evidence |
 | --- | --- |

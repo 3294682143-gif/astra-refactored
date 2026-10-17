@@ -8,6 +8,10 @@ fixture runner. Preserve P0 probe behavior while making `main.ts` the explicit
 agent-loop profile selected by the Python TS Host. Keep lite/legacy defaults
 unchanged and forbid hidden solver fallback.
 
+> Amended by ADR-011 (2026-10-17): the FORMAL release entry default becomes
+> `engine="ts"` (lite explicit-only, no silent fallback); lite/legacy stay reachable and
+> non-default. The forbidden hidden-fallback rule is unchanged.
+
 Pi/DSH remain mechanism references. No third-party coding-agent CLI, dynamic
 plugin installation, private API key or provider route is embedded in the
 competition package. Retain the five mathematical packages and shared protocol

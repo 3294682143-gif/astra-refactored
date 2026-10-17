@@ -19,4 +19,6 @@ is `NOT_RUN (BLOCKED_EXTERNAL)` until the official environment is supplied.
 
 ## Default engine
 
-`user_agent.py` default engine is unchanged; `engine="ts"` remains explicit only.
+As of ADR-011 (2026-10-17) the **formal default entry is `engine="ts"`**; `lite` and
+`legacy` are reachable only by an explicit choice, and a TS-path failure is never
+silently downgraded to them. Unknown engines are rejected.

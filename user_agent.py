@@ -25,14 +25,17 @@ _ENGINES = {"lite", "legacy", "ts"}
 class ReasoningAgent:
     """Public entry point with an explicit engine switch.
 
-    The default experimental engine is the lightweight typed-action path. The
-    original Controller remains reachable with engine='legacy' and is otherwise
-    untouched. Unknown engines and unsupported parameters are rejected rather
-    than silently ignored.
+    The formal default engine is the unified TypeScript AgentLoop (``engine="ts"``):
+    the Host starts the Node runtime and drives M1-M5 under one root session. The
+    lightweight typed-action path remains available only as an explicit
+    ``engine="lite"`` choice, and the original Controller as ``engine="legacy"``.
+    Unknown engines and unsupported parameters are rejected rather than silently
+    ignored, and a failure on the TS path surfaces as an error/unsolved result —
+    it is never silently downgraded to lite/legacy.
     """
 
     def __init__(self, client, *args, **kwargs):
-        engine = kwargs.pop("engine", "lite")
+        engine = kwargs.pop("engine", "ts")
         if engine not in _ENGINES:
             raise ValueError("unknown engine")
         self.engine = engine

@@ -22,8 +22,10 @@ class _Client:
 def test_readme_entry_contract():
     from user_agent import ReasoningAgent
 
-    agent = ReasoningAgent(client=_Client())
-    assert agent.engine == "lite"  # README: default is the experimental lite path
+    # README: the formal default entry is engine="ts"; lite is explicit-only.
+    assert ReasoningAgent(client=_Client()).engine == "ts"
+    agent = ReasoningAgent(client=_Client(), engine="lite")
+    assert agent.engine == "lite"
     result = agent.solve("Compute 1+1.", {"idx": 0})
     assert isinstance(result, dict)
     # README: solve returns a non-empty final_response, a status, candidate_verified.

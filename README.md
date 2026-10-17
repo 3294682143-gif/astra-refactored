@@ -1,13 +1,31 @@
-# Astra — TypeScript five-module migration (offline development)
+# Zygos
 
-Current integration focus: the [unified TS AgentLoop](docs/UNIFIED_TS_AGENT_LOOP.md)
-reuses M1–M5 under one root session with async model/tool ports, multiple work
-units, one R2 review and S3 candidate selection. New independent P4 fixtures,
-R1 and additional R0 review rounds are frozen until the v4 gate requires them.
-The [explicit Python TS entry](docs/TS_ENGINE_ENTRY.md) now connects the injected
-client through a thin Host to `main.js --agent-loop`. The default remains lite;
-formal deployment, mathematical parity and full migration remain unaccepted.
-See the [v4 gateboard](docs/GATEBOARD.md) and [source identity lock](docs/SOURCE_LOCK.md).
+ZY · 天轭
+
+**Axiom-Guided Math Agent → General Agent Runtime**
+
+目标契约驱动 · 证据约束 · 有界调度 · 可逆修复
+
+Zygos is the product name of a general Agent runtime; **Zygos MathAgent** is its first complete
+domain implementation. Mathematics is the current focus — no other domain's agent capability is
+claimed as verified. **Astra** is the original project name, retained as the compatibility /
+migration-history name. Naming and the two-phase migration are recorded in
+[docs/NAMING.md](docs/NAMING.md), [docs/RENAME_MIGRATION.md](docs/RENAME_MIGRATION.md) and
+[ADR-011](docs/adr/ADR-011-zygos-brand-and-two-phase-migration.md).
+
+**Current phase: A (development)** — the working technical identity is still transitional
+(repo `astra-refactored`, TS scope `@astra/*`, Python host module `mathagent`, `engine="ts"`).
+The target names (`zygos`, `@zygos/*`, `zy`, `engine="zygos"`, `ZYGOS_`) are **targets, not yet
+available**: do not use `pip install zygos`, `npm i @zygos/...` or `zy` until Phase B ships and is
+verified for that channel.
+
+Integration focus: the [unified TS AgentLoop](docs/UNIFIED_TS_AGENT_LOOP.md) reuses M1–M5 under
+one root session with async model/tool ports, multiple work units, one R2 review and S3 candidate
+selection. The [explicit Python TS entry](docs/TS_ENGINE_ENTRY.md) connects the injected client
+through a thin Host to `main.js --agent-loop`; the **formal default entry is `engine="ts"`**
+(`lite` explicit-only, no silent fallback). Formal deployment, real-API math parity and full
+migration remain unaccepted. See the [v4 gateboard](docs/GATEBOARD.md) and
+[source identity lock](docs/SOURCE_LOCK.md).
 
 For the original full Python architecture, see the independent
 [General Full RC2 source branch](https://github.com/3294682143-gif/astra-refactored/tree/python-full-rc2-frozen).
@@ -133,14 +151,19 @@ The public entry point keeps the official interface:
 ```python
 from user_agent import ReasoningAgent
 
-agent = ReasoningAgent(client=client)                 # default: experimental lite
+agent = ReasoningAgent(client=client)                 # formal default: engine="ts"
+agent = ReasoningAgent(client=client, engine="lite")    # experimental lite (explicit)
 agent = ReasoningAgent(client=client, engine="legacy")  # original Controller
 result = agent.solve(problem, metadata)
 ```
 
-- `engine="lite"` (default) is the experimental lightweight typed-action path.
-  It is a bounded model/tool loop over two existing registered operators and an
-  on-demand advisory method reader. It does not claim any accuracy improvement.
+- `engine="ts"` (**default**) is the unified TypeScript AgentLoop driven through the
+  Python Host; a failure on this path surfaces as an error/unsolved result and is
+  **never silently downgraded** to lite/legacy.
+- `engine="lite"` is the experimental lightweight typed-action path, reachable only by
+  an explicit choice. It is a bounded model/tool loop over two existing registered
+  operators and an on-demand advisory method reader. It does not claim any accuracy
+  improvement.
 - `engine="legacy"` selects the original Controller implementation unchanged.
 - Unknown engines and unsupported parameters are rejected, not silently ignored.
 

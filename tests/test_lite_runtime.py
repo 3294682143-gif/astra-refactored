@@ -45,7 +45,7 @@ def tool(name, args, scope="s"):
 
 def test_default_entry_point_direct_final():
     client = FakeClient([final("7")])
-    result = user_agent.ReasoningAgent(client=client).solve("What is 3+4?")
+    result = user_agent.ReasoningAgent(client=client, engine="lite").solve("What is 3+4?")
     assert result["final_response"] == "7"
     assert result["status"] == "candidate"
     assert result["candidate_verified"] is False
@@ -74,7 +74,7 @@ def test_unknown_engine_rejected():
 
 def test_unsupported_lite_parameter_rejected():
     with pytest.raises(TypeError):
-        user_agent.ReasoningAgent(client=FakeClient([]), bogus=1)
+        user_agent.ReasoningAgent(client=FakeClient([]), engine="lite", bogus=1)
 
 
 def test_tool_then_final():
@@ -314,7 +314,7 @@ def test_new_instance_does_not_inherit_module_load_time():
     entry._LOAD_STARTED = time.monotonic() - 1000.0
     try:
         client = FakeClient([final("fresh")])
-        result = entry.ReasoningAgent(client=client).solve("q")
+        result = entry.ReasoningAgent(client=client, engine="lite").solve("q")
     finally:
         entry._LOAD_STARTED = original
     assert result["status"] == "candidate"
