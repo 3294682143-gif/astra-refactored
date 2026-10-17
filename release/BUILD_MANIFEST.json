@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "4d88ae9ca53402a54ff1f831acb9976db41e4d28",
-    "tree": "bf8331b165fa464acd2bc257884d09cd4bc58b12"
+    "commit": "cf2ffd482ee653abb01ee2e3df0ff09e1aba94c0",
+    "tree": "23cc34b759a06060639b0d0ee0fd979f38ffaec3"
   },
   "js": [
     {
@@ -122,9 +122,9 @@
     "maxWorkUnits": 2,
     "maxEffects": 1,
     "maxReviews": 1,
-    "maxMethodLoads": 0,
-    "maxRepairs": 0,
-    "maxR0": 0
+    "maxMethodLoads": 1,
+    "maxRepairs": 1,
+    "maxR0": 1
   },
   "precompiled": true,
   "requiresNpmInstall": false,

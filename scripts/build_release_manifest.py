@@ -52,9 +52,9 @@ LOCKED_RUN_PROFILE = {
     "maxWorkUnits": 2,
     "maxEffects": 1,
     "maxReviews": 1,
-    "maxMethodLoads": 0,
-    "maxRepairs": 0,
-    "maxR0": 0,
+    "maxMethodLoads": 1,
+    "maxRepairs": 1,
+    "maxR0": 1,
 }
 
 
