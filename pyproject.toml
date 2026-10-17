@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astra-mathagent-s2"
 version = "0.10.0a2"
-description = "Astra mathematics runtime with an experimental lightweight typed-action path"
+description = "Zygos (Astra) mathematics runtime — unified TS AgentLoop with a Python Host"
 requires-python = ">=3.10"
 dependencies = ["sympy>=1.12,<2", "numpy>=1.24,<3", "scipy>=1.10,<2", "requests>=2.28,<3"]
 
@@ -13,7 +13,7 @@ dependencies = ["sympy>=1.12,<2", "numpy>=1.24,<3", "scipy>=1.10,<2", "requests>
 py-modules = ["user_agent"]
 
 [tool.setuptools.packages.find]
-include = ["mathagent*", "math_families*"]
+include = ["mathagent*", "math_families*", "python*"]
 exclude = ["tests*", "math_families.tests*"]
 
 [tool.setuptools.package-data]
@@ -27,6 +27,8 @@ mathagent = [
     "resources/general_v11/scripts/*.py",
 ]
 math_families = ["catalog.json", "skills/*.md", "README.md"]
+# The precompiled TS bundle + schema shipped inside the Host package (see setup.py).
+"python.astra_bridge" = ["release/stdio-runtime.bundle.mjs", "release/schema/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -102,6 +102,11 @@ def _default_script():
     is the schema shipped next to it). A missing artifact is a fixed error at the
     call site; there is no silent fallback to an unusable path.
     """
+    here = Path(__file__).resolve().parent
+    packaged = here / "release" / "stdio-runtime.bundle.mjs"
+    if packaged.is_file():
+        # Installed distribution: the bundle + schema ship inside the package.
+        return packaged
     root = Path(__file__).resolve().parents[2]
     return root / "release" / "stdio-runtime.bundle.mjs"
 
