@@ -24,9 +24,10 @@ an earlier valid BEST_EFFORT candidate. Non-COMPLETE transports keep the origina
 stop/unknown-responsibility rules. STRICT never labels a candidate verified.
 
 Python remains provenance/admission/IO Host, not the mathematical selector.
-The default engine, 4-model/2-effect/5-second ceilings, existing method quota,
-single root Session, M1–M5 interfaces and old schemas are unchanged. No extra
-model provider, dependency, Fixture, executable capability or live math API was
+At G2 time the default engine, 4-model/2-effect/5-second ceilings, existing method quota,
+single root Session, M1–M5 interfaces and old schemas were unchanged (amended by ADR-011:
+the formal entry default is now `engine="ts"`; these preview/library defaults stay unchanged).
+No extra model provider, dependency, Fixture, executable capability or live math API was
 introduced. Context v2 is accepted only by its explicit read-only WORK validator;
 this does not claim full lifecycle/event replay.
 

@@ -3,8 +3,9 @@
 Scope: a user-approved local development exception, not official deployment
 acceptance. See [ADR-005](adr/ADR-005-p1-offline-prototype.md). The five-module
 design remains the implementation baseline; the P0 target gate is still
-TARGET_UNVERIFIED. `user_agent.py`, the default engine and the old Python solver
-are unchanged.
+TARGET_UNVERIFIED. `user_agent.py` keeps the official interface; as of ADR-011 the formal
+default engine is `engine="ts"` (`lite` explicit-only), and the original Python solver is
+reachable only via `engine="legacy"`.
 
 ## Package ownership
 

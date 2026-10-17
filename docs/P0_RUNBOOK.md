@@ -51,5 +51,6 @@ Model generation, mathematical tools, method bodies and production solve methods
 are unavailable. Never interpret a successful handshake as a math score.
 
 See [capability matrix](P0_CAPABILITY_MATRIX.md) for actual acceptance evidence and
-[ADR-002](adr/ADR-002-node-runtime-gate.md) for the official-target gate. Do not merge
-this branch into the default engine or submit it as the TS competition agent yet.
+[ADR-002](adr/ADR-002-node-runtime-gate.md) for the official-target gate. As of ADR-011
+this branch is the integrated `main` and the formal default entry is `engine="ts"`; the
+official target-environment gate (B2) remains TARGET_UNVERIFIED.
