@@ -64,7 +64,6 @@ interface Scenario {
   /** Where the checker runs: on the candidate task, or on a foreign task. */
   readonly toolOnCandidateTask?: boolean;
 }
-
 function portsFor(scenario: Scenario) {
   let toolDone = false;
   const toolOnCandidate = scenario.toolOnCandidateTask ?? true;
@@ -255,4 +254,30 @@ test("E07: a checker bound to a foreign task cannot ground a revision (S1 refuse
   assert.equal(ports.requests.some((request) => request.phase === "REPAIR"), false);
   // The S1 gate did not record a structural match for the foreign checker.
   assert.equal(result.privateState.s1Assessment, null);
+});
+
+test("incomplete all-solutions completeness fails closed: {0} is never a grounded revision", async () => {
+  // x(x^2-2)=0 has irrational roots, so its real solution set is not independently
+  // determinable by the rational-only oracle: the completeness gate fails closed and
+  // the incomplete {0} can never ground a REVISED_CANDIDATE (the parent is kept).
+  const problem = "Find all real solutions x(x^2-2)=0";
+  const ports = portsFor({ firstCandidate: "{0}", revisedCandidate: "{0}", tool: true });
+  const result = await runAgentLoop(
+    problem,
+    SESSION,
+    {
+      remainingMs: 5000,
+      maxModelCalls: 12,
+      maxWorkUnits: 8,
+      maxEffects: 1,
+      maxReviews: 1,
+      maxRepairs: 1,
+      now: () => 0,
+    },
+    portsOf(ports),
+  );
+  // The incomplete set never becomes a grounded revision: no REVISED_CANDIDATE, and the
+  // released candidate stays unverified (BEST_EFFORT).
+  assert.notEqual(result.summary.reason, "REVISED_CANDIDATE");
+  assert.equal(result.summary.candidateVerified, false);
 });
