@@ -13753,20 +13753,26 @@ function integerCoefficients(poly, variable) {
         return null;
       }
     }
-    if (!Number.isInteger(value)) {
-      return null;
-    }
     const e = parts.get(variable) ?? 0;
     rows.push({ e, c: value });
     if (e > degree) {
       degree = e;
     }
   }
-  const out = new Array(degree + 1).fill(0n);
+  const numeric = new Array(degree + 1).fill(0);
   for (const row of rows) {
-    out[row.e] = out[row.e] + BigInt(row.c);
+    numeric[row.e] = numeric[row.e] + row.c;
   }
-  return out;
+  let scale = 1;
+  for (; scale <= 4096; scale += 1) {
+    if (numeric.every((value) => Math.abs(value * scale - Math.round(value * scale)) < 1e-9)) {
+      break;
+    }
+  }
+  if (scale > 4096) {
+    return null;
+  }
+  return numeric.map((value) => BigInt(Math.round(value * scale)));
 }
 function divisors(value) {
   const m = bigAbs(value);

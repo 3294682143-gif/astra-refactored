@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { solutionSetOf, sameRationalSet, type Poly, type Rat } from "../src/agent-semantics.js";
+import { problemRelationPolynomial, solutionSetOf, sameRationalSet, type Poly, type Rat } from "../src/agent-semantics.js";
 
 function poly(terms: ReadonlyArray<readonly [string, number]>): Poly {
   return new Map(terms);
@@ -58,4 +58,16 @@ test("multi-variable / zero polynomial -> null", () => {
 test("sameRationalSet is exact and treats null as never equal", () => {
   assert.equal(sameRationalSet(null, null), false);
   assert.equal(sameRationalSet([], []), true);
+});
+
+test("the six gate cases through problemRelationPolynomial", () => {
+  const sol = (problem: string) => solutionSetOf(problemRelationPolynomial(problem));
+  assert.deepEqual(keys(sol("x/2-1=0")), ["2/1"]); // {2}
+  assert.equal(sol("x^2/2-1=0"), null); // {−√2,√2}: real roots not all rational -> undeterminable
+  assert.equal(sol("x(x^2-2)=0"), null); // {0} would be incomplete -> undeterminable
+  assert.deepEqual(keys(sol("x^2+1=0")), []); // empty real set (distinct from "unsolvable")
+  assert.deepEqual(keys(sol("(x-1)^2=0")), ["1/1"]); // repeated root collapses to {1}
+  // (x^2-1)/(x-1)=0: the domain exclusion (x≠1) is not representable here, so the
+  // relation is undeterminable -> fail closed; the excluded point is never accepted.
+  assert.equal(problemRelationPolynomial("(x^2-1)/(x-1)=0"), null);
 });

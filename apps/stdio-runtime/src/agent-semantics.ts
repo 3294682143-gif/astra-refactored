@@ -463,20 +463,29 @@ function integerCoefficients(poly: Poly, variable: string): bigint[] | null {
         return null;
       }
     }
-    if (!Number.isInteger(value)) {
-      return null;
-    }
     const e = parts.get(variable) ?? 0;
     rows.push({ e, c: value });
     if (e > degree) {
       degree = e;
     }
   }
-  const out: bigint[] = new Array(degree + 1).fill(0n);
+  const numeric: number[] = new Array(degree + 1).fill(0);
   for (const row of rows) {
-    out[row.e] = (out[row.e] as bigint) + BigInt(row.c);
+    numeric[row.e] = (numeric[row.e] as number) + row.c;
   }
-  return out;
+  // Clear simple rational coefficients (e.g. `x/2 - 1`) with the smallest integer
+  // factor that makes every coefficient integral; scaling does not change the
+  // roots. Irrational coefficients do not clear and yield null (undeterminable).
+  let scale = 1;
+  for (; scale <= 4096; scale += 1) {
+    if (numeric.every((value) => Math.abs(value * scale - Math.round(value * scale)) < 1e-9)) {
+      break;
+    }
+  }
+  if (scale > 4096) {
+    return null;
+  }
+  return numeric.map((value) => BigInt(Math.round(value * scale)));
 }
 
 function divisors(value: bigint): bigint[] {
