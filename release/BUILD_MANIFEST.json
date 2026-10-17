@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "51ad5e9d53652dc7814a21a154c721fc6a93e4be",
-    "tree": "98a0a9adc36bf05b1fbfb8592662d263dc879953"
+    "commit": "4c1892dbf5f8651a4026ae3816ed573ee304dfb7",
+    "tree": "998910f9265e4cdaa6e2d48953272291ff4373df"
   },
   "js": [
     {
@@ -27,7 +27,7 @@
   "assets": {
     "protocolSchema": {
       "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "66d1071c6e887a12534a089dc04f392175164a2668de1c30bce67436d93953e1"
+      "sha256": "5f2d64c2fda2f79319bb6571b3b5d66b18a839869ba2c1d549a64c77cef84a5b"
     },
     "methodRegistry": {
       "path": "mathagent/resources/tool-registry.json",
@@ -49,7 +49,7 @@
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
-      "sha256": "66d1071c6e887a12534a089dc04f392175164a2668de1c30bce67436d93953e1"
+      "sha256": "5f2d64c2fda2f79319bb6571b3b5d66b18a839869ba2c1d549a64c77cef84a5b"
     }
   },
   "mathFamilyFiles": {

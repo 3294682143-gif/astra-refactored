@@ -141,24 +141,24 @@ class AgentRuntime:
         self,
         client,
         *,
-        max_model_calls=8,
-        max_work_units=4,
-        max_effects=1,
+        max_model_calls=32,
+        max_work_units=8,
+        max_effects=2,
         max_reviews=1,
-        max_method_loads=0,
-        max_repairs=0,
-        max_r0=0,
+        max_method_loads=1,
+        max_repairs=1,
+        max_r0=1,
         problem_seconds=600,
         policy="BEST_EFFORT",
         derive_budget=False,
         node="node",
         mode="platform",
     ):
-        if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 32:
+        if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 256:
             raise ValueError("invalid max_model_calls")
-        if not _is_int(max_work_units) or not 1 <= max_work_units <= 32:
+        if not _is_int(max_work_units) or not 1 <= max_work_units <= 64:
             raise ValueError("invalid max_work_units")
-        if not _is_int(max_effects) or not 0 <= max_effects <= 2:
+        if not _is_int(max_effects) or not 0 <= max_effects <= 16:
             raise ValueError("invalid max_effects")
         if not _is_int(max_reviews) or not 0 <= max_reviews <= 1:
             raise ValueError("invalid max_reviews")
