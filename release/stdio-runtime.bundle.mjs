@@ -14725,11 +14725,29 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           }
           const effectsBefore = root.effectCalls();
           const receipt = await calls.effect(running, outcome.requestId, action, subGate, callsLeft(), catalog ?? void 0);
+          let methodCardSha = null;
+          if (isMethod && methodId2 !== null && captured.asset !== null && root.effectCalls() > effectsBefore) {
+            const scopeHash = p4Hash(JSON.stringify({ scope: running.scopeId, card: methodId2 }));
+            try {
+              const descriptor = await captured.asset.call({
+                group: "methodCards",
+                assetId: methodId2,
+                scopeId: scopeHash,
+                contractVersion: contract.contractVersion
+              });
+              if (descriptor.assetId === methodId2 && descriptor.scopeId === scopeHash) {
+                methodCardSha = descriptor.sha256;
+              }
+            } catch {
+              methodCardSha = null;
+            }
+          }
           sessionLog.append(isMethod ? "METHOD_LOAD" : "TOOL_OBSERVATION", {
             effectId: receipt.effectId,
             source: receipt.source,
             level: receipt.level,
-            checkResult: receipt.checkResult
+            checkResult: receipt.checkResult,
+            ...isMethod ? { methodCardSha } : {}
           });
           if (isMethod && root.effectCalls() > effectsBefore) {
             methodLoads += 1;

@@ -309,3 +309,55 @@ test("the frozen 1.2 manifest stays read-only and the live 1.3 profile is active
     (error: unknown) => error instanceof Error && error.message === "FIELD_VALUE",
   );
 });
+
+test("G7/PR7 7e: a loaded method card is bound through one scoped methodCards call", async () => {
+  const ports = reactivePorts({
+    work: (request: AgentModelRequest) =>
+      request.requestId === "model-1" ? methodReply() : reactiveWork(request),
+    effect: (request: P3EffectRequest) => methodEffect(request, CATALOG),
+  });
+  const assetCalls: Record<string, unknown>[] = [];
+  const result = await runAgentLoop(
+    PROBLEM,
+    SESSION,
+    {
+      remainingMs: 5000,
+      maxModelCalls: 4,
+      maxWorkUnits: 2,
+      maxEffects: 1,
+      maxReviews: 1,
+      maxMethodLoads: 1,
+      now: () => 0,
+    },
+    {
+      model: ports.model,
+      effect: ports.effect,
+      catalog: {
+        async read(): Promise<P2MethodCatalog> {
+          return CATALOG;
+        },
+      },
+      asset: {
+        async call(request: unknown) {
+          const row = request as Record<string, unknown>;
+          assetCalls.push(row);
+          return {
+            group: row["group"],
+            assetId: row["assetId"],
+            scopeId: row["scopeId"],
+            contractVersion: row["contractVersion"],
+            sha256: "a".repeat(64),
+          };
+        },
+      },
+    } as never,
+  );
+  // Exactly one scoped methodCards call, addressed by the loaded method id, and
+  // the method body still reaches WORK via method.catalog -> method.load.
+  assert.equal(result.summary.methodLoads, 1);
+  const cards = assetCalls.filter((row) => row["group"] === "methodCards");
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0]!["assetId"], METHOD_ID);
+  assert.equal(typeof cards[0]!["scopeId"], "string");
+  assert.equal((cards[0]!["scopeId"] as string).length, 64);
+});

@@ -801,11 +801,35 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     }
                     const effectsBefore = root.effectCalls();
                     const receipt = await calls.effect(running, outcome.requestId, action, subGate, callsLeft(), catalog ?? undefined);
+                    // G7/PR7 Slice 7e: bind the loaded method card to the Host registry with
+                    // one scoped `methodCards` call within the current scope. The card body
+                    // still reaches WORK through `method.catalog -> method.load`; a refused
+                    // descriptor is recorded as absent (never fabricated), and it never
+                    // replaces the real method body or counts as evidence.
+                    let methodCardSha = null;
+                    if (isMethod && methodId !== null && captured.asset !== null && root.effectCalls() > effectsBefore) {
+                        const scopeHash = p4Hash(JSON.stringify({ scope: running.scopeId, card: methodId }));
+                        try {
+                            const descriptor = (await captured.asset.call({
+                                group: "methodCards",
+                                assetId: methodId,
+                                scopeId: scopeHash,
+                                contractVersion: contract.contractVersion,
+                            }));
+                            if (descriptor.assetId === methodId && descriptor.scopeId === scopeHash) {
+                                methodCardSha = descriptor.sha256;
+                            }
+                        }
+                        catch {
+                            methodCardSha = null;
+                        }
+                    }
                     sessionLog.append(isMethod ? "METHOD_LOAD" : "TOOL_OBSERVATION", {
                         effectId: receipt.effectId,
                         source: receipt.source,
                         level: receipt.level,
                         checkResult: receipt.checkResult,
+                        ...(isMethod ? { methodCardSha } : {}),
                     });
                     if (isMethod && root.effectCalls() > effectsBefore) {
                         methodLoads += 1;
