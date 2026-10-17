@@ -68,6 +68,12 @@ def scoped_asset_call(group, asset_id, *, scope_id, contract_version, root):
     if group == "mathFamilies":
         path = root / "math_families" / "catalog.json"
         expected = baseline.get("mathFamilies", {}).get("catalogSha256")
+    elif group == "methodCards":
+        # Addressed by card id via the authoritative methods.json `path`.
+        from .host_assets_registry import _method_card_path
+
+        path = _method_card_path(root, asset_id)
+        expected = (baseline.get("methodCards", {}).get("files") or {}).get(asset_id)
     else:
         path = {
             "outputCheckers": root / "mathagent" / "output_checks" / asset_id,

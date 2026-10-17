@@ -100,7 +100,7 @@ export interface AgentCatalogPort {
 /** The two injected ports of one AgentLoop run. */
 /** G7/PR7 Slice 7e: one scoped math-asset reference from the TS M2/M3/M5 side. */
 export interface AgentAssetRequest {
-  readonly group: "outputCheckers" | "mathFamilies" | "skills" | "prompts";
+  readonly group: "outputCheckers" | "mathFamilies" | "skills" | "prompts" | "methodCards";
   readonly assetId: string;
   readonly scopeId: string;
   readonly contractVersion: number;

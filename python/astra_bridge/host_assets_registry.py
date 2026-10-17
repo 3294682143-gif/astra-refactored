@@ -30,6 +30,9 @@ ASSET_GROUPS = {
     "mathFamilies": "math_families",
     "skills": "mathagent/resources/skills",
     "prompts": "mathagent/prompts",
+    # methodCards: the general_v11 method cards, addressed by card id via the
+    # authoritative methods.json `path` (NOT a math_families mapping). See ADR-011.
+    "methodCards": "mathagent/resources/general_v11/references",
 }
 
 # The committed frozen baseline SHA list. The integrity check compares the live
@@ -76,6 +79,32 @@ def _prompts(root: Path):
     return sorted(p.name for p in base.glob("*.py") if p.name != "__init__.py")
 
 
+def _methods_json(root: Path) -> Path:
+    return root / "mathagent" / "resources" / "general_v11" / "data" / "methods.json"
+
+
+def _method_cards(root: Path):
+    """The general_v11 method-card ids, from the authoritative methods.json.
+
+    Returns [] when the source is absent (the registry is also queried on
+    partial roots, e.g. a math_families-only tamper root).
+    """
+    path = _methods_json(root)
+    if not path.is_file():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return sorted(str(row["id"]) for row in data.get("methods", []) if isinstance(row, dict) and row.get("id"))
+
+
+def _method_card_path(root: Path, name: str) -> Path:
+    """Resolve a method-card id to its body path via the authoritative methods.json."""
+    data = json.loads(_methods_json(root).read_text(encoding="utf-8"))
+    for row in data.get("methods", []):
+        if isinstance(row, dict) and str(row.get("id")) == name:
+            return root / "mathagent" / "resources" / "general_v11" / str(row["path"])
+    raise KeyError(name)
+
+
 def registry_snapshot(root) -> dict:
     """Enumerate the registered assets with their enumerations and SHA-256."""
     root = Path(root)
@@ -91,12 +120,18 @@ def registry_snapshot(root) -> dict:
         },
         "skills": {"dir": ASSET_GROUPS["skills"], "entries": _skills(root)},
         "prompts": {"dir": ASSET_GROUPS["prompts"], "entries": _prompts(root)},
+        "methodCards": {
+            "methodsJson": "mathagent/resources/general_v11/data/methods.json",
+            "entries": _method_cards(root),
+            "methodsJsonSha256": _sha256(_methods_json(root)) if _methods_json(root).is_file() else None,
+        },
     }
     out["counts"] = {
         "outputCheckers": len(out["outputCheckers"]["entries"]),
         "mathFamilies": len(out["mathFamilies"]["entries"]),
         "skills": len(out["skills"]["entries"]),
         "prompts": len(out["prompts"]["entries"]),
+        "methodCards": len(out["methodCards"]["entries"]),
     }
     return out
 
@@ -138,6 +173,21 @@ def verify_integrity(root, snapshot=None, baseline=None) -> dict:
         path = root / rel
         if not path.is_file() or _sha256(path) != expected:
             errors.append(f"ASSET_INTEGRITY_ERROR:mathFamilies:{rel}")
+    # methodCards: the addressing contract (methods.json) and every card body are
+    # frozen; an id that is not declared, or a changed body, fails closed.
+    mc = baseline.get("methodCards") or {}
+    methods_json = _methods_json(root)
+    if methods_json.is_file():
+        if _sha256(methods_json) != mc.get("methodsJsonSha256"):
+            errors.append("ASSET_INTEGRITY_ERROR:methodCards:methodsJson")
+        for name in snapshot["methodCards"]["entries"]:
+            try:
+                path = _method_card_path(root, name)
+            except KeyError:
+                errors.append(f"ASSET_INTEGRITY_ERROR:methodCards:{name}")
+                continue
+            if not path.is_file() or (mc.get("files") or {}).get(name) != _sha256(path):
+                errors.append(f"ASSET_INTEGRITY_ERROR:methodCards:{name}")
     return {
         "ok": not errors,
         "errors": errors,

@@ -108,5 +108,30 @@
       "math_families/skills/transfer_matrix.md": "876e74b2e4a449d0cb028794500c8ffd819d2342c9e8115ebaf3b974c396c0d1"
     }
   },
-  "schemaVersion": "astra-asset-baseline-v1"
+  "schemaVersion": "astra-asset-baseline-v1",
+  "methodCards": {
+    "methodsJsonSha256": "789283c5abc0e17b84bddd9a292e95b037f900deeec55cec0fa7da401debe168",
+    "files": {
+      "domain-equivalence": "97299e6b9296d40b61a4ceaa3fcac1aff5396702f75095aa0c9813e6fac551bb",
+      "proof-counterexamples": "aa057446c8243c67277e47286ecd9e105be777e10d7d4a8bbd13decf285eff57",
+      "invariants-extremal": "31cef53113861bcb4424fc186ebdb65c98926100983578f99a7625dca7b94e94",
+      "induction-recurrence": "5487e83bdeeba3634f63022fae68a463917c9ed661146b9f1dcd10a44c530a52",
+      "finite-state-dp": "8a5bc4cdc8a4187565bec6fcb5b5e25bb67a5c89df5c87f937790e1a4cd06080",
+      "counting-bijections": "58d48bf1ac3b99b8d6181bbc0a936f7c7bded771c4c9470272f1faef8561b7d8",
+      "generating-functions": "9d037da5b0f95d93962a0fc179f28e94d7c0dffc1153974e70ec316c99fbbd34",
+      "modular-crt": "8a123c21709cb30619e811125b74b383bd1bb49aec7901488bc642ff119bbd5e",
+      "integral-symmetry": "d24a300bfd6366a3452297e2e11f1770ecdf4c988ad43a69c0e43e5702505cc9",
+      "coordinates-geometry": "c1157489b331bd4b3e48247c866db7f9368cd18adf5aca837423103688e0f4dc",
+      "inequalities-optimization": "dd56f50e8b78ecf2d6e60fadf30ec0336e597da6f3608365968b63a2c659779a",
+      "linearization-spectral": "1d5e7b4266064bcc7c6f79ad4fb23f8d40a56b31afabc03adeeae3e4fa683e51",
+      "conditioning-indicators": "dabe13802c1567d8f0fe0d14e3ac7e28b148bb6cc03a9975318d42a4779fc8e4",
+      "convergence-limits": "f8066e62545b26626849682c9ef5fe868e2acbc5754d2e669e98ceec34c878f3",
+      "differential-equations": "b63091695d79108fef4c6247cd3f426495bfbe3ed23b2caae6407a2e4360a7c6",
+      "algebraic-structures": "c87e081e165a3b5ee2f324f377c257d74339af7fc9a64e7960ba7c8b3105f13b",
+      "topology-local-global": "1c8a58bf8fe6205b2fb63d801d6f43fda14efe6b305f222b956edc6982f7d3d0",
+      "statistical-inference": "756a82734adf6baa1948dc7c62cd4d08c9f5e7f650d3b6793e3793f30d9b64f4",
+      "regression-diagnostics": "3d8d1715efa5317c1d6484db1ef49cf7135142990da411670c48b17268c8b8a3",
+      "numerical-approximation": "9b936c93677a6348a7d79e2504cceb69184f68b99c3c2e69f2ddb70ca2a0edae"
+    }
+  }
 }
