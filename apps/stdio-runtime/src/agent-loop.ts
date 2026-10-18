@@ -782,6 +782,10 @@ export async function runAgentLoop(
       }
       let advanced = false;
       let yielded = false;
+      // Batch 2 (deep loop): bounded, fail-closed retry of a TRANSIENT model
+      // failure on the SAME task. An unusable/unknown transport is never accepted
+      // as progress or evidence; we may re-ask a bounded number of times.
+      let workRetries = 0;
       while (!root.stopped()) {
         if (root.remainingMs() <= MIN_MS) {
           stop = "DEADLINE_EXCEEDED";
@@ -934,6 +938,17 @@ export async function runAgentLoop(
           outcome.code !== "WORK" ||
           root.remainingMs() <= MIN_MS
         ) {
+          const transient =
+            outcome.code !== "WORK" && outcome.code !== "DEADLINE_EXCEEDED";
+          if (
+            transient &&
+            workRetries < 2 &&
+            callsLeft() > reserve() &&
+            root.remainingMs() > MIN_MS
+          ) {
+            workRetries += 1;
+            continue;
+          }
           stop = outcome.code === "WORK" ? "DEADLINE_EXCEEDED" : outcome.code;
           break;
         }

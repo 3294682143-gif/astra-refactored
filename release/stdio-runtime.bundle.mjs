@@ -14623,6 +14623,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       }
       let advanced = false;
       let yielded = false;
+      let workRetries = 0;
       while (!root.stopped()) {
         if (root.remainingMs() <= MIN_MS) {
           stop = "DEADLINE_EXCEEDED";
@@ -14708,6 +14709,11 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           });
         }
         if (outcome.receipt.transportStatus !== "COMPLETE" || outcome.code !== "WORK" || root.remainingMs() <= MIN_MS) {
+          const transient = outcome.code !== "WORK" && outcome.code !== "DEADLINE_EXCEEDED";
+          if (transient && workRetries < 2 && callsLeft() > reserve() && root.remainingMs() > MIN_MS) {
+            workRetries += 1;
+            continue;
+          }
           stop = outcome.code === "WORK" ? "DEADLINE_EXCEEDED" : outcome.code;
           break;
         }
