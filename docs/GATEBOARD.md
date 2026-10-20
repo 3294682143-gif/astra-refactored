@@ -2,6 +2,13 @@
 
 Current gate: **G5 / PR6 (local-ready) + G7 / PR7 in progress** — the official 书生 S2 API + L1 comparison remain `BLOCKED_EXTERNAL`, so G5/G6 are delivered as **locally-verifiable packages** (Slices 5a/5b) and work continues on **G7 / PR7** (Slices 7a-7f). **G4 / PR5 CLOSED** (Slices 4a `63dbeca`, 4b `9d18ef4`, 4c this commit: immutable SessionLog + ContextProjector replay, Pi truncated-tool-barrier E08/E09, DSH monotonic tool guards + request-responsibility journal + E17 exact IPC); **G3 / PR4 CLOSED at `651cb04`**; G2 closed at `899c7fc`.
 G4/PR5 is closed; **CURRENT_GATE points to G5 / PR6 (real 书生 S2 API + budget modes + L1 math comparison)**, which stays BLOCKED_EXTERNAL until the official environment/authorization is supplied.
+Session update (2026-10-20 late): the TS loop now exposes `exact_check_expr`
+and `bounded_enumeration`, emits a machine-readable `CERT1` final certificate,
+and forces one bounded enumeration/exact-object check where the problem text
+supplies a finite draw, determinant, field extension, distribution, trig or
+limit object. Targeted reruns fixed #10/#12/#24/#35/#99; see
+`docs/REAL_MODEL_PILOT_20261019.md`. This is a targeted repair count, not a
+blind 100-item score.
 G0 source inventory and deployment facts are supporting work, not a competing
 math-feature stream. DSH authors implementation/tests; the supervisor reviews,
 applies and independently verifies them. No parallel coding agents are used.
@@ -19,12 +26,35 @@ applies and independently verifies them. No parallel coding agents are used.
 - **Migration ledger**: **260 = 254 CLOSED / 6 REVIEW_REQUIRED** (6 MATH rows closed on
   `tests/bridge/test_g8_retained_modules.py`; 3 DOC rows on `tests/bridge/test_g8_doc_runbook.py`;
   6 DOC rows still need a `DOCUMENTED_CONTRACT` disposition).
+- **Real-model smoke (local, 2 items)**: precise WorkPacket field types were added to the WORK
+  prompt and a bounded same-task schema-repair turn is available through
+  `max_repairs=1`; both test0 #4 and #41 now reach `candidate` through the real
+  `engine="ts"` entry. This is not an accuracy benchmark; see
+  `docs/REAL_MODEL_SMOKE_20261018.md`.
+- **Full test0 local run (2026-10-18, current code)**: 100 items completed through the public
+  `engine="ts"` entry; 93 best-effort candidates, 2 `PACKET_REJECTED`, 5
+  `WORK_UNITS_COMPLETE`; 399 model requests / 1,810,961 reported tokens; emulator
+  `ReferenceJudge` 14/100 (format-normalized 18/93 candidates with one uniform
+  normalizer; the latter is a local cross-check, not the official judge). The matcher number is
+  a strict reference-string match, not math accuracy. Average depth is still ~4 calls/item
+  (median 4, max 6, no item near the 256-call cap), so this is not a baseline-depth run: the
+  compiled task graph, not the cap, bounds depth. See `docs/REAL_MODEL_SMOKE_20261018.md`;
+  report at `/tmp/astra-test0-full2`.
+- **Depth work (20 items x 6 real pilot runs, 2026-10-18)**: an answer-task tool-check line, an
+  `unsolved` guard and an answer-check turn (system prompt only; a unit test pins the payload as
+  byte-identical) were added and measured on the same 20 items. Candidates reached 19/20 and the
+  1-call no-candidate failure mode disappeared, but the tool check fired on only 0-7 of 20 items
+  depending on wording and strict accuracy stayed at 1-4/20, i.e. within noise. Two stronger
+  designs are refused by the Host protocol (a `REPAIR` call before the review; a second `WORK`
+  turn for a delivered task), so real depth needs a Host protocol change, not a cap or prompt
+  change. See `docs/REAL_MODEL_SMOKE_20261018.md`.
 - **Distribution (local)**: wheel `astra_mathagent_s2-0.10.0a2-py3-none-any.whl` builds and
   installs into a clean venv; the official entry runs from outside the source tree. The wheel
-  does **not** ship the TS bundle, so `engine="ts"` cannot run from a wheel-only install
-  (packaging gap + B2).
-- **Verified baseline (this session)**: `tsc -b` 0; Node **325/0**; `pytest -q`
-  **673 passed / 24 skipped**; `build_release_manifest.py --verify` **VERIFY_OK**.
+  now ships the TS bundle and schema, and a wheel-only `engine="ts"` smoke passed locally.
+  Target-environment launch remains **B2 BLOCKED_EXTERNAL**.
+- **Verified baseline (this session, local)**: `tsc -b` 0; Node **328/0**; `pytest -q`
+  **683 passed / 24 skipped**; `tests/e2e` **265 passed**; `build_release_manifest.py --verify`
+  **VERIFY_OK**; wheel-only `engine="ts"` smoke passed outside the source tree.
 - **Release**: still **NOT_RELEASABLE** — B1–B4 `BLOCKED_EXTERNAL`, 6 DOC rows open,
   7e mapping contract pending. (Formal default entry is now `engine="ts"` per ADR-011;
   Zygos naming/migration recorded in `docs/NAMING.md` + `docs/RENAME_MIGRATION.md`.)
@@ -38,9 +68,9 @@ applies and independently verifies them. No parallel coding agents are used.
 | S2b mid-run resume | partial-run resume: completed WORK is never re-run (0 WORK calls); the Host rehydrates its `history` from the checkpoint (full source-WORK `messages`, recomputed `contextHash` compared fail-closed); model ordinal/spend carried over monotonically; only REVIEW and subsequent stages execute. Verified online and via the no-node_modules bundle |
 | G0 source locks | commit/tree identities captured for RC2, a2, TS, DSH and Pi; audit script + five real-Git tests passed |
 | G0 deployment | BLOCKED_EXTERNAL: no official Node/subprocess permission or target sandbox supplied |
-| BUDGET | Preview 4 model calls / 2 effects / 5000 ms maximum; not official contest limits; no math API calls authorized in current implementation work |
+| BUDGET | Current code default: 8 model calls / 4 work units / 1 effect / 600 s; hard caps 256 / 64 / 2. Not official contest limits; no real math API calls are required for local tests |
 | MATH | E08/E09/E10/E11/E12/E18 infrastructure paths locally tested; E01 grounded repair and other full math properties pending; real model comparison NOT_RUN |
-| QUALITY | v4 head (G5/G6 local + G7/PR7 slices 7a-7c) exact clean: **314 Node / 663 Python passed (24 WASI skips)**, **261 e2e**; G4/PR5: 311 / 589, 203 e2e; G3/PR4 `651cb04`: 304 / 587, 201 e2e; prior `a1a1428`: 300 / 582, 196 e2e; prior 3c.3: 300 / 579; slice 3b: 299 / 578; slice 3a.2: 297 / 578; slice 3c.2: 297 / 578; slice 3c.1: 297 / 577; slice 3a.1: 295 / 576; slice 2: 294 / 576; head `899c7fc`: 287 / 572; G1 PR2: 244 / 406; redo `5b3ff34`: 269 / 484; progress/parity worktree: 272 / 507, same 24 WASI skips |
+| QUALITY | v4 head (G5/G6 local + G7/PR7 slices 7a-7c) exact clean: **328 Node / 683 Python passed (24 WASI skips)**, **265 e2e**; G4/PR5: 311 / 589, 203 e2e; G3/PR4 `651cb04`: 304 / 587, 201 e2e; prior `a1a1428`: 300 / 582, 196 e2e; prior 3c.3: 300 / 579; slice 3b: 299 / 578; slice 3a.2: 297 / 578; slice 3c.2: 297 / 578; slice 3c.1: 297 / 577; slice 3a.1: 295 / 576; slice 2: 294 / 576; head `899c7fc`: 287 / 572; G1 PR2: 244 / 406; redo `5b3ff34`: 269 / 484; progress/parity worktree: 272 / 507, same 24 WASI skips |
 | G2A METHODS | Real method → WORK → second WORK → R2; one catalog read/one method load in shared effect quota; opt-in only; see G2_METHOD_BRIDGE.md |
 | G2B1 FINAL | Real tool → WORK → final → R2 in four calls; confirms only the protected old candidate; no fabricated artifact; see G2_FINAL_CONFIRMATION.md |
 | G2B2 ROUTES | Model v2 proposal → M1 TASK_ADDED → real second-route WORK; full raw provenance, empty cross-route inputs, current-obligation scope; see G2_DYNAMIC_ROUTES.md |
@@ -83,3 +113,51 @@ Pending: G5 real official API + target environment (external); G6 approved L1 re
 L1: NOT_COMPLETE. L2: NOT_COMPLETE. Do not create MIGRATION_COMPLETION.md as a
 signed completion record while ownership/evidence gaps remain. Real API costs,
 expanded permissions and default-engine switching retain their separate gates.
+
+## Session update — 2026-10-19 (deep-loop repair closure + bounded multi-round review)
+
+- **Baseline reds cleared**: the last missing `model-1..model-3` pin was in the
+  S1 diagnostic ledger (`packages/math-audit/src/p4-s1.ts`), not in the repair
+  branch itself. With it widened, the four-task PARAMETER flagship reaches the
+  real REPAIR call: complete revision -> `REVISED_CANDIDATE`; partial revision
+  -> fail-closed `REVISE_REJECTED`; both keep `candidateVerified=false`.
+- **Checkpoint budget row** moved to the four-task graph's own checkpoint
+  budget; the resume tightening semantics are unchanged.
+- **Bounded review/repair rounds** are now implemented end to end: `R2` review
+  of the protected candidate, one grounded `REPAIR`, then an `R4` re-review of
+  the revised child, up to the synchronized `maxReviews`/`maxRepairs` cap of 3.
+  The Host enforces one repair per review round, R4 only after a repair, and
+  re-derives a REPAIR source's full scope/obligations from Host-owned `WORK`
+  history for the next review.
+- **New e2e**: `tests/e2e/test_ts_g3_multi_round.py` covers two complete
+  `R2 -> REPAIR -> R4 -> REPAIR` rounds and a post-repair R4 where the repair
+  budget is already spent and the first revision is kept.
+- **Answer consensus + forced methods**: `maxConsensus` (0..8, default 0)
+  adds a blind re-solve followed by full-proof adversarial audit turns; forced
+  method consultation loads a real catalog card before the answer-bearing
+  packet; choice problems must decide every option; long/partial/malformed
+  packets are fail-closed or recovered through a Host-authorized CONSENSUS turn.
+  Host projection collapses same-task WORK/CONSENSUS rows to the same artifact,
+  including runs containing an unusable consensus packet.
+- **Verified**: `tsc -b` 0; Node suite **330/330**; Python suite **695 passed,
+  24 skipped, 0 failed**; `build_release_manifest.py --verify` `VERIFY_OK`.
+- **Not claimed**: corrected accuracy. The historical 22-family / 20-card
+  method layer remains unported.
+
+### 2026-10-19 real 100-item pilot (local ReferenceJudge)
+
+- Max2: strict **17/100**, 93/100 candidates, semantic **68/100**, 8.41 calls/item.
+- Max8 merged (2026-10-20): **100/100 candidates**, strict **20/100**, same
+  local semantic judge **80/100**, local per-item adjudicated review **91/100**
+  (8 incorrect, 1 ambiguous; 91 includes targeted repair reruns; single-run baseline is 86/13/1, strict 19), normalized **24/100**, **15.18 calls/item**
+  (1518 requests), 9,110,467 tokens, 96 effect/method loads and 100 reviews.
+- Seven unsolved: 4 `PACKET_REJECTED`, 2 `WORK_UNITS_COMPLETE`, 1 `ERROR`.
+- **0.9.8 comparison**: strict **14 -> 19** (+5); the same local semantic judge
+  gives 0.9.8 **70/100** vs TS max8 **80/100**; per-item adjudicated review is
+  0.9.8 **75/100** vs TS max8 **91/100**; candidate hit 81 -> 100. 0.9.8 used
+  **51.07 calls/item** vs **15.18** here. The review regimes differ, so these
+  are reported separately.
+- The max8 100-item run required batching because of the upstream input-token
+  window; the merged valid result is reported above. The earlier 20-item max8
+  pilot was 14.05 calls/item and semantic 13–14/20.
+- Report: `docs/REAL_MODEL_PILOT_20261019.md`.

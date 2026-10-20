@@ -76,24 +76,27 @@ def _fail(code):
     raise ProtocolError(code)
 
 
+def _packaged_path(name):
+    """Schema shipped beside the Python package in the wheel/release bundle."""
+    return Path(__file__).resolve().parent / "release" / "schema" / name
+
+
+def _source_path(name):
+    return Path(__file__).resolve().parents[2] / "packages" / "protocol" / "schema" / name
+
+
 def _default_path():
-    return (
-        Path(__file__).resolve().parents[2]
-        / "packages"
-        / "protocol"
-        / "schema"
-        / "agent-host-v13.schema.json"
-    )
+    packaged = _packaged_path("agent-host-v13.schema.json")
+    if packaged.is_file():
+        return packaged
+    return _source_path("agent-host-v13.schema.json")
 
 
 def _legacy_path():
-    return (
-        Path(__file__).resolve().parents[2]
-        / "packages"
-        / "protocol"
-        / "schema"
-        / "agent-host.schema.json"
-    )
+    packaged = _packaged_path("agent-host.schema.json")
+    if packaged.is_file():
+        return packaged
+    return _source_path("agent-host.schema.json")
 
 
 def _read_manifest(path):

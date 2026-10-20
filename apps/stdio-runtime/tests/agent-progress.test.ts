@@ -50,8 +50,8 @@ async function runProgress(options: {
     SESSION,
     {
       remainingMs: 5000,
-      maxModelCalls: 4,
-      maxWorkUnits: 3,
+      maxModelCalls: 8,
+      maxWorkUnits: 4,
       maxEffects: 1,
       maxReviews: 0,
       now: () => 0,
@@ -103,11 +103,14 @@ test("unsolved yields the current task and another ready task works", async () =
     work: (request) =>
       request.requestId === "model-1" ? unsolvedReply() : reactiveWork(request),
   });
-  assert.equal(run.result.summary.modelCalls, 2);
-  assert.equal(run.result.summary.workUnits, 1);
+  // A yielded task never stops the loop: the remaining ready tasks keep working
+  // (the UNKNOWN graph has ANSWER_REQUEST, INDEPENDENT_DERIVATION and
+  // OUTPUT_COVERAGE), so the count is the tasks that could still run.
+  assert.equal(run.result.summary.modelCalls, 3);
+  assert.equal(run.result.summary.workUnits, 2);
   assert.equal(run.result.summary.effectCalls, 0);
   const works = workRequests(run.requests);
-  assert.equal(works.length, 2);
+  assert.equal(works.length, 3);
   assert.notEqual(taskOf(works[0]!).taskId, taskOf(works[1]!).taskId);
   assertYielded(run, "UNSOLVED", "model-1");
 });
@@ -123,11 +126,11 @@ test("a legal partial packet yields and keeps its own artifact", async () => {
       return JSON.stringify(packet);
     },
   });
-  assert.equal(run.result.summary.modelCalls, 2);
-  assert.equal(run.result.summary.workUnits, 2);
+  assert.equal(run.result.summary.modelCalls, 3);
+  assert.equal(run.result.summary.workUnits, 3);
   assert.equal(run.result.summary.effectCalls, 0);
   const works = workRequests(run.requests);
-  assert.equal(works.length, 2);
+  assert.equal(works.length, 3);
   assert.notEqual(taskOf(works[0]!).taskId, taskOf(works[1]!).taskId);
   const artifacts = run.result.privateState.artifacts as readonly {
     readonly artifact: {
@@ -147,16 +150,21 @@ test("a legal partial packet yields and keeps its own artifact", async () => {
 });
 
 test("a second consecutive cached repeat yields and the next task works", async () => {
+  // The single effect is spent by model-1, so every later tool reply is served
+  // from the cache; the second identical cached request yields the task, and the
+  // remaining ready tasks keep working after it.
   const run = await runProgress({
     work: (request) =>
-      request.requestId === "model-4" ? reactiveWork(request) : reactiveTool(),
+      ["model-1", "model-2", "model-3"].includes(request.requestId)
+        ? reactiveTool()
+        : reactiveWork(request),
   });
-  assert.equal(run.result.summary.modelCalls, 4);
-  assert.equal(run.result.summary.workUnits, 1);
+  assert.equal(run.result.summary.modelCalls, 5);
+  assert.equal(run.result.summary.workUnits, 2);
   assert.equal(run.result.summary.effectCalls, 1);
   const works = workRequests(run.requests);
-  assert.equal(works.length, 4);
-  assert.notEqual(taskOf(works[0]!).taskId, taskOf(works[3]!).taskId);
+  assert.equal(works.length, 5);
+  assert.notEqual(taskOf(works[2]!).taskId, taskOf(works[3]!).taskId);
   assert.deepEqual(bodyOf(works[3]!)["toolObservations"], []);
   assertYielded(run, "REPEATED_EFFECT", "model-3");
 });

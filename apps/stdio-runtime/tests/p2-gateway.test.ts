@@ -205,7 +205,7 @@ test("ready-task selection prefers candidate, then boundary, then inputs", () =>
 
   assert.equal(chooseP2ReadyTask(contract, []), null);
   assert.throws(
-    () => chooseP2ReadyTask(contract, new Array(33).fill(ready[0]) as P2Task[]),
+    () => chooseP2ReadyTask(contract, new Array(49).fill(ready[0]) as P2Task[]),
     (error: unknown) => {
       assert.ok(error instanceof P2Error);
       assert.equal(error.code, "PACKET_BINDING");

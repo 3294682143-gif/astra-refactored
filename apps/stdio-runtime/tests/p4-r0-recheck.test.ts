@@ -44,7 +44,7 @@ test("group 1: real preparation keeps the actual child contract and REOPENED", (
       reopened += 1;
     }
   }
-  assert.equal(reopened, 3);
+  assert.equal(reopened, 4);
   assert.equal(opened, 2);
   assert.throws(
     () => prepareP4R0(child, { enabled: true, planningModelCalls: 1, remainingRootCalls: 3, remainingMs: 1000 }),

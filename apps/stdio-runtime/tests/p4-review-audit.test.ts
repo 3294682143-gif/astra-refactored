@@ -211,8 +211,24 @@ test("a real multi-codepoint quote is accepted while malformed reports are rejec
   assert.equal(emoji.report?.issues[0]?.stepLocator.quote, "😀 Divide by x.");
   assert.equal(emoji.report?.issues[0]?.stepLocator.start, 0);
 
+  // Real models often copy the exact quote but miscount code-point offsets.
+  // A unique quote is re-anchored to its one real occurrence; an absent or
+  // ambiguous quote remains fail-closed.
+  const recovered = settle(
+    new P4ReviewSession(built.contract, built.target, 2),
+    "model-2",
+    report(built, "model-2", "ISSUES", built.obligationIds, [
+      issue("Divide by x.", built.obligationIds, {
+        stepLocator: { start: 1, end: 2, quote: "Divide by x." },
+      }),
+    ]),
+  );
+  assert.equal(recovered.code, "OK");
+  assert.equal(recovered.report?.issues[0]?.stepLocator.start, 2);
+  assert.equal(recovered.report?.issues[0]?.stepLocator.end, 14);
+
   const bad: readonly [string, string][] = [
-    ["PACKET_SCHEMA", report(built, "model-2", "ISSUES", built.obligationIds, [issue("Divide by x.", built.obligationIds, { stepLocator: { start: 1, end: 2, quote: "Divide by x." } })])],
+    ["PACKET_SCHEMA", report(built, "model-2", "ISSUES", built.obligationIds, [issue("x", built.obligationIds, { stepLocator: { start: 0, end: 1, quote: "x" } })])],
     ["PACKET_SCHEMA", report(built, "model-2", "ISSUES", built.obligationIds, [issue("Divide by x.", built.obligationIds, { stepLocator: { start: 0, end: 3, quote: "zzz" } })])],
     ["PACKET_BINDING", report(built, "model-9", "ISSUES", built.obligationIds, [issue("Divide by x.", built.obligationIds)])],
     ["PACKET_BINDING", report(built, "model-2", "ISSUES", built.obligationIds, [issue("Divide by x.", built.obligationIds)], { targetHash: "0".repeat(64) })],

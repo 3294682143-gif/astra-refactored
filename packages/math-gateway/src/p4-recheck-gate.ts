@@ -19,7 +19,7 @@ export const P4_RECHECK_GATE_VERSION = "0.0.0-p4s2" as const;
 export const P4_RECHECK_MIN_REMAINING_MS = 26 as const;
 
 /** Hard ceiling on admitted calls in this phase. */
-export const P4_RECHECK_MAX_MODEL_CALLS = 32 as const;
+export const P4_RECHECK_MAX_MODEL_CALLS = 256 as const;
 
 /** Default ceiling when the caller does not explicitly widen it. */
 export const P4_RECHECK_DEFAULT_MODEL_CALLS = 3 as const;
@@ -105,9 +105,9 @@ export class P4RecheckModelGate {
     task: P2Task,
     requestId: string,
     remainingMs: number,
-    phase: "WORK" | "R2" | "REPAIR" = "WORK",
+    phase: "WORK" | "CONSENSUS" | "R2" | "R4" | "REPAIR" = "WORK",
   ): P2ModelPermit {
-    if (phase !== "WORK" && phase !== "R2" && phase !== "REPAIR") {
+    if (phase !== "WORK" && phase !== "CONSENSUS" && phase !== "R2" && phase !== "R4" && phase !== "REPAIR") {
       throw new P2Error("PACKET_BINDING");
     }
     if (typeof task !== "object" || task === null) {
@@ -147,7 +147,7 @@ export class P4RecheckModelGate {
     }
 
     const deliveryOk =
-      phase === "R2" || phase === "REPAIR"
+      phase === "R2" || phase === "R4" || phase === "REPAIR"
         ? frozen.delivery === "RUNNING" || frozen.delivery === "DELIVERED"
         : frozen.delivery === "RUNNING";
     if (

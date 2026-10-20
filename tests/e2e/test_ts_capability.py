@@ -68,7 +68,7 @@ class AggregationClient(FakeClient):
 def test_multipart_returns_the_complete_two_part_answer(process_tracker):
     """A two-part problem releases the root aggregation as the whole answer."""
     client = AggregationClient(MULTIPART_ANSWER)
-    result = _solve(client, MULTIPART_PROBLEM, derive_budget=True)
+    result = _solve(client, MULTIPART_PROBLEM, derive_budget=True, max_model_calls=32, max_work_units=32)
     assert result["engine"] == "ts"
     assert result["status"] == "candidate"
     assert result["final_response"] == MULTIPART_ANSWER
@@ -85,7 +85,7 @@ def test_multipart_returns_the_complete_two_part_answer(process_tracker):
 def test_parameter_returns_the_complete_classification(process_tracker):
     """A parameter-classification problem releases the root aggregation."""
     client = AggregationClient(PARAMETER_ANSWER)
-    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True)
+    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True, max_model_calls=32, max_work_units=32)
     assert result["status"] == "candidate"
     assert result["final_response"] == PARAMETER_ANSWER
     assert result["candidate_verified"] is False
@@ -108,8 +108,25 @@ def test_missing_branch_never_releases_a_candidate(process_tracker):
     client = AggregationClient(
         MULTIPART_ANSWER, incomplete_task="goal-1-a:CANDIDATE_VALIDITY"
     )
-    result = _solve(client, MULTIPART_PROBLEM, derive_budget=True)
+    result = _solve(client, MULTIPART_PROBLEM, derive_budget=True, max_model_calls=32, max_work_units=32)
     assert result["status"] != "candidate"
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
+    assert process_tracker
+
+
+def test_derived_budget_never_exceeds_the_host_caps(process_tracker):
+    """derive_budget is an allocation within the root caps, not a bypass."""
+    client = AggregationClient(MULTIPART_ANSWER)
+    result = _solve(
+        client,
+        MULTIPART_PROBLEM,
+        derive_budget=True,
+        max_model_calls=4,
+        max_work_units=4,
+        max_effects=0,
+    )
+    assert result["metrics"]["logical_model_calls"] <= 4
+    assert result["metrics"]["work_units"] <= 4
+    assert result["status"] in ("unsolved", "candidate")
     assert process_tracker

@@ -35,7 +35,7 @@ __all__ = [
     "validate_legacy_context",
 ]
 
-_MAX_REFS = 3
+_MAX_REFS = 8
 _MAX_TEXT_CHARS = 4096
 _WORK_SCHEMA = "p2a-work-v1"
 _PACKET_FIELDS = (
@@ -271,7 +271,7 @@ def _source_body(entry):
     if receipt["transportStatus"] != "COMPLETE":
         _fail()
     request_id, messages = _validate_request(copy.deepcopy(request))
-    if request["phase"] != "WORK":
+    if request["phase"] not in ("WORK", "REPAIR", "CONSENSUS"):
         _fail()
     body = _parse_inner(messages[1]["content"])
     if not isinstance(body, dict):
@@ -307,7 +307,7 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         # The revised candidate (G3/PR4) comes from a REPAIR request; the
         # ordinary candidate from a WORK request. `_validate_request` already
         # accepted the phase, so only these two shapes reach the packet check.
-        if request.get("phase") not in ("WORK", "REPAIR"):
+        if request.get("phase") not in ("WORK", "REPAIR", "CONSENSUS"):
             return None
         body = _parse_inner(messages[1]["content"])
         if not isinstance(body, dict):
@@ -476,7 +476,7 @@ def _work_ordinals(history, problem, session_id, problem_hash,
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in tuple(str(n) for n in range(1, 33)):
+        if suffix not in tuple(str(n) for n in range(1, 257)):
             continue
         ordered.append((int(suffix), request_id))
     ordered.sort()
@@ -513,8 +513,12 @@ def _projection_for_source(history, problem, session_id, problem_hash, source_id
             return None
         task = body.get("task")
         scope = body.get("scope")
-        if not isinstance(task, dict) or not isinstance(scope, dict):
+        if not isinstance(task, dict):
             return None
+        if not isinstance(scope, dict):
+            # A REPAIR request carries task/scope identity but not the full
+            # scope object; the binding only needs the declared scope id.
+            scope = {"scopeId": task.get("scopeId")}
         projection = project_artifacts(history, session_id, problem_hash)
         row = projection["bySourceRef"].get(source_id)
         if not isinstance(row, dict) or row["availability"] != "ACTIVE":
@@ -678,7 +682,7 @@ def _ordinal(request_id):
     if not isinstance(request_id, str) or not request_id.startswith("model-"):
         _fail()
     suffix = request_id[len("model-"):]
-    if suffix not in tuple(str(n) for n in range(1, 33)):
+    if suffix not in tuple(str(n) for n in range(1, 257)):
         _fail()
     return int(suffix)
 
@@ -942,12 +946,15 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _fail()
 
 
-def _check_r2(body, request_id, problem, session_id, problem_hash, history):
-    """Validate one R2 context body against the real candidate packet."""
+def _check_r2(body, request_id, problem, session_id, problem_hash, history,
+              stage="R2"):
+    """Validate one R2/R4 context body against the real candidate packet."""
     _exact_keys(body, _R2_FIELDS)
     if body["schemaVersion"] != _R2_SCHEMA_VERSION:
         _fail()
-    if body["stage"] != "R2" or body["requestId"] != request_id:
+    if stage not in ("R2", "R4"):
+        _fail()
+    if body["stage"] != stage or body["requestId"] != request_id:
         _fail()
     if body["problemFullText"] != problem:
         _fail()
@@ -984,6 +991,38 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
     entry = history.get(source_id)
     source_body = _parse_inner(entry["request"]["messages"][1]["content"])
     source_scope = source_body.get("scope")
+    source_obligations = source_body.get("obligations")
+    if not isinstance(source_scope, dict) or not isinstance(source_obligations, list):
+        # A REPAIR source carries task/scope identity but not the full scope
+        # object (nor the obligation list). Re-derive both from the earlier
+        # WORK of the same task in the Host-owned history; never trust the
+        # Node-supplied scope as its own authority.
+        source_task = source_body.get("task")
+        source_task_id = source_task.get("taskId") if isinstance(source_task, dict) else None
+        for prior_id, prior_entry in history.items():
+            if prior_id == source_id:
+                break
+            if not isinstance(prior_entry, dict):
+                continue
+            prior_request = prior_entry.get("request")
+            if not isinstance(prior_request, dict) or prior_request.get("phase") != "WORK":
+                continue
+            try:
+                prior_body = _parse_inner(prior_request["messages"][1]["content"])
+            except Exception:  # noqa: BLE001 - a malformed prior row is not a scope
+                continue
+            prior_task = prior_body.get("task")
+            prior_scope = prior_body.get("scope")
+            prior_obligations = prior_body.get("obligations")
+            if (
+                isinstance(prior_task, dict)
+                and prior_task.get("taskId") == source_task_id
+                and isinstance(prior_scope, dict)
+                and isinstance(prior_obligations, list)
+            ):
+                source_scope = prior_scope
+                source_obligations = prior_obligations
+                break
     if not isinstance(source_scope, dict):
         _fail()
     if not same_json(body["scope"], source_scope):
@@ -1012,7 +1051,6 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history):
         _fail()
     if body["targetHash"] != hashlib.sha256(payload.encode("utf-8")).hexdigest():
         _fail()
-    source_obligations = source_body.get("obligations")
     if not isinstance(source_obligations, list):
         _fail()
     expected = []
@@ -1136,7 +1174,7 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
         _fail()
     if body.get("problemFullText") != problem:
         _fail()
-    if request["phase"] == "WORK":
+    if request["phase"] in ("WORK", "CONSENSUS"):
         task = body.get("task")
         if not isinstance(task, dict):
             _fail()
@@ -1148,13 +1186,16 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
             body, request_id, problem, session_id, problem_hash, history, effects,
             catalog, method_assets, _PROGRESS_CONTEXT_SCHEMA_VERSION, True,
         )
-    elif request["phase"] == "R2":
+    elif request["phase"] in ("R2", "R4"):
         target = body.get("target")
         if not isinstance(target, dict):
             _fail()
         if target.get("taskId") != request["taskId"] or target.get("scopeId") != request["scopeId"]:
             _fail()
-        _check_r2(body, request_id, problem, session_id, problem_hash, history)
+        _check_r2(
+            body, request_id, problem, session_id, problem_hash, history,
+            request["phase"],
+        )
     elif request["phase"] == "REPAIR":
         task = body.get("task")
         if not isinstance(task, dict):

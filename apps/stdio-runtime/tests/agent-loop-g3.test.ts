@@ -199,7 +199,11 @@ test("no checker grounding means no replacement: the parent candidate stays", as
   assert.equal(result.summary.reason, "BEST_EFFORT_CANDIDATE");
   assert.equal(result.summary.candidateVerified, false);
   assert.equal(result.summary.strictAcceptance, "NOT_PERFORMED");
-  assert.equal(ports.requests.some((request) => request.phase === "REPAIR"), false);
+  // The bounded refutation check (deep-loop step 1) may run once in its own
+  // REPAIR turn, but it accepts no artifact: with no checker grounding there is
+  // still no S2 transaction and the protected candidate is untouched.
+  assert.ok(ports.requests.filter((request) => request.phase === "REPAIR").length <= 1);
+  assert.equal(result.privateState.s2Transaction ?? null, null);
 });
 
 test("the revision path is opt-in: maxRepairs=0 keeps the pre-G3 behaviour", async () => {

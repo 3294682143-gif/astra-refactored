@@ -40,14 +40,22 @@ __all__ = [
     "failure_receipt",
 ]
 
-TOOL_NAMES = ("polynomial_expand_coefficients", "linear_system_solution_set")
+TOOL_NAMES = (
+    "polynomial_expand_coefficients",
+    "linear_system_solution_set",
+    "exact_check_expr",
+    "bounded_enumeration",
+)
 MAX_REQUEST_BYTES = 65536
 MAX_ARGS_BYTES = 10000
 MAX_OBSERVATION_BYTES = 16000
 MIN_REMAINING_MS = 26
 MAX_REMAINING_MS = 3600000
 EFFECT_IDS = ("effect-1", "effect-2")
-REQUEST_IDS = ("model-1", "model-2", "model-3")
+# Root model request ids the session can produce. The previous three-entry
+# tuple made every tool call on the fourth or later model request a fixed
+# validation failure once the M1 contract grew past three obligations.
+REQUEST_IDS = tuple("model-" + str(n) for n in range(1, 257))
 FAILURE_CODES = (
     "EFFECT_FAILED",
     "INVALID_INPUT",

@@ -177,7 +177,9 @@ test("group 4: oversized real child context is rejected without truncation", () 
     remainingRootCalls: 4,
     remainingMs: 1000,
   });
-  assert.equal(original.target.contract.obligations.length, 6);
+  // Three UNKNOWN goals, each with ANSWER_REQUEST, INDEPENDENT_DERIVATION and
+  // OUTPUT_COVERAGE.
+  assert.equal(original.target.contract.obligations.length, 9);
   const review = new P4R0ReviewSession(original);
   review.admit(1000, 4);
   review.markDispatched();
@@ -211,7 +213,9 @@ test("group 4: oversized real child context is rejected without truncation", () 
   assert.equal(settled.code, "PROPOSAL_RECORDED");
   assert.equal(settled.report!.changes.length, 3);
   const revision = revisionSession.snapshot();
-  assert.equal(revision.revisedContract!.obligations.length, 15);
+  // Three UNKNOWN goals become ALL_SOLUTIONS (six obligations each) in the
+  // revised contract.
+  assert.equal(revision.revisedContract!.obligations.length, 18);
   const preparation = prepareP4R0Recheck(original, trigger, revision, {
     planningModelCalls: 1,
     remainingRootCalls: 2,

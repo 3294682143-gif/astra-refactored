@@ -2,21 +2,109 @@
   "version": "tool-registry-v1",
   "description": "按实际实现状态开放工具的注册表",
   "tools": {
+    "exact_check_expr": {
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Bounded exact symbolic checks: trig reduction, maximal minors, factorization over explicit algebraic extensions, definite integrals, limits and density normalization",
+      "evidence_type": "independent sympy recomputation under a whitelisted expression AST",
+      "required_params": [
+        "operation"
+      ],
+      "optional_params": [
+        "expression",
+        "variable",
+        "matrix",
+        "lower",
+        "upper",
+        "point",
+        "minimal_polynomials",
+        "density"
+      ],
+      "input_schema": {
+        "operation": "SIMPLIFY|TRIG_REDUCE|MAXIMAL_MINORS|FACTOR_OVER_EXTENSION|DEFINITE_INTEGRAL|LIMIT|DENSITY_CHECK",
+        "expression": "bounded scalar expression AST",
+        "variable": "short identifier",
+        "matrix": "rectangular expression matrix, at most 8x8",
+        "lower/upper/point": "expression or oo/-oo",
+        "minimal_polynomials": "1..4 univariate polynomials for RootOf extensions",
+        "density": "bounded scalar expression"
+      },
+      "limits": [
+        "degree<=12; matrix<=8x8; extensions<=4; no source mapping proof; integration may return unevaluated"
+      ],
+      "aliases": []
+    },
+    "bounded_enumeration": {
+      "family": "algorithm_simulation",
+      "skill_status": "implemented",
+      "implementation_status": "available",
+      "declared_scope": "Exhaustive count of k-subsets of an explicit finite object table or Cartesian-product universe satisfying a bounded attribute predicate",
+      "evidence_type": "complete itertools.combinations enumeration with exact reduced fraction",
+      "required_params": [
+        "choose",
+        "predicate"
+      ],
+      "optional_params": [
+        "objects",
+        "ranges"
+      ],
+      "input_schema": {
+        "objects": "optional 1..60 rows, each 1..4 int/string attributes",
+        "ranges": "optional 1..4 positive product dimensions; objects are generated as their Cartesian product",
+        "choose": "1..6",
+        "predicate": "distinct(i), count(i,v), size(), sum(i), min(i), max(i), contains(i,v), arithmetic/comparisons"
+      },
+      "limits": [
+        "at most 5,000,000 combinations; no arbitrary code; mapping from problem to attributes remains model-owned"
+      ],
+      "aliases": []
+    },
     "polynomial_expand_coefficients": {
-      "family": "symbolic_algebra", "skill_status": "implemented", "implementation_status": "available",
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
       "declared_scope": "Complete exact coefficient table for supplied bounded rational polynomial and ordered variables/parameters",
       "evidence_type": "independent sparse Fraction polynomial arithmetic",
-      "required_params": ["expression", "variables", "parameters"], "optional_params": [],
-      "input_schema": {"expression": "rational polynomial AST", "variables": "1..3 ordered identifiers", "parameters": "ordered identifiers; total symbols <=6"},
-      "limits": ["degree<=8; AST<=256; text<=2000; terms<=512; 256-bit rational intermediates; no source mapping proof"], "aliases": []
+      "required_params": [
+        "expression",
+        "variables",
+        "parameters"
+      ],
+      "optional_params": [],
+      "input_schema": {
+        "expression": "rational polynomial AST",
+        "variables": "1..3 ordered identifiers",
+        "parameters": "ordered identifiers; total symbols <=6"
+      },
+      "limits": [
+        "degree<=8; AST<=256; text<=2000; terms<=512; 256-bit rational intermediates; no source mapping proof"
+      ],
+      "aliases": []
     },
     "linear_system_solution_set": {
-      "family": "symbolic_algebra", "skill_status": "implemented", "implementation_status": "available",
+      "family": "symbolic_algebra",
+      "skill_status": "implemented",
+      "implementation_status": "available",
       "declared_scope": "Exact affine/unique/empty solution set of the explicitly supplied rational linear system",
       "evidence_type": "independent elimination, substitution, rank/nullspace and inconsistency witness",
-      "required_params": ["matrix", "rhs", "variables", "domain"], "optional_params": [],
-      "input_schema": {"matrix": "1..12 rows, 1..6 columns; exact integers or rational strings", "rhs": "one exact rational per row", "variables": "ordered identifiers", "domain": "RATIONAL or REAL"},
-      "limits": ["input numerator/denominator<=1000000; 256-bit intermediates; explicit free variables and parameter domain"], "aliases": []
+      "required_params": [
+        "matrix",
+        "rhs",
+        "variables",
+        "domain"
+      ],
+      "optional_params": [],
+      "input_schema": {
+        "matrix": "1..12 rows, 1..6 columns; exact integers or rational strings",
+        "rhs": "one exact rational per row",
+        "variables": "ordered identifiers",
+        "domain": "RATIONAL or REAL"
+      },
+      "limits": [
+        "input numerator/denominator<=1000000; 256-bit intermediates; explicit free variables and parameter domain"
+      ],
+      "aliases": []
     },
     "lz78_encode": {
       "family": "algorithm_simulation",
@@ -1232,10 +1320,24 @@
       "implementation_status": "available",
       "declared_scope": "Check one rational polynomial candidate against a declared universal functional equality; not classify all functions",
       "evidence_type": "independent exact residual coefficients and counterexample substitution",
-      "required_params": ["equation", "function", "argument", "variables", "expression"],
+      "required_params": [
+        "equation",
+        "function",
+        "argument",
+        "variables",
+        "expression"
+      ],
       "optional_params": [],
-      "input_schema": {"equation":"one equality containing the named unary function", "function":"function identifier", "argument":"candidate variable identifier", "variables":"1..3 distinct variable names", "expression":"rational polynomial in argument"},
-      "limits": ["degree<=12; <=128 AST nodes; integer literals or rational fractions; no variable denominators"],
+      "input_schema": {
+        "equation": "one equality containing the named unary function",
+        "function": "function identifier",
+        "argument": "candidate variable identifier",
+        "variables": "1..3 distinct variable names",
+        "expression": "rational polynomial in argument"
+      },
+      "limits": [
+        "degree<=12; <=128 AST nodes; integer literals or rational fractions; no variable denominators"
+      ],
       "aliases": []
     },
     "polynomial_invariant_check": {
@@ -1244,10 +1346,24 @@
       "implementation_status": "available",
       "declared_scope": "Individual polynomial invariance under simultaneous substitutions; not complete invariant-ring classification",
       "evidence_type": "independent exact composed polynomial residuals",
-      "required_params": ["base_variables", "variables", "forward", "target", "invariants"],
+      "required_params": [
+        "base_variables",
+        "variables",
+        "forward",
+        "target",
+        "invariants"
+      ],
       "optional_params": [],
-      "input_schema": {"base_variables":"two distinct symbols", "variables":"1..3 input symbols", "forward":"two polynomial expressions in variables", "target":"two polynomial expressions in variables", "invariants":"1..4 polynomials in base_variables"},
-      "limits": ["composed degree<=12; rational coefficients; simultaneous maps"],
+      "input_schema": {
+        "base_variables": "two distinct symbols",
+        "variables": "1..3 input symbols",
+        "forward": "two polynomial expressions in variables",
+        "target": "two polynomial expressions in variables",
+        "invariants": "1..4 polynomials in base_variables"
+      },
+      "limits": [
+        "composed degree<=12; rational coefficients; simultaneous maps"
+      ],
       "aliases": []
     },
     "algebraic_polynomial_check": {
@@ -1256,10 +1372,26 @@
       "implementation_status": "available",
       "declared_scope": "Polynomial value and minimum degree for an explicit rational number-field relation",
       "evidence_type": "independent quotient reduction and coefficient ranks",
-      "required_params": ["minimal_polynomial", "generator", "argument", "target", "expression", "variable"],
+      "required_params": [
+        "minimal_polynomial",
+        "generator",
+        "argument",
+        "target",
+        "expression",
+        "variable"
+      ],
       "optional_params": [],
-      "input_schema": {"minimal_polynomial":"irreducible rational polynomial in generator", "generator":"field symbol", "argument":"polynomial in generator", "target":"polynomial in generator", "expression":"polynomial in variable", "variable":"symbol distinct from generator"},
-      "limits": ["field degree 2..6; modulus coefficient numerator/denominator<=128; rational polynomial AST"],
+      "input_schema": {
+        "minimal_polynomial": "irreducible rational polynomial in generator",
+        "generator": "field symbol",
+        "argument": "polynomial in generator",
+        "target": "polynomial in generator",
+        "expression": "polynomial in variable",
+        "variable": "symbol distinct from generator"
+      },
+      "limits": [
+        "field degree 2..6; modulus coefficient numerator/denominator<=128; rational polynomial AST"
+      ],
       "aliases": []
     },
     "wronskian_root_identity_expr": {
@@ -1268,10 +1400,20 @@
       "implementation_status": "available",
       "declared_scope": "Wronskian identity and squarefreeness for an explicitly supplied polynomial and rational roots",
       "evidence_type": "independent product coefficients and polynomial gcd",
-      "required_params": ["expression", "variable", "roots"],
+      "required_params": [
+        "expression",
+        "variable",
+        "roots"
+      ],
       "optional_params": [],
-      "input_schema": {"expression":"rational polynomial", "variable":"polynomial symbol", "roots":"rational expression strings; one per degree"},
-      "limits": ["degree 1..6; no claimed generic root list or original-problem mapping"],
+      "input_schema": {
+        "expression": "rational polynomial",
+        "variable": "polynomial symbol",
+        "roots": "rational expression strings; one per degree"
+      },
+      "limits": [
+        "degree 1..6; no claimed generic root list or original-problem mapping"
+      ],
       "aliases": []
     },
     "constraint_propagation_2coloring": {
@@ -1280,10 +1422,20 @@
       "implementation_status": "available",
       "declared_scope": "Color propagation and contradictions in explicitly pinned finite graph components",
       "evidence_type": "independent GF(2) constraint elimination and assignment audit",
-      "required_params": ["points", "edges", "fixed"],
+      "required_params": [
+        "points",
+        "edges",
+        "fixed"
+      ],
       "optional_params": [],
-      "input_schema": {"points":"distinct nonnegative integer vertex IDs", "edges":"integer vertex pairs, endpoints must differ", "fixed":"canonical string vertex IDs mapped to integer 0 or 1"},
-      "limits": ["<=64 vertices; <=256 edges; unpinned components remain unclassified"],
+      "input_schema": {
+        "points": "distinct nonnegative integer vertex IDs",
+        "edges": "integer vertex pairs, endpoints must differ",
+        "fixed": "canonical string vertex IDs mapped to integer 0 or 1"
+      },
+      "limits": [
+        "<=64 vertices; <=256 edges; unpinned components remain unclassified"
+      ],
       "aliases": []
     }
   },

@@ -147,6 +147,7 @@ class AgentRuntime:
         max_reviews=1,
         max_method_loads=0,
         max_repairs=0,
+        max_consensus=0,
         max_r0=0,
         problem_seconds=600,
         policy="BEST_EFFORT",
@@ -158,14 +159,16 @@ class AgentRuntime:
             raise ValueError("invalid max_model_calls")
         if not _is_int(max_work_units) or not 1 <= max_work_units <= 64:
             raise ValueError("invalid max_work_units")
-        if not _is_int(max_effects) or not 0 <= max_effects <= 16:
+        if not _is_int(max_effects) or not 0 <= max_effects <= 2:
             raise ValueError("invalid max_effects")
-        if not _is_int(max_reviews) or not 0 <= max_reviews <= 1:
+        if not _is_int(max_reviews) or not 0 <= max_reviews <= 3:
             raise ValueError("invalid max_reviews")
         if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 1:
             raise ValueError("invalid max_method_loads")
-        if not _is_int(max_repairs) or not 0 <= max_repairs <= 1:
+        if not _is_int(max_repairs) or not 0 <= max_repairs <= 3:
             raise ValueError("invalid max_repairs")
+        if not _is_int(max_consensus) or not 0 <= max_consensus <= 8:
+            raise ValueError("invalid max_consensus")
         if not _is_int(max_r0) or not 0 <= max_r0 <= 1:
             raise ValueError("invalid max_r0")
         if not isinstance(derive_budget, bool):
@@ -186,6 +189,7 @@ class AgentRuntime:
         self.max_reviews = max_reviews
         self.max_method_loads = max_method_loads
         self.max_repairs = max_repairs
+        self.max_consensus = max_consensus
         self.max_r0 = max_r0
         self.derive_budget = derive_budget
         self.problem_seconds = float(problem_seconds)
@@ -237,6 +241,7 @@ class AgentRuntime:
                 "maxReviews": self.max_reviews,
                 "maxMethodLoads": self.max_method_loads,
                 "maxRepairs": self.max_repairs,
+                "maxConsensus": self.max_consensus,
                 "maxR0": self.max_r0,
                 "policy": self.policy,
                 "problemSeconds": self.problem_seconds,
@@ -328,7 +333,7 @@ class AgentRuntime:
             state = row.get("state")
             if state not in ("REMOTE_TERMINAL_CONFIRMED", "OUTCOME_UNKNOWN"):
                 continue
-            if row.get("phase") not in ("WORK", "R2", "REPAIR", "R0"):
+            if row.get("phase") not in ("WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0"):
                 continue
             ledger.append(row)
             if state == "OUTCOME_UNKNOWN":
@@ -392,6 +397,7 @@ class AgentRuntime:
             "maxReviews": options["maxReviews"],
             "maxMethodLoads": options["maxMethodLoads"],
             "maxRepairs": options["maxRepairs"],
+            "maxConsensus": options["maxConsensus"],
             "maxR0": options["maxR0"],
             "policy": options["policy"],
             "deriveBudget": options["deriveBudget"],
@@ -439,6 +445,7 @@ class AgentRuntime:
                 "maxReviews": options["maxReviews"],
                 "maxMethodLoads": options["maxMethodLoads"],
                 "maxRepairs": options["maxRepairs"],
+                "maxConsensus": options["maxConsensus"],
                 "maxR0": options["maxR0"],
                 "policy": options["policy"],
                 "deriveBudget": options["deriveBudget"],

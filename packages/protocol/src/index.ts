@@ -164,7 +164,7 @@ export const OBLIGATION_STATUS = [
 ] as const;
 export type ObligationStatus = (typeof OBLIGATION_STATUS)[number];
 
-export const REVIEW_STAGE = ["R0", "R1", "R2"] as const;
+export const REVIEW_STAGE = ["R0", "R1", "R2", "R4"] as const;
 export type ReviewStage = (typeof REVIEW_STAGE)[number];
 
 export const AUDIT_STAGE = ["S1", "S2", "S3"] as const;

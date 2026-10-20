@@ -49,7 +49,9 @@ MULTIPART_PROBLEM = "Solve both parts: (a) compute 2+2 and (b) compute 3+3"
 # so the contract carries ANSWER_REQUEST plus OUTPUT_COVERAGE only.
 PARAMETER_PROBLEM = "Classify the parameter a in the equation a*x=1"
 
-_BUDGET = {"max_model_calls": 4, "max_work_units": 3, "max_effects": 0}
+# The VALUE graph is four obligations after INDEPENDENT_DERIVATION, so the
+# shared profile needs four work units and the review call.
+_BUDGET = {"max_model_calls": 5, "max_work_units": 4, "max_effects": 0}
 
 
 class ScopeClient(FakeClient):

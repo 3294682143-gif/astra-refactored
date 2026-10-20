@@ -49,8 +49,8 @@ _MAX_TEXT_BYTES = 65536
 _SETTLE_SECONDS = 0.025
 _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 3600000
-_REQUEST_IDS = tuple("model-" + str(n) for n in range(1, 33))
-_PHASES = ("WORK", "R2", "REPAIR", "R0")
+_REQUEST_IDS = tuple("model-" + str(n) for n in range(1, 257))
+_PHASES = ("WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0")
 _TRANSPORT = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
 _TERMINAL = ("stop", "end_turn", "length", "content_filter")
 _USAGE_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
@@ -252,8 +252,6 @@ def _normalize(response):
         if message.get("tool_calls"):
             return "UNKNOWN", "", finish, None, "UNKNOWN"
         text = message.get("content")
-        if not isinstance(text, str):
-            _fail()
         usage = _usage(response)
     else:
         message = response
@@ -263,9 +261,19 @@ def _normalize(response):
         if message.get("tool_calls"):
             return "UNKNOWN", "", finish, None, "UNKNOWN"
         text = message.get("content")
-        if not isinstance(text, str):
-            _fail()
         usage = _usage(response)
+    # The official provider may return a thinking-only reply with
+    # ``content=null`` and an explicit ``finish_reason=length``.  Preserve that
+    # terminal signal as TRUNCATED/ERROR instead of turning the whole call into
+    # an unkeyed OUTCOME_UNKNOWN (the caller must still reject actions).
+    if text is None:
+        if finish == "length":
+            return "TRUNCATED", "", finish, usage, "TRUNCATED"
+        if finish == "content_filter":
+            return "ERROR", "", finish, usage, "ERROR"
+        return "UNKNOWN", "", finish, usage, "UNKNOWN"
+    if not isinstance(text, str):
+        _fail()
     if _code_points(text) is None:
         _fail()
     if finish is None:

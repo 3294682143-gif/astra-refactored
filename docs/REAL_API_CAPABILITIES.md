@@ -1,8 +1,10 @@
 # REAL_API_CAPABILITIES — official 书生 S2 client surface (G5/PR6 local)
 
-Status: **NOT_RUN (BLOCKED_EXTERNAL)** for the real provider. This document fixes
-the *local* contract the Python Host applies to the platform-injected official
-client; it is not a real provider measurement.
+Status: **SMOKE_RUN (2 items) / formal G5 NOT_RUN (BLOCKED_EXTERNAL)**. This document
+fixes the *local* contract the Python Host applies to the platform-injected
+official client. A two-item engineering smoke is recorded in
+[REAL_MODEL_SMOKE_20261018](REAL_MODEL_SMOKE_20261018.md); it is not a math
+benchmark or an L1 comparison.
 
 ## Adapter contract (public signature only)
 
@@ -28,9 +30,9 @@ client; it is not a real provider measurement.
 ## What is NOT established here
 
 The real provider's thinking/usage/finish_reason fields, streaming, native
-tools, rate limits and true max output are **NOT_RUN (BLOCKED_EXTERNAL)** — they
-require the separately authorized real API run and the target environment. No
-benefit is claimed from any real-model measurement.
+tools, rate limits and true max output are only partially observed in the smoke;
+the formal four-arm comparison and target environment remain
+**NOT_RUN (BLOCKED_EXTERNAL)**. No accuracy or cost benefit is claimed.
 
 ## Smoke log — 2026-10-15 (engine session)
 - Endpoint `https://discovery-api.intern-ai.org.cn/v1/chat/completions` (OpenAI-compatible), model `intern-s2`

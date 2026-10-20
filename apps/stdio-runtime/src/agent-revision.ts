@@ -31,8 +31,8 @@ const MAX_REMAINING_MS = 3_600_000;
 const MIN_REMAINING_MS = 25;
 import { AGENT_MAX_MODEL_CALLS } from "@astra/runtime-core";
 
-const MAX_WORK_UNITS = 32;
-const MAX_REVIEWS = 1;
+const MAX_WORK_UNITS = 64;
+const MAX_REVIEWS = 3;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);

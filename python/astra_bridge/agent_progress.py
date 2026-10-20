@@ -39,7 +39,7 @@ _POLICY_FIELDS = (
     "schemaVersion", "cachedRepeatLimit", "taskLocalUnsolved", "partialYield",
 )
 _CONTEXT_V7 = "agent-work-context-v7"
-_ORDINALS = tuple(str(n) for n in range(1, 33))
+_ORDINALS = tuple(str(n) for n in range(1, 257))
 _REASONS = ("UNSOLVED", "PARTIAL", "REPEATED_EFFECT")
 _PARTIAL_DELIVERY = ("INCOMPLETE", "TRUNCATED", "ERROR")
 _MAX_TEXT = 4096

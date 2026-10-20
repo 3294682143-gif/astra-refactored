@@ -32,7 +32,7 @@ import { p4Hash, p4JsonEqual, p4SameBinding, p4Target } from "@astra/protocol";
 
 const CHECK_IDS = ["check-1", "check-2"] as const;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
-const REQUEST_IDS = ["model-1", "model-2", "model-3"] as const;
+const REQUEST_ID = /^model-(?:[1-9][0-9]{0,2})$/u;
 const TOOL_VERSION = "tool-registry-v1";
 const MAX_ARGS_BYTES = 10000;
 const MAX_OBSERVATION_BYTES = 16000;
@@ -270,7 +270,7 @@ export class P4DiagnosticLedger {
     const taskId = text(binding.taskId, 256);
     const scopeId = hash(binding.scopeId);
     const sourceRequestId = binding.sourceRequestId;
-    if (typeof sourceRequestId !== "string" || !(REQUEST_IDS as readonly string[]).includes(sourceRequestId)) {
+    if (typeof sourceRequestId !== "string" || !REQUEST_ID.test(sourceRequestId)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const bound: P3Binding = {

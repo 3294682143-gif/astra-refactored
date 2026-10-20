@@ -19,13 +19,13 @@ import hashlib
 
 from .p0_probe import ProbeError
 from .p2_host_fixture import _parse_inner
-from .p3_host_context import same_json as _same_json
+from .p3_host_context import parse_action, same_json as _same_json
 from .agent_workflow import _source_record, checked_packet
 from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
 
-_ORDINALS = tuple(str(n) for n in range(1, 33))
+_ORDINALS = tuple(str(n) for n in range(1, 257))
 _ENVELOPE_FIELDS = (
     "recordId", "sessionId", "problemHash", "sourceModule", "taskId",
     "contractVersion", "artifactId", "artifactVersion", "scopeId",
@@ -228,6 +228,25 @@ def _latest_row(rows, artifact_id):
     return best
 
 
+def _is_certified_packet(packet):
+    """Mirror the Node CERT1|FINAL selection rule (data only, not a proof)."""
+    if not isinstance(packet, dict):
+        return False
+    checks = packet.get("suggestedChecks")
+    if not isinstance(checks, list):
+        return False
+    final = any(
+        isinstance(row, str) and row.startswith("CERT1|FINAL|") for row in checks
+    )
+    checks_rows = any(
+        isinstance(row, str)
+        and row.startswith("CERT1|CHECK|")
+        and "=>" in row
+        for row in checks
+    )
+    return final and checks_rows
+
+
 def project_artifacts(history, session_id, problem_hash):
     """Project the real artifact ledger of one session from its history.
 
@@ -249,6 +268,149 @@ def project_artifacts(history, session_id, problem_hash):
     yield_by_request = {}
     for row in progress_events(history):
         yield_by_request[row["sourceRequestId"]] = row
+
+    # Consensus/schema-repair turns may issue several WORK/CONSENSUS packets for
+    # the same still-undelivered task. Only the last valid packet in that run is
+    # the artifact the Node delivers. Collapse each such run to the last packet
+    # with a candidate when one exists; otherwise to the last valid packet. This
+    # keeps the Host projection's artifact ordinals and event sequence identical
+    # to the delivered WORKUNIT, while every discarded model call remains in the
+    # authenticated history.
+    ordered = _ordered(history)
+    superseded_normal_ids = set()
+    normal_packets = {}
+    run_ids = []
+    run_task = None
+
+    def flush_normal_run():
+        nonlocal run_ids, run_task
+        if not run_ids:
+            run_task = None
+            return
+        candidate_ids = []
+        for candidate_id in run_ids:
+            packet = normal_packets.get(candidate_id)
+            if isinstance(packet, dict):
+                candidate = packet.get("candidateProposal")
+                if isinstance(candidate, str):
+                    candidate_ids.append((candidate_id, candidate))
+        # Match Node. A packet carrying a machine-readable CERT1|FINAL row is
+        # the final independent certificate and wins over correlated audit
+        # repeats. Without one, keep the exact-support majority with the latest
+        # tie-break.
+        chosen = run_ids[-1]
+        certified_ids = [
+            candidate_id
+            for candidate_id, _candidate in candidate_ids
+            if _is_certified_packet(normal_packets.get(candidate_id))
+        ]
+        if certified_ids:
+            chosen = certified_ids[-1]
+        elif candidate_ids:
+            counts = {}
+            for _candidate_id, candidate in candidate_ids:
+                counts[candidate] = counts.get(candidate, 0) + 1
+            best = max(counts.values())
+            chosen = next(
+                candidate_id
+                for candidate_id, candidate in reversed(candidate_ids)
+                if counts[candidate] == best
+            )
+        for candidate_id in run_ids:
+            if candidate_id != chosen:
+                superseded_normal_ids.add(candidate_id)
+        run_ids = []
+        run_task = None
+
+    for _, request_id in ordered:
+        entry = history.get(request_id)
+        body = _body_of(entry, ("WORK", "CONSENSUS")) if isinstance(entry, dict) else None
+        if body is None:
+            flush_normal_run()
+            continue
+        if body.get("revisionProvenance") is not None:
+            flush_normal_run()
+            continue
+        task = body.get("task")
+        task_id = task.get("taskId") if isinstance(task, dict) else None
+        if not isinstance(task_id, str):
+            flush_normal_run()
+            continue
+        try:
+            _, packet = _source_record(
+                history, request_id, session_id, problem_hash,
+                require_complete=False, phases=("WORK", "CONSENSUS"),
+            )
+        except ProbeError:
+            request = entry.get("request") if isinstance(entry, dict) else None
+            phase = request.get("phase") if isinstance(request, dict) else None
+            # An unusable CONSENSUS attempt is not a projected artifact. Mark it
+            # superseded so the projection loop cannot advance the control
+            # sequence for a packet that will never be delivered.
+            if phase == "CONSENSUS":
+                # An unusable consensus attempt is not an artifact. It also
+                # does not end the same-task run: the remaining valid attempts
+                # still collapse to one delivered artifact, exactly as the
+                # Node loop keeps its earlier candidates after a malformed
+                # audit.
+                superseded_normal_ids.add(request_id)
+                continue
+            # A WORK tool/method action ends the current draft run: any packet
+            # before it was a pre-observation draft and is superseded. A merely
+            # malformed WorkPacket (e.g. one failed schema repair) is only
+            # superseded; it must not split the same-task run, because the Node
+            # loop retains its earlier candidates and a later correction.
+            if phase == "WORK" and run_task == task_id:
+                action = None
+                if isinstance(entry, dict):
+                    body_for_action = _body_of(entry, ("WORK",))
+                    task_for_action = (
+                        body_for_action.get("task")
+                        if isinstance(body_for_action, dict)
+                        else None
+                    )
+                    scope_for_action = (
+                        body_for_action.get("scope")
+                        if isinstance(body_for_action, dict)
+                        else None
+                    )
+                    receipt = entry.get("receipt")
+                    if (
+                        isinstance(task_for_action, dict)
+                        and isinstance(scope_for_action, dict)
+                        and isinstance(receipt, dict)
+                        and isinstance(receipt.get("text"), str)
+                    ):
+                        try:
+                            action = parse_action(
+                                receipt["text"],
+                                {
+                                    "sessionId": body_for_action.get("sessionId"),
+                                    "problemHash": body_for_action.get("problemHash"),
+                                    "contractVersion": body_for_action.get("contractVersion"),
+                                    "taskId": task_for_action.get("taskId"),
+                                    "scopeId": scope_for_action.get("scopeId"),
+                                    "sourceRequestId": request_id,
+                                },
+                            )
+                        except (ProbeError, ProtocolError):
+                            action = None
+                if isinstance(action, dict) and action.get("action") in ("tool", "method"):
+                    for draft_id in run_ids:
+                        superseded_normal_ids.add(draft_id)
+                    run_ids = []
+                    continue
+                superseded_normal_ids.add(request_id)
+                continue
+            flush_normal_run()
+            continue
+        if run_task is not None and run_task != task_id:
+            flush_normal_run()
+        run_task = task_id
+        run_ids.append(request_id)
+        normal_packets[request_id] = packet
+    flush_normal_run()
+
     rows = []
     by_source = {}
     next_seq = 2
@@ -256,12 +418,14 @@ def project_artifacts(history, session_id, problem_hash):
     seen_dynamic = set()
     seen_redo_sources = set()
     finished_redo = False
-    for _, request_id in _ordered(history):
+    for _, request_id in ordered:
         entry = history.get(request_id)
         if not isinstance(entry, dict):
             continue
-        body = _body_of(entry, ("WORK", "REPAIR"))
+        body = _body_of(entry, ("WORK", "REPAIR", "CONSENSUS"))
         if body is None:
+            continue
+        if request_id in superseded_normal_ids:
             continue
         if finished_redo:
             # A committed replacement ends the WORK phase of this profile: no
@@ -368,7 +532,8 @@ def project_artifacts(history, session_id, problem_hash):
             continue
         try:
             _, packet = _source_record(
-                history, request_id, session_id, problem_hash, require_complete=False,
+                history, request_id, session_id, problem_hash,
+                require_complete=False, phases=("WORK", "CONSENSUS"),
             )
         except ProbeError:
             continue

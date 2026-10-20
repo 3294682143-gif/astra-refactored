@@ -106,7 +106,7 @@ test("B1 R0 is inert by default (maxR0 omitted)", async () => {
   const result = await runAgentLoop(
     PROBLEM,
     "r0-off",
-    { remainingMs: 5000, maxModelCalls: 4, maxWorkUnits: 2, maxEffects: 0, maxReviews: 0 },
+    { remainingMs: 5000, maxModelCalls: 5, maxWorkUnits: 4, maxEffects: 0, maxReviews: 0 },
     portsOf(ports),
   );
   assert.equal(ports.requests[0]?.phase, "WORK");

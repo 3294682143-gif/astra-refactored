@@ -92,7 +92,7 @@ export interface P4ReviewReport {
   readonly requestId: string;
   readonly target: P4Binding;
   readonly targetHash: string;
-  readonly stage: "R2";
+  readonly stage: "R2" | "R4";
   readonly conclusion: P4ReviewConclusion;
   readonly reviewCoverage: readonly string[];
   readonly issues: readonly P4ReviewIssue[];

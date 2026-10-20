@@ -42,8 +42,8 @@ import {
 } from "@astra/protocol";
 
 const MAX_REMAINING_MS = 3_600_000;
-const MAX_REVIEWS = 2;
-const MAX_REQUEST_ORDINAL = 32;
+const MAX_REVIEWS = 3;
+const MAX_REQUEST_ORDINAL = 256;
 const MAX_CHALLENGES = 16;
 const MAX_COVERAGE = 32;
 const MAX_ISSUES = 8;
@@ -236,6 +236,52 @@ function allowedObligationIds(contract: P2Contract, binding: P4Binding): readonl
         item.goalId === binding.goalId && item.envelope.scopeId === binding.scopeId,
     )
     .map((item) => item.obligationId);
+}
+
+/**
+ * Compare the raw model report with the parser-normalized report while allowing
+ * only the two stepLocator offsets to differ. The review parser re-anchors a
+ * unique quoted slice to its real occurrence in the trusted derivation because
+ * models routinely copy the quote exactly but miscount code-point offsets.
+ * Every other field, including the quote itself, must still be byte-identical.
+ */
+function reportMatchesNormalizedLocators(
+  raw: unknown,
+  normalized: Record<string, unknown>,
+): boolean {
+  try {
+    const rawReport = exact(raw, REPORT_FIELDS);
+    const frozen = exact(p2Snapshot(normalized), REPORT_FIELDS);
+    const rawIssues = rawReport.issues;
+    const normalizedIssues = frozen.issues;
+    if (
+      !Array.isArray(rawIssues) ||
+      !Array.isArray(normalizedIssues) ||
+      rawIssues.length !== normalizedIssues.length
+    ) {
+      return false;
+    }
+    const issues = rawIssues.map((item, index) => {
+      const rawIssue = exact(item, ISSUE_FIELDS);
+      const normalizedIssue = exact(normalizedIssues[index], ISSUE_FIELDS);
+      const rawLocator = exact(rawIssue.stepLocator, LOCATOR_FIELDS);
+      const normalizedLocator = exact(normalizedIssue.stepLocator, LOCATOR_FIELDS);
+      if (rawLocator.quote !== normalizedLocator.quote) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      return {
+        ...rawIssue,
+        stepLocator: {
+          ...rawLocator,
+          start: normalizedLocator.start,
+          end: normalizedLocator.end,
+        },
+      };
+    });
+    return p4JsonEqual(p2Snapshot({ ...rawReport, issues }), frozen);
+  } catch {
+    return false;
+  }
 }
 
 function issueKey(issue: Record<string, unknown>): string {
@@ -469,7 +515,7 @@ export class P4CandidateGate {
           fail(P2_ERROR_CODES.PACKET_SCHEMA);
         }
         const frozenReport = exact(p2Snapshot(report), REPORT_FIELDS);
-        if (!p4JsonEqual(p2Snapshot(parsed), frozenReport)) {
+        if (!reportMatchesNormalizedLocators(p2Snapshot(parsed), frozenReport)) {
           fail(P2_ERROR_CODES.PACKET_BINDING);
         }
         if (frozenReport.schemaVersion !== "p4-review-v1" || frozenReport.stage !== "R2") {

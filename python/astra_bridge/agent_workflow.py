@@ -187,7 +187,7 @@ def _ordinal(request_id):
     if not isinstance(request_id, str) or not request_id.startswith("model-"):
         _fail()
     suffix = request_id[len("model-"):]
-    if suffix not in tuple(str(n) for n in range(1, 33)):
+    if suffix not in tuple(str(n) for n in range(1, 257)):
         _fail()
     return int(suffix)
 
@@ -393,7 +393,8 @@ def default_route():
     return normalize_route(copy.deepcopy(_DEFAULT_MECHANISM))
 
 
-def _source_record(history, source_id, session_id, problem_hash, *, require_complete=True):
+def _source_record(history, source_id, session_id, problem_hash, *,
+                   require_complete=True, phases=("WORK",)):
     """Strict read of one real COMPLETE WORK record; returns (body, packet).
 
     The request body and the raw receipt packet are cross-checked against each
@@ -424,7 +425,7 @@ def _source_record(history, source_id, session_id, problem_hash, *, require_comp
         _fail()
     if receipt["transportStatus"] != "COMPLETE":
         _fail()
-    if request.get("phase") != "WORK" or request.get("requestId") != source_id:
+    if request.get("phase") not in phases or request.get("requestId") != source_id:
         _fail()
     if request.get("sessionId") != session_id or request.get("problemHash") != problem_hash:
         _fail()
@@ -512,7 +513,7 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in tuple(str(n) for n in range(1, 33)):
+        if suffix not in tuple(str(n) for n in range(1, 257)):
             continue
         if int(suffix) > source_ordinal:
             continue
@@ -600,7 +601,7 @@ def _completed_work_count(history, session_id, problem_hash, upto_ordinal):
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in tuple(str(n) for n in range(1, 33)):
+        if suffix not in tuple(str(n) for n in range(1, 257)):
             continue
         if int(suffix) > upto_ordinal:
             continue
@@ -628,7 +629,7 @@ def _admitted_task_count(history, session_id, problem_hash, upto_ordinal):
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in tuple(str(n) for n in range(1, 33)):
+        if suffix not in tuple(str(n) for n in range(1, 257)):
             continue
         if int(suffix) > upto_ordinal:
             continue
@@ -706,7 +707,7 @@ def _expected_event_seq(history, session_id, problem_hash, source_ordinal):
         if not isinstance(request_id, str) or not request_id.startswith("model-"):
             continue
         suffix = request_id[len("model-"):]
-        if suffix not in tuple(str(n) for n in range(1, 33)):
+        if suffix not in tuple(str(n) for n in range(1, 257)):
             continue
         if int(suffix) > source_ordinal:
             continue

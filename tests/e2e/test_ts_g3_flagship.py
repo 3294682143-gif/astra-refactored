@@ -49,7 +49,11 @@ class G3FlagshipClient(FakeClient):
         self.tool_on_candidate = tool_on_candidate
 
     def _work(self, body):
-        if body.get("stage") == "REPAIR":
+        # The bounded S2 repair arrives either as the R2-driven REPAIR stage or as
+        # the redo WORK turn carrying revision provenance; both answer with the
+        # revised candidate.
+        if (body.get("stage") == "REPAIR" or body.get("revisionProvenance")
+                or body.get("revisionTarget")):
             return self._packet(body, "the real solution set is {0,1}", "Split the zero product: x=0 or x=1.", "{0,1}")
         task = body["task"]
         on_answer = task["taskId"] == ANSWER_TASK
@@ -128,8 +132,8 @@ def test_public_entry_evidence_gated_revision_releases_the_complete_answer(proce
         max_reviews=1,
         max_repairs=1,
         max_effects=1,
-        max_model_calls=6,
-        max_work_units=3,
+        max_model_calls=7,
+        max_work_units=4,
     )
     assert result["engine"] == "ts"
     assert result["status"] == "candidate"
@@ -149,8 +153,8 @@ def test_public_entry_without_repair_budget_keeps_the_first_candidate(process_tr
         client,
         max_reviews=1,
         max_effects=1,
-        max_model_calls=6,
-        max_work_units=3,
+        max_model_calls=7,
+        max_work_units=4,
     )
     assert result["status"] == "candidate"
     assert result["final_response"] == "{1}"
@@ -207,7 +211,11 @@ class MultiGapParamClient(FakeClient):
         self.repair_answer = repair_answer
 
     def _work(self, body):
-        if body.get("stage") == "REPAIR":
+        # The bounded S2 repair arrives either as the R2-driven REPAIR stage or as
+        # the redo WORK turn carrying revision provenance; both answer with the
+        # revised candidate.
+        if (body.get("stage") == "REPAIR" or body.get("revisionProvenance")
+                or body.get("revisionTarget")):
             return self._packet(
                 body,
                 "classification of x^2=p",
@@ -289,8 +297,10 @@ def test_public_entry_multi_gap_complete_repair_revises_the_candidate(process_tr
         max_reviews=1,
         max_repairs=1,
         max_effects=1,
-        max_model_calls=8,
-        max_work_units=3,
+        # The answer task is the fourth work unit, so the bounded redo needs a
+        # fifth unit of its own plus the review and repair calls.
+        max_model_calls=10,
+        max_work_units=5,
     )
     assert result["engine"] == "ts"
     assert result["status"] == "candidate"
@@ -308,8 +318,10 @@ def test_public_entry_multi_gap_partial_repair_is_refused(process_tracker):
         max_reviews=1,
         max_repairs=1,
         max_effects=1,
-        max_model_calls=8,
-        max_work_units=3,
+        # The answer task is the fourth work unit, so the bounded redo needs a
+        # fifth unit of its own plus the review and repair calls.
+        max_model_calls=10,
+        max_work_units=5,
     )
     assert result["engine"] == "ts"
     # The partial repair leaves the p!=0 branch uncovered: fail-closed, the

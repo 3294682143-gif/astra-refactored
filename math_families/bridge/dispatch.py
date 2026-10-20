@@ -411,6 +411,15 @@ def _entries_impl():
             for name in ("polynomial_expand_coefficients", "linear_system_solution_set")
         }
     )
+    from math_families.bridge.exact_check import exact_check_expr
+    from math_families.bridge.finite_enumeration import bounded_enumeration
+
+    T.update(
+        {
+            "exact_check_expr": (exact_check_expr, {}),
+            "bounded_enumeration": (bounded_enumeration, {}),
+        }
+    )
     return T
 
 

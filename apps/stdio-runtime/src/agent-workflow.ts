@@ -35,8 +35,8 @@ import { AGENT_MAX_MODEL_CALLS } from "@astra/runtime-core";
 
 const MAX_ROUTES = 2;
 const MAX_DEPENDENCIES = 2;
-const MAX_REVIEWS = 1;
-const MAX_WORK_UNITS = 32;
+const MAX_REVIEWS = 3;
+const MAX_WORK_UNITS = 64;
 const MAX_REMAINING_MS = 3_600_000;
 const MIN_REMAINING_MS = 25;
 const MAX_TASK_ID_CHARS = 256;

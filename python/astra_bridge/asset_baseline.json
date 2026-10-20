@@ -51,10 +51,10 @@
       "math_families/bridge/__init__.py": "b4607d526883e233bd019c0b7958c918331aa789fbd3df567c1d36cb8955e444",
       "math_families/bridge/computation.py": "6f20940c7ebb606ad9f8b1568238f9f74b3c3de340013daedf07fd13ddff040b",
       "math_families/bridge/descriptors.py": "c25b783d49dcb1b6eee313cbe34c6e45b03cbb4805944b62930b3efef2422c2e",
-      "math_families/bridge/dispatch.py": "86bc49b5e108ceebb91074c094c207e429138d9e54e6eabe73e1d7c75a04f085",
+      "math_families/bridge/dispatch.py": "86ac6f04e0c00b86975dca00836fe208a88d5ba3d6696f428014ad959a66bc64",
       "math_families/bridge/evidence_bridge.py": "21b6c0cbddbb49fd83d6ee64f76201ad689b37c1ee94b80c9fa28ba3e449a987",
       "math_families/bridge/exact_math.py": "6fc74a62a2e2a686b1748ed32bd5fefa8626995eace2daaab6421c011cbba7af",
-      "math_families/bridge/safe_expr.py": "55719f70cc5dc8317964bba2dd972f5c483d6fc9c2bd9dda0c3da2665bacc55f",
+      "math_families/bridge/safe_expr.py": "35f1ba6551b679a3bbe562cd94a63fd1027d9f76aaae2945bd6368c75c7e7c4b",
       "math_families/bridge/spec_adapters.py": "7f4bc017207c7f0948165ab1371826b0f4c2f5946288e4203da38c05e529544e",
       "math_families/catalog.json": "eb97e20d7e6421a10f3a3c66e42b24c9a65c283882134d3127111c0a0dde2874",
       "math_families/core/__init__.py": "bdb6ca12014f070c6f28c0b6a2a899b77aea999e27a992a5c032f6ebc74d7194",
@@ -105,7 +105,9 @@
       "math_families/skills/probabilistic_model.md": "e22ed9344f81c9199c2437d2aa9173fa5c79e4c999b5230054c30942eb42ed9c",
       "math_families/skills/symbolic_algebra.md": "53ed2c62017c9cade4ad59f1a915cb5cfc7755bba6517fed7f91cd10f7751cc1",
       "math_families/skills/symbolic_calculus.md": "615a4ea563887371e689efd16da489b91166f08e1b7e6a71178db93b030d0e6d",
-      "math_families/skills/transfer_matrix.md": "876e74b2e4a449d0cb028794500c8ffd819d2342c9e8115ebaf3b974c396c0d1"
+      "math_families/skills/transfer_matrix.md": "876e74b2e4a449d0cb028794500c8ffd819d2342c9e8115ebaf3b974c396c0d1",
+      "math_families/bridge/exact_check.py": "b57c937bd48ab969c60bed478763f96bf690beac38e4738e30c59d7ff5cc37b1",
+      "math_families/bridge/finite_enumeration.py": "223507c21350856b4fad7bb058a60b5c50addd70766f0a0d9f61829fc2e8e996"
     }
   },
   "schemaVersion": "astra-asset-baseline-v1",

@@ -48,8 +48,8 @@ _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 3600000
 _MAX_MODEL_CALLS = 256
 _MAX_WORK_UNITS = 64
-_MAX_EFFECTS = 16
-_MAX_REVIEWS = 1
+_MAX_EFFECTS = 2
+_MAX_REVIEWS = 3
 _MAX_METHOD_LOADS = 1
 _MAX_TOKENS = 8192
 _HOST_SOLVE_ID = "host-2"
@@ -59,7 +59,7 @@ _ENGINE = "ts"
 _MODE = "TS_PREVIEW"
 _POLICIES = ("BEST_EFFORT", "STRICT")
 _STOP_REASONS = (
-    "WORK", "R2", "REPAIR", "R0", "COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN", "ADMITTED",
+    "WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0", "COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN", "ADMITTED",
     "BUDGET_EXHAUSTED", "DEADLINE_EXCEEDED", "ILLEGAL_TRANSITION",
     "NO_CANDIDATE", "NO_REVIEW", "CONTROL_REJECTED", "PACKET_REJECTED",
     "CONTEXT_REJECTED", "REVIEW_STOP", "REVIEWS_COMPLETE",
@@ -68,7 +68,7 @@ _STOP_REASONS = (
 )
 _TRACE_KINDS = ("MODEL", "EFFECT", "CONTROL")
 _TRACE_STATES = ("DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED")
-_MODEL_TRACE_IDS = tuple("model-" + str(n) for n in range(1, 33))
+_MODEL_TRACE_IDS = tuple("model-" + str(n) for n in range(1, 257))
 _EFFECT_TRACE_IDS = ("effect-1", "effect-2")
 # The root AgentSession emits exactly one control trace id, `control`. The
 # older P0/P1/P2/P3 traces are not touched here; this filter only accepts the
@@ -180,7 +180,8 @@ class AgentHost(_Host):
             options,
             (
                 "maxModelCalls", "maxWorkUnits", "maxEffects", "maxReviews",
-                "maxMethodLoads", "maxRepairs", "maxR0", "policy", "deriveBudget",
+                "maxMethodLoads", "maxRepairs", "maxConsensus", "maxR0",
+                "policy", "deriveBudget",
                 "resumeSessionLog", "resumeContractVersion", "resumeHistory",
             ),
         )
@@ -198,7 +199,8 @@ class AgentHost(_Host):
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
         self.max_reviews = _bounded_int(options["maxReviews"], 0, _MAX_REVIEWS)
         self.max_method_loads = _bounded_int(options["maxMethodLoads"], 0, _MAX_METHOD_LOADS)
-        self.max_repairs = _bounded_int(options["maxRepairs"], 0, 1)
+        self.max_repairs = _bounded_int(options["maxRepairs"], 0, 3)
+        self.max_consensus = _bounded_int(options["maxConsensus"], 0, 8)
         self.max_r0 = _bounded_int(options["maxR0"], 0, 1)
         if options["policy"] not in _POLICIES:
             _fail()
@@ -246,6 +248,7 @@ class AgentHost(_Host):
             self.effect_calls = self.resume_effect_offset
         self.review_calls = 0
         self.repair_calls = 0
+        self.consensus_calls = 0
         self.catalog_calls = 0
         self.method_loads = 0
         self.asset_calls = 0
@@ -431,7 +434,7 @@ class AgentHost(_Host):
 
     def on_model(self, frame_id, params):
         ordinal = self.model_requests + 1
-        if not self.derive_budget and ordinal > self.max_model_calls:
+        if ordinal > self.max_model_calls:
             _fail()
         if self.model_requests == 0 and self._methods_enabled():
             if self.catalog_calls != 1 or not self.callback_done:
@@ -450,21 +453,42 @@ class AgentHost(_Host):
             _fail()
         if request["maxTokens"] != _MAX_TOKENS:
             _fail()
-        if request["phase"] == "R2":
+        if request["phase"] in ("R2", "R4"):
+            # Bounded review rounds share one authorized review budget. R4 is
+            # only a re-review after at least one evidence-triggered repair.
             if self.review_calls >= self.max_reviews:
                 _fail()
-            if self.review_calls >= 1:
+            if request["phase"] == "R4" and self.repair_calls < 1:
                 _fail()
         elif request["phase"] == "REPAIR":
-            # The single G3/PR4 evidence-triggered revision: at most one, only
-            # after exactly one review, and only with repair budget authorized.
+            # A bounded sequence of evidence-triggered revisions: at most one
+            # per review round, never more than the authorized repair budget.
             if self.max_repairs < 1:
                 _fail()
-            if self.review_calls != 1:
+            if self.review_calls < 1:
                 _fail()
-            if self.repair_calls >= 1:
+            if self.repair_calls >= self.max_repairs:
+                _fail()
+            # At most one revision per review round: a REPAIR must be preceded
+            # by a review that has not already produced a repair.
+            if self.repair_calls >= self.review_calls:
                 _fail()
             if self.max_model_calls - self.model_requests < 1:
+                _fail()
+        elif request["phase"] == "CONSENSUS":
+            # A bounded blind re-solve / adjudication before candidate delivery.
+            # It never follows a review and never produces a Host artifact by
+            # itself; only the selected packet is later accepted by Node.
+            if self.max_consensus < 1 or self.consensus_calls >= self.max_consensus:
+                _fail()
+            if self.review_calls > 0:
+                _fail()
+            if not any(
+                isinstance(record, dict)
+                and isinstance(record.get("request"), dict)
+                and record["request"].get("phase") == "WORK"
+                for record in self.history.values()
+            ):
                 _fail()
         else:
             if self.review_calls > 0:
@@ -669,10 +693,12 @@ class AgentHost(_Host):
         }
         self.model_requests += 1
         self.last_model_id = request_id
-        if request["phase"] == "R2":
+        if request["phase"] in ("R2", "R4"):
             self.review_calls += 1
         elif request["phase"] == "REPAIR":
             self.repair_calls += 1
+        elif request["phase"] == "CONSENSUS":
+            self.consensus_calls += 1
         if transport != "COMPLETE":
             self.stopped = True
         if transport == "UNKNOWN":
@@ -926,7 +952,7 @@ class AgentHost(_Host):
         if (
             not _is_int(summary["modelCalls"])
             or summary["modelCalls"] < self.model_requests
-            or (not self.derive_budget and summary["modelCalls"] > self.max_model_calls)
+            or summary["modelCalls"] > self.max_model_calls
         ):
             _fail()
         if not _is_int(summary["effectCalls"]) or not self.effect_calls <= summary["effectCalls"] <= self.max_effects:
@@ -934,7 +960,7 @@ class AgentHost(_Host):
         if (
             not _is_int(summary["workUnits"])
             or summary["workUnits"] < 0
-            or (not self.derive_budget and summary["workUnits"] > self.max_work_units)
+            or summary["workUnits"] > self.max_work_units
         ):
             _fail()
         if not _is_int(summary["reviewCalls"]) or summary["reviewCalls"] != self.review_calls:
@@ -962,7 +988,7 @@ class AgentHost(_Host):
         if not isinstance(summary["finalResponse"], str) or not summary["finalResponse"]:
             _fail()
         trace = result["trace"]
-        if not isinstance(trace, list) or len(trace) > 64:
+        if not isinstance(trace, list) or len(trace) > 128:
             _fail()
         for index, row in enumerate(trace):
             _exact_keys(row, _TRACE_FIELDS)
@@ -1049,7 +1075,7 @@ class AgentHost(_Host):
                     for name in self.history
                     if isinstance(name, str)
                     and name.startswith("model-")
-                    and name.split("-")[1] in tuple(str(n) for n in range(1, 33))
+                    and name.split("-")[1] in tuple(str(n) for n in range(1, 257))
                 )
             )
         except Exception:  # noqa: BLE001 - a malformed key is not a final
@@ -1121,5 +1147,5 @@ class AgentHost(_Host):
                 later_request = later.get("request")
                 if not isinstance(later_request, dict):
                     _fail()
-                if later_request.get("phase") != "R2":
+                if later_request.get("phase") not in ("R2", "R4", "REPAIR"):
                     _fail()

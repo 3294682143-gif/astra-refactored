@@ -193,11 +193,12 @@ test("group 3: unicode codepoint spans and untouched scopes", () => {
 });
 
 test("group 4: capacity overflow is atomic and oversized context is refused", () => {
-  const prep = makePrep(valueGoals(4));
+  const prep = makePrep(valueGoals(8));
   const { trigger } = makeRevisionTrigger(prep);
-  assert.equal(prep.target.contract.obligations.length, 12);
+  // Eight VALUE goals, each with four obligations after INDEPENDENT_DERIVATION.
+  assert.equal(prep.target.contract.obligations.length, 32);
   const raw = revisionRawOf(prep, trigger, (report) => {
-    report.changes = ["goal-1", "goal-2", "goal-3", "goal-4"].map((goalId) => ({
+    report.changes = ["goal-1", "goal-2", "goal-3", "goal-4", "goal-5", "goal-6", "goal-7", "goal-8"].map((goalId) => ({
       goalId,
       fromKind: "VALUE",
       toKind: "ALL_SOLUTIONS",
@@ -210,7 +211,7 @@ test("group 4: capacity overflow is atomic and oversized context is refused", ()
       ),
     }));
   });
-  assert.equal(parseP4R0RevisionReport(raw, prep, trigger).changes.length, 4);
+  assert.equal(parseP4R0RevisionReport(raw, prep, trigger).changes.length, 8);
   const session = dispatched(prep, trigger);
   const record = session.settle("COMPLETE", raw, 800);
   assert.equal(record.code, "INVALID_REVISION");

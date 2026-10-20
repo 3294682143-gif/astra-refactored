@@ -214,7 +214,7 @@ const KIND_PRIORITY: Readonly<Record<string, number>> = {
  */
 export function chooseP2ReadyTask(contract: P2Contract, ready: readonly P2Task[]): P2Task | null {
   const frozenContract = p2Snapshot(contract);
-  if (!Array.isArray(ready) || ready.length > 32) {
+  if (!Array.isArray(ready) || ready.length > 48) {
     throw new P2Error("PACKET_BINDING");
   }
   const frozenReady = p2Snapshot(ready);

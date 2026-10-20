@@ -62,7 +62,7 @@ test("old P2 gate still rejects a fourth call while the new gate defaults to thr
     expectCode("PACKET_BINDING"),
   );
   assert.equal(P4_RECHECK_DEFAULT_MODEL_CALLS, 3);
-  assert.equal(P4_RECHECK_MAX_MODEL_CALLS, 32);
+  assert.equal(P4_RECHECK_MAX_MODEL_CALLS, 256);
   const task = runningTask(ledger);
   const gate = gateFor(ledger);
   for (const id of ["model-1", "model-2", "model-3"]) {
@@ -121,7 +121,7 @@ test("caps 0..4 bound the ledger and bad caps or times are refused without mutat
     assert.equal(gate.snapshot().length, cap);
   }
   const contract = ledger.snapshot();
-  for (const bad of [33, -1, true, Number.NaN, 1.5]) {
+  for (const bad of [257, -1, true, Number.NaN, 1.5]) {
     assert.throws(
       () =>
         new P4RecheckModelGate(

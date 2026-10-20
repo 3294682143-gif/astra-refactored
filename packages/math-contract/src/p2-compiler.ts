@@ -41,20 +41,38 @@ export function p2ScopeIdOf(scope: Scope): string {
 }
 
 const KIND_OBLIGATIONS: Readonly<Record<P2GoalKind, readonly P2ObligationKind[]>> = {
-  VALUE: ["DOMAIN_VALIDITY", "CANDIDATE_VALIDITY", "OUTPUT_COVERAGE"],
+  VALUE: ["DOMAIN_VALIDITY", "CANDIDATE_VALIDITY", "INDEPENDENT_DERIVATION", "OUTPUT_COVERAGE"],
   ALL_SOLUTIONS: [
     "DOMAIN_VALIDITY",
     "CANDIDATE_VALIDITY",
     "BOUNDARY_EXCEPTIONS",
     "EXHAUSTIVENESS",
+    "INDEPENDENT_DERIVATION",
     "OUTPUT_COVERAGE",
   ],
-  COUNT: ["COUNT_OBJECTS", "NO_DUPLICATES", "EXHAUSTIVENESS", "OUTPUT_COVERAGE"],
-  OPTIMIZATION: ["FEASIBILITY", "GLOBAL_BOUND", "ATTAINMENT", "OUTPUT_COVERAGE"],
-  PROOF: ["PREMISES", "QUANTIFIERS", "PROOF_GOAL", "OUTPUT_COVERAGE"],
-  PARAMETER: ["DOMAIN_VALIDITY", "BOUNDARY_EXCEPTIONS", "OUTPUT_COVERAGE"],
-  MULTIPART: ["SUBGOAL_COVERAGE", "OUTPUT_COVERAGE"],
-  UNKNOWN: ["ANSWER_REQUEST", "OUTPUT_COVERAGE"],
+  COUNT: [
+    "COUNT_OBJECTS",
+    "NO_DUPLICATES",
+    "EXHAUSTIVENESS",
+    "INDEPENDENT_DERIVATION",
+    "OUTPUT_COVERAGE",
+  ],
+  OPTIMIZATION: [
+    "FEASIBILITY",
+    "GLOBAL_BOUND",
+    "ATTAINMENT",
+    "INDEPENDENT_DERIVATION",
+    "OUTPUT_COVERAGE",
+  ],
+  PROOF: ["PREMISES", "QUANTIFIERS", "PROOF_GOAL", "INDEPENDENT_DERIVATION", "OUTPUT_COVERAGE"],
+  PARAMETER: [
+    "DOMAIN_VALIDITY",
+    "BOUNDARY_EXCEPTIONS",
+    "INDEPENDENT_DERIVATION",
+    "OUTPUT_COVERAGE",
+  ],
+  MULTIPART: ["SUBGOAL_COVERAGE", "INDEPENDENT_DERIVATION", "OUTPUT_COVERAGE"],
+  UNKNOWN: ["ANSWER_REQUEST", "INDEPENDENT_DERIVATION", "OUTPUT_COVERAGE"],
 };
 
 /** Fixed expected-result strings. They describe the work, not a proof. */
@@ -72,6 +90,8 @@ const KIND_EXPECTED: Readonly<Record<P2ObligationKind, string>> = {
   QUANTIFIERS: "state the quantifier structure used",
   PROOF_GOAL: "state the proof goal and its steps",
   SUBGOAL_COVERAGE: "state how the declared subgoals are covered",
+  INDEPENDENT_DERIVATION:
+    "state a second derivation of the answer that does not reuse the first one, and state whether it agrees with the stated candidate",
   OUTPUT_COVERAGE: "state how the requested output is covered",
   ANSWER_REQUEST: "state the requested answer",
 };
@@ -90,6 +110,7 @@ const KIND_ACCEPTANCE: Readonly<Record<P2ObligationKind, string>> = {
   QUANTIFIERS: "quantifiers-review",
   PROOF_GOAL: "proof-goal-review",
   SUBGOAL_COVERAGE: "subgoal-coverage-review",
+  INDEPENDENT_DERIVATION: "independent-derivation-review",
   OUTPUT_COVERAGE: "output-coverage-review",
   ANSWER_REQUEST: "answer-request-review",
 };

@@ -111,17 +111,24 @@ def test_tampered_final_resume_is_rejected_never_forged(process_tracker):
 def test_resume_budget_only_tightens(process_tracker):
     _, checkpoint = _first_with_checkpoint("shared_public")
 
+    # The four-task graph spends more than the old three-task graph. The prior
+    # carrier must still cover that spend while remaining tighter than the
+    # checkpoint's own root budget.
+    tighter_calls = checkpoint["budget"]["maxModelCalls"] - 1
+    assert tighter_calls >= checkpoint["spent"]["modelCalls"]
     # A widened recovery is a fixed rejection; a same-or-tighter one is fine.
     prior = host_carriers.bind_carrier(
         "shared_public", checkpoint["problemHash"], "prior-session",
-        "math-agent-preview-v2", max_model_calls=4, max_work_units=3,
-        max_effects=2, root_deadline_ms=5000,
+        "math-agent-preview-v2", max_model_calls=tighter_calls,
+        max_work_units=checkpoint["budget"]["maxWorkUnits"],
+        max_effects=checkpoint["budget"]["maxEffects"], root_deadline_ms=5000,
     )
     plan = host_checkpoint.resume_plan(checkpoint, prior=prior, session_id="next")
-    assert plan["carrier"].max_model_calls == 4
+    assert plan["carrier"].max_model_calls == tighter_calls
     with pytest.raises(host_checkpoint.CheckpointError) as widened:
         host_checkpoint.resume_plan(
-            checkpoint, prior=prior, session_id="next", max_model_calls=8,
+            checkpoint, prior=prior, session_id="next",
+            max_model_calls=tighter_calls + 1,
         )
     assert widened.value.code == "BUDGET_WIDENED"
 

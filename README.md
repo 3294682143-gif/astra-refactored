@@ -37,7 +37,7 @@ Zygos 围绕四个原则组织运行过程：
 | 评审与修复 | 有界 R0、R2、挑战、范围化检查及候选修复路径 | R0、修复默认关闭；整题严格数学验收未执行 |
 | 数学资产 | 保留 22 个数学族 catalog 条目及 Python 算法、检查器、skills、prompts | 统一 TS 主流程的全量算法执行与结果消费证据尚未齐备 |
 | 运行底座 | 事件日志、上下文投影与回放、请求责任、截断屏障、受控 checkpoint/resume | 目标环境验收与完整迁移结案 |
-| 分发 | 仓库内提供预编译 Node bundle、schema 和构建清单 | 当前 Python wheel 未包含完整 TS 运行链路 |
+| 分发 | 仓库内提供预编译 Node bundle、schema 和构建清单；wheel 已包含 TS 运行链路并在本地 clean-venv 冒烟通过 | 正式目标环境的 Node/子进程验收（B2）仍未完成 |
 | 交互展示 | 当前对外使用 Python 接口 | Web / Notebook 交互 Demo 和比赛要求的多智能体协作展示待验收 |
 
 本地回归、资产哈希、模型准确率、目标环境验收和正式发布是不同层面的证据。当前状态与未决项见 [GATEBOARD](docs/GATEBOARD.md) 和 [RELEASE_BLOCKERS](docs/RELEASE_BLOCKERS.md)。
@@ -113,7 +113,7 @@ python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
 
 清单检查成功时输出 `VERIFY_OK`。它校验记录的文件哈希和源码祖先关系，不调用模型，也不证明数学答案正确。浅克隆缺少清单引用的祖先提交时，需要先补齐对应 Git 历史。
 
-**当前请从完整源码检出运行 TS 引擎。** `pip install .` 生成的 Python 包尚未包含 `python/astra_bridge`、预编译 bundle 及完整协议资源，wheel 单独安装不是当前已经验收的 TS 安装方式。
+`pip install .` 生成的 wheel 已包含 `python/astra_bridge`、预编译 bundle、schema 和协议资源；本地 clean-venv、源码目录外的 `engine="ts"` 冒烟已通过。正式目标环境的 Node/子进程验收仍需单独完成（B2）。
 
 ### 离线入口冒烟
 
@@ -215,16 +215,16 @@ Host 不从环境中读取模型密钥，也不另建模型请求通道。真实
 
 | Python 参数 | 默认值 | 允许范围 / 含义 |
 | --- | --- | --- |
-| `max_model_calls` | `4` | `0..32`，根会话模型调用上限 |
-| `max_work_units` | `2` | `1..32`，工作单元上限 |
+| `max_model_calls` | `8` | `0..256`，根会话模型调用上限 |
+| `max_work_units` | `4` | `1..64`，工作单元上限 |
 | `max_effects` | `1` | `0..2`，工具执行与方法加载共享的效果额度 |
 | `max_reviews` | `1` | `0..1`，R2 评审额度 |
 | `max_method_loads` | `0` | `0..1`，方法卡加载额度 |
 | `max_repairs` | `0` | `0..1`，候选修复额度 |
 | `max_r0` | `0` | `0..1`，R0 计划评审额度 |
-| `problem_seconds` | `5` | `0 < 值 <= 3600`，单题根截止时间，包含启动与收口 |
+| `problem_seconds` | `600` | `0 < 值 <= 3600`，单题根截止时间，包含启动与收口 |
 | `policy` | `"BEST_EFFORT"` | `"BEST_EFFORT"` 或 `"STRICT"` |
-| `derive_budget` | `False` | 是否启用内部任务预算推导；仍受根上限约束 |
+| `derive_budget` | `False` | 是否启用内部任务预算推导；只能在 Host 根上限内分配，不会扩大上限 |
 | `node` | `"node"` | 受信的 Node 可执行文件名或路径 |
 | `mode` | `"platform"` | `"platform"`、`"local"` 或 `"shared_public"` |
 
@@ -241,9 +241,9 @@ def create_method_enabled_agent(client):
     )
 ```
 
-R0 与修复分别通过 `max_r0=1`、`max_repairs=1` 启用。开启开关只授予调用额度；实际触发还需要满足任务状态、后续工作与评审预留、证据和剩余时间条件。方法加载与工具执行共用 `max_effects`，每题无需强制加载卡片。
+R0 与修复分别通过 `max_r0=1`、`max_repairs=1` 启用。`max_repairs=1` 还允许在 WorkPacket 形状被控制 schema 拒绝后做一次同一任务的 schema-repair 回合；默认 0 保持 fail-closed。开启开关只授予调用额度；实际触发还需要满足任务状态、后续工作与评审预留、证据和剩余时间条件。方法加载与工具执行共用 `max_effects`，每题无需强制加载卡片。
 
-真实运行应在已确定的预算内配置全部参数。开发默认的 5 秒不代表真实模型完成一题所需的时间。固定对照实验配置见 [RUN_CONFIG_LOCK](docs/RUN_CONFIG_LOCK.md)，它与默认预览 profile 分开管理。
+真实运行应在已确定的预算内配置全部参数。开发默认的 600 秒只是为了给真实模型留出完成时间，不代表官方额度。固定对照实验配置见 [RUN_CONFIG_LOCK](docs/RUN_CONFIG_LOCK.md)，它与默认预览 profile 分开管理。
 
 ## 结果语义
 
@@ -310,6 +310,8 @@ TS / lite 的通用工具动作入口当前限定为：
 | --- | --- |
 | `polynomial_expand_coefficients` | 在有界输入上展开多项式并返回系数 |
 | `linear_system_solution_set` | 在声明的域与精确输入范围内求线性系统解集 |
+| `exact_check_expr` | 有界符号检查：三角化简、极大子式、代数扩域因式分解、定积分、极限、密度归一化 |
+| `bounded_enumeration` | 对显式有限对象表或笛卡尔积做穷举 k-子集计数 |
 
 这些工具经过已有注册执行器的输入验证、隔离、截止时间与审计路径。工具结果是范围化程序观察，不能自动证明原题全部义务。
 

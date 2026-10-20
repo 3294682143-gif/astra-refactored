@@ -173,6 +173,23 @@ SCHEMAS = {
         "n_samples": "samples",
         "seed": "seed",
     },
+    "exact_check_expr": {
+        "operation": "exact_operation",
+        "expression": "expr",
+        "variable": "variable",
+        "matrix": "expression_matrix",
+        "lower": "expr",
+        "upper": "expr",
+        "point": "expr",
+        "minimal_polynomials": "expressions",
+        "density": "expr",
+    },
+    "bounded_enumeration": {
+        "objects": "object_rows",
+        "ranges": "positive_ints",
+        "choose": "positive",
+        "predicate": "predicate",
+    },
     "line_through": {"p": "point", "q": "point"},
     "angle_at_vertex": {"p": "point", "v": "point", "q": "point"},
     "count_angle_ratio_locus": {
@@ -243,6 +260,15 @@ ENUMS = {
     "style": {"plain", "comma", "latex", "subscript", "words"},
     "pair_style": {"paren", "subscript"},
     "objective": {"covering_critical", "separation"},
+    "exact_operation": {
+        "SIMPLIFY",
+        "TRIG_REDUCE",
+        "MAXIMAL_MINORS",
+        "FACTOR_OVER_EXTENSION",
+        "DEFINITE_INTEGRAL",
+        "LIMIT",
+        "DENSITY_CHECK",
+    },
 }
 
 
@@ -333,6 +359,10 @@ def _check(rule, value):
                 "Integer",
                 "floor",
                 "ceiling",
+                "erf",
+                "erfc",
+                "Phi",
+                "phi",
             }
             if any(not isinstance(n, allowed) for n in nodes):
                 raise InvalidToolInput(
@@ -367,6 +397,66 @@ def _check(rule, value):
                 raise InvalidToolInput(
                     "expression is not a pure mathematical expression"
                 )
+    elif rule == "expression_matrix":
+        _array(value, 1, 8)
+        width = None
+        for row in value:
+            _array(row, 1, 8)
+            if width is None:
+                width = len(row)
+            elif len(row) != width:
+                raise InvalidToolInput("expression matrix must be rectangular")
+            for entry in row:
+                _check("expr", entry)
+    elif rule == "object_rows":
+        _array(value, 1, 60)
+        width = None
+        for row in value:
+            _array(row, 1, 4)
+            if width is None:
+                width = len(row)
+            elif len(row) != width:
+                raise InvalidToolInput("enumeration objects must have equal arity")
+            for entry in row:
+                if type(entry) is int:
+                    if abs(entry) > 10**9:
+                        raise OutsideAuditScope("enumeration integer attribute bound")
+                elif type(entry) is str:
+                    if len(entry) > 64 or any(0xD800 <= ord(c) <= 0xDFFF for c in entry):
+                        raise InvalidToolInput("enumeration string attribute is not bounded")
+                else:
+                    raise InvalidToolInput("enumeration attributes must be int or str")
+    elif rule == "predicate":
+        if type(value) is not str or not 1 <= len(value) <= 400:
+            raise InvalidToolInput("predicate must be a bounded non-empty string")
+        try:
+            nodes = list(ast.walk(ast.parse(value, mode="eval")))
+        except (SyntaxError, ValueError) as exc:
+            raise InvalidToolInput("predicate syntax") from exc
+        if len(nodes) > 96:
+            raise OutsideAuditScope("predicate AST bound")
+        allowed = (
+            ast.Expression,
+            ast.BoolOp, ast.And, ast.Or,
+            ast.UnaryOp, ast.Not, ast.USub, ast.UAdd,
+            ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
+            ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod,
+            ast.FloorDiv, ast.Pow, ast.Constant, ast.Call, ast.Name,
+            ast.Load, ast.Tuple,
+        )
+        funcs = {"distinct", "count", "size", "sum", "min", "max", "contains"}
+        if any(not isinstance(n, allowed) for n in nodes):
+            raise InvalidToolInput("predicate node is not allowed")
+        if any(isinstance(n, ast.Name) and n.id not in funcs for n in nodes):
+            raise InvalidToolInput("predicate name is not allowed")
+        if any(
+            isinstance(n, ast.Call)
+            and (not isinstance(n.func, ast.Name) or n.func.id not in funcs)
+            for n in nodes
+        ):
+            raise InvalidToolInput("predicate call is not allowed")
+        if any(isinstance(n, ast.Constant) and type(n.value) not in {int, float, str} for n in nodes):
+            raise InvalidToolInput("predicate constant type is not allowed")
     elif rule in {"point", "pair"}:
         _array(value, 2, 2)
         for v in value:

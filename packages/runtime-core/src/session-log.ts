@@ -30,6 +30,7 @@ export const SESSION_LOG_KIND = [
   "METHOD_LOAD",
   "REVIEW_CHALLENGE",
   "REPAIR",
+  "CONSENSUS",
   "TRUNCATION",
   "FINAL",
 ] as const;

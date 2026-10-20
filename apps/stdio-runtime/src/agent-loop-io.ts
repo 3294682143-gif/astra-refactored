@@ -34,6 +34,7 @@ const OPTION_FIELDS = [
   "maxReviews",
   "maxMethodLoads",
   "maxRepairs",
+  "maxConsensus",
   "maxR0",
   "remainingMs",
   "policy",
@@ -162,6 +163,7 @@ export interface CapturedAgentOptions {
   readonly maxReviews: number;
   readonly maxMethodLoads: number;
   readonly maxRepairs: number;
+  readonly maxConsensus: number;
   /** B1 (DECISION-0150): bounded R0 planning review (0 or 1). */
   readonly maxR0: number;
   readonly remainingMs: number;
@@ -244,6 +246,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const rawMaxReviews = source.maxReviews;
   const rawMaxMethodLoads = source.maxMethodLoads;
   const rawMaxRepairs = source.maxRepairs;
+  const rawMaxConsensus = source.maxConsensus;
   const rawMaxR0 = source.maxR0;
   const rawRemainingMs = source.remainingMs;
   const rawPolicy = source.policy;
@@ -251,14 +254,16 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const rawGoalSpecs = source.goalSpecs;
   // Hard caps for the explicit root budget; defaults are the preview profile.
   const maxModelCalls =
-    rawMaxModelCalls === undefined ? 4 : boundedInt(rawMaxModelCalls, 0, 32);
+    rawMaxModelCalls === undefined ? 4 : boundedInt(rawMaxModelCalls, 0, 256);
   const maxWorkUnits =
-    rawMaxWorkUnits === undefined ? 2 : boundedInt(rawMaxWorkUnits, 1, 32);
+    rawMaxWorkUnits === undefined ? 2 : boundedInt(rawMaxWorkUnits, 1, 64);
   const maxEffects = rawMaxEffects === undefined ? 1 : boundedInt(rawMaxEffects, 0, 2);
-  const maxReviews = rawMaxReviews === undefined ? 1 : boundedInt(rawMaxReviews, 0, 1);
+  const maxReviews = rawMaxReviews === undefined ? 1 : boundedInt(rawMaxReviews, 0, 3);
   const maxMethodLoads =
     rawMaxMethodLoads === undefined ? 0 : boundedInt(rawMaxMethodLoads, 0, 1);
-  const maxRepairs = rawMaxRepairs === undefined ? 0 : boundedInt(rawMaxRepairs, 0, 1);
+  const maxRepairs = rawMaxRepairs === undefined ? 0 : boundedInt(rawMaxRepairs, 0, 3);
+  const maxConsensus =
+    rawMaxConsensus === undefined ? 0 : boundedInt(rawMaxConsensus, 0, 8);
   const maxR0 = rawMaxR0 === undefined ? 0 : boundedInt(rawMaxR0, 0, 1);
   const remainingMs = boundedInt(rawRemainingMs, 1, AGENT_IO_MAX_REMAINING_MS);
   const policy = rawPolicy === undefined ? "BEST_EFFORT" : rawPolicy;
@@ -290,6 +295,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     maxReviews,
     maxMethodLoads,
     maxRepairs,
+    maxConsensus,
     maxR0,
     remainingMs,
     policy,
@@ -306,23 +312,41 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
  * one work unit per task plus the review and one final slot, clamped to the
  * hard caps. Node decides this budget and Python only verifies it.
  */
-export const AGENT_ROOT_MAX_MODEL_CALLS = 32 as const;
-export const AGENT_ROOT_MAX_WORK_UNITS = 32 as const;
+export const AGENT_ROOT_MAX_MODEL_CALLS = 256 as const;
+export const AGENT_ROOT_MAX_WORK_UNITS = 64 as const;
 
 export function deriveRootBudget(
   taskCount: number,
   maxReviews: number,
+  maxModelCallsCap: number,
+  maxWorkUnitsCap: number,
+  maxConsensus = 0,
 ): { readonly maxWorkUnits: number; readonly maxModelCalls: number } {
   if (
     !Number.isSafeInteger(taskCount) ||
     taskCount < 1 ||
     !Number.isSafeInteger(maxReviews) ||
-    maxReviews < 0
+    maxReviews < 0 ||
+    !Number.isSafeInteger(maxModelCallsCap) ||
+    !Number.isSafeInteger(maxWorkUnitsCap) ||
+    maxModelCallsCap < 1 ||
+    maxWorkUnitsCap < 1
   ) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
-  const maxWorkUnits = Math.min(Math.max(taskCount, 1), AGENT_ROOT_MAX_WORK_UNITS);
-  const maxModelCalls = Math.min(maxWorkUnits + maxReviews + 1, AGENT_ROOT_MAX_MODEL_CALLS);
+  // Derivation may allocate within the Host-advertised root caps, never above
+  // them. The Python Host always enforces the same caps; this is a second,
+  // independent guard.
+  const maxWorkUnits = Math.min(
+    Math.max(taskCount, 1),
+    AGENT_ROOT_MAX_WORK_UNITS,
+    maxWorkUnitsCap,
+  );
+  const maxModelCalls = Math.min(
+    maxWorkUnits + maxReviews + maxConsensus + 1,
+    AGENT_ROOT_MAX_MODEL_CALLS,
+    maxModelCallsCap,
+  );
   return Object.freeze({ maxWorkUnits, maxModelCalls });
 }
 

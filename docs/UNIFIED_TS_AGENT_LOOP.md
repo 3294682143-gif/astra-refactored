@@ -65,7 +65,7 @@ deliveries; they are not guessed or dropped. COMPLETE task delivery never
 satisfies a mathematical obligation.
 
 WORK accepts the existing WorkPacket format or an existing bounded tool/unsolved
-action. The two registered tools are the only tool names accepted. Tool receipts
+action. Only the registered tool names are accepted (the two algebraic tools plus the bounded exact-check and finite-enumeration tools). Tool receipts
 remain PROVISIONAL/UNKNOWN and are carried into the next request for the same
 task even when further tool dispatch is disabled. They are not reused across
 tasks. Per-task effect guards receive remaining global quota and global effect

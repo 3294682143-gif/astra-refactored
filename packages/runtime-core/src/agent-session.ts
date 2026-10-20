@@ -27,21 +27,23 @@ export const AGENT_SESSION_VERSION = "0.0.0-agent" as const;
 /** Below this remaining time no model call or effect is admitted. */
 export const AGENT_MIN_REMAINING_MS = 25 as const;
 export const AGENT_MAX_REMAINING_MS = 3_600_000 as const;
-export const AGENT_MAX_MODEL_CALLS = 32 as const;
+export const AGENT_MAX_MODEL_CALLS = 256 as const;
 export const AGENT_MAX_EFFECTS = 2 as const;
-export const AGENT_MAX_TRACE_EVENTS = 64 as const;
+export const AGENT_MAX_TRACE_EVENTS = 128 as const;
 
 // Root model request ids are generated up to the hard cap; the preview profile
 // just uses a smaller budget. No fixed four-id table any more.
 const modelIdFor = (index: number): string => `model-${index + 1}`;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
-const PHASES = ["WORK", "R2", "REPAIR", "R0"] as const;
+const PHASES = ["WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0"] as const;
 const TRANSPORTS = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"] as const;
 const TRACE_KINDS = ["MODEL", "EFFECT", "CONTROL"] as const;
 const TRACE_STATES = ["DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED"] as const;
 const TRACE_CODES = [
   "WORK",
+  "CONSENSUS",
   "R2",
+  "R4",
   "REPAIR",
   "R0",
   "COMPLETE",

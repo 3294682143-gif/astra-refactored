@@ -13,6 +13,7 @@
 import {
   P2_ERROR_CODES,
   P2Error,
+  P3_TOOL_NAMES,
   p2AnswerObligationForGoal,
   p2IsAnswerObligationKindForGoal,
   p2Snapshot,
@@ -61,6 +62,11 @@ import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
 import { AgentWorkflowRoutes } from "./agent-workflow.js";
+import {
+  certificateCorrection,
+  isCertifiedPacket,
+  summarizeCertificate,
+} from "./agent-answer-certificate.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import {
@@ -91,6 +97,27 @@ const MIN_MS = 25;
  * `P2_ANSWER_OBLIGATION_BY_GOAL` authority is untouched.
  */
 const AUX_OBLIGATION_KINDS: readonly P2ObligationKind[] = ["PREMISES", "ATTAINMENT"];
+
+/** Shape/type failures that one bounded model-side schema repair may correct. */
+const SCHEMA_REPAIR_CODES: ReadonlySet<string> = new Set([
+  "PACKET_SCHEMA",
+  "PACKET_BINDING",
+  "PACKET_DELIVERY",
+  "PACKET_FORBIDDEN_FIELD",
+  // The model may add explanatory assumptions that are not declared in the
+  // trusted scope. That is a repairable shape/scope mistake for this one
+  // bounded turn; the same task and scope are retained.
+  "PACKET_SCOPE_VIOLATION",
+  "SCOPE_MISMATCH",
+  "ROUTE_MISMATCH",
+  "VERSION_MISMATCH",
+  "UNKNOWN_DEPENDENCY",
+  "DUPLICATE_ID",
+  // A maxLength/type violation is reported as FIELD_VALUE by the strict
+  // WorkPacket schema. One bounded repair may shorten an overlong derivation
+  // or fix a scalar field; it never changes the task or the answer policy.
+  "FIELD_VALUE",
+]);
 
 /**
  * The declared goal kind of one goal id, or `UNKNOWN` when the goal is not
@@ -341,6 +368,78 @@ function checkerSupportsObligation(action: P3Action, problemText: string): boole
 }
 
 /**
+ * Build the bounded, model-visible schema-repair context. This is not a second
+ * solver: it repeats the same task with the rejected packet and the fixed
+ * WorkPacket field contract. The caller owns the one-attempt policy.
+ */
+function buildSchemaRepairMessages(
+  base: readonly { readonly role: "system" | "user"; readonly content: string }[],
+  previousText: string,
+  code: string,
+  requestId: string,
+): {
+  readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
+  readonly contextHash: string;
+  readonly contextBytes: number;
+} {
+  const baseBytes =
+    Buffer.byteLength(base[0]!.content, "utf8") +
+    Buffer.byteLength(base[1]!.content, "utf8");
+  const available = Math.max(0, 59_000 - baseBytes);
+  const clipped = [...previousText].slice(0, Math.min(4096, available)).join("");
+  // The Host re-parses the user message with the same strict context
+  // validator that served the original request. Keep that message valid JSON
+  // and advance only the request-bound sourceRequestId; the rejected packet
+  // and the repair identity live in the system message.
+  let repairBody: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(base[1]!.content);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("SCHEMA_REPAIR_CONTEXT");
+    }
+    repairBody = { ...(parsed as Record<string, unknown>), sourceRequestId: requestId };
+  } catch {
+    throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const replyTask = repairBody["task"] as Record<string, unknown> | undefined;
+  const replyRoute = repairBody["route"] as Record<string, unknown> | undefined;
+  const bindingLines = [
+    "currentProblemHash=" + String(repairBody["problemHash"] ?? ""),
+    "currentSessionId=" + String(repairBody["sessionId"] ?? ""),
+    "currentContractVersion=" + String(repairBody["contractVersion"] ?? ""),
+    "currentTaskId=" + String(replyTask?.["taskId"] ?? ""),
+    "currentGoalId=" + String(replyTask?.["goalId"] ?? ""),
+    "currentScopeId=" + String(replyTask?.["scopeId"] ?? ""),
+    "currentRouteId=" + String(replyRoute?.["routeId"] ?? ""),
+    "currentSourceRequestId=" + requestId,
+  ].join("\n");
+  const messages = [
+    {
+      role: "system" as const,
+      content:
+        base[0]!.content +
+        " Your previous WorkPacket was rejected by the control schema. Return ONE corrected WorkPacket and nothing else." +
+        " candidateProposal MUST be a JSON string or null (never an object); deliveryStatus MUST be exactly COMPLETE, INCOMPLETE, TRUNCATED or ERROR." +
+        " If the answer is complete, use deliveryStatus=COMPLETE, pendingObligations=[] and candidateProposal as the answer string." +
+        " Keep the current task and scope; use sourceRequestId exactly as the value given below." +
+        " If claim, derivation or candidateProposal exceeded 4096 Unicode code points, shorten each field; do not paste the rejected derivation again." +
+        " assumptions MUST be an empty array unless each entry is already a declared scope assumption; never invent a new assumption." +
+        "\n\nSCHEMA_REPAIR_CONTROL\n" +
+        "rejectedCode=" + code + "\n" +
+        bindingLines + "\n" +
+        "PREVIOUS_REJECTED_WORKPACKET=" + clipped,
+    },
+    { role: "user" as const, content: JSON.stringify(repairBody) },
+  ];
+  const serialized = JSON.stringify(messages);
+  return {
+    messages,
+    contextHash: p4Hash(serialized),
+    contextBytes: Buffer.byteLength(serialized, "utf8"),
+  };
+}
+
+/**
  * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
  * injected model port using only the shared root budget. R0 has no work task,
  * so it bypasses the P4RecheckModelGate; the root still owns the ordinal and
@@ -517,7 +616,13 @@ export async function runAgentLoop(
   );
   // One budget, derived from the compiled task graph, is the single source.
   const derived = opts0.deriveBudget
-    ? deriveRootBudget(contract.tasks.length, opts0.maxReviews)
+    ? deriveRootBudget(
+        contract.tasks.length,
+        opts0.maxReviews,
+        opts0.maxModelCalls,
+        opts0.maxWorkUnits,
+        opts0.maxConsensus,
+      )
     : null;
   const opts: CapturedAgentOptions =
     derived === null
@@ -623,6 +728,9 @@ export async function runAgentLoop(
   const progress = new AgentProgressPolicy();
 
   let workUnits = 0;
+  let schemaRepairs = 0;
+  let verifyCalls = 0;
+  const refutationDone = new Set<string>();
   let reviewCalls = 0;
   let repairCalls = 0;
   let catalogCalls = 0;
@@ -633,9 +741,12 @@ export async function runAgentLoop(
   let target: P4Target | null = null;
   let protectedOrigin: P4Target | null = null;
   let review: P4ReviewSession | null = null;
+  let protectedReview: P4ReviewSession | null = null;
+  let reviewTarget: P4Target | null = null;
   let firstReviewOrdinal = 2;
   let candidateTask: P2Task | null = null;
   let revisedDecision: ReturnType<typeof reviseCandidate>["decision"] | null = null;
+  let lastRevisionAccepted = false;
   let s1Assessment: P4S1Assessment | null = null;
   let s1AssetDescriptor: string | null = null;
   let s3AssetDescriptor: string | null = null;
@@ -782,6 +893,18 @@ export async function runAgentLoop(
       }
       let advanced = false;
       let yielded = false;
+      let methodSelectionAttempted = false;
+      let forcedMethodSelection = false;
+      let enumerationAttempted = false;
+      let forcedEnumerationSelection = false;
+      let exactCheckAttempted = false;
+      let forcedExactCheckSelection = false;
+      let forcedExactCheckOperation: string | null = null;
+      let verdictClosureAttempted = false;
+      let forcedVerdictClosure = false;
+      let densityClosureAttempted = false;
+      let forcedDensityClosure = false;
+      let densityCheckFailure: string | null = null;
       // Batch 2 (deep loop): bounded, fail-closed retry of a TRANSIENT model
       // failure on the SAME task. An unusable/unknown transport is never accepted
       // as progress or evidence; we may re-ask a bounded number of times.
@@ -870,6 +993,47 @@ export async function runAgentLoop(
           stop = "BUDGET_EXHAUSTED";
           break;
         }
+        const answerSnapshot = ledger.snapshot();
+        const runningObligation = answerSnapshot.obligations.find(
+          (row) => row.obligationId === running.obligationId,
+        );
+        const answerKind = p2AnswerObligationForGoal(
+          goalKindOf(answerSnapshot.goals, running.goalId),
+        );
+        const answerBearingTask =
+          target === null &&
+          runningObligation !== undefined &&
+          runningObligation.kind === answerKind &&
+          answerSnapshot.goals.some((goal) => goal.goalId === running.goalId);
+        // Deep loop step 1 (opt-in, `maxRepairs >= 1`): EVIDENCE BEFORE
+        // DELIVERY. On the first turn of the answer-bearing task the fixed
+        // system prompt additionally asks for one refutation attempt with a
+        // registered tool, so the review and repair gates have a real program
+        // observation instead of a model's opinion. The flag changes only the
+        // system prompt of that one turn: the recorded user payload is
+        // byte-identical, no packet is ever dropped and no protocol shape
+        // changes. With `maxRepairs=0` the run is byte-identical.
+        let refutationRequired = false;
+        if (
+          opts.maxRepairs >= 1 &&
+          schemaRepairs === 0 &&
+          verifyCalls === 0 &&
+          allowTools &&
+          subGate !== null &&
+          !refutationDone.has(running.taskId) &&
+          !observations.some((item) => item.source === "PROGRAM_OBSERVATION")
+        ) {
+          refutationRequired = answerBearingTask;
+          if (refutationRequired) {
+            verifyCalls += 1;
+            refutationDone.add(running.taskId);
+            sessionLog.append("REPAIR", {
+              kind: "REFUTATION_REQUEST",
+              taskId: running.taskId,
+              verifyCalls,
+            });
+          }
+        }
         let context: ReturnType<typeof buildAgentWorkContext>;
         try {
           // Read-only wiring of the declared scope-coverage rows of this task
@@ -904,6 +1068,7 @@ export async function runAgentLoop(
             revisionProvenance: revision.provenanceFor(running.taskId),
             revisionTarget: revision.targetFor(running.taskId),
             scopeCoverage: declaredCoverage,
+            refutationRequired,
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -912,7 +1077,127 @@ export async function runAgentLoop(
           stop = "CONTEXT_REJECTED";
           break;
         }
-        const outcome = await calls.model({
+        if (forcedDensityClosure) {
+          const note =
+            "\n\nDENSITY NORMALIZATION FAILURE. exact_check_expr reports that the claimed density integrates to " +
+            JSON.stringify(densityCheckFailure ?? "a value other than 1") +
+            ", not 1. A probability density must integrate to 1. Re-derive the distribution from the process definition " +
+            "(time change, reflection principle or conditioning), correct both the CDF and the density, and do not repeat the same density. " +
+            "Return exactly one complete WorkPacket with the corrected answer and include " +
+            "`CERT1|CHECK|C1|DENSITY_CHECK|<integral computation> => PASS` and `CERT1|FINAL|OK` in suggestedChecks.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        } else if (forcedVerdictClosure) {
+          const note =
+            "\n\nVERDICT CONSISTENCY TURN. Your own candidate begins with an affirmative verdict but also says the proposition is not always true. " +
+            "For a universal statement, one counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE. " +
+            "Return exactly one complete WorkPacket with candidateProposal exactly \"错误\" and suggestedChecks containing " +
+            "`CERT1|CHECK|C1|COUNTEREXAMPLE|<explicit counterexample or quantifier reason> => PASS`, `CERT1|VERDICT|FALSE`, and `CERT1|FINAL|错误`. " +
+            "Keep the current task and scope; do not return a WorkPacket with an affirmative verdict in this turn.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        } else if (forcedExactCheckSelection) {
+          const operation = forcedExactCheckOperation ?? "SIMPLIFY";
+          const operationArgs =
+            operation === "MAXIMAL_MINORS"
+              ? "matrix: <the explicit matrix>, variable: \"t\""
+              : operation === "TRIG_REDUCE"
+                ? "expression: <the trigonometric/polynomial expression>, variable: \"x\""
+                : operation === "FACTOR_OVER_EXTENSION"
+                  ? "expression: <the polynomial>, variable: \"x\", minimal_polynomials: [<minimal polynomials of the actual claimed generators>]; test both the claimed field and the field generated by all roots, and require splits_completely=true for a splitting field"
+                  : operation === "DENSITY_CHECK"
+                    ? "density: <the claimed density valid on its support only; do not include text such as 'for x>=0'>, variable: \"x\", lower: \"0\", upper: \"oo\"; Phi(x) and phi(x) are accepted standard normal notation"
+                    : operation === "LIMIT"
+                      ? "expression: <the expression>, variable: \"x\", point: <the limit point>"
+                      : "expression: <the expression>, variable: \"x\"";
+          const note =
+            "\n\nEXACT CHECK TURN. This answer involves a " + operation + " obligation. " +
+            "Before delivering a WorkPacket, return exactly one JSON tool action " +
+            "{\"action\":\"tool\",\"name\":\"exact_check_expr\",\"args\":{\"operation\":\"" + operation + "\"," + operationArgs + "},\"scope\":\"<what is being checked>\"} " +
+            "and nothing else. Every expression and every matrix entry must be a quoted JSON string; never place raw arithmetic in JSON. " +
+            "Copy the explicit matrix/expression exactly from the problem statement; do not retype or simplify its entries. " +
+            "Use ** or ^ for powers; every matrix entry is still a quoted JSON string. " +
+            "do not return a WorkPacket in this turn. The observation is an input-relative exact computation, not a proof of the mapping. " +
+            "After the observation, return a COMPLETE WorkPacket with a best-effort candidate; do not use INCOMPLETE merely because a check is inconclusive.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        } else if (forcedEnumerationSelection) {
+          const note =
+            "\n\nFINITE ENUMERATION TURN. This problem asks for a finite count or probability. " +
+            "Before delivering a WorkPacket, return exactly one JSON tool action " +
+            "{\"action\":\"tool\",\"name\":\"bounded_enumeration\",\"args\":{\"ranges\":[<positive sizes>],\"choose\":<k>,\"predicate\":\"<expression>\"},\"scope\":\"<what is enumerated>\"} " +
+            "and nothing else. `ranges` describes ONE physical item: it generates the Cartesian product " +
+            "0..n_i-1 over its attributes, not one range per selected position. `choose` is the number of " +
+            "items selected. `predicate` may use distinct(i), count(i,v), size(), sum(i), min(i), max(i) and " +
+            "contains(i,v); distinct(i) is computed across the selected subset. Choose attributes that make " +
+            "the target event expressible, and do not substitute a closed-form pattern formula for the enumeration. " +
+            "Do not return a WorkPacket in this turn.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        } else if (forcedMethodSelection) {
+          const note =
+            "\n\nMETHOD SELECTION TURN. Before delivering a WorkPacket, choose exactly one method id from methodCatalog. " +
+            "Return exactly one JSON action {\"action\":\"method\",\"id\":\"<one id from methodCatalog>\"} and nothing else. " +
+            "Do not return a WorkPacket in this turn.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        }
+        let outcome = await calls.model({
           task: running,
           phase: "WORK",
           messages: context.messages,
@@ -1006,6 +1291,11 @@ export async function runAgentLoop(
               methodCardSha = null;
             }
           }
+          forcedMethodSelection = false;
+          forcedEnumerationSelection = false;
+          forcedExactCheckSelection = false;
+          forcedVerdictClosure = false;
+          forcedDensityClosure = false;
           sessionLog.append(isMethod ? "METHOD_LOAD" : "TOOL_OBSERVATION", {
             effectId: receipt.effectId,
             source: receipt.source,
@@ -1015,6 +1305,30 @@ export async function runAgentLoop(
           });
           if (isMethod && root.effectCalls() > effectsBefore) {
             methodLoads += 1;
+          }
+          if (
+            action.action === "tool" &&
+            action.name === "exact_check_expr" &&
+            receipt.status === "COMPLETE"
+          ) {
+            try {
+              const observation = JSON.parse(receipt.observation) as {
+                result?: { operation?: unknown; normalized?: unknown; numeric_integral?: unknown };
+              };
+              const result = observation.result;
+              if (
+                result !== undefined &&
+                result.operation === "DENSITY_CHECK" &&
+                result.normalized === false
+              ) {
+                densityCheckFailure =
+                  typeof result.numeric_integral === "string"
+                    ? result.numeric_integral
+                    : "a value other than 1";
+              }
+            } catch {
+              // An unparsable observation is not a density certificate.
+            }
           }
           if (receipt.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
             stop = receipt.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
@@ -1200,15 +1514,618 @@ export async function runAgentLoop(
           // or the delivery record. An out-of-scope proposal is therefore a
           // fixed rejection with no side effect on the store, the ledger or the
           // scheduling sequence.
-          let prepared: P2Artifact;
-          try {
-            prepared = store.validateAccept(running, receiptInput);
-          } catch (error) {
-            if (!(error instanceof P2Error)) {
-              throw error;
+          let prepared: P2Artifact | null = null;
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              prepared = store.validateAccept(running, receiptInput);
+              break;
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              if (
+                attempt === 0 &&
+                opts.maxRepairs >= 1 &&
+                schemaRepairs < 2 &&
+                SCHEMA_REPAIR_CODES.has(error.code) &&
+                callsLeft() > reserve() &&
+                root.remainingMs() > MIN_MS
+              ) {
+                const repairId = root.nextModelId();
+                if (repairId !== null) {
+                  const repair = buildSchemaRepairMessages(
+                    context.messages,
+                    outcome.receipt.text,
+                    error.code,
+                    repairId,
+                  );
+                  const repaired = await calls.model({
+                    task: running,
+                    phase: "WORK",
+                    messages: repair.messages,
+                    contextHash: repair.contextHash,
+                    contextBytes: repair.contextBytes,
+                    requestId: repairId,
+                  });
+                  schemaRepairs += 1;
+                  if (repaired.receipt.transportStatus === "COMPLETE") {
+                    outcome = repaired;
+                    receiptInput.sourceRequestId = repaired.requestId;
+                    receiptInput.text = repaired.receipt.text;
+                    continue;
+                  }
+                }
+              }
+              stop = "PACKET_REJECTED";
+              break;
             }
+          }
+          let recoveryUsed = false;
+          if (prepared === null) {
+            // A malformed first packet (and an equally malformed schema repair)
+            // is not a reason to discard the whole answer-bearing task. With
+            // bounded consensus enabled, one blind CONSENSUS re-solve is a
+            // separate, Host-authorized attempt; only a valid COMPLETE packet
+            // is accepted and the invalid raw text never becomes an artifact.
+            if (
+              opts.maxConsensus >= 1 &&
+              answerBearingTask &&
+              target === null &&
+              revision.pendingTaskId() === null &&
+              callsLeft() >= 1 + opts.maxReviews
+            ) {
+              const recoveryId = root.nextModelId();
+              if (recoveryId !== null) {
+                const upstreamTaskIds = new Set(running.dependencyTaskIds);
+                const declaredCoverage = store
+                  .scopeCoverageSnapshot()
+                  .filter(
+                    (row) =>
+                      row.taskId === running.taskId || upstreamTaskIds.has(row.taskId),
+                  );
+                const built = buildAgentWorkContext({
+                  contract: ledger.snapshot(),
+                  task: running,
+                  route,
+                  requestId: recoveryId,
+                  inputs,
+                  toolObservations: observations,
+                  allowTools,
+                  allowMethods,
+                  allowFinal: false,
+                  protectedCandidate: exposedCandidate,
+                  catalog,
+                  methodAssets,
+                  allowRouteProposal,
+                  allowTaskContinuation,
+                  allowArtifactRedo,
+                  routeProvenance: null,
+                  dependencyProvenance: null,
+                  revisionProvenance: null,
+                  revisionTarget: null,
+                  scopeCoverage: declaredCoverage,
+                  refutationRequired: false,
+                });
+                const messages = [
+                  {
+                    role: "system" as const,
+                    content:
+                      built.messages[0]!.content +
+                      "\n\nSCHEMA RECOVERY. The previous turn did not produce a parseable WorkPacket. " +
+                      "Solve the same problem again and return exactly one JSON WorkPacket and nothing else, " +
+                      "with the exact p2a-work-v1 fields and a non-empty answer string in candidateProposal. " +
+                      "Do not call a tool in this turn. Keep claim, derivation and candidateProposal within 4096 Unicode code points each.",
+                  },
+                  built.messages[1]!,
+                ];
+                const recovered = await calls.model({
+                  task: running,
+                  phase: "CONSENSUS",
+                  messages,
+                  contextHash: p4Hash(JSON.stringify(messages)),
+                  contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                  requestId: recoveryId,
+                });
+                if (
+                  recovered.receipt.transportStatus === "COMPLETE" &&
+                  (recovered.code === "WORK" || recovered.code === "CONSENSUS")
+                ) {
+                  try {
+                    const artifact = store.validateAccept(running, {
+                      artifactId: `artifact-${workUnits + 1}`,
+                      routeId: route.routeId,
+                      sourceRequestId: recovered.requestId,
+                      transportStatus: recovered.receipt.transportStatus,
+                      text: recovered.receipt.text,
+                      eventSeq: ledger.nextEventSeq(),
+                      supersedes: null,
+                    });
+                    if (
+                      artifact.packet !== null &&
+                      artifact.packet.deliveryStatus === "COMPLETE" &&
+                      typeof artifact.packet.candidateProposal === "string" &&
+                      artifact.packet.candidateProposal.trim().length > 0 &&
+                      [...artifact.packet.claim].length <= 4096 &&
+                      [...artifact.packet.derivation].length <= 4096 &&
+                      [...artifact.packet.candidateProposal].length <= 4096
+                    ) {
+                      prepared = artifact;
+                      outcome = recovered;
+                      recoveryUsed = true;
+                      receiptInput.sourceRequestId = recovered.requestId;
+                      receiptInput.text = recovered.receipt.text;
+                    }
+                  } catch (error) {
+                    if (!(error instanceof P2Error)) {
+                      throw error;
+                    }
+                  }
+                }
+              }
+            }
+            if (prepared === null) {
+              break;
+            }
+          }
+          let firstPacketOverlong = false;
+          if (prepared.packet !== null) {
+            const packet = prepared.packet;
+            firstPacketOverlong =
+              [...packet.claim].length > 4096 ||
+              [...packet.derivation].length > 4096 ||
+              (typeof packet.candidateProposal === "string" &&
+                [...packet.candidateProposal].length > 4096);
+          }
+          if (firstPacketOverlong && opts.maxConsensus < 1) {
             stop = "PACKET_REJECTED";
             break;
+          }
+          // One forced method-consultation turn before a candidate is
+          // delivered. The model must choose a real catalog card; the normal
+          // effect path loads it and the next WORK turn sees the card body.
+          if (
+            opts.maxConsensus >= 1 &&
+            opts.maxMethodLoads >= 1 &&
+            prepared.packet !== null &&
+            prepared.packet.deliveryStatus === "COMPLETE" &&
+            answerBearingTask &&
+            !methodSelectionAttempted &&
+            catalog !== null &&
+            catalog.entries.length > 0 &&
+            subGate !== null &&
+            allowMethods &&
+            root.effectCalls() < opts.maxEffects &&
+            methodLoads < opts.maxMethodLoads &&
+            !observations.some((item) => item.source === "METHOD_REFERENCE") &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            methodSelectionAttempted = true;
+            forcedMethodSelection = true;
+            continue;
+          }
+          forcedMethodSelection = false;
+          // Generic finite-counting intervention: a finite probability/count
+          // answer is first subjected to an explicit exhaustive enumeration
+          // tool call. The tool result is input-relative, not a proof of the
+          // model's mapping, but it prevents a pattern formula from replacing
+          // the actual sample space. This is bounded by the effect budget.
+          const finiteCountingProblem =
+            /(概率|probability)/iu.test(problemText) &&
+            /(抽取|选取|随机取|从中取|draw|choose|select|hand)/iu.test(problemText);
+          if (
+            opts.maxConsensus >= 1 &&
+            finiteCountingProblem &&
+            !enumerationAttempted &&
+            !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
+            allowTools &&
+            subGate !== null &&
+            root.effectCalls() < opts.maxEffects &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            enumerationAttempted = true;
+            forcedEnumerationSelection = true;
+            continue;
+          }
+          forcedEnumerationSelection = false;
+          // Generic exact-object intervention: determinant/minor, field
+          // extension, density, trigonometric expansion and limit answers get
+          // one exact_check_expr call before delivery. The operation is chosen
+          // from the mathematical object in the problem, never from its id.
+          const exactOperation =
+            /(行列式|子式|Alexander|determinant|\bminor\b)/iu.test(problemText)
+              ? "MAXIMAL_MINORS"
+              : /(分裂域|Galois|splitting\s+field|不可约|扩域)/iu.test(problemText)
+                ? "FACTOR_OVER_EXTENSION"
+                : /(CDF|累积分布|分布函数|分布|密度|density)/iu.test(problemText)
+                  ? "DENSITY_CHECK"
+                  : /(分离变量|偏微分|PDE|u_t|u_xx|边界条件|初值)/iu.test(problemText)
+                    ? "TRIG_REDUCE"
+                    : /(极限|limit|\\lim|lim\s*_)/iu.test(problemText)
+                      ? "LIMIT"
+                      : null;
+          if (
+            opts.maxConsensus >= 1 &&
+            exactOperation !== null &&
+            !finiteCountingProblem &&
+            !exactCheckAttempted &&
+            !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
+            allowTools &&
+            subGate !== null &&
+            root.effectCalls() < opts.maxEffects &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            exactCheckAttempted = true;
+            forcedExactCheckSelection = true;
+            forcedExactCheckOperation = exactOperation;
+            continue;
+          }
+          forcedExactCheckSelection = false;
+          if (
+            opts.maxConsensus >= 1 &&
+            densityCheckFailure !== null &&
+            !densityClosureAttempted &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            densityClosureAttempted = true;
+            forcedDensityClosure = true;
+            continue;
+          }
+          forcedDensityClosure = false;
+          // Generic verdict consistency: an affirmative answer that itself
+          // says the universal proposition is "not always" true contradicts
+          // its own quantifier analysis. Close that contradiction with one
+          // bounded COMPLETE packet carrying a machine-readable FALSE verdict.
+          const binaryProblem =
+            /(判断|是否正确|对错|true\s+or\s+false)/iu.test(problemText);
+          const verdictText = prepared.packet?.candidateProposal ?? "";
+          const affirmativeVerdict =
+            /^(正确|是|√|true|yes)/iu.test(verdictText.trim());
+          const hedgedVerdict =
+            /(并非|不一定|通常|not\s+always|not\s+necessarily|需限定|但需)/iu.test(verdictText);
+          if (
+            opts.maxConsensus >= 1 &&
+            binaryProblem &&
+            affirmativeVerdict &&
+            hedgedVerdict &&
+            !verdictClosureAttempted &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            verdictClosureAttempted = true;
+            forcedVerdictClosure = true;
+            continue;
+          }
+          forcedVerdictClosure = false;
+          // Bounded answer consensus (opt-in with `maxConsensus >= 1`). The first
+          // complete WorkPacket is not delivered immediately on the
+          // answer-bearing task. Instead, one blind independent re-solve is
+          // performed on the SAME still-RUNNING task; if its candidate differs,
+          // one adjudication turn sees both candidates. This adds real model
+          // work before delivery and never promotes a model claim to verified
+          // evidence. With `maxConsensus=0` the block is dead and the run is
+          // byte-identical.
+          if (
+            opts.maxConsensus >= 1 &&
+            !recoveryUsed &&
+            answerBearingTask &&
+            target === null &&
+            revision.pendingTaskId() === null &&
+            prepared.packet !== null &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            const firstCandidate = firstPacketOverlong
+              ? ""
+              : prepared.packet.candidateProposal ?? "";
+            const choiceLetters = new Set<string>();
+            for (const match of problemText.matchAll(
+              /(?:^|[\s\n（(\[])([A-E])[\.\)、:：\]]/gu,
+            )) {
+              choiceLetters.add(match[1]!.toUpperCase());
+            }
+            const choiceProblem = choiceLetters.size >= 2;
+            const consensusAttempts: {
+              prepared: P2Artifact;
+              outcome: typeof outcome;
+              candidate: string;
+              certified: boolean;
+            }[] = [{
+              prepared,
+              outcome,
+              candidate: firstCandidate,
+              certified: isCertifiedPacket(prepared.packet ?? {}),
+            }];
+            const buildConsensusContext = (nextId: string, note: string) => {
+              const upstreamTaskIds = new Set(running.dependencyTaskIds);
+              const declaredCoverage = store
+                .scopeCoverageSnapshot()
+                .filter(
+                  (row) =>
+                    row.taskId === running.taskId || upstreamTaskIds.has(row.taskId),
+                );
+              const built = buildAgentWorkContext({
+                contract: ledger.snapshot(),
+                task: running,
+                route,
+                requestId: nextId,
+                inputs,
+                toolObservations: observations,
+                allowTools,
+                allowMethods,
+                allowFinal: false,
+                protectedCandidate: exposedCandidate,
+                catalog,
+                methodAssets,
+                allowRouteProposal,
+                allowTaskContinuation,
+                allowArtifactRedo,
+                routeProvenance: null,
+                dependencyProvenance: null,
+                revisionProvenance: null,
+                revisionTarget: null,
+                scopeCoverage: declaredCoverage,
+                refutationRequired: false,
+              });
+              const messages = [
+                {
+                  role: "system" as const,
+                  content: built.messages[0]!.content + "\n\n" + note,
+                },
+                built.messages[1]!,
+              ];
+              return {
+                messages,
+                contextHash: p4Hash(JSON.stringify(messages)),
+                contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+              };
+            };
+            const evaluateConsensus = (candidateOutcome: typeof outcome) => {
+              if (
+                candidateOutcome.receipt.transportStatus !== "COMPLETE" ||
+                (candidateOutcome.code !== "WORK" && candidateOutcome.code !== "CONSENSUS")
+              ) {
+                return null;
+              }
+              try {
+                const artifact = store.validateAccept(running, {
+                  artifactId: `artifact-${workUnits + 1}`,
+                  routeId: route.routeId,
+                  sourceRequestId: candidateOutcome.requestId,
+                  transportStatus: candidateOutcome.receipt.transportStatus,
+                  text: candidateOutcome.receipt.text,
+                  eventSeq: receiptInput.eventSeq,
+                  supersedes: null,
+                });
+                if (
+                  artifact.packet === null ||
+                  artifact.packet.deliveryStatus !== "COMPLETE" ||
+                  typeof artifact.packet.candidateProposal !== "string" ||
+                  artifact.packet.candidateProposal.trim().length === 0
+                ) {
+                  return null;
+                }
+                // The Host's strict WorkPacket text bound is 4096 code points;
+                // a long consensus derivation is not projected as the same
+                // artifact and would make the Host fail a later context.
+                if (
+                  [...artifact.packet.claim].length > 4096 ||
+                  [...artifact.packet.derivation].length > 4096 ||
+                  [...artifact.packet.candidateProposal].length > 4096
+                ) {
+                  return null;
+                }
+                return { outcome: candidateOutcome, prepared: artifact };
+              } catch (error) {
+                if (!(error instanceof P2Error)) {
+                  throw error;
+                }
+                return null;
+              }
+            };
+            let lastObservedCandidate = firstCandidate;
+            for (let round = 0; round < opts.maxConsensus; round += 1) {
+              if (callsLeft() < 2 + opts.maxReviews) break;
+              const isBlind = round === 0 && opts.maxConsensus >= 2;
+              const isCertificate =
+                !isBlind && (opts.maxConsensus === 1 || round === opts.maxConsensus - 1);
+              const nextId = root.nextModelId();
+              if (nextId === null) break;
+              let note: string;
+              if (isBlind) {
+                note =
+                  "INDEPENDENT RECHECK. Return exactly one JSON WorkPacket and nothing else. " +
+                  "Solve the same problem independently from scratch. Do not copy any earlier answer and do not call a tool in this turn. " +
+                  "Keep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+              } else if (isCertificate) {
+                note =
+                  "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; " +
+                  "its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. " +
+                  "Return exactly one complete WorkPacket and nothing else. In suggestedChecks include at least two rows of the form " +
+                  "`CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` (or FAIL), and at least one marker row " +
+                  "`CERT1|FINAL|OK` (if the exact final answer fits in 200 code points, use `CERT1|FINAL|<answer>` instead). " +
+                  "Each suggestedChecks row must be at most 200 Unicode code points; keep derivation under 3500 code points and do not paste long computations into it. " +
+                  (choiceProblem
+                    ? "Also include one row `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option exactly once, and set candidateProposal to exactly the options marked TRUE. "
+                    : "") +
+                  "For a true/false statement also include `CERT1|VERDICT|TRUE` or `CERT1|VERDICT|FALSE`, and make candidateProposal the canonical verdict token alone. " +
+                  "Checks must be explicit computations, not words such as verified or correct: substitute into every defining equation, initial condition, boundary condition, normalization and quantifier; " +
+                  "for a field list every root and check containment and degree; for a CDF/density check endpoints, nonnegativity, total mass and F'=f; " +
+                  "for finite counting enumerate the sample space and every favorable case; for a determinant or expansion recompute it exactly; for a limit identify the scaling and a dominating function. " +
+                  "A statement of the form 'if P, then X is called Y' or '则称' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. " +
+                  "For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. " +
+                  "If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. " +
+                  "CURRENT CANDIDATE: " + lastObservedCandidate.slice(0, 1200) +
+                  "\nReturn exactly one JSON WorkPacket and nothing else; keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
+              } else {
+                const latest = consensusAttempts[consensusAttempts.length - 1]!;
+                const latestPacket = latest.prepared.packet;
+                const other = [...consensusAttempts]
+                  .reverse()
+                  .find((attempt) => attempt.candidate.length > 0 && attempt.candidate !== lastObservedCandidate);
+                const otherPacket = other?.prepared.packet ?? null;
+                const auditMode = round % 4;
+                const auditHead =
+                  auditMode === 0
+                    ? "COUNTEREXAMPLE AUDIT. Try to construct a concrete counterexample to the current candidate. A false counterexample invalidates the attempt; if none exists, verify the candidate. "
+                    : auditMode === 1
+                      ? "PROOF AUDIT. Audit every definition, hypothesis, inference and stated counterexample. A false counterexample invalidates the whole attempt. "
+                      : auditMode === 2
+                        ? "EXACT RECOMPUTATION. Independently recompute every numerical coefficient, matrix entry, probability, limit or formula from the problem statement. Do not repeat the candidate's algebra; compare the exact recomputation with the candidate. "
+                        : "BOUNDARY AND COMPLETENESS AUDIT. Check every quantifier, branch, support endpoint, boundary/initial condition, normalization, multiplicity, requested sub-part and option. Construct the complete object and verify that no case or witness is missing. ";
+                note =
+                  "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " +
+                  auditHead +
+                  (choiceProblem
+                    ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. " +
+                      "The final candidateProposal must list every correct option and must not omit an option that is also correct. "
+                    : "") +
+                  "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. " +
+                  "Return exactly one JSON WorkPacket and nothing else. " +
+                  "CURRENT CANDIDATE: " + lastObservedCandidate.slice(0, 500) +
+                  "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) +
+                  "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) +
+                  (otherPacket === null
+                    ? ""
+                    : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) +
+                      "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) +
+                      "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) +
+                  "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+              }
+              const built = buildConsensusContext(nextId, note);
+              const nextOutcome = await calls.model({
+                task: running,
+                phase: "CONSENSUS",
+                messages: built.messages,
+                contextHash: built.contextHash,
+                contextBytes: built.contextBytes,
+                requestId: nextId,
+              });
+              const evaluatedNext = evaluateConsensus(nextOutcome);
+              const nextCandidate = evaluatedNext?.prepared.packet?.candidateProposal ?? "";
+              const nextCertificate =
+                evaluatedNext === null
+                  ? null
+                  : summarizeCertificate(evaluatedNext.prepared.packet ?? {});
+              sessionLog.append("CONSENSUS", {
+                stage: isCertificate ? "CERTIFICATE" : isBlind ? "INDEPENDENT" : "AUDIT",
+                requestId: nextId,
+                previousCandidate: lastObservedCandidate,
+                nextCandidate: evaluatedNext === null ? null : nextCandidate,
+                agreement:
+                  evaluatedNext !== null && nextCandidate === lastObservedCandidate,
+                ...(nextCertificate === null
+                  ? {}
+                  : {
+                      certificateChecks: nextCertificate.checkCount,
+                      certificateCertified: nextCertificate.certified,
+                    }),
+              });
+              if (evaluatedNext === null) {
+                // A malformed audit never replaces a valid earlier attempt.
+                // Spend another bounded consensus round instead of stopping
+                // early: the retained first packet remains the fallback.
+                continue;
+              }
+              consensusAttempts.push({
+                prepared: evaluatedNext.prepared,
+                outcome: evaluatedNext.outcome,
+                candidate: nextCandidate,
+                certified: isCertifiedPacket(evaluatedNext.prepared.packet ?? {}),
+              });
+              lastObservedCandidate = nextCandidate;
+            }
+            // If the model's own certificate exposes a contradiction between
+            // its final answer and its structured options/verdict rows, spend
+            // one bounded call to close that contradiction. This is a
+            // consistency repair, not a new mathematical oracle: the target is
+            // derived only from the model's own certificate data.
+            const latestCertified = [...consensusAttempts]
+              .reverse()
+              .find((attempt) => attempt.certified && attempt.candidate.length > 0);
+            if (
+              latestCertified !== undefined &&
+              callsLeft() >= 2 + opts.maxReviews
+            ) {
+              const correction = certificateCorrection(
+                latestCertified.prepared.packet ?? {},
+              );
+              if (correction !== null && correction !== latestCertified.candidate) {
+                const closureId = root.nextModelId();
+                if (closureId !== null) {
+                  const closureNote =
+                    "CERTIFICATE CLOSURE. Your own certificate rows imply the final answer " +
+                    JSON.stringify(correction) +
+                    ", but candidateProposal is " +
+                    JSON.stringify(latestCertified.candidate) +
+                    ". Return exactly one complete WorkPacket with candidateProposal exactly " +
+                    JSON.stringify(correction) +
+                    " and retain the CERT1 rows. Do not change the mathematics or re-solve; this turn only closes the contradiction. " +
+                    "Keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
+                  const closureContext = buildConsensusContext(closureId, closureNote);
+                  const closureOutcome = await calls.model({
+                    task: running,
+                    // WORK is not consensus-budgeted by the Host; the closure
+                    // turn is a consistency repair of the same undelivered
+                    // answer task, not an extra adversarial ballot.
+                    phase: "WORK",
+                    messages: closureContext.messages,
+                    contextHash: closureContext.contextHash,
+                    contextBytes: closureContext.contextBytes,
+                    requestId: closureId,
+                  });
+                  const closure = evaluateConsensus(closureOutcome);
+                  if (closure !== null) {
+                    const closureCandidate =
+                      closure.prepared.packet?.candidateProposal ?? "";
+                    if (closureCandidate.length > 0) {
+                      consensusAttempts.push({
+                        prepared: closure.prepared,
+                        outcome: closure.outcome,
+                        candidate: closureCandidate,
+                        certified: isCertifiedPacket(closure.prepared.packet ?? {}),
+                      });
+                    }
+                  }
+                }
+              }
+            }
+            const candidateAttempts = consensusAttempts.filter(
+              (attempt) => attempt.candidate.length > 0,
+            );
+            if (candidateAttempts.length === 0 && firstPacketOverlong) {
+              stop = "PACKET_REJECTED";
+              break;
+            }
+            // A candidate carrying a machine-readable CERT1|FINAL row is the
+            // final independent check and wins over correlated audit repeats.
+            // The Host projection applies the same rule. Without a certificate
+            // row, keep the exact-support majority with the latest tie-break.
+            const certifiedAttempts = candidateAttempts.filter(
+              (attempt) => attempt.certified,
+            );
+            const counts = new Map<string, number>();
+            for (const attempt of candidateAttempts) {
+              counts.set(attempt.candidate, (counts.get(attempt.candidate) ?? 0) + 1);
+            }
+            let chosen =
+              candidateAttempts[candidateAttempts.length - 1] ?? consensusAttempts[0]!;
+            if (certifiedAttempts.length > 0) {
+              chosen = certifiedAttempts[certifiedAttempts.length - 1]!;
+            } else if (candidateAttempts.length > 0) {
+              let bestCount = 0;
+              for (const count of counts.values()) {
+                bestCount = Math.max(bestCount, count);
+              }
+              for (let index = candidateAttempts.length - 1; index >= 0; index -= 1) {
+                const attempt = candidateAttempts[index]!;
+                if ((counts.get(attempt.candidate) ?? 0) === bestCount) {
+                  chosen = attempt;
+                  break;
+                }
+              }
+            }
+            prepared = chosen.prepared;
+            outcome = chosen.outcome;
+            receiptInput.sourceRequestId = chosen.outcome.requestId;
+            receiptInput.text = chosen.outcome.receipt.text;
           }
           if (prepared.packet !== null && prepared.packet.schemaVersion === "p2a-work-v5") {
             const proposed = prepared.packet.scopeProposal;
@@ -1236,6 +2153,7 @@ export async function runAgentLoop(
               }
             }
           }
+          receiptInput.artifactId = prepared.artifactId;
           try {
             accepted = store.accept(running, receiptInput);
           } catch (error) {
@@ -1426,117 +2344,129 @@ export async function runAgentLoop(
       }
     }
 
-    if (target !== null && target.availability === "ACTIVE" && !root.stopped()) {
-      if (opts.maxReviews === 0) {
-        stop = "NO_REVIEW";
-      } else if (root.nextModelId() === null || root.remainingMs() <= MIN_MS) {
+    const runReviewRound = async (
+      candidate: P4Target,
+      stage: "R2" | "R4",
+    ): Promise<P4ReviewSession | null> => {
+      if (root.nextModelId() === null || root.remainingMs() <= MIN_MS) {
         stop = root.remainingMs() <= MIN_MS ? "DEADLINE_EXCEEDED" : "NO_REVIEW";
-      } else {
-        const reviewTask = ledger
-          .snapshot()
-          .tasks.find((row) => row.taskId === target?.binding.taskId);
-        if (reviewTask === undefined || reviewTask.delivery !== "DELIVERED") {
-          stop = "CONTROL_REJECTED";
-        } else {
-          firstReviewOrdinal = root.modelCalls() + 1;
-          review = new P4ReviewSession(ledger.snapshot(), target, 1, firstReviewOrdinal);
-          const requestId = root.nextModelId();
-          if (requestId !== null) {
-            let admitted: ReturnType<P4ReviewSession["admit"]> | null = null;
-            try {
-              admitted = review.admit(requestId, root.remainingMs());
-            } catch (error) {
-              if (!(error instanceof P2Error)) {
-                throw error;
-              }
-              stop = "CONTROL_REJECTED";
-            }
-            if (admitted !== null) {
-              const before = root.modelCalls();
-              const outcome = await calls.model({
-                task: reviewTask,
-                phase: "R2",
-                messages: admitted.context.messages,
-                contextHash: admitted.context.contextHash,
-                contextBytes: admitted.context.contextBytes,
-                onDispatch: (id) => review?.markDispatched(id),
-              });
-              if (root.modelCalls() > before) {
-                reviewCalls += 1;
-              }
-              if (root.modelCalls() > before) {
-                try {
-                  const settled = review.settle(
-                    outcome.requestId,
-                    outcome.receipt.transportStatus,
-                    outcome.receipt.text,
-                    root.remainingMs(),
-                  );
-                  stop =
-                    settled.code === "OK" &&
-                    settled.report !== null &&
-                    settled.report.conclusion !== "UNKNOWN"
-                      ? "REVIEWS_COMPLETE"
-                      : "REVIEW_STOP";
-                } catch (error) {
-                  if (!(error instanceof P2Error)) {
-                    throw error;
-                  }
-                  stop = "CONTROL_REJECTED";
-                }
-              } else {
-                stop = outcome.code;
-              }
-            }
-          }
-        }
+        return null;
       }
-    }
-
-    // G3/PR4 S2: at most one evidence-triggered revision after the R2 review.
-    // A protected candidate whose answer (global) obligation drew a challenge is
-    // re-stated once, and the revised child may replace it ONLY when the
-    // replacement is grounded by an independent, Host-accepted checker
-    // observation already bound to the original problem. This is opt-in
-    // (`maxRepairs`); with the default 0 the whole block is dead and the run is
-    // byte-identical to before.
-    if (review !== null) {
-      const reviewSnapshotForLog = review.snapshot();
-      sessionLog.append("REVIEW_CHALLENGE", {
-        reviewCalls,
-        challenges: reviewSnapshotForLog.challenges.length,
-        records: reviewSnapshotForLog.records.length,
-      });
-    }
-
-    if (
-      opts.maxRepairs >= 1 &&
-      stop === "REVIEWS_COMPLETE" &&
-      target !== null &&
-      target.availability === "ACTIVE" &&
-      review !== null &&
-      candidateTask !== null &&
-      !root.stopped() &&
-      root.remainingMs() > MIN_MS &&
-      callsLeft() >= 1
-    ) {
-      const challenges: readonly P4Challenge[] = review
+      const reviewTask = ledger
         .snapshot()
-        .challenges.filter((item) => item.status === "CHALLENGED" && item.availability === "ACTIVE");
+        .tasks.find((row) => row.taskId === candidate.binding.taskId);
+      if (reviewTask === undefined || reviewTask.delivery !== "DELIVERED") {
+        stop = "CONTROL_REJECTED";
+        return null;
+      }
+      const ordinal = root.modelCalls() + 1;
+      let session: P4ReviewSession;
+      try {
+        session = new P4ReviewSession(ledger.snapshot(), candidate, 1, ordinal, stage);
+      } catch (error) {
+        if (!(error instanceof P2Error)) {
+          throw error;
+        }
+        stop = "CONTROL_REJECTED";
+        return null;
+      }
+      if (stage === "R2" && protectedReview === null) {
+        protectedReview = session;
+        firstReviewOrdinal = ordinal;
+      }
+      const requestId = root.nextModelId();
+      if (requestId === null) {
+        stop = "NO_REVIEW";
+        return null;
+      }
+      let admitted: ReturnType<P4ReviewSession["admit"]> | null = null;
+      try {
+        admitted = session.admit(requestId, root.remainingMs());
+      } catch (error) {
+        if (!(error instanceof P2Error)) {
+          throw error;
+        }
+        stop = "CONTROL_REJECTED";
+        return null;
+      }
+      if (admitted === null) {
+        return null;
+      }
+      const before = root.modelCalls();
+      const outcome = await calls.model({
+        task: reviewTask,
+        phase: stage,
+        messages: admitted.context.messages,
+        contextHash: admitted.context.contextHash,
+        contextBytes: admitted.context.contextBytes,
+        onDispatch: (id) => session.markDispatched(id),
+      });
+      if (root.modelCalls() > before) {
+        reviewCalls += 1;
+      }
+      if (root.modelCalls() <= before) {
+        stop = outcome.code;
+        return session;
+      }
+      try {
+        const settled = session.settle(
+          outcome.requestId,
+          outcome.receipt.transportStatus,
+          outcome.receipt.text,
+          root.remainingMs(),
+        );
+        stop =
+          settled.code === "OK" &&
+          settled.report !== null &&
+          settled.report.conclusion !== "UNKNOWN"
+            ? "REVIEWS_COMPLETE"
+            : "REVIEW_STOP";
+      } catch (error) {
+        if (!(error instanceof P2Error)) {
+          throw error;
+        }
+        stop = "CONTROL_REJECTED";
+      }
+      return session;
+    };
+
+    const attemptRevision = async (
+      candidate: P4Target,
+      roundReview: P4ReviewSession,
+      challenges: readonly P4Challenge[],
+    ): Promise<{
+      readonly accepted: boolean;
+      readonly decision: ReturnType<typeof reviseCandidate>["decision"];
+      readonly child: P4Target;
+    } | null> => {
+      if (
+        candidateTask === null ||
+        opts.maxRepairs < 1 ||
+        repairCalls >= opts.maxRepairs ||
+        schemaRepairs > 0 ||
+        callsLeft() < 1 ||
+        root.remainingMs() <= MIN_MS
+      ) {
+        return null;
+      }
       const checker = calls.effects.find(
         (item) =>
           item.receipt.status === "COMPLETE" &&
           item.receipt.source === "PROGRAM_OBSERVATION" &&
-          item.receipt.binding.scopeId === candidateTask!.scopeId,
+          item.receipt.binding.scopeId === candidate.binding.scopeId,
       );
       const snapshot = ledger.snapshot();
       const goalKind = goalKindOf(
-        snapshot.goals as readonly { readonly goalId: string; readonly kind: P2GoalKind; readonly subgoals: readonly unknown[] }[],
-        candidateTask.goalId,
+        snapshot.goals as readonly {
+          readonly goalId: string;
+          readonly kind: P2GoalKind;
+          readonly subgoals: readonly unknown[];
+        }[],
+        candidate.binding.goalId,
       );
       const answerKind = p2AnswerObligationForGoal(goalKind);
       const answerObligation = snapshot.obligations.find(
-        (row) => row.goalId === candidateTask!.goalId && row.kind === answerKind,
+        (row) => row.goalId === candidate.binding.goalId && row.kind === answerKind,
       );
       // G3/PR4 Slice 3a: M5 S1 original-problem mapping gate. A
       // PROGRAM_OBSERVATION receipt may be promoted to a CHECKED_SCOPE/PASS
@@ -1549,12 +2479,12 @@ export async function runAgentLoop(
       const challenge0 = challenges[0];
       if (challenge0 !== undefined && checker !== undefined && answerObligation !== undefined) {
         try {
-          s1Assessment = new P4DiagnosticLedger(ledger.snapshot(), target, 1).precheck({
-            checkId: "check-1",
-            target: target.binding,
-            targetHash: target.targetHash,
-            scope: target.artifact.scope,
-            assumptions: target.artifact.packet?.assumptions ?? [],
+          s1Assessment = new P4DiagnosticLedger(ledger.snapshot(), candidate, 1).precheck({
+            checkId: `check-${Math.min(2, repairCalls + 1)}`,
+            target: candidate.binding,
+            targetHash: candidate.targetHash,
+            scope: candidate.artifact.scope,
+            assumptions: candidate.artifact.packet?.assumptions ?? [],
             checkedProperty:
               checker.request.action.action === "tool"
                 ? p4CheckedPropertyForTool(checker.request.action.name) ??
@@ -1588,7 +2518,7 @@ export async function runAgentLoop(
         const toolName = checker.request.action.action === "tool" ? checker.request.action.name : "";
         const assetKey = S1_CHECKER_ASSET[toolName];
         if (assetKey !== undefined) {
-          const scopeHash = p4Hash(JSON.stringify({ scope: target.binding.scopeId, check: assetKey }));
+          const scopeHash = p4Hash(JSON.stringify({ scope: candidate.binding.scopeId, check: assetKey }));
           try {
             const descriptor = (await captured.asset.call({
               group: "outputCheckers",
@@ -1611,174 +2541,250 @@ export async function runAgentLoop(
       // policy (BEST_EFFORT included); the protected parent candidate is kept.
       if (!s1Ok && checker !== undefined && challenges.length > 0) {
         stop = "REVISE_REJECTED";
+        return null;
       }
-      if (challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok) {
-        // `challenges[0]` is defined by the length guard above.
-        const challenge = challenges[0]!;
-        const route = workflow.forTask(candidateTask);
-        const repairTask = candidateTask;
-        const requestId = root.nextModelId();
-        if (requestId !== null) {
-          const body = {
-            schemaVersion: "p4-repair-context-v1" as const,
-            sessionId: session,
-            problemHash,
-            contractVersion: contract.contractVersion,
-            problemFullText: problemText,
-            stage: "REPAIR" as const,
-            requestId,
-            task: p2Snapshot({
-              taskId: repairTask.taskId,
-              goalId: repairTask.goalId,
-              scopeId: repairTask.scopeId,
-              inputArtifactRefs: repairTask.inputArtifactRefs,
-            }),
-            route: { routeId: route.routeId },
-            sourceRequestId: requestId,
-            answerObligationId: answerObligation.obligationId,
-            challenge,
-            parentCandidate: target.artifact.packet?.candidateProposal ?? null,
-          };
-          const messages = [
-            {
-              role: "system" as const,
-              content:
-                "You are a strict single revision reviser. Reply with exactly one JSON work packet and nothing else. You cannot declare anything verified.",
-            },
-            { role: "user" as const, content: JSON.stringify(body) },
-          ];
-          const contextBytes = Buffer.byteLength(JSON.stringify(messages), "utf8");
-          const before = root.modelCalls();
-          const outcome = await calls.model({
-            task: repairTask,
-            phase: "REPAIR",
-            messages,
-            contextHash: p4Hash(JSON.stringify(messages)),
-            contextBytes,
-          });
-          if (root.modelCalls() > before && outcome.receipt.transportStatus === "COMPLETE") {
-            repairCalls += 1;
-            try {
-              const childArtifact = store.accept(repairTask, {
-                artifactId: "repair-1",
-                routeId: route.routeId,
-                sourceRequestId: requestId,
-                transportStatus: outcome.receipt.transportStatus,
-                text: outcome.receipt.text,
-                eventSeq: ledger.nextEventSeq(),
-                supersedes: null,
-              });
-              const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
-              // B3 (DECISION-0150): for a PARAMETER goal the trusted parameter
-              // branches are the required gap set (the bounded "PARAMETER two
-              // gaps" flagship); the revised child must restate every branch or
-              // the revision fails closed (REVISE_REJECTED).
-              const gapSet =
-                goalKind === "PARAMETER"
-                  ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId)
-                  : [];
-              const answerText = child.artifact.packet?.candidateProposal ?? "";
-              // Step 1 hard gate 2 (completeness): when the protected parent is a
-              // numeric solution set of a solvable relation, the revision must be a
-              // well-formed, NON-empty numeric set that (a) keeps every valid parent
-              // root, (b) contains only genuine roots of the relation, and (c) is
-              // strictly larger (it must cover the checker-verified missing roots).
-              // Any other format (e.g. `999`, `x = 999`) or a degenerate set (`{}`,
-              // `{0}`) is fail-closed; reviseCandidate is never called.
-              const relation = problemRelationPolynomial(problemText);
-              const trueRoots = solutionSetOf(relation);
-              // P0-1: for a problem with an independently determinable finite
-              // single-variable solution set, a revision is accepted ONLY when the
-              // revised answer is a well-formed, deduplicated set EXACTLY equal to
-              // the independently solved set (exact rational arithmetic). Any
-              // other case — unparseable/unsupported representation, empty set,
-              // stale/extra/missing elements, or an undeterminable relation — is
-              // fail-closed: reviseCandidate is never called and the parent
-              // candidate is kept. A model claim of "fixed" is never a basis.
-              let basisSupported = true;
-              if (relation !== null && trueRoots !== null) {
-                const childRats = rationalSetElements(answerText);
-                if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
-                  basisSupported = false;
-                }
-              } else if (goalKind === "ALL_SOLUTIONS") {
-                // An ALL-SOLUTIONS goal whose real solution set is not
-                // independently determinable (multi-variable, non-integer
-                // coefficients, zero polynomial, or a real set that is not
-                // exactly the rational set — e.g. irrational roots) can never
-                // ground a revision: "unable to verify completeness" must never
-                // become an evidence-grounded repair. Fail closed for this goal
-                // class only; other classes such as PARAMETER ground their
-                // revision on the trusted branch/gap coverage.
-                basisSupported = false;
-              }
-              const basis: P4ReviseBasis | null = basisSupported
+      if (!(challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok)) {
+        return null;
+      }
+      const challenge = challenges[0]!;
+      const repairTask = candidateTask;
+      const route = workflow.forTask(repairTask);
+      const requestId = root.nextModelId();
+      if (requestId === null) {
+        return null;
+      }
+      const body = {
+        schemaVersion: "p4-repair-context-v1" as const,
+        sessionId: session,
+        problemHash,
+        contractVersion: contract.contractVersion,
+        problemFullText: problemText,
+        stage: "REPAIR" as const,
+        requestId,
+        task: p2Snapshot({
+          taskId: repairTask.taskId,
+          goalId: repairTask.goalId,
+          scopeId: repairTask.scopeId,
+          inputArtifactRefs: repairTask.inputArtifactRefs,
+        }),
+        route: { routeId: route.routeId },
+        sourceRequestId: requestId,
+        answerObligationId: answerObligation.obligationId,
+        challenge,
+        parentCandidate: candidate.artifact.packet?.candidateProposal ?? null,
+      };
+      const messages = [
+        {
+          role: "system" as const,
+          content:
+            "You are a strict single revision reviser. Reply with exactly one JSON work packet and nothing else. You cannot declare anything verified.",
+        },
+        { role: "user" as const, content: JSON.stringify(body) },
+      ];
+      const contextBytes = Buffer.byteLength(JSON.stringify(messages), "utf8");
+      const before = root.modelCalls();
+      const outcome = await calls.model({
+        task: repairTask,
+        phase: "REPAIR",
+        messages,
+        contextHash: p4Hash(JSON.stringify(messages)),
+        contextBytes,
+      });
+      if (!(root.modelCalls() > before && outcome.receipt.transportStatus === "COMPLETE")) {
+        stop = outcome.receipt.transportStatus === "COMPLETE" ? outcome.code : "PACKET_REJECTED";
+        return null;
+      }
+      repairCalls += 1;
+      try {
+        const childArtifact = store.accept(repairTask, {
+          // Match the Host projection's artifact identity for a REPAIR row:
+          // it names the next projected artifact in the real history.
+          artifactId: `repair-${store.snapshot().length + 1}`,
+          routeId: route.routeId,
+          sourceRequestId: requestId,
+          transportStatus: outcome.receipt.transportStatus,
+          text: outcome.receipt.text,
+          eventSeq: ledger.nextEventSeq(),
+          supersedes: null,
+        });
+        const child = p4Target(ledger.snapshot(), childArtifact, "ACTIVE");
+        // B3 (DECISION-0150): for a PARAMETER goal the trusted parameter
+        // branches are the required gap set (the bounded "PARAMETER two
+        // gaps" flagship); the revised child must restate every branch or
+        // the revision fails closed (REVISE_REJECTED).
+        const gapSet =
+          goalKind === "PARAMETER"
+            ? parameterGapsOf(ledger.snapshot().goals, candidateTask.goalId)
+            : [];
+        const answerText = child.artifact.packet?.candidateProposal ?? "";
+        // Step 1 hard gate 2 (completeness): when the protected parent is a
+        // numeric solution set of a solvable relation, the revision must be a
+        // well-formed, NON-empty numeric set that (a) keeps every valid parent
+        // root, (b) contains only genuine roots of the relation, and (c) is
+        // strictly larger (it must cover the checker-verified missing roots).
+        // Any other format (e.g. `999`, `x = 999`) or a degenerate set (`{}`,
+        // `{0}`) is fail-closed; reviseCandidate is never called.
+        const relation = problemRelationPolynomial(problemText);
+        const trueRoots = solutionSetOf(relation);
+        // P0-1: for a problem with an independently determinable finite
+        // single-variable solution set, a revision is accepted ONLY when the
+        // revised answer is a well-formed, deduplicated set EXACTLY equal to
+        // the independently solved set (exact rational arithmetic). Any
+        // other case — unparseable/unsupported representation, empty set,
+        // stale/extra/missing elements, or an undeterminable relation — is
+        // fail-closed: reviseCandidate is never called and the parent
+        // candidate is kept. A model claim of "fixed" is never a basis.
+        let basisSupported = true;
+        if (relation !== null && trueRoots !== null) {
+          const childRats = rationalSetElements(answerText);
+          if (trueRoots.length === 0 || childRats === null || !sameRationalSet(childRats, trueRoots)) {
+            basisSupported = false;
+          }
+        } else if (goalKind === "ALL_SOLUTIONS") {
+          // An ALL-SOLUTIONS goal whose real solution set is not
+          // independently determinable (multi-variable, non-integer
+          // coefficients, zero polynomial, or a real set that is not
+          // exactly the rational set — e.g. irrational roots) can never
+          // ground a revision: "unable to verify completeness" must never
+          // become an evidence-grounded repair. Fail closed for this goal
+          // class only; other classes such as PARAMETER ground their
+          // revision on the trusted branch/gap coverage.
+          basisSupported = false;
+        }
+        const basis: P4ReviseBasis | null = basisSupported
+          ? {
+              source: "CHECKER_COUNTEREXAMPLE",
+              level: "CHECKED_SCOPE",
+              checkResult: "PASS",
+              scopeId: candidate.binding.scopeId,
+              witness: checker.receipt.observation.slice(0, 2048),
+              obligatedObligationIds: [answerObligation.obligationId],
+              childCoverage: [answerObligation.obligationId],
+              ...(gapSet.length > 0
                 ? {
-                    source: "CHECKER_COUNTEREXAMPLE",
-                    level: "CHECKED_SCOPE",
-                    checkResult: "PASS",
-                    scopeId: target.binding.scopeId,
-                    witness: checker.receipt.observation.slice(0, 2048),
-                    obligatedObligationIds: [answerObligation.obligationId],
-                    childCoverage: [answerObligation.obligationId],
-                    ...(gapSet.length > 0
-                      ? {
-                          requiredGaps: gapSet,
-                          coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
-                        }
-                      : {}),
+                    requiredGaps: gapSet,
+                    coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
                   }
-                : null;
-              const revision =
-                basis === null
-                  ? null
-                  : reviseCandidate(
-                      ledger.snapshot(),
-                      { parent: target, child, challenge, basis },
-                      root.remainingMs(),
-                    );
-              if (revision === null) {
-                stop = "REVISE_REJECTED";
-              }
-              revisedDecision = revision === null ? null : revision.decision;
-              if (revision !== null) {
-                sessionLog.append("REPAIR", {
-                  accepted: revision.accepted,
-                  reason: revision.decision.reason,
-                  sourceRequestId: requestId,
-                  // Defect 3: record the revised candidate so resume/replay can
-                  // rebuild the current candidate and re-derive the final answer.
-                  candidateProposal: child.artifact.packet?.candidateProposal ?? null,
-                  finalResponse: revision.decision.finalResponse,
-                });
-              }
-              if (revision !== null && revision.accepted) {
-                // B1c (DECISION-0150): sync the M1 ledger to the local update of
-                // the affected (challenged) answer obligation's task; every other
-                // obligation/task keeps its prior state.
-                ledger.recordLocalRevision(
-                  repairTask.taskId,
-                  {
-                    artifactId: childArtifact.artifactId,
-                    artifactVersion: childArtifact.envelope.artifactVersion ?? 1,
-                  },
-                  childArtifact.envelope.eventSeq,
-                );
-              }
-              if (revision !== null) {
-                s2Transaction = {
-                  supersededObligationIds: revision.supersededObligationIds,
-                  preservedObligationIds: revision.preservedObligationIds,
-                  preservedParentArtifactId: revision.preservedParentArtifactId,
-                };
-              }
-              stop = revision !== null && revision.accepted ? "REVISED_CANDIDATE" : "REVISE_REJECTED";
-            } catch (error) {
-              if (!(error instanceof P2Error)) {
-                throw error;
-              }
-              stop = "CONTROL_REJECTED";
+                : {}),
             }
+          : null;
+        const revision =
+          basis === null
+            ? null
+            : reviseCandidate(
+                ledger.snapshot(),
+                { parent: candidate, child, challenge, basis },
+                root.remainingMs(),
+              );
+        if (revision === null) {
+          stop = "REVISE_REJECTED";
+          return null;
+        }
+        revisedDecision = revision.decision;
+        if (revision !== null) {
+          sessionLog.append("REPAIR", {
+            accepted: revision.accepted,
+            reason: revision.decision.reason,
+            sourceRequestId: requestId,
+            // Defect 3: record the revised candidate so resume/replay can
+            // rebuild the current candidate and re-derive the final answer.
+            candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+            finalResponse: revision.decision.finalResponse,
+          });
+        }
+        if (revision !== null && revision.accepted) {
+          // B1c (DECISION-0150): sync the M1 ledger to the local update of
+          // the affected (challenged) answer obligation's task; every other
+          // obligation/task keeps its prior state.
+          ledger.recordLocalRevision(
+            repairTask.taskId,
+            {
+              artifactId: childArtifact.artifactId,
+              artifactVersion: childArtifact.envelope.artifactVersion ?? 1,
+            },
+            childArtifact.envelope.eventSeq,
+          );
+        }
+        if (revision !== null) {
+          s2Transaction = {
+            supersededObligationIds: revision.supersededObligationIds,
+            preservedObligationIds: revision.preservedObligationIds,
+            preservedParentArtifactId: revision.preservedParentArtifactId,
+          };
+        }
+        return {
+          accepted: revision.accepted,
+          decision: revision.decision,
+          child,
+        };
+      } catch (error) {
+        if (!(error instanceof P2Error)) {
+          throw error;
+        }
+        stop = "CONTROL_REJECTED";
+        return null;
+      }
+    };
+
+    reviewTarget = target;
+    if (target !== null && target.availability === "ACTIVE" && !root.stopped()) {
+      if (opts.maxReviews === 0) {
+        stop = "NO_REVIEW";
+      } else {
+        for (let round = 0; round < opts.maxReviews; round += 1) {
+          if (reviewTarget === null || reviewTarget.availability !== "ACTIVE" || root.stopped()) {
+            break;
+          }
+          if (root.nextModelId() === null || root.remainingMs() <= MIN_MS) {
+            stop = root.remainingMs() <= MIN_MS ? "DEADLINE_EXCEEDED" : "NO_REVIEW";
+            break;
+          }
+          const stage: "R2" | "R4" = round === 0 ? "R2" : "R4";
+          const roundReview = await runReviewRound(reviewTarget, stage);
+          if (roundReview === null) {
+            break;
+          }
+          review = roundReview;
+          const reviewSnapshotForLog = roundReview.snapshot();
+          sessionLog.append("REVIEW_CHALLENGE", {
+            reviewCalls,
+            challenges: reviewSnapshotForLog.challenges.length,
+            records: reviewSnapshotForLog.records.length,
+          });
+          if (stop === "REVIEW_STOP" || stop === "CONTROL_REJECTED" || stop === "DEADLINE_EXCEEDED") {
+            break;
+          }
+          const challenges: readonly P4Challenge[] = reviewSnapshotForLog.challenges.filter(
+            (item) => item.status === "CHALLENGED" && item.availability === "ACTIVE",
+          );
+          if (challenges.length === 0) {
+            if (lastRevisionAccepted) {
+              stop = "REVISED_CANDIDATE";
+            }
+            break;
+          }
+          if (opts.maxRepairs < 1 || repairCalls >= opts.maxRepairs) {
+            if (lastRevisionAccepted) {
+              stop = "REVISED_CANDIDATE";
+            }
+            break;
+          }
+          const revision = await attemptRevision(reviewTarget, roundReview, challenges);
+          if (revision === null) {
+            if (lastRevisionAccepted) {
+              stop = "REVISED_CANDIDATE";
+            }
+            break;
+          }
+          if (!revision.accepted) {
+            stop = "REVISE_REJECTED";
+            break;
+          }
+          lastRevisionAccepted = true;
+          reviewTarget = revision.child;
+          stop = "REVISED_CANDIDATE";
+          if (reviewCalls >= opts.maxReviews) {
+            break;
           }
         }
       }
@@ -1786,6 +2792,10 @@ export async function runAgentLoop(
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;
+    }
+    {
+      const code = (error as { code?: string }).code;
+      const stack = new Error("trace").stack ?? "";
     }
     stop = "CONTROL_REJECTED";
   }
@@ -1799,7 +2809,7 @@ export async function runAgentLoop(
   const candidateGate = new P4CandidateGate(
     ledger.snapshot(),
     policy,
-    review === null ? 2 : firstReviewOrdinal,
+    protectedReview === null ? 2 : firstReviewOrdinal,
   );
   if (target !== null) {
     try {
@@ -1820,7 +2830,7 @@ export async function runAgentLoop(
   let decision = candidateGate.finalize(
     ledger.snapshot(),
     target,
-    review === null ? null : review.snapshot(),
+    protectedReview === null ? null : protectedReview.snapshot(),
     root.remainingMs(),
   );
   if (revisedDecision !== null && policy !== "STRICT") {

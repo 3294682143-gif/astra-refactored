@@ -63,8 +63,13 @@ export type P2WorkPacketSchemaVersionV5 = typeof P2_WORK_PACKET_SCHEMA_VERSION_V
 /** Bounds for this phase. All are safe integers. */
 export const P2_LIMITS = {
   maxGoals: 8,
-  maxObligations: 16,
-  maxTasks: 32,
+  // The widest legal contract is eight labelled multipart children (four
+  // obligations each) plus the parent's ten, i.e. 42; the previous 16/32 pair
+  // predates INDEPENDENT_DERIVATION and silently refused four-part multipart
+  // problems. A retype of all eight goals to a six-obligation kind (48) is
+  // deliberately outside the bound.
+  maxObligations: 42,
+  maxTasks: 48,
   maxArtifacts: 32,
   maxRoutes: 2,
   maxFixtureWorkUnits: 3,
@@ -164,6 +169,7 @@ export const P2_OBLIGATION_KIND = [
   "QUANTIFIERS",
   "PROOF_GOAL",
   "SUBGOAL_COVERAGE",
+  "INDEPENDENT_DERIVATION",
   "OUTPUT_COVERAGE",
   "ANSWER_REQUEST",
 ] as const;

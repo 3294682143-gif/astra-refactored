@@ -327,6 +327,19 @@ test("error, unknown and late outcomes never produce evidence and never retry", 
   expectCode(() => pending.markStale(), "ILLEGAL_TRANSITION");
 });
 
+test("precheck accepts S1 evidence produced on a deep model ordinal", () => {
+  const built = build();
+  const ledger = new P4DiagnosticLedger(built.contract, built.target, 2);
+  for (const sourceRequestId of ["model-4", "model-256"]) {
+    const deep = plan(built, {}, {
+      binding: { ...plan(built).request.binding, sourceRequestId },
+    });
+    const assessed = ledger.precheck(deep);
+    assert.equal(assessed.structuralMatch, true);
+    assert.equal(assessed.reason, "STRUCTURAL_MATCH_ONLY");
+  }
+});
+
 test("precheck reports structural reasons without promoting anything", () => {
   const built = build();
   const ledger = new P4DiagnosticLedger(built.contract, built.target, 2);

@@ -191,14 +191,16 @@ def test_nested_bidirectional_rpc_tool_roundtrip(process_tracker):
 
 def test_ts_entry_three_units_dependencies(process_tracker):
     client = FakeClient()
-    result = _solve(client, max_model_calls=4, max_work_units=3, max_effects=0)
+    # The VALUE graph is DOMAIN_VALIDITY, CANDIDATE_VALIDITY, INDEPENDENT_DERIVATION
+    # and OUTPUT_COVERAGE, so a complete run needs four work units plus the review.
+    result = _solve(client, max_model_calls=5, max_work_units=4, max_effects=0)
     assert result["status"] == "candidate"
-    assert result["metrics"]["work_units"] == 3
+    assert result["metrics"]["work_units"] == 4
     assert result["metrics"]["effect_calls"] == 0
-    assert client.calls == 4
-    third = json.loads(client.seen[2][0][1]["content"])
-    assert len(third["task"]["inputArtifactRefs"]) == 2
-    assert len(third["inputArtifacts"]) == 2
+    assert client.calls == 5
+    last = json.loads(client.seen[3][0][1]["content"])
+    assert len(last["task"]["inputArtifactRefs"]) == 3
+    assert len(last["inputArtifacts"]) == 3
     assert process_tracker
 
 

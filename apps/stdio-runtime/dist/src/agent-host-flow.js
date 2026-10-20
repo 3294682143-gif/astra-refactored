@@ -23,10 +23,10 @@ const PROFILE_ID = "math-agent-preview-v2";
 // Hard caps for the explicit root budget. The budget is derived from the
 // compiled task graph (one work unit per task, plus the review and slack) and
 // clamped to these caps; they are upper bounds, not a per-problem default.
-const MAX_MODEL_CALLS = 32;
-const MAX_WORK_UNITS = 32;
+const MAX_MODEL_CALLS = 256;
+const MAX_WORK_UNITS = 64;
 const MAX_EFFECTS = 2;
-const MAX_REVIEWS = 1;
+const MAX_REVIEWS = 3;
 const MAX_METHOD_LOADS = 1;
 const MAX_REMAINING_MS = 3600000;
 const HASH = /^[0-9a-f]{64}$/u;
@@ -203,7 +203,8 @@ export class AgentHostFlow {
         const maxWorkUnits = safeInt(params["maxWorkUnits"], 1, MAX_WORK_UNITS);
         const maxReviews = safeInt(params["maxReviews"], 0, MAX_REVIEWS);
         const maxMethodLoads = safeInt(params["maxMethodLoads"], 0, MAX_METHOD_LOADS);
-        const maxRepairs = params["maxRepairs"] === undefined ? 0 : safeInt(params["maxRepairs"], 0, 1);
+        const maxRepairs = params["maxRepairs"] === undefined ? 0 : safeInt(params["maxRepairs"], 0, 3);
+        const maxConsensus = params["maxConsensus"] === undefined ? 0 : safeInt(params["maxConsensus"], 0, 8);
         const maxR0 = params["maxR0"] === undefined ? 0 : safeInt(params["maxR0"], 0, 1);
         const remainingMs = safeInt(params["remainingMs"], 1, MAX_REMAINING_MS);
         if (params["profileId"] !== PROFILE_ID) {
@@ -247,6 +248,7 @@ export class AgentHostFlow {
             maxReviews,
             maxMethodLoads: this.methodAvailable ? maxMethodLoads : 0,
             maxRepairs,
+            maxConsensus,
             maxR0,
             policy,
             deriveBudget,
@@ -320,6 +322,7 @@ export class AgentHostFlow {
                 maxReviews: options.maxReviews,
                 maxMethodLoads: options.maxMethodLoads,
                 maxRepairs: options.maxRepairs,
+                maxConsensus: options.maxConsensus,
                 maxR0: options.maxR0,
                 remainingMs: budget,
                 policy: options.policy,

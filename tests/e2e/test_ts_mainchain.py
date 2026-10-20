@@ -44,7 +44,9 @@ from test_ts_entry import (  # noqa: E402
 
 __all__ = ["no_legacy_solver", "process_tracker"]
 
-_BUDGET = {"max_model_calls": 4, "max_work_units": 3, "max_effects": 0}
+# Four obligations per VALUE goal after INDEPENDENT_DERIVATION, plus the
+# single review call.
+_BUDGET = {"max_model_calls": 5, "max_work_units": 4, "max_effects": 0}
 
 
 class ChainClient(FakeClient):
@@ -87,18 +89,18 @@ def test_three_work_units_follow_real_ready_order(process_tracker):
     assert result["candidate_verified"] is False
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert result["childReaped"] is True
-    assert result["metrics"]["work_units"] == 3
+    assert result["metrics"]["work_units"] == 4
     assert result["metrics"]["effect_calls"] == 0
     assert result["metrics"]["review_calls"] == 1
     assert process_tracker
     assert process_tracker[0].args[1].endswith(("main.js", "stdio-runtime.bundle.mjs"))
     assert process_tracker[0].args[2] == "--agent-loop"
     bodies = _work_bodies(client)
-    assert len(bodies) == 3
+    assert len(bodies) == 4
     # The real observed scheduling sequence, printed for traceability.
     observed = [body["task"]["taskId"] for body in bodies]
     print("observed ready order:", observed)
-    assert len(set(observed)) == 3
+    assert len(set(observed)) == 4
     # Every later task's declared dependencies are already DELIVERED earlier in
     # the real sequence: the order is the real DAG's ready order, not a fixed
     # route id or question id.
@@ -125,7 +127,7 @@ def test_downstream_consumes_predecessor_active_artifact(process_tracker):
     assert result["childReaped"] is True
     assert process_tracker
     bodies = _work_bodies(client)
-    assert len(bodies) == 3
+    assert len(bodies) == 4
     by_task = {body["task"]["taskId"]: body for body in bodies}
     consumed = 0
     for body in bodies:

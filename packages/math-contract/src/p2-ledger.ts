@@ -138,7 +138,7 @@ function isArtifactRef(value: unknown): value is P2ArtifactRef {
 }
 
 /** A real earlier WORK request ordinal; no other request id is accepted. */
-const YIELD_REQUEST_ORDINAL = /^model-([1-4])$/u;
+const YIELD_REQUEST_ORDINAL = /^model-([1-9][0-9]{0,2})$/u;
 
 /**
  * Validate one task batch against the contract and against itself: envelope

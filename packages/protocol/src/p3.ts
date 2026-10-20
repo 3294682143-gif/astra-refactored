@@ -12,6 +12,8 @@
 export const P3_TOOL_NAMES = Object.freeze([
   "polynomial_expand_coefficients",
   "linear_system_solution_set",
+  "exact_check_expr",
+  "bounded_enumeration",
 ] as const);
 export type P3ToolName = (typeof P3_TOOL_NAMES)[number];
 

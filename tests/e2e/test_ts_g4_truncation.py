@@ -66,3 +66,33 @@ def test_e09_missing_finish_reason_is_conservatively_banned(process_tracker):
     assert result["metrics"]["effect_calls"] == 0
     assert result["candidate_verified"] is False
     assert process_tracker
+
+
+class NullContentClient(FakeClient):
+    """Official-provider shape: thinking-only content=null with length."""
+
+    def chat(self, messages, temperature=0.2, max_tokens=8192):
+        self.seen.append((messages, temperature, max_tokens))
+        self.calls += 1
+        return {
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "length",
+                    "message": {"role": "assistant", "content": None,
+                                "reasoning_content": "thinking only"},
+                }
+            ],
+            "usage": {"total_tokens": 17},
+        }
+
+
+def test_null_content_with_length_is_truncated_not_unknown(process_tracker):
+    client = NullContentClient()
+    result = _solve(client)
+    assert result["status"] != "candidate"
+    assert result["final_response"] == "Unsolved."
+    assert result["metrics"]["effect_calls"] == 0
+    assert result["metrics"]["remote_outcome_unknown"] is False
+    assert client.calls == 1
+    assert process_tracker

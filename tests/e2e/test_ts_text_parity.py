@@ -116,9 +116,11 @@ def test_unsolved_reason_whitespace_boundary(label, reason, legal, monkeypatch, 
     assert seen
     events = seen[0]
     if legal:
-        assert client.calls == 2
+        # model-1 yields the first task; the two ready tasks that do not depend
+        # on it still work, and OUTPUT_COVERAGE stays unready behind the yield.
+        assert client.calls == 3
         bodies = _work_bodies(client)
-        assert len(bodies) == 2
+        assert len(bodies) == 3
         assert bodies[0]["task"]["taskId"] != bodies[1]["task"]["taskId"]
         assert len(events) == 1
         assert events[0]["reason"] == "UNSOLVED"

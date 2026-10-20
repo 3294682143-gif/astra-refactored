@@ -15,6 +15,9 @@ _ALLOWED_FUNCS = {
     "sin": math.sin, "cos": math.cos, "tan": math.tan,
     "exp": math.exp, "log": math.log, "sqrt": math.sqrt,
     "abs": abs, "min": min, "max": max,
+    "erf": math.erf, "erfc": math.erfc,
+    "Phi": lambda z: (1.0 + math.erf(z / math.sqrt(2.0))) / 2.0,
+    "phi": lambda z: math.exp(-z * z / 2.0) / math.sqrt(2.0 * math.pi),
 }
 _ALLOWED_CONSTS = {"pi": math.pi, "e": math.e}
 _BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.FloorDiv)
@@ -127,7 +130,10 @@ def sympy_expr(source: str, variables: list[str]):
     local["e"] = sympy.E
     local.update({"sin": sympy.sin, "cos": sympy.cos, "tan": sympy.tan,
                   "exp": sympy.exp, "log": sympy.log, "sqrt": sympy.sqrt,
-                  "Abs": sympy.Abs, "factorial": sympy.factorial})
+                  "Abs": sympy.Abs, "factorial": sympy.factorial,
+                  "erf": sympy.erf, "erfc": sympy.erfc,
+                  "Phi": lambda z: (1 + sympy.erf(z / sympy.sqrt(2))) / 2,
+                  "phi": lambda z: sympy.exp(-z**2 / 2) / sympy.sqrt(2 * sympy.pi)})
     return parse_expr(
         source,
         local_dict=local,
@@ -139,7 +145,7 @@ def sympy_expr(source: str, variables: list[str]):
 
 def _check_ext(node: ast.AST, variables: set[str], extra_funcs: set[str]) -> None:
     """AST whitelist for the symbolic variant (also allows factorial/Abs)."""
-    allowed_names = variables | set(_ALLOWED_CONSTS) | set(_ALLOWED_FUNCS) | {"Abs"} | extra_funcs
+    allowed_names = variables | set(_ALLOWED_CONSTS) | set(_ALLOWED_FUNCS) | {"Abs", "Phi", "phi"} | extra_funcs
     if isinstance(node, ast.Expression):
         _check_ext(node.body, variables, extra_funcs)
     elif isinstance(node, ast.Constant):

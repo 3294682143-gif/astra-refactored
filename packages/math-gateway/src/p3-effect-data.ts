@@ -24,7 +24,10 @@ const MAX_TASK_CHARS = 256;
 const MAX_OBSERVATION_BYTES = 16000;
 const MIN_REMAINING_MS = 26;
 const MAX_REMAINING_MS = 3_600_000;
-const REQUEST_IDS = ["model-1", "model-2", "model-3"] as const;
+// Effect bindings may name any root model request id the session can produce;
+// the previous three-entry table made every tool call after the third one a
+// fixed PACKET_BINDING once the contract grew past three obligations.
+const REQUEST_ID = /^model-(?:[1-9][0-9]{0,2})$/u;
 const EFFECT_IDS = ["effect-1", "effect-2"] as const;
 const HASH = /^[0-9a-f]{64}$/u;
 
@@ -88,7 +91,7 @@ export function p3Binding(value: unknown): P3Binding {
   const taskId = boundedId(source.taskId, MAX_TASK_CHARS);
   const scopeId = hashOf(source.scopeId);
   const sourceRequestId = source.sourceRequestId;
-  if (typeof sourceRequestId !== "string" || !(REQUEST_IDS as readonly string[]).includes(sourceRequestId)) {
+  if (typeof sourceRequestId !== "string" || !REQUEST_ID.test(sourceRequestId)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({ sessionId, problemHash, contractVersion, taskId, scopeId, sourceRequestId }) as P3Binding;

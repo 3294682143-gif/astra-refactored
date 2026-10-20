@@ -84,7 +84,7 @@ test("group 1: valid revision records version+1, REOPENED and lineage flags", ()
       reopened += 1;
     }
   }
-  assert.equal(reopened, 3);
+  assert.equal(reopened, 4);
   assert.equal(opened, 2);
   assert.equal(revised.obligations.some((item) => item.kind === "EXHAUSTIVENESS" && item.status === "OPEN"), true);
   assert.equal(revised.obligations.some((item) => item.status === "OPEN"), true);

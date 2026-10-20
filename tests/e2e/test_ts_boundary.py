@@ -70,7 +70,7 @@ class BoundaryClient(FakeClient):
 def test_trusted_boundary_cases_complete_the_parameter_answer(process_tracker):
     """Exactly the trusted parameter branches are accepted."""
     client = BoundaryClient(["a=0", "a!=0"])
-    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True)
+    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True, max_model_calls=32, max_work_units=32)
     assert result["status"] == "candidate"
     assert result["final_response"] == PARAMETER_ANSWER
     assert result["childReaped"] is True
@@ -86,7 +86,7 @@ def test_missing_or_forged_boundary_cases_never_release_a_candidate(
 ):
     """A missing, forged, partial or extra boundary set is refused."""
     client = BoundaryClient(boundary)
-    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True)
+    result = _solve(client, PARAMETER_PROBLEM, derive_budget=True, max_model_calls=32, max_work_units=32)
     assert result["status"] != "candidate"
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True

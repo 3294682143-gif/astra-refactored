@@ -69,7 +69,14 @@ test("template obligations, risk hint and multipart coverage graph", () => {
   assert.equal(contract.riskHints.some((hint) => hint.includes("x=0")), true);
   assert.deepEqual(contract.goals[0]!.scope.branchConditions, []);
   const kinds = contract.obligations.map((item) => item.kind);
-  assert.deepEqual(kinds, ["DOMAIN_VALIDITY", "CANDIDATE_VALIDITY", "BOUNDARY_EXCEPTIONS", "EXHAUSTIVENESS", "OUTPUT_COVERAGE"]);
+  assert.deepEqual(kinds, [
+    "DOMAIN_VALIDITY",
+    "CANDIDATE_VALIDITY",
+    "BOUNDARY_EXCEPTIONS",
+    "EXHAUSTIVENESS",
+    "INDEPENDENT_DERIVATION",
+    "OUTPUT_COVERAGE",
+  ]);
   const multi = new ContractLedger(compileP2Contract(MULTI, SESSION, [goal("root", "MULTIPART", [goal("a", "VALUE"), goal("b", "VALUE")])]));
   const tasks = multi.snapshot().tasks;
   const cover = tasks.filter((task) => task.taskId.includes("cover"));

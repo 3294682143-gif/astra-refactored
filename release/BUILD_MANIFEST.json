@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "2698063fdcd63f7ac867837822553b6ce1c22248",
-    "tree": "c19b93cb0776e367cf1715d813090d047447b58d"
+    "commit": "0a88eca2948e2853c5a6ed5218668259a03c285f",
+    "tree": "bce7dc47de9978cadedb3091e59cb81285682f0a"
   },
   "js": [
     {
@@ -15,23 +15,23 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "60f4103f58f0492089975c4f569e075c881751931f0db59ffc7cbefd57be8bec",
-      "bytes": 83919
+      "sha256": "33c6fd4e32e5afafb42aee8e58980653aabcd895280b1d47d8334879714de441",
+      "bytes": 140274
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
-      "sha256": "17f2700703f898b58c59d178378310fe95bc7035336e7cfa7b5242ccd5a223e2",
-      "bytes": 23609
+      "sha256": "6a102f72a1da5dd325bd7dcc1f7a8c66a0ad3b8d1c2e55eb859c0cf802de4ecb",
+      "bytes": 23799
     }
   ],
   "assets": {
     "protocolSchema": {
       "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "5f2d64c2fda2f79319bb6571b3b5d66b18a839869ba2c1d549a64c77cef84a5b"
+      "sha256": "b5f8a7cbf46a8680667d6d31917107c2357db4a4aaca5f611fc148faf129f46c"
     },
     "methodRegistry": {
       "path": "mathagent/resources/tool-registry.json",
-      "sha256": "2cbc4abf693988dce1bbd85a7a1ececf80043cdf3b4068de20b7cc1ae9b1b903"
+      "sha256": "b4435be34e73bb01a77ee4816592f070452b37700ca86947631e44e9ac0d55ad"
     },
     "methodSkillMapping": {
       "path": "mathagent/resources/skill-mapping-manifest.json",
@@ -45,11 +45,11 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "fdfdccb72701eae5ea3a02c6d395099aaa97e4da19b81a11adc98c6c06c5e633"
+      "sha256": "f667d344665430ef92d214fd9c9047b736b9c01d71ef8dcf1a421ba7800326b6"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
-      "sha256": "5f2d64c2fda2f79319bb6571b3b5d66b18a839869ba2c1d549a64c77cef84a5b"
+      "sha256": "b5f8a7cbf46a8680667d6d31917107c2357db4a4aaca5f611fc148faf129f46c"
     }
   },
   "mathFamilyFiles": {
@@ -58,10 +58,12 @@
     "math_families/bridge/__init__.py": "b4607d526883e233bd019c0b7958c918331aa789fbd3df567c1d36cb8955e444",
     "math_families/bridge/computation.py": "6f20940c7ebb606ad9f8b1568238f9f74b3c3de340013daedf07fd13ddff040b",
     "math_families/bridge/descriptors.py": "c25b783d49dcb1b6eee313cbe34c6e45b03cbb4805944b62930b3efef2422c2e",
-    "math_families/bridge/dispatch.py": "86bc49b5e108ceebb91074c094c207e429138d9e54e6eabe73e1d7c75a04f085",
+    "math_families/bridge/dispatch.py": "86ac6f04e0c00b86975dca00836fe208a88d5ba3d6696f428014ad959a66bc64",
     "math_families/bridge/evidence_bridge.py": "21b6c0cbddbb49fd83d6ee64f76201ad689b37c1ee94b80c9fa28ba3e449a987",
+    "math_families/bridge/exact_check.py": "b57c937bd48ab969c60bed478763f96bf690beac38e4738e30c59d7ff5cc37b1",
     "math_families/bridge/exact_math.py": "6fc74a62a2e2a686b1748ed32bd5fefa8626995eace2daaab6421c011cbba7af",
-    "math_families/bridge/safe_expr.py": "55719f70cc5dc8317964bba2dd972f5c483d6fc9c2bd9dda0c3da2665bacc55f",
+    "math_families/bridge/finite_enumeration.py": "223507c21350856b4fad7bb058a60b5c50addd70766f0a0d9f61829fc2e8e996",
+    "math_families/bridge/safe_expr.py": "35f1ba6551b679a3bbe562cd94a63fd1027d9f76aaae2945bd6368c75c7e7c4b",
     "math_families/bridge/spec_adapters.py": "7f4bc017207c7f0948165ab1371826b0f4c2f5946288e4203da38c05e529544e",
     "math_families/catalog.json": "eb97e20d7e6421a10f3a3c66e42b24c9a65c283882134d3127111c0a0dde2874",
     "math_families/core/__init__.py": "bdb6ca12014f070c6f28c0b6a2a899b77aea999e27a992a5c032f6ebc74d7194",

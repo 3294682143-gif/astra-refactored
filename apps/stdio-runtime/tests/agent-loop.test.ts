@@ -113,32 +113,37 @@ test("three work units without tools keep real dependency refs and the first can
         : reactiveWork(request, { candidate: "999" });
     },
   });
+  // The UNKNOWN graph is ANSWER_REQUEST, INDEPENDENT_DERIVATION and
+  // OUTPUT_COVERAGE: four WORK calls once the answer obligation is counted, plus
+  // the single R2 review.
   const result = await runAgentLoop(
     PROBLEM,
     SESSION,
-    { remainingMs: 5000, maxModelCalls: 4, maxWorkUnits: 3, maxEffects: 0, now: () => 0 },
+    { remainingMs: 5000, maxModelCalls: 5, maxWorkUnits: 4, maxEffects: 0, now: () => 0 },
     portsOf(ports),
   );
-  assert.equal(result.summary.modelCalls, 4);
+  assert.equal(result.summary.modelCalls, 5);
   assert.equal(result.summary.effectCalls, 0);
-  assert.equal(result.summary.workUnits, 3);
+  assert.equal(result.summary.workUnits, 4);
   assert.equal(result.summary.reviewCalls, 1);
   assert.equal(result.summary.finalResponse, "4");
   assert.equal(result.summary.candidateVerified, false);
   assert.deepEqual(
     ports.requests.map((request) => request.requestId),
-    ["model-1", "model-2", "model-3", "model-4"],
+    ["model-1", "model-2", "model-3", "model-4", "model-5"],
   );
-  const third = bodyOf(ports.requests[2]!);
-  const task = third.task as { readonly inputArtifactRefs: readonly { readonly artifactId: string }[] };
-  assert.equal(task.inputArtifactRefs.length, 2);
-  const inputArtifacts = third.inputArtifacts as readonly { readonly artifactId: string }[];
-  assert.equal(inputArtifacts.length, 2);
+  // The last WORK is the OUTPUT_COVERAGE task, whose real dependency refs point
+  // at every artifact delivered by the earlier tasks of the same goal.
+  const last = bodyOf(ports.requests[3]!);
+  const task = last.task as { readonly inputArtifactRefs: readonly { readonly artifactId: string }[] };
+  assert.equal(task.inputArtifactRefs.length, 3);
+  const inputArtifacts = last.inputArtifacts as readonly { readonly artifactId: string }[];
+  assert.equal(inputArtifacts.length, 3);
   assert.deepEqual(
     inputArtifacts.map((artifact) => artifact.artifactId),
     task.inputArtifactRefs.map((ref) => ref.artifactId),
   );
-  assert.equal(result.privateState.artifacts.length, 3);
+  assert.equal(result.privateState.artifacts.length, 4);
   assert.equal(result.privateState.decision.protectedCandidate?.artifactId, "artifact-1");
   assert.equal(result.privateState.decision.reason, "BEST_EFFORT_CANDIDATE");
 });
@@ -230,4 +235,45 @@ test("the last root review id is real and the default M4 session still refuses m
   assert.equal(p4Hash(PROBLEM).length, 64);
   assert.equal(reviewReply(ports.requests.at(-1)!).length > 0, true);
   assert.equal(reactiveTool().includes("polynomial_expand_coefficients"), true);
+});
+
+test("the answer-check turn changes only the system prompt, never the payload", async () => {
+  const { runAgentLoop } = await import("../src/agent-loop.js");
+  const support = await import("./agent-loop-test-support.js");
+  const run = async (maxRepairs: number) => {
+    const ports = support.reactivePorts({
+      work: (request) => support.reactiveWork(request, { candidate: "4" }),
+      review: (request) => support.reviewReply(request),
+    });
+    const result = await runAgentLoop("Compute 2+2", "s", {
+      remainingMs: 5000,
+      maxModelCalls: 8,
+      maxWorkUnits: 3,
+      maxEffects: 1,
+      maxReviews: 1,
+      maxRepairs,
+      now: () => 0,
+    }, { model: ports.model, effect: ports.effect });
+    const bodies = ports.requests.map((request) => {
+      const body = JSON.parse(request.messages[1]!.content) as Record<string, unknown>;
+      delete body["sourceRequestId"];
+      delete body["task"];
+      return body;
+    });
+    return { result, requests: ports.requests, bodies };
+  };
+  const off = await run(0);
+  const on = await run(1);
+  // Same calls, same status: the flag is not a new control path.
+  assert.equal(on.result.summary.status, off.result.summary.status);
+  assert.equal(on.result.summary.stopReason, off.result.summary.stopReason);
+  assert.equal(on.result.summary.modelCalls, off.result.summary.modelCalls);
+  // Exactly one request is a refutation turn, and its payload is unchanged.
+  const flagged = on.requests.filter((request) => request.messages[0]!.content.includes("ANSWER-CHECK TURN"));
+  assert.equal(flagged.length, 1);
+  assert.equal(off.requests.some((request) => request.messages[0]!.content.includes("ANSWER-CHECK TURN")), false);
+  const flaggedIndex = on.requests.indexOf(flagged[0]!);
+  assert.deepEqual(on.bodies[flaggedIndex], off.bodies[flaggedIndex]);
+  // No payload key was added or removed by the flag.
+  assert.deepEqual(Object.keys(on.bodies[flaggedIndex]!).sort(), Object.keys(off.bodies[flaggedIndex]!).sort());
 });

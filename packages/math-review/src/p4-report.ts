@@ -43,7 +43,7 @@ const MAX_ISSUES = 8;
 // the candidate gate use. The old preview value (4) assumed a four-call profile;
 // the graph-derived root budget (G2 capability package) runs more calls before
 // the review, so a review at `model-N` (N up to the shared ceiling) is legal.
-const MAX_REQUEST_ORDINAL = 32;
+const MAX_REQUEST_ORDINAL = 256;
 
 const REPORT_FIELDS = [
   "schemaVersion",
@@ -125,6 +125,7 @@ export function parseP4ReviewReport(
   target: P4Target,
   contract: P2Contract,
   firstRequestOrdinal = 2,
+  stage: "R2" | "R4" = "R2",
 ): P4ReviewReport {
   try {
     if (
@@ -172,7 +173,10 @@ export function parseP4ReviewReport(
     if (report.schemaVersion !== P4_REVIEW_SCHEMA_VERSION) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
-    if (report.stage !== "R2") {
+    if (stage !== "R2" && stage !== "R4") {
+      throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (report.stage !== stage) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
     }
     const lastAllowed = Math.min(firstRequestOrdinal + 1, MAX_REQUEST_ORDINAL);
@@ -251,14 +255,36 @@ export function parseP4ReviewReport(
         !Number.isSafeInteger(start) ||
         !Number.isSafeInteger(end) ||
         start < 0 ||
-        end <= start ||
-        end > derivation.length
+        start >= derivation.length ||
+        end <= start
       ) {
         throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
       }
       const quote = text(locator.quote, MAX_QUOTE_CHARS);
+      let anchoredStart = start;
+      let anchoredEnd = end;
       if (derivation.slice(start, end).join("") !== quote) {
-        throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+        // Real models routinely copy an exact quote but miscount code-point
+        // offsets. The quote is model data, but its anchor must exist in the
+        // trusted derivation. Recover the locator only when the exact quote
+        // occurs exactly once; an absent or ambiguous quote stays fail-closed.
+        const quoteChars = [...quote];
+        let found = -1;
+        let occurrences = 0;
+        for (let index = 0; index + quoteChars.length <= derivation.length; index += 1) {
+          if (derivation.slice(index, index + quoteChars.length).join("") === quote) {
+            found = index;
+            occurrences += 1;
+            if (occurrences > 1) {
+              break;
+            }
+          }
+        }
+        if (occurrences !== 1) {
+          throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+        }
+        anchoredStart = found;
+        anchoredEnd = found + quoteChars.length;
       }
       if (!(P4_ISSUE_KINDS as readonly string[]).includes(issue.suspectedIssue as string)) {
         throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
@@ -271,7 +297,11 @@ export function parseP4ReviewReport(
           throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
         }
       }
-      const frozenLocator: P4StepLocator = Object.freeze({ start, end, quote });
+      const frozenLocator: P4StepLocator = Object.freeze({
+        start: anchoredStart,
+        end: anchoredEnd,
+        quote,
+      });
       issues.push(
         Object.freeze({
           stepLocator: frozenLocator,
@@ -309,7 +339,7 @@ export function parseP4ReviewReport(
       requestId,
       target: frozenBinding,
       targetHash: target.targetHash,
-      stage: "R2",
+      stage,
       conclusion,
       reviewCoverage: Object.freeze(coverage),
       issues: Object.freeze(issues),

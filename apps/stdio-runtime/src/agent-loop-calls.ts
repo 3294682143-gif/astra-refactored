@@ -57,10 +57,12 @@ export interface AgentModelCallOutcome {
 
 export interface AgentModelCallInput {
   readonly task: P2Task;
-  readonly phase: "WORK" | "R2" | "REPAIR";
+  readonly phase: "WORK" | "CONSENSUS" | "R2" | "R4" | "REPAIR";
   readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
   readonly contextHash: string;
   readonly contextBytes: number;
+  /** Optional already-reserved ordinal for a bounded schema-repair call. */
+  readonly requestId?: string;
   readonly onDispatch?: (requestId: string) => void;
 }
 
@@ -108,7 +110,7 @@ export class AgentCalls {
   async model(input: AgentModelCallInput): Promise<AgentModelCallOutcome> {
     const task = p2Snapshot(input.task) as P2Task;
     const phase = input.phase;
-    if (phase !== "WORK" && phase !== "R2" && phase !== "REPAIR") {
+    if (phase !== "WORK" && phase !== "CONSENSUS" && phase !== "R2" && phase !== "R4" && phase !== "REPAIR") {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const messages = p2Snapshot(input.messages) as readonly {
@@ -156,8 +158,8 @@ export class AgentCalls {
     if (admitRemaining <= AGENT_IO_MIN_REMAINING_MS) {
       fail(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
-    const permit = this.gate.admit(task, this.nextRequestId(), admitRemaining, phase);
-    const requestId = permit.requestId;
+    const requestId = input.requestId ?? this.nextRequestId();
+    const permit = this.gate.admit(task, requestId, admitRemaining, phase);
     // G4/PR5 Slice 4a: the request identity is projected from the SessionLog;
     // the log records the exact model-visible context and its hash.
     this.sessionLog?.append("MODEL_REQUEST", {

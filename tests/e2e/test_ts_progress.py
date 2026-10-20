@@ -82,15 +82,17 @@ def test_unsolved_or_partial_yields_to_another_domain_task(mode, process_tracker
     result = _solve(client, max_model_calls=4, max_work_units=3, max_effects=0)
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
-    assert client.calls == 2
+    assert client.calls == 3
     bodies = _work_bodies(client)
-    assert len(bodies) == 2
+    assert len(bodies) == 3
     assert bodies[0]["task"]["taskId"] != bodies[1]["task"]["taskId"]
     assert bodies[1]["task"]["taskId"].startswith("dep-task-") is False
+    # The yielded task delivers nothing; the two independent tasks split off it
+    # still deliver, and OUTPUT_COVERAGE stays unready behind the yield.
     if mode == "unsolved":
-        assert result["metrics"]["work_units"] == 1
-    else:
         assert result["metrics"]["work_units"] == 2
+    else:
+        assert result["metrics"]["work_units"] == 3
     assert process_tracker
 
 
@@ -119,8 +121,8 @@ def test_partial_keeps_raw_and_numbers_next_artifact(monkeypatch, process_tracke
     assert result["childReaped"] is True
     assert seen
     rows = seen[0]["rows"]
-    assert len(rows) == 2
-    first, second = rows
+    assert len(rows) == 3
+    first, second = rows[0], rows[1]
     assert first["deliveryStatus"] == "INCOMPLETE"
     assert first["artifactId"] == "artifact-1"
     assert second["artifactId"] == "artifact-2"
@@ -141,7 +143,7 @@ def test_unsolved_first_has_no_artifact(monkeypatch, process_tracker):
     assert result["childReaped"] is True
     assert seen
     rows = seen[0]["rows"]
-    assert len(rows) == 1
+    assert len(rows) == 2
     assert rows[0]["artifactId"] == "artifact-1"
     assert process_tracker
 
@@ -216,8 +218,10 @@ def test_candidate_survives_other_task_unsolved(policy, status, process_tracker)
     assert result["status"] == status
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
-    assert client.calls == 3
-    assert result["metrics"]["work_units"] == 1
+    # The candidate is admitted by the first task, one more task is answered
+    # unsolved, and the caller budget stops the run before the review reserve.
+    assert client.calls == 4
+    assert result["metrics"]["work_units"] == 2
     assert result["metrics"]["review_calls"] == 1
     assert process_tracker
 
