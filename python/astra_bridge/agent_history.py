@@ -18,9 +18,10 @@ import copy
 import hashlib
 
 from .p0_probe import ProbeError
+from .p0_protocol import ProtocolError
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import parse_action, same_json as _same_json
-from .agent_workflow import _source_record, checked_packet
+from .agent_workflow import _source_record, checked_packet, trusted_packet_binding
 from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
@@ -292,13 +293,21 @@ def project_artifacts(history, session_id, problem_hash):
             packet = normal_packets.get(candidate_id)
             if isinstance(packet, dict):
                 candidate = packet.get("candidateProposal")
-                if isinstance(candidate, str):
+                # Node keeps only non-empty candidates in consensusAttempts
+                # (``candidate.length > 0`` on artifacts that already passed
+                # ``candidateProposal.trim().length > 0``). Mirror that with the
+                # shared JavaScript whitespace set; an empty candidate packet is
+                # a draft, never a ballot or a tie-break winner.
+                if isinstance(candidate, str) and js_nonempty(candidate):
                     candidate_ids.append((candidate_id, candidate))
         # Match Node. A packet carrying a machine-readable CERT1|FINAL row is
         # the final independent certificate and wins over correlated audit
         # repeats. Without one, keep the exact-support majority with the latest
-        # tie-break.
-        chosen = run_ids[-1]
+        # tie-break. When no packet of the run carries a candidate at all, Node
+        # delivers ``consensusAttempts[0]`` -- the FIRST attempt of the run, not
+        # the last one (see the `?? consensusAttempts[0]` fallback in
+        # agent-loop.ts), so the Host must project the same first packet.
+        chosen = run_ids[0]
         certified_ids = [
             candidate_id
             for candidate_id, _candidate in candidate_ids
@@ -446,7 +455,10 @@ def project_artifacts(history, session_id, problem_hash):
             # artifact keeps its own row. Nothing is invented: the row carries the
             # exact repair receipt bytes and the parsed revised packet.
             try:
-                packet = checked_packet(entry["receipt"]["text"])
+                binding = trusted_packet_binding(body, request_id)
+                if binding is None:
+                    continue
+                packet = checked_packet(entry["receipt"]["text"], binding)
             except ProbeError:
                 continue
             if not isinstance(packet, dict) or packet.get("deliveryStatus") != "COMPLETE":

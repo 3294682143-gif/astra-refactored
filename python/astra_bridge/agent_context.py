@@ -21,6 +21,7 @@ from .agent_workflow import (
     check_dependency_provenance,
     check_route_provenance,
     checked_packet,
+    trusted_packet_binding,
 )
 from .agent_history import check_revision_context
 from .agent_history import artifact_view, project_artifacts
@@ -319,7 +320,10 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
             return None
         if body.get("problemFullText") != problem:
             return None
-        packet = checked_packet(receipt["text"])
+        binding = trusted_packet_binding(body, request_id)
+        if binding is None:
+            return None
+        packet = checked_packet(receipt["text"], binding)
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
         if not _contract_version_ok(packet["contractVersion"]):
@@ -332,13 +336,41 @@ def candidate_packet(history, request_id, problem, session_id, problem_hash,
         route = body.get("route")
         if not isinstance(task, dict) or not isinstance(route, dict):
             return None
-        # Declared dependencies are admitted only when they are exactly this
-        # task's own declared input refs; a foreign, unknown or tampered ref is
-        # still a fixed rejection. Node decides candidate eligibility; the Host
-        # only re-checks the structural binding.
+        # Node accepts a duplicate-free SUBSET of this task's declared
+        # input refs (see p2-receipt.packetDependencies). The Host must use the
+        # same rule: a packet may legitimately report [] or a proper subset.
+        # A foreign, unknown, duplicate or version-shifted ref is still a fixed
+        # rejection.
         refs = task.get("inputArtifactRefs")
-        if not isinstance(refs, list) or packet["dependencies"] != refs:
+        if not isinstance(refs, list):
             return None
+        allowed = set()
+        for ref in refs:
+            if not isinstance(ref, dict):
+                return None
+            _exact_keys(ref, ("artifactId", "artifactVersion"))
+            artifact_id = _text(ref["artifactId"], 256)
+            if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] < 1:
+                return None
+            allowed.add((artifact_id, ref["artifactVersion"]))
+        dependencies = packet["dependencies"]
+        if not isinstance(dependencies, list):
+            return None
+        seen = set()
+        for ref in dependencies:
+            if not isinstance(ref, dict):
+                return None
+            _exact_keys(ref, ("artifactId", "artifactVersion"))
+            reported_id = _text(ref["artifactId"], 256)
+            # Never reuse the name ``version``: it already holds the body
+            # schema version that the repair branch below tests.
+            reported_version = ref["artifactVersion"]
+            if not _is_int(reported_version) or reported_version < 1:
+                return None
+            key = (reported_id, reported_version)
+            if key in seen or key not in allowed:
+                return None
+            seen.add(key)
         if packet["taskId"] != task.get("taskId") or packet["goalId"] != task.get("goalId"):
             return None
         if packet["routeId"] != route.get("routeId"):
@@ -409,7 +441,10 @@ def _work_packet(entry, problem, session_id, problem_hash,
             return None
         if body.get("problemFullText") != problem:
             return None
-        packet = checked_packet(receipt["text"])
+        binding = trusted_packet_binding(body, request_id)
+        if binding is None:
+            return None
+        packet = checked_packet(receipt["text"], binding)
         if packet["sessionId"] != session_id or packet["problemHash"] != problem_hash:
             return None
         if not _contract_version_ok(packet["contractVersion"]):
@@ -624,8 +659,31 @@ def check_inputs(inner, history, current_request_id):
             _fail()
         if artifact["level"] != "PROVISIONAL" or artifact["checkResult"] != "UNKNOWN":
             _fail()
-        if artifact["dependencies"] != source_task.get("inputArtifactRefs"):
+        # Node admits a duplicate-free SUBSET of this task's declared input
+        # refs (``packetDependencies`` in p2-receipt). The Host re-checks the
+        # same rule: a foreign, repeated or version-shifted ref stays a fixed
+        # rejection, but a shorter dependency list is not a mismatch.
+        declared_refs = source_task.get("inputArtifactRefs")
+        if not isinstance(declared_refs, list):
             _fail()
+        allowed_refs = set()
+        for declared in declared_refs:
+            if not isinstance(declared, dict):
+                _fail()
+            _exact_keys(declared, ("artifactId", "artifactVersion"))
+            allowed_refs.add((declared["artifactId"], declared["artifactVersion"]))
+        reported = artifact["dependencies"]
+        if not isinstance(reported, list):
+            _fail()
+        seen_refs = set()
+        for reported_ref in reported:
+            if not isinstance(reported_ref, dict):
+                _fail()
+            _exact_keys(reported_ref, ("artifactId", "artifactVersion"))
+            key = (reported_ref["artifactId"], reported_ref["artifactVersion"])
+            if key in seen_refs or key not in allowed_refs:
+                _fail()
+            seen_refs.add(key)
         if not isinstance(artifact["provisionalDependency"], bool):
             _fail()
         if artifact["provisionalDependency"] is not bool(source_task.get("inputArtifactRefs")):
@@ -635,7 +693,13 @@ def check_inputs(inner, history, current_request_id):
         digest = hashlib.sha256(receipt["text"].encode("utf-8")).hexdigest()
         if artifact["rawResponseHash"] != digest:
             _fail()
-        source_packet = _parse_inner(receipt["text"])
+        # The eight packet identity fields are control data: rebind them to the
+        # trusted request body before the strict parse, exactly as the Node
+        # receipt reader does. Every mathematical field keeps the model bytes.
+        source_binding = trusted_packet_binding(body, source_id)
+        if source_binding is None:
+            _fail()
+        source_packet = checked_packet(receipt["text"], source_binding)
         if not same_json(artifact["packet"], source_packet):
             _fail()
         if not isinstance(source_packet, dict):

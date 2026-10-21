@@ -20,6 +20,7 @@ from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
 __all__ = [
     "checked_packet",
+    "trusted_packet_binding",
     "normalize_route",
     "default_route",
     "check_route_provenance",
@@ -250,7 +251,55 @@ def _sha256(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def checked_packet(text):
+_TRUSTED_BINDING_FIELDS = (
+    "sessionId", "problemHash", "contractVersion", "taskId", "goalId",
+    "scopeId", "routeId", "sourceRequestId",
+)
+
+
+def trusted_packet_binding(body, source_request_id):
+    """Build the eight trusted WorkPacket identity values from a request body.
+
+    This is control data only. It never supplies claim, derivation, candidate,
+    dependencies or any mathematical field. Callers that do not have a trusted
+    body must keep using the strict ``checked_packet(text)`` path.
+    """
+    if not isinstance(body, dict) or not isinstance(source_request_id, str):
+        return None
+    task = body.get("task")
+    scope = body.get("scope")
+    route = body.get("route")
+    if not isinstance(task, dict) or not isinstance(route, dict):
+        return None
+    scope_id = None
+    if isinstance(scope, dict):
+        scope_id = scope.get("scopeId")
+    if not isinstance(scope_id, str):
+        scope_id = task.get("scopeId")
+    route_id = route.get("routeId")
+    if not isinstance(route_id, str):
+        route_id = task.get("routeId")
+    values = {
+        "sessionId": body.get("sessionId"),
+        "problemHash": body.get("problemHash"),
+        "contractVersion": body.get("contractVersion"),
+        "taskId": task.get("taskId"),
+        "goalId": task.get("goalId"),
+        "scopeId": scope_id,
+        "routeId": route_id,
+        "sourceRequestId": source_request_id,
+    }
+    if not all(isinstance(values[name], str) and values[name] for name in (
+        "sessionId", "problemHash", "taskId", "goalId", "scopeId", "routeId",
+        "sourceRequestId",
+    )):
+        return None
+    if not _is_int(values["contractVersion"]) or values["contractVersion"] < 1:
+        return None
+    return values
+
+
+def checked_packet(text, binding=None):
     """Strict parse of one raw WorkPacket of either accepted version.
 
     The raw text is parsed once with the shared P0 inner parser; a v2 packet
@@ -269,6 +318,15 @@ def checked_packet(text):
     packet = _parse_inner(text)
     if not isinstance(packet, dict):
         _fail()
+    if binding is not None:
+        if not isinstance(binding, dict):
+            _fail()
+        # Only the eight control-identity keys are replaced. Every
+        # mathematical field and every extra-key check below stays strict.
+        for field in _TRUSTED_BINDING_FIELDS:
+            if field not in binding:
+                _fail()
+            packet[field] = binding[field]
     version = packet.get("schemaVersion")
     if version == _WORK_V1:
         _exact_keys(packet, _PACKET_FIELDS)
@@ -438,7 +496,10 @@ def _source_record(history, source_id, session_id, problem_hash, *,
     text = receipt["text"]
     if not isinstance(text, str):
         _fail()
-    packet = checked_packet(text)
+    binding = trusted_packet_binding(body, source_id)
+    if binding is None:
+        _fail()
+    packet = checked_packet(text, binding)
     if require_complete:
         if packet["deliveryStatus"] != "COMPLETE":
             _fail()

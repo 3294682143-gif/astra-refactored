@@ -91,8 +91,9 @@ class CandidateClient(FakeClient):
     - ``partial``: the answer packet is INCOMPLETE, so no candidate may exist.
     - ``nonanswer_candidate``: a local step carries a candidate while the answer
       task carries none, so no whole-problem candidate may exist.
-    - ``wrong_scope``: the answer packet is bound to a foreign scope.
-    - ``missing_goal``: the answer packet is bound to an unknown goal.
+    - ``wrong_scope``: the answer packet claims a foreign scope id.
+    - ``missing_goal``: the answer packet claims an unknown goal id.
+    - ``foreign_assumption``: the answer packet uses an undeclared assumption.
     """
 
     def __init__(self, case, mode="good"):
@@ -132,6 +133,8 @@ class CandidateClient(FakeClient):
             packet["scopeId"] = "0" * 64
         if self.mode == "missing_goal" and is_answer:
             packet["goalId"] = "goal-absent"
+        if self.mode == "foreign_assumption" and is_answer:
+            packet["assumptions"] = ["assumption-not-in-scope"]
         return json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -207,22 +210,41 @@ def test_local_step_candidate_is_not_the_answer(name, process_tracker):
 
 
 @pytest.mark.parametrize("name", list(CASES))
-def test_wrong_scope_answer_packet_is_rejected(name, process_tracker):
-    """An answer packet bound to a foreign scope is never a candidate."""
+def test_forged_scope_id_is_rebound_to_the_trusted_scope(name, process_tracker):
+    """A model-written scopeId is control data, never scope authority.
+
+    The packet is accepted, but only under the trusted scope of its task: the
+    Host and the Node loop both replace the eight identity fields with the
+    trusted binding before the strict parse.
+    """
     case = CASES[name]
     client = CandidateClient(case, mode="wrong_scope")
     result = _solve(client, case["problem"], **_BUDGET)
-    assert result["status"] != "candidate"
+    assert result["status"] == "candidate"
+    assert result["final_response"] == case["answer"]
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
     assert process_tracker
 
 
 @pytest.mark.parametrize("name", list(CASES))
-def test_missing_goal_answer_packet_is_rejected(name, process_tracker):
-    """An answer packet bound to an unknown goal is never a candidate."""
+def test_foreign_goal_id_is_rebound_to_the_trusted_goal(name, process_tracker):
+    """A model-written goalId is control data, never goal authority."""
     case = CASES[name]
     client = CandidateClient(case, mode="missing_goal")
+    result = _solve(client, case["problem"], **_BUDGET)
+    assert result["status"] == "candidate"
+    assert result["final_response"] == case["answer"]
+    assert result["candidate_verified"] is False
+    assert result["childReaped"] is True
+    assert process_tracker
+
+
+@pytest.mark.parametrize("name", list(CASES))
+def test_answer_packet_with_undeclared_assumption_is_rejected(name, process_tracker):
+    """An assumption outside the trusted scope is still a fixed rejection."""
+    case = CASES[name]
+    client = CandidateClient(case, mode="foreign_assumption")
     result = _solve(client, case["problem"], **_BUDGET)
     assert result["status"] != "candidate"
     assert result["candidate_verified"] is False

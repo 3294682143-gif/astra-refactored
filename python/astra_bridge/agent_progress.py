@@ -18,7 +18,7 @@ from .p0_probe import ProbeError
 from .p0_protocol import ProtocolError
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import effect_key, parse_action, same_json
-from .agent_workflow import _trim, checked_packet
+from .agent_workflow import _trim, checked_packet, trusted_packet_binding
 
 __all__ = [
     "PROGRESS_POLICY",
@@ -224,7 +224,10 @@ def _partial_packet(history, request_id, body, session_id, problem_hash):
     if not isinstance(text, str):
         return False
     try:
-        packet = checked_packet(text)
+        binding = trusted_packet_binding(body, request_id)
+        if binding is None:
+            return False
+        packet = checked_packet(text, binding)
     except ProbeError:
         return False
     if packet["deliveryStatus"] not in _PARTIAL_DELIVERY:
