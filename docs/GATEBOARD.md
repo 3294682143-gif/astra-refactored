@@ -163,3 +163,17 @@ expanded permissions and default-engine switching retain their separate gates.
   window; the merged valid result is reported above. The earlier 20-item max8
   pilot was 14.05 calls/item and semantic 13–14/20.
 - Report: `docs/REAL_MODEL_PILOT_20261019.md`.
+
+### Session update — 2026-10-21 (stability closure: Node/Host binding parity)
+
+- WorkPacket identity fields are control data on both sides: TS
+  `canonicalizeP2WorkPacketText` (receipt, P4 binding rebuild, revision target
+  rebuild) and Python `trusted_packet_binding`/`checked_packet`.
+- Dependencies are a duplicate-free **subset** of the declared refs everywhere.
+- Consensus ballot keeps only non-empty candidates; a same-task run with no
+  candidate at all falls back to its **first** packet (Node parity).
+- Tests updated to the new contract (forged identity is rebound, undeclared
+  assumptions / duplicate refs / bad JSON / empty claim still fail closed); new
+  `tests/e2e/test_ts_binding_parity.py`.
+- Gates: Node 334/334, Python 716 passed / 24 skipped, manifest `VERIFY_OK`.
+- 12-item A-group failure subset: 11/12 candidates, 0 `FIELD_VALUE`.

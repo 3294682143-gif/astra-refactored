@@ -194,3 +194,35 @@ See `/tmp/astra-test0-pilot20-r4d-20261019`.
   cards, bounded multiple method loads, soft routing, stage quotas and the
   three R0 reviews) is still not ported. The current TS catalog remains a
   fixture-sized method surface.
+
+## Stability closure: Node/Host parity on the trusted binding (2026-10-21)
+
+Root cause of the remaining A-group `FIELD_VALUE` losses: the Python Host and the
+Node loop disagreed about the same history, not about the model output.
+
+- **Trusted binding.** The eight WorkPacket identity fields (`sessionId`,
+  `problemHash`, `contractVersion`, `taskId`, `goalId`, `scopeId`, `routeId`,
+  `sourceRequestId`) are control data. Both sides now replace exactly those
+  fields with the trusted contract/task/scope/route/request values before the
+  strict parse (`canonicalizeP2WorkPacketText` in TS; `trusted_packet_binding` +
+  `checked_packet(text, binding)` in Python). Mathematics, the raw receipt text
+  and its hash are untouched.
+- **Dependency admission.** A duplicate-free subset of the task's declared input
+  refs is legal on both sides. Foreign, repeated or version-shifted refs remain
+  fixed rejections.
+- **Ballot.** Only non-empty candidates enter the consensus ballot, compared with
+  the shared JavaScript whitespace set. `CERT1|FINAL` still wins; otherwise
+  exact-support majority with the latest tie-break.
+- **First-packet fallback.** When no packet of a same-task run carries a
+  candidate, the delivered artifact is the FIRST attempt of the run, mirroring
+  Node's `candidateAttempts[...] ?? consensusAttempts[0]`. The Host previously
+  projected the last attempt, which shifted `sourceRequestId` and made the next
+  task's `check_inputs` fail closed.
+- **Two real bugs.** `candidate_packet` shadowed the body schema version with a
+  dependency ref's `artifactVersion`, so every G3/PR4 repair candidate was
+  rejected; `agent_history` referenced an unimported `ProtocolError`.
+
+Verification: `tsc -b` 0, Node 334/334, Python 716 passed / 24 skipped / 0
+failed, manifest `VERIFY_OK`. On the 12 previously failing A-group items the
+subset now yields 11/12 candidates and zero `FIELD_VALUE` (the single unsolved
+item is a real transport `OUTCOME_UNKNOWN`, which stays fail-closed).
