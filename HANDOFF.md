@@ -28,54 +28,222 @@
 
 ---
 
-## 1. 环境与命令（实测可用）
+## 1. 完整复跑配置（当前 HEAD `36e056f`，2026-10-20 late）
 
-- 仓库：`/home/ma-user/work/Astra /astra-refactored`（注意路径含空格，所有命令都要加引号）
-  - HEAD `0a88eca`，分支 `feat/v4-dynamic-workflows`，**约 58 个未提交改动**
-- Node `v24.7.0`，Python `3.10.6`；**没有 `npx`**，必须直接用二进制：
-  ```bash
-  cd '/home/ma-user/work/Astra /astra-refactored'
-  node node_modules/typescript/bin/tsc -b                      # 类型检查/构建
-  node node_modules/esbuild/bin/esbuild apps/stdio-runtime/dist/src/main.js \
-    --bundle --platform=node --format=esm \
-    --outfile=release/stdio-runtime.bundle.mjs --log-level=warning
-  python3 scripts/build_release_manifest.py                    # 重新生成 manifest
-  python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
-  ```
-- 测试：
-  ```bash
-  node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js   # 329
-  python3 -m pytest -q                                                                          # 683 用例（当前 680 passed / 24 skipped / 3 failed）
-  python3 -m pytest tests/e2e/test_ts_g3_flagship.py -q -k multi_gap                            # 单点复现
-  ```
-- **shell 工具会间歇性失效**（每条命令都返回 `clipped`、连 `echo` 都不执行）。对策：
-  - 先 `node -v` 探活；失效时只用文件工具（read/write/edit/grep/glob），**不要**声称任何运行结果；
-  - 长任务用后台：`(setsid nohup bash -c '... > /tmp/x.log 2>&1; echo "EXIT:$?" >> /tmp/x.log' &)`，然后用 `sleep 60~200` 轮询；
-  - **不要**在同一个 foreground 命令里 `sleep >= 300`，会杀掉整个后台任务（本会话踩过两次）。
+这一节是交给另一个 agent 的**可复跑配置**。按这里的版本、命令、输入和 profile
+重跑；不要根据旧会话里的 `0a88eca`、329/683 测试数或旧 profile 重跑。
 
-### 真实 API（pilot 用，密钥不得落盘）
+### 1.1 代码版本与工作区
 
-- 端点 `https://chat.intern-ai.org.cn/api/v1/chat/completions`，模型 `intern-s2`，`temperature=0.2, top_p=0.9, max_tokens=8192, thinking_mode=false, stream=false`。
-- 密钥只在进程环境里：本会话从 `~/.bash_history` 的 `INTERN_API_KEY=...` 提取到 `/tmp/.k1`（600 权限），端点存 `/tmp/.k2`。**绝不写入仓库/日志/提交**。
-- 客户端与 profile：
-  - `/tmp/intern_s2_client.py`（读 `INTERN_API_KEY` / `INTERN_ENDPOINT`）
-  - `/tmp/real_client_factory.py`（把 `ReasoningAgent` 打成 max profile：`max_model_calls=256, max_work_units=64, max_effects=2, max_reviews=1, max_method_loads=1, max_repairs=1, max_r0=1, derive_budget=False, mode="local"`）
-- 跑 20 题 pilot / 100 题全量（judge emulator 在全仓之外）：
-  ```bash
-  cd /home/ma-user/work/official_judge_emulator
-  export INTERN_API_KEY="$(cat /tmp/.k1)" INTERN_ENDPOINT="$(cat /tmp/.k2)" PYTHONPATH=/tmp
-  setsid nohup python3 run_judge.py \
-    --submission '/home/ma-user/work/Astra /astra-refactored' \
-    --input /tmp/test0-20.txt --report-dir /tmp/astra-test0-pilot-XX --infer-total \
-    --client-factory real_client_factory:build_client \
-    --item-concurrency 3 --api-concurrency 3 --max-model-calls 1000 \
-    --default-max-tokens 8192 --model-max-attempts 1 --item-timeout 900 \
-    > /tmp/astra-test0-pilot-XX.log 2>&1 &
-  ```
-  - `/tmp/test0-20.txt` 是 test0 前 20 题（`sha256 c83a35ba…`），与历史 pilot 可比；全量用 `/home/ma-user/work/input/test0.txt`，去掉 `--infer-total` 会强制 112 题，**要保留** `--infer-total`。
-  - 结果目录结构：`outputs/<idx>.json`（`result.metrics` 有 `logical_model_calls / effect_calls / review_calls / work_units / reported_tokens`）、`judgements/<idx>.txt`（`A`=判对）、`outputs/run_summary.json`。
-  - 归一化对照脚本：`/tmp/fmt_norm.py <report-dir>`（NFKC + 去 LaTeX 命令/空格/括号后比较）。
-- 历史 pilot 报告（可对比调用深度/候选率）：`/tmp/astra-test0-pilot20{,b,c,d,e,f}`、`/tmp/astra-test0-full`、`/tmp/astra-test0-full2`。
+- 仓库：`/home/ma-user/work/Astra /astra-refactored`（路径含空格，命令必须加引号）
+- 分支：`feat/v4-dynamic-workflows`
+- HEAD：`36e056f2081661cba85f3417bd28c1972ab68af1`
+- 已推送：`origin/main` 和 `origin/feat/v4-dynamic-workflows` 都是 `36e056f`
+- 远端：`https://github.com/3294682143-gif/astra-refactored.git`
+- Node `v24.7.0`，Python `3.10.6`；没有 `npx`
+- 工作区应只剩未跟踪的临时文件：`.ipynb_checkpoints/`、`G5.txt`、
+  `PY_STATUS.txt`、`STATUS_TMP.txt`；这些不是复跑输入，不要提交。
+
+### 1.2 构建与门禁（必须全部通过）
+
+```bash
+cd '/home/ma-user/work/Astra /astra-refactored'
+node node_modules/typescript/bin/tsc -b
+node node_modules/esbuild/bin/esbuild apps/stdio-runtime/dist/src/main.js \
+  --bundle --platform=node --format=esm \
+  --outfile=release/stdio-runtime.bundle.mjs --log-level=warning
+python3 scripts/build_release_manifest.py
+python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
+node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js
+python3 -m pytest -q
+git diff --check
+```
+
+预期（本次实测）：
+
+- `tsc -b`：0
+- Node：**334/334 pass**
+- Python：**704 passed, 24 skipped, 0 failed**
+- manifest：`VERIFY_OK`
+- `git diff --check`：clean
+- 仓库内无真实 API key
+
+### 1.3 真实 API 与客户端（密钥不落盘）
+
+- 端点：`https://chat.intern-ai.org.cn/api/v1/chat/completions`
+- 模型：`intern-s2`
+- 请求参数：`temperature=0.2, top_p=0.9, max_tokens=8192,
+  thinking_mode=false, stream=false`
+- 密钥只从进程环境读取：`INTERN_API_KEY`、`INTERN_ENDPOINT`。
+  **不要把 key 写进仓库、日志、提交或 HANDOFF。**
+- 客户端文件（在 `/tmp`，不属于 repo）：
+  - `/tmp/intern_s2_client.py`
+  - `/tmp/real_client_factory_retry.py`：正式重跑用，带进程间 4s 限速和 10 次 HTTP 重试
+  - `/tmp/real_client_factory_log.py`：调试用，把每次请求/响应追加到 `/tmp/reallog.jsonl`
+- `real_client_factory_retry.py` 的 `MAX_PROFILE` 必须逐项等于：
+
+```json
+{
+  "engine": "ts",
+  "max_model_calls": 256,
+  "max_work_units": 64,
+  "max_effects": 2,
+  "max_reviews": 2,
+  "max_method_loads": 1,
+  "max_repairs": 2,
+  "max_consensus": 8,
+  "max_r0": 1,
+  "problem_seconds": 1800,
+  "policy": "BEST_EFFORT",
+  "derive_budget": false,
+  "mode": "local"
+}
+```
+
+注意：`run_judge.py` 的 `--max-model-calls 240` 是 emulator 的 usage 上限；
+真正的 `ReasoningAgent` profile 由 factory 的 `MAX_PROFILE` 注入 256。两者要同时
+保留，不能用旧 `max_reviews=1/max_repairs=1` 的 `real_client_factory.py` 替代。
+
+### 1.4 输入文件、题号映射和哈希
+
+全量输入：
+
+- `/home/ma-user/work/input/test0.txt`
+- sha256：`d98995104bbedbca845a1af05a5629eb1b1c184642e28da2b23416e8a5611d0c`
+- 100 行 JSONL；`--infer-total` 必须保留。
+
+9 题定向集（原错题 + #44 争议题）：
+
+- 文件：`/tmp/test0-remain9.txt`
+- sha256：`2d392960a68a662cdab6a52ab56eab92282f908ef015d627aff3256de29a9de5`
+- 0-based 原题号：`[1, 9, 11, 18, 23, 34, 36, 43, 98]`
+- 对应题号：`#2, #10, #12, #19, #24, #35, #37, #44, #99`
+- 映射文件：`/tmp/test0-remain9.map.jsonl`
+  sha256 `81ceabcdb507a345025ca9e05644ef71244890ca6f0da73d8af30d458eda7918`
+- 盲评文件：`/tmp/test0-remain9.blind.jsonl`
+  sha256 `88848d87437d9596891f3ecfb9224807a9fd4ef1989ad89c82b091f2adf18ff9`
+  （不含 answer，给盲评 agent 用）
+
+抽取命令（如果 `/tmp` 被清理，先重建）：
+
+```bash
+python3 - <<'PY'
+import json, hashlib
+from pathlib import Path
+src = Path('/home/ma-user/work/input/test0.txt')
+lines = [ln for ln in src.read_text(encoding='utf-8').splitlines() if ln.strip()]
+assert len(lines) == 100
+picks = [1, 9, 11, 18, 23, 34, 36, 43, 98]
+out = Path('/tmp/test0-remain9.txt')
+blind = Path('/tmp/test0-remain9.blind.jsonl')
+mp = Path('/tmp/test0-remain9.map.jsonl')
+with out.open('w', encoding='utf-8') as fo, blind.open('w', encoding='utf-8') as fb, mp.open('w', encoding='utf-8') as fm:
+    for new_idx, old_idx in enumerate(picks):
+        item = json.loads(lines[old_idx])
+        fo.write(json.dumps({'idx': new_idx, 'problem': item['problem'],
+                             'answer': item['answer'], 'source_idx': old_idx},
+                            ensure_ascii=False) + '\n')
+        fb.write(json.dumps({'idx': new_idx, 'problem': item['problem'],
+                             'source_idx': old_idx}, ensure_ascii=False) + '\n')
+        fm.write(json.dumps({'report_idx': new_idx, 'source_idx': old_idx,
+                             'item_no': old_idx + 1}, ensure_ascii=False) + '\n')
+print('source_sha256', hashlib.sha256(src.read_bytes()).hexdigest())
+PY
+sha256sum /tmp/test0-remain9.txt /tmp/test0-remain9.blind.jsonl /tmp/test0-remain9.map.jsonl
+```
+
+子集文件（本次证据用）：
+
+| 文件 | 原题 0-based | sha256 |
+| --- | --- | --- |
+| `/tmp/test0-tools5.txt` | `[1,9,18,23,34]` = #2,#10,#19,#24,#35 | `235acc55bbdfb9540e932a5569b2f0f28bbe3b7632cf5b86b91391d98deac1c6` |
+| `/tmp/test0-tools2.txt` | `[1,18]` = #2,#19 | `bfd7957dba628c1b649d6df7962f61ca95f17f7986918e66ae48fe87b0047505` |
+| `/tmp/test0-tools2b.txt` | `[36,98]` = #37,#99 | `11c31909ec8d20350ded3c7d0b3216d70994328b25cfff8644ebc3f1f3c0dd47` |
+| `/tmp/test0-one12.txt` | #12 | `181ab4886404031af415a5895d1bbb11b04df1da3b49f9da67e5260fcdd0522a` |
+| `/tmp/test0-one35.txt` | #35 | `3c319f2952dfed03184fb6e982a06c3688f15bab9bca0689010b72a211a08d3a` |
+| `/tmp/test0-one99.txt` | #99 | `d617ed6176db0a97479ae81d0e0dc7e2c6df5235a0cbd78748a9ab585cbfe889` |
+| `/tmp/test0-one19.txt` | #19 | `83f9054e89ef4dab9823d397097daaf976c6263d7988b89b209b2089264ddd97` |
+
+### 1.5 9 题真实重跑命令（原样）
+
+```bash
+cd /home/ma-user/work/official_judge_emulator
+export INTERN_API_KEY="$(cat /tmp/.k1)"          # 或用户提供的新 key
+export INTERN_ENDPOINT="$(cat /tmp/.k2)"         # 或上面的 endpoint
+export PYTHONPATH=/tmp
+SUB='/home/ma-user/work/Astra /astra-refactored'
+RUN='/tmp/astra-test0-remain9-max8-20261020c'
+(cd "$SUB" && python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json)
+test "$(grep -c . /tmp/test0-remain9.txt)" = 9
+test ! -e "$RUN"
+setsid nohup bash -c '
+  python3 run_judge.py \
+    --submission "$SUB" \
+    --input /tmp/test0-remain9.txt \
+    --report-dir "$RUN" \
+    --archive "$RUN.zip" \
+    --infer-total \
+    --client-factory real_client_factory_retry:build_client \
+    --item-concurrency 3 \
+    --api-concurrency 3 \
+    --max-model-calls 240 \
+    --default-max-tokens 8192 \
+    --model-max-attempts 1 \
+    --model-retry-backoff 5 \
+    --item-timeout 1800 \
+    --judge-concurrency 4 \
+    > "$RUN.log" 2>&1
+  echo "EXIT:$?" >> "$RUN.log"
+' >/dev/null 2>&1 &
+```
+
+单题/子集只需把 `--input`、`--report-dir`、`--item-concurrency` 改小：
+
+- `#12`：`--input /tmp/test0-one12.txt --item-concurrency 1 --api-concurrency 1`
+- `#35`：`--input /tmp/test0-one35.txt --item-concurrency 1 --api-concurrency 1`
+- `#99`：`--input /tmp/test0-one99.txt --item-concurrency 1 --api-concurrency 1`
+- `#2/#19`：`--input /tmp/test0-tools2.txt --item-concurrency 2 --api-concurrency 2`
+- `#37/#99`：`--input /tmp/test0-tools2b.txt --item-concurrency 2 --api-concurrency 2`
+
+### 1.6 本次定向证据目录（不是 repo 内容）
+
+| 目录 | 用途 |
+| --- | --- |
+| `/tmp/astra-test0-merged-max8-20261020` | 100 题 max8 单轮基线快照：strict 19，逐题 86/13/1 |
+| `/tmp/astra-tools5-20261020` | #2/#10/#19/#24/#35 的 5 题重跑；#10/#24 正确，#2/#35 当时 FIELD_VALUE |
+| `/tmp/astra-one12-debug4` | #12 使用 forced enumeration，候选 `223/8330`，18 calls |
+| `/tmp/astra-one35-debug7` | #35 使用 forced `MAXIMAL_MINORS`，候选 degree-6 Alexander，18 calls |
+| `/tmp/astra-one99-debug` | #99 候选 `假`，18 calls |
+| `/tmp/astra-tools2c-20261020` | #2/#19 最新精确工具重跑；#2 仍漏根，#19 仍非归一化 |
+| `/tmp/astra-tools2b2-20261020` | #37/#99；#37 仍 A,C；#99 当次 FIELD_VALUE，后由 one99 修对 |
+| `/tmp/astra-one19-debug` | density closure 尝试，但 15k 字符超长包导致 FIELD_VALUE，不能作为最终证据 |
+
+这些目录是**本次机器上的证据**；如果被清理，按 1.4/1.5 重建重新跑。不要把
+`/tmp` 结果当成 repo 的稳定资产，也不要把旧目录名当成新结果。
+
+### 1.7 当前口径（必须按这个报告）
+
+- 单轮基线：**86 正确 / 13 错误 / 1 争议**；strict `19/100`；同语义 `80/100`
+- 先定向修 `#7/#13/#17/#52/#70`：**91 / 8 / 1**；strict `20/100`
+- 本次定向修 `#10/#12/#24/#35/#99`：**96 / 3 / 1**；strict `22/100`
+- 若按“性质集合完整”接受 `#44` 的额外真性质：**97 / 3 / 0**
+- 剩余错误：`#2`（候选漏根；参考答案也不是最小分裂域）、`#19`、`#37`
+- `#44`：候选 `对称性、反自反性` 数学上完整；参考只列 `对称`，是参考答案不完整
+- `2/π`、`223/8330`、`假` 等与参考的 TeX/词形差异只影响 strict，不影响数学复核
+- **97 不是一次不看错题的全量盲跑**，也不是平台/人工正式分；引用 97 必须同时给 86
+
+### 1.8 复跑纪律（另一 agent 必须遵守）
+
+1. 不把 test0 的 `answer`、题号、参考式或定向 skill 注入 solver；参考只用于评测/复核。
+2. 工具触发按题面数学对象语义，不按 idx；当前实现见
+   `apps/stdio-runtime/src/agent-loop.ts` 的 `finiteCountingProblem` /
+   `exactOperation`。
+3. `maxConsensus=0` 必须保持默认行为不变；新机制只在 `maxConsensus>=1` 的
+   answer-bearing 路径启用。
+4. 真实 API key 只能从环境读；日志写文件，不写 stderr。
+5. 改 TS 后必须 `tsc -b` → esbuild → manifest → `--verify`，否则真实跑的是旧 bundle。
+6. 不要把本文件的 96/97 当成 blind score；报告必须同时给出 86 的单轮基线、
+   strict/语义/逐题三种口径和“targeted repair”标签。
 
 ---
 
