@@ -220,6 +220,15 @@ If these five corrected rows are substituted into the previously repaired
 #35 become exact-string matches). If #44's extra true property is accepted
 under a completeness rubric, the count is **97 correct / 3 incorrect / 0
 ambiguous**; the conservative table keeps it ambiguous. This is a **targeted
-repair rerun count**, not one uninterrupted blind 100-item run. The comparable
-single-run baseline remains **86 correct / 13 incorrect / 1 ambiguous**, strict
-**19/100**, semantic **80/100**. Do not present 96 as a blind score.
+repair rerun count**, not one uninterrupted blind 100-item run.
+
+The historical `86` baseline is itself an **adjudicated merged baseline**, not a
+single automatic run: the second stricter semantic pass scored 78 correct / 21
+incorrect / 1 ambiguous; 8 of the 21 were manually promoted after
+reference/alternative review (idx 27,47,57,64,76,78,83,95 = #28,#48,#58,#65,
+#77,#79,#84,#96), giving 86 correct / 13 incorrect / 1 ambiguous. Five later
+targeted repairs (idx 6,12,16,51,69 = #7,#13,#17,#52,#70) produced the 91/8/1
+table. Strict `19/100` belongs to the pre-repair merged snapshot and is a
+separate exact matcher; the current merged output directory includes later
+repairs, so recomputing strict there gives 20/100. Do not present 86/91/96/97
+as one blind full-run score.

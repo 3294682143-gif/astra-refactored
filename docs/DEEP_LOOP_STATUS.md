@@ -85,7 +85,7 @@ See `docs/REAL_MODEL_PILOT_20261019.md` and
 - Merged max8 100-item evaluation (same code, valid front segment plus small
   repair batches): **100/100 candidates**, strict **20/100**, same local
   semantic judge **80/100**, **local per-item adjudicated review 91/100**
-  (8 incorrect, 1 ambiguous; 91 includes targeted repair reruns of #7/#13/#17/#52/#70; the single-run baseline is 86/13/1 and strict 19), format-normalized **24/100**, **15.18 calls/item**
+  (8 incorrect, 1 ambiguous; 91 includes targeted repair reruns of #7/#13/#17/#52/#70; the adjudicated merged baseline is 86/13/1 (78 second-pass correct + 8 manual promotions) and strict 19), format-normalized **24/100**, **15.18 calls/item**
   (1518 requests), 9,110,467 reported tokens. The 0.9.8 outputs score **70/100**
   under the same semantic judge and **75/100** under its human review. See
   `docs/REAL_MODEL_PILOT_20261019.md`.

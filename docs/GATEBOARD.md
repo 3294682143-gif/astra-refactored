@@ -151,7 +151,7 @@ expanded permissions and default-engine switching retain their separate gates.
 - Max2: strict **17/100**, 93/100 candidates, semantic **68/100**, 8.41 calls/item.
 - Max8 merged (2026-10-20): **100/100 candidates**, strict **20/100**, same
   local semantic judge **80/100**, local per-item adjudicated review **91/100**
-  (8 incorrect, 1 ambiguous; 91 includes targeted repair reruns; single-run baseline is 86/13/1, strict 19), normalized **24/100**, **15.18 calls/item**
+  (8 incorrect, 1 ambiguous; 91 includes targeted repair reruns; adjudicated merged baseline is 86/13/1 (78 second-pass correct + 8 manual promotions), strict 19), normalized **24/100**, **15.18 calls/item**
   (1518 requests), 9,110,467 tokens, 96 effect/method loads and 100 reviews.
 - Seven unsolved: 4 `PACKET_REJECTED`, 2 `WORK_UNITS_COMPLETE`, 1 `ERROR`.
 - **0.9.8 comparison**: strict **14 -> 19** (+5); the same local semantic judge
