@@ -5,13 +5,15 @@ review/repair loop, answer consensus, forced method consultation and
 malformed-packet recovery are implemented; a 100-item real Intern-S2 pilot
 was run.** The pilot is a local `ReferenceJudge` pilot, not a platform score.
 
-Late 2026-10-20: two generic exact tools (`exact_check_expr`,
-`bounded_enumeration`), a machine-readable `CERT1` final-certificate turn, one
-forced finite-enumeration turn and one forced exact-object check were added.
-Targeted reruns fixed #10, #12, #24, #35 and #99; the targeted-repair count is
-96 correct / 3 incorrect / 1 ambiguous, strict 22/100. This is not a blind
-100-item run. Remaining errors are #2 (its reference is also not the minimal
-splitting field), #19 and #37; #44 is an incomplete-reference/ambiguity case.
+2026-10-21 A full 100-item rerun (frozen 36e056f, 10000-call arm, 4/4):
+**68 correct / 12 incorrect / 12 unsolved / 8 ambiguous; strict 18/100;
+88/100 candidates; 12 unsolved all `FIELD_VALUE`; 1459 requests; 9.739M
+tokens; 14.59 calls/item.** The late-2026-10-20 exact tools/certificate
+targeted reruns fixed #10/#12/#24/#35/#99 and gave 96/3/1, but that is a
+targeted-repair diagnostic, not the full-run score. Priority is now
+`FIELD_VALUE`/binding-schema stability; #12 and #35 still failed in the full
+run. See `docs/REAL_MODEL_PILOT_20261019.md` and the A data root
+`/tmp/astra-rerun-ab-10000-20261021-TrfJBe/`.
 
 ## Resolved baseline failures
 

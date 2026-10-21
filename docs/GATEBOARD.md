@@ -2,13 +2,15 @@
 
 Current gate: **G5 / PR6 (local-ready) + G7 / PR7 in progress** — the official 书生 S2 API + L1 comparison remain `BLOCKED_EXTERNAL`, so G5/G6 are delivered as **locally-verifiable packages** (Slices 5a/5b) and work continues on **G7 / PR7** (Slices 7a-7f). **G4 / PR5 CLOSED** (Slices 4a `63dbeca`, 4b `9d18ef4`, 4c this commit: immutable SessionLog + ContextProjector replay, Pi truncated-tool-barrier E08/E09, DSH monotonic tool guards + request-responsibility journal + E17 exact IPC); **G3 / PR4 CLOSED at `651cb04`**; G2 closed at `899c7fc`.
 G4/PR5 is closed; **CURRENT_GATE points to G5 / PR6 (real 书生 S2 API + budget modes + L1 math comparison)**, which stays BLOCKED_EXTERNAL until the official environment/authorization is supplied.
-Session update (2026-10-20 late): the TS loop now exposes `exact_check_expr`
-and `bounded_enumeration`, emits a machine-readable `CERT1` final certificate,
-and forces one bounded enumeration/exact-object check where the problem text
-supplies a finite draw, determinant, field extension, distribution, trig or
-limit object. Targeted reruns fixed #10/#12/#24/#35/#99; see
-`docs/REAL_MODEL_PILOT_20261019.md`. This is a targeted repair count, not a
-blind 100-item score.
+Session update (2026-10-21): **A full 100-item rerun** on frozen `36e056f`
+(10000-call arm, 4/4 concurrency) produced **68 correct / 12 incorrect /
+12 unsolved / 8 ambiguous; strict 18/100; 88/100 candidates; 12 unsolved all
+`FIELD_VALUE`; 1459 requests; 9.739M tokens; 14.59 calls/item.** The earlier
+96/97 figures were targeted repair reruns, not this full run. The TS loop now
+exposes `exact_check_expr` and `bounded_enumeration` and emits a `CERT1` final
+certificate, but `FIELD_VALUE`/binding-schema stability is the immediate
+blocker. See `docs/REAL_MODEL_PILOT_20261019.md` and
+`/tmp/astra-rerun-ab-10000-20261021-TrfJBe/`.
 G0 source inventory and deployment facts are supporting work, not a competing
 math-feature stream. DSH authors implementation/tests; the supervisor reviews,
 applies and independently verifies them. No parallel coding agents are used.

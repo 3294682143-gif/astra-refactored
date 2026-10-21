@@ -10,6 +10,33 @@ through the real injected public client. Two judge numbers are reported:
 
 The two must not be mixed.
 
+## A full 100-item rerun (2026-10-21, current code)
+
+This is the **current full-run result** and supersedes the targeted-repair
+numbers as the headline score.
+
+- Data root: `/tmp/astra-rerun-ab-10000-20261021-TrfJBe/`
+- Frozen submission: commit `36e056f`, bundle sha256
+  `f667d344665430ef92d214fd9c9047b736b9c01d71ef8dcf1a421ba7800326b6`
+- Input: frozen `input.test0.jsonl`, sha256
+  `d98995104bbedbca845a1af05a5629eb1b1c184642e28da2b23416e8a5611d0c`
+- Runner: item concurrency 4, API concurrency 4, arm `max_model_calls=10000`,
+  per-item profile 256/64/2/2/1/2/8/1, max_tokens 8192.
+- Per-item review: `A_item_review_v2.md` / `.json`.
+- **68 correct / 12 incorrect / 12 unsolved / 8 ambiguous**
+- strict `ReferenceJudge`: **18/100**
+- candidates: **88/100**; all 12 unsolved are `FIELD_VALUE` + `NO_CANDIDATE`
+- 1459 outer requests / 1459 attempts; 9,739,322 tokens; 14.59 calls/item
+
+Unsolved: `#2,#6,#12,#15,#16,#35,#37,#43,#82,#86,#88,#100`.
+Incorrect: `#7,#17,#19,#20,#21,#23,#30,#38,#46,#52,#70,#97`.
+Ambiguous: `#8,#13,#27,#45,#48,#84,#95,#96`.
+
+The earlier 96/97 figures were **targeted repair reruns**, not this full run.
+In particular `#12` and `#35` were fixed in targeted reruns but still ended
+`FIELD_VALUE` in this single full run. The immediate blocker is
+`FIELD_VALUE`/binding-schema stability, not another accuracy claim.
+
 ## Full 100-item run (maxConsensus=2, audit prompt)
 
 - Input: `/home/ma-user/work/input/test0.txt`, sha256
