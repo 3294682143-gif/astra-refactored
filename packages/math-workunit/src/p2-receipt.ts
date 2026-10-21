@@ -15,6 +15,7 @@ import {
   P2_PACKET_DELIVERY,
   P2_TRANSPORT_STATUS,
   P2Error,
+  canonicalizeP2WorkPacketText,
   detectLoneSurrogates,
   p2Snapshot,
   parseP2WorkPacketAny,
@@ -24,6 +25,7 @@ import {
   type P2PacketDelivery,
   type P2Task,
   type P2TransportStatus,
+  type P2TrustedWorkBinding,
   type Scope,
 } from "@astra/protocol";
 import { workHash, workRefKey, workSeq, workShort } from "./p2-context.js";
@@ -249,9 +251,25 @@ export function readWorkReceipt(
 
   const trusted = trustedInputRefs(task);
 
+  // The eight identity fields are control data, not model authority. Replace
+  // only those fields with the trusted contract/task/scope/route/request
+  // values before the strict packet parser; the raw receipt text and its hash
+  // remain untouched. This eliminates stochastic hash/session copy errors
+  // without accepting any malformed mathematical field.
+  const binding: P2TrustedWorkBinding = {
+    sessionId: workShort(contract.envelope.sessionId),
+    problemHash: workHash(contract.problemFullText),
+    contractVersion: workSeq(contract.contractVersion),
+    taskId: workShort(task.taskId),
+    goalId: workShort(task.goalId),
+    scopeId: workShort(scope.scopeId),
+    routeId: workShort(routeId),
+    sourceRequestId: workShort(sourceRequestId),
+  };
   let packet: P2AcceptedWorkPacket | null = null;
   try {
-    packet = parseP2WorkPacketAny(raw.text);
+    const canonicalText = canonicalizeP2WorkPacketText(raw.text, binding);
+    packet = parseP2WorkPacketAny(canonicalText);
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;

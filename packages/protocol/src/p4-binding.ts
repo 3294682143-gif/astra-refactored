@@ -11,6 +11,7 @@ import {
   P2_ERROR_CODES,
   P2Error,
   canonicalScope,
+  canonicalizeP2WorkPacketText,
   p2Snapshot,
   parseP2WorkPacketAny,
   validateP2GoalSpecs,
@@ -303,7 +304,23 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
   }
   let parsed: P2AcceptedWorkPacket;
   try {
-    parsed = parseP2WorkPacketAny(artifact.rawResponseText);
+    // The eight identity fields are control data, exactly as in
+    // `readWorkReceipt`: rebind them to the trusted contract/task/scope/route
+    // values before the strict parse, so a stochastic hash/session copy error
+    // is never a permanent binding rejection. Every mathematical field keeps
+    // exactly the bytes the model wrote.
+    parsed = parseP2WorkPacketAny(
+      canonicalizeP2WorkPacketText(artifact.rawResponseText, {
+        sessionId: contract.envelope.sessionId,
+        problemHash: contract.problemHash,
+        contractVersion: contract.contractVersion,
+        taskId: task.taskId,
+        goalId: task.goalId,
+        scopeId: scope.scopeId,
+        routeId: artifact.routeId,
+        sourceRequestId: artifact.sourceRequestId,
+      }),
+    );
   } catch (error) {
     if (error instanceof P2Error) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
@@ -314,8 +331,22 @@ function requireArtifact(contract: P2Contract, task: P2Task, artifact: P2Artifac
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
   const packet = artifact.packet;
-  if (!p4JsonEqual(packet.dependencies, task.inputArtifactRefs)) {
-    throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  // Dependency admission uses the same rule as the M3 receipt reader: a
+  // duplicate-free SUBSET of this task's own declared input refs. A foreign,
+  // repeated or version-shifted ref is still a fixed rejection.
+  const declaredRefs = new Set(
+    task.inputArtifactRefs.map((ref) => `${ref.artifactId}@${ref.artifactVersion}`),
+  );
+  const seenDependencies = new Set<string>();
+  for (const ref of packet.dependencies) {
+    const key = `${ref.artifactId}@${ref.artifactVersion}`;
+    if (seenDependencies.has(key)) {
+      throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+    }
+    if (!declaredRefs.has(key)) {
+      throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    }
+    seenDependencies.add(key);
   }
   if (packet.sessionId !== contract.envelope.sessionId) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);

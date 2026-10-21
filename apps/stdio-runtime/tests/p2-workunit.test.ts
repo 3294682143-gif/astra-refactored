@@ -107,10 +107,18 @@ test("transport dominates self-assessment and bad JSON keeps raw material", () =
   seq += 1;
   assert.throws(() => store.accept(task, receipt(contract, task, "bad2", seq, { text: "{oops" })), { code: "PACKET_SCHEMA" });
   seq += 1;
+  // A model-side identity copy error is rebound to the trusted receipt
+  // binding; it is never model authority and never a rejection.
   const wrongSession = { ...packet(contract, task, "bad3"), sessionId: "other" };
+  const rebound = store.accept(task, receipt(contract, task, "bad3", seq, { transportStatus: "TRUNCATED", text: JSON.stringify(wrongSession) }));
+  assert.equal(rebound.packet?.sessionId, contract.envelope.sessionId);
+  assert.equal(JSON.parse(rebound.rawResponseText)["sessionId"], "other");
+  seq += 1;
+  // An assumption outside the trusted scope is still a fixed rejection.
+  const foreignAssumption = { ...packet(contract, task, "bad4"), assumptions: ["undeclared"] };
   assert.throws(
-    () => store.accept(task, receipt(contract, task, "bad3", seq, { transportStatus: "TRUNCATED", text: JSON.stringify(wrongSession) })),
-    { code: "PACKET_BINDING" },
+    () => store.accept(task, receipt(contract, task, "bad4", seq, { transportStatus: "TRUNCATED", text: JSON.stringify(foreignAssumption) })),
+    { code: "PACKET_SCOPE_VIOLATION" },
   );
 });
 
@@ -189,13 +197,28 @@ test("atomic rejections and dependency negative controls leave state unchanged",
 
   bad(receipt(contract, task, "a", 11, { artifactId: "other" }), "DUPLICATE_REQUEST_ID");
 
-  const wrongVersion = { ...packet(contract, task, "b"), contractVersion: contract.contractVersion + 1 };
-  bad(receipt(contract, task, "b", 11, { text: JSON.stringify(wrongVersion) }), "VERSION_MISMATCH");
-  store.accept(task, receipt(contract, task, "b", 11));
+  const duplicateDependency = {
+    ...packet(contract, task, "b"),
+    dependencies: [
+      { artifactId: "a", artifactVersion: 1 },
+      { artifactId: "a", artifactVersion: 1 },
+    ],
+  };
+  const dependentTask: P2Task = { ...task, inputArtifactRefs: [a1] };
+  bad(receipt(contract, task, "b", 11, { text: JSON.stringify(duplicateDependency) }), "DUPLICATE_ID", dependentTask);
+  // A duplicate-free subset of the declared input refs is admitted, exactly as
+  // the M3 receipt reader allows.
+  const subset = store.accept(dependentTask, receipt(contract, task, "b", 11, {
+    text: JSON.stringify({ ...packet(contract, task, "b"), dependencies: [] }),
+  }));
+  // The packet keeps its own reported subset; the store records the trusted
+  // declared refs of the task (conservative inclusion).
+  assert.deepEqual(subset.packet?.dependencies, []);
+  assert.deepEqual(subset.dependencies, [a1]);
   baseline = store.snapshot();
 
-  const wrongScope = { ...packet(contract, task, "c"), scopeId: "other" };
-  bad(receipt(contract, task, "c", 12, { text: JSON.stringify(wrongScope) }), "SCOPE_MISMATCH");
+  const extraKey = { ...packet(contract, task, "c"), extraField: 1 };
+  bad(receipt(contract, task, "c", 12, { text: JSON.stringify(extraKey) }), "PACKET_SCHEMA");
 
   const extraAssumption = { ...packet(contract, task, "d"), assumptions: ["undeclared"] };
   bad(receipt(contract, task, "d", 12, { text: JSON.stringify(extraAssumption) }), "PACKET_SCOPE_VIOLATION");

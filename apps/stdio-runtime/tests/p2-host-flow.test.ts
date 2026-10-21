@@ -176,9 +176,19 @@ test("delivery, scope and proof table", () => {
   const shortResult = resultOf(short.sent[2]!);
   assert.equal(shortResult["status"], "unsolved");
   assert.equal(shortResult["artifactCount"], 0);
+  // A forged scopeId is control data: it is rebound to the trusted scope, so
+  // the packet is accepted under that scope and never under the claimed one.
+  const forged = setup();
+  const rebound = JSON.parse(packet(forged.callback)) as Record<string, unknown>;
+  rebound["scopeId"] = "other-scope";
+  forged.flow.handle(receipt(forged.callback, { text: JSON.stringify(rebound) }));
+  const reboundResult = resultOf(forged.sent[2]!);
+  assert.equal(reboundResult["status"], "candidate");
+  assert.equal(reboundResult["artifactCount"], 1);
+  // An assumption outside the trusted scope is still a fixed rejection.
   const wrong = setup();
   const bad = JSON.parse(packet(wrong.callback)) as Record<string, unknown>;
-  bad["scopeId"] = "other-scope";
+  bad["assumptions"] = ["undeclared"];
   wrong.flow.handle(receipt(wrong.callback, { text: JSON.stringify(bad) }));
   const wrongResult = resultOf(wrong.sent[2]!);
   assert.equal(wrongResult["status"], "unsolved");

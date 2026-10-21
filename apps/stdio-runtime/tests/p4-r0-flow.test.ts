@@ -323,8 +323,20 @@ test("group 3: R0 stop, missing slots and malformed work", () => {
   assert.equal(missingWork.summary.stopReason, "FIXTURE_EXHAUSTED");
   assert.equal(missingWork.privateState.artifacts.length, 0);
 
+  // A packet that echoes a stale request id is control-copy noise: the trusted
+  // receipt request id is the only authority, so the artifact is accepted and
+  // carries the trusted id.
+  const staleId = runP4R0Fixture(problem, session, {
+    r0: complete(r0Report(prep)),
+    work: complete(workRaw(contract, "model-1").raw),
+  }, options);
+  assert.equal(staleId.summary.workCalls, 1);
+  for (const entry of staleId.privateState.artifacts) {
+    assert.equal(entry.artifact.sourceRequestId, "model-2");
+    assert.equal(entry.artifact.packet?.sourceRequestId, "model-2");
+  }
   const badWork: readonly P4FixtureReceipt[] = [
-    complete(workRaw(contract, "model-1").raw),
+    complete(JSON.stringify({ ...(JSON.parse(work2.raw) as Record<string, unknown>), assumptions: ["undeclared"] })),
     { transportStatus: "TRUNCATED", text: work2.raw },
     { transportStatus: "ERROR", text: work2.raw },
     { transportStatus: "UNKNOWN", text: work2.raw },

@@ -13,6 +13,7 @@ import {
   P2Error,
   P3_TOOL_NAMES,
   canonicalScope,
+  canonicalizeP2WorkPacketText,
   detectLoneSurrogates,
   p2Snapshot,
   parseP2WorkPacketAny,
@@ -745,7 +746,23 @@ function checkRevisionTarget(
   }
   let parsed: unknown;
   try {
-    parsed = parseP2WorkPacketAny(rawText);
+    // Mirror `readWorkReceipt`: the eight identity fields are control data, so
+    // the reconstruction rebinds them to this row's trusted contract/task/
+    // scope/route values before the strict parse. The mathematical fields keep
+    // exactly the bytes the model wrote, and the raw text and its hash are
+    // untouched.
+    parsed = parseP2WorkPacketAny(
+      canonicalizeP2WorkPacketText(rawText, {
+        sessionId: contract.envelope.sessionId,
+        problemHash: contract.problemHash,
+        contractVersion: contract.contractVersion,
+        taskId: task.taskId,
+        goalId: task.goalId,
+        scopeId: task.scopeId,
+        routeId: route.routeId,
+        sourceRequestId: row.sourceRequestId,
+      }),
+    );
   } catch (error) {
     if (error instanceof P2Error) {
       fail(P2_ERROR_CODES.PACKET_BINDING);

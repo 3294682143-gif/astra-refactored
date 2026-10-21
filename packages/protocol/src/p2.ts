@@ -1215,4 +1215,64 @@ export function p2CodeOf(result: { readonly ok: false; readonly code: ErrorCode 
     : P2_ERROR_CODES.PACKET_SCHEMA;
 }
 
+/** Trusted identity fields of one WorkPacket. These are never model authority. */
+export interface P2TrustedWorkBinding {
+  readonly sessionId: string;
+  readonly problemHash: string;
+  readonly contractVersion: number;
+  readonly taskId: string;
+  readonly goalId: string;
+  readonly scopeId: string;
+  readonly routeId: string;
+  readonly sourceRequestId: string;
+}
+
+const P2_TRUSTED_BINDING_FIELDS = [
+  "sessionId",
+  "problemHash",
+  "contractVersion",
+  "taskId",
+  "goalId",
+  "scopeId",
+  "routeId",
+  "sourceRequestId",
+] as const;
+
+/**
+ * Return the model packet text with only its eight control-identity fields
+ * replaced by trusted values. The strict packet parser still runs afterwards;
+ * this function never repairs mathematics or adds missing content.
+ *
+ * It is intentionally separate from `parseP2WorkPacketAny`: callers that do
+ * not own a trusted binding keep the fully strict, model-value-checking path.
+ */
+export function canonicalizeP2WorkPacketText(
+  text: string,
+  binding: P2TrustedWorkBinding,
+): string {
+  if (typeof text !== "string") {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const parsed = parseStrictJson(text, { type: "object" });
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const record = parsed as Record<string, unknown>;
+  const version = record["schemaVersion"];
+  if (
+    version !== P2_WORK_PACKET_SCHEMA_VERSION &&
+    version !== P2_WORK_PACKET_SCHEMA_VERSION_V2 &&
+    version !== P2_WORK_PACKET_SCHEMA_VERSION_V3 &&
+    version !== P2_WORK_PACKET_SCHEMA_VERSION_V4 &&
+    version !== P2_WORK_PACKET_SCHEMA_VERSION_V5
+  ) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const copy: Record<string, unknown> = { ...record };
+  for (const field of P2_TRUSTED_BINDING_FIELDS) {
+    copy[field] = binding[field];
+  }
+  return JSON.stringify(copy);
+}
+
 export type { ParseResult };

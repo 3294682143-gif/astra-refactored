@@ -407,7 +407,26 @@ function parseP2WorkPacketAny(text6) {
   });
   return p2Snapshot(parsed);
 }
-var MAX_SAFE, MAX_DEPTH, P2_WORK_PACKET_SCHEMA_VERSION, P2_WORK_PACKET_SCHEMA_VERSION_V2, P2_WORK_PACKET_SCHEMA_VERSION_V3, P2_WORK_PACKET_SCHEMA_VERSION_V4, P2_WORK_PACKET_SCHEMA_VERSION_V5, P2_LIMITS, P2_ERROR_CODES, P2Error, P2_GOAL_KIND, GOAL_SPEC_FIELDS, P2_OBLIGATION_KIND, P2_ANSWER_OBLIGATION_KINDS, P2_ANSWER_OBLIGATION_BY_GOAL, P2_TASK_DELIVERY, P2_PACKET_DELIVERY, P2_TRANSPORT_STATUS, P2_TASK_YIELD_REASON, P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION, SCOPE_FIELDS, GOAL_ID_PATTERN, SHORT, TEXT, SHORT_LIST, REF, WORK_PACKET_SCHEMA, P2_WORK_PACKET_SCHEMA, PROPOSAL_MECHANISM_SCHEMA, WORKFLOW_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV2, DEPENDENT_TASK_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV3, ARTIFACT_REDO_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV4, SCOPE_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV5;
+function canonicalizeP2WorkPacketText(text6, binding) {
+  if (typeof text6 !== "string") {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const parsed = parseStrictJson(text6, { type: "object" });
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const record = parsed;
+  const version = record["schemaVersion"];
+  if (version !== P2_WORK_PACKET_SCHEMA_VERSION && version !== P2_WORK_PACKET_SCHEMA_VERSION_V2 && version !== P2_WORK_PACKET_SCHEMA_VERSION_V3 && version !== P2_WORK_PACKET_SCHEMA_VERSION_V4 && version !== P2_WORK_PACKET_SCHEMA_VERSION_V5) {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const copy = { ...record };
+  for (const field of P2_TRUSTED_BINDING_FIELDS) {
+    copy[field] = binding[field];
+  }
+  return JSON.stringify(copy);
+}
+var MAX_SAFE, MAX_DEPTH, P2_WORK_PACKET_SCHEMA_VERSION, P2_WORK_PACKET_SCHEMA_VERSION_V2, P2_WORK_PACKET_SCHEMA_VERSION_V3, P2_WORK_PACKET_SCHEMA_VERSION_V4, P2_WORK_PACKET_SCHEMA_VERSION_V5, P2_LIMITS, P2_ERROR_CODES, P2Error, P2_GOAL_KIND, GOAL_SPEC_FIELDS, P2_OBLIGATION_KIND, P2_ANSWER_OBLIGATION_KINDS, P2_ANSWER_OBLIGATION_BY_GOAL, P2_TASK_DELIVERY, P2_PACKET_DELIVERY, P2_TRANSPORT_STATUS, P2_TASK_YIELD_REASON, P2_TASK_PROGRESS_EVENT_SCHEMA_VERSION, SCOPE_FIELDS, GOAL_ID_PATTERN, SHORT, TEXT, SHORT_LIST, REF, WORK_PACKET_SCHEMA, P2_WORK_PACKET_SCHEMA, PROPOSAL_MECHANISM_SCHEMA, WORKFLOW_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV2, DEPENDENT_TASK_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV3, ARTIFACT_REDO_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV4, SCOPE_PROPOSAL_SCHEMA, cachedWorkPacketSchemaV5, P2_TRUSTED_BINDING_FIELDS;
 var init_p2 = __esm({
   "packages/protocol/dist/src/p2.js"() {
     "use strict";
@@ -692,6 +711,16 @@ var init_p2 = __esm({
       }
     };
     cachedWorkPacketSchemaV5 = null;
+    P2_TRUSTED_BINDING_FIELDS = [
+      "sessionId",
+      "problemHash",
+      "contractVersion",
+      "taskId",
+      "goalId",
+      "scopeId",
+      "routeId",
+      "sourceRequestId"
+    ];
   }
 });
 
@@ -1072,7 +1101,16 @@ function requireArtifact(contract, task, artifact) {
   }
   let parsed;
   try {
-    parsed = parseP2WorkPacketAny(artifact.rawResponseText);
+    parsed = parseP2WorkPacketAny(canonicalizeP2WorkPacketText(artifact.rawResponseText, {
+      sessionId: contract.envelope.sessionId,
+      problemHash: contract.problemHash,
+      contractVersion: contract.contractVersion,
+      taskId: task.taskId,
+      goalId: task.goalId,
+      scopeId: scope.scopeId,
+      routeId: artifact.routeId,
+      sourceRequestId: artifact.sourceRequestId
+    }));
   } catch (error) {
     if (error instanceof P2Error) {
       throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
@@ -1083,8 +1121,17 @@ function requireArtifact(contract, task, artifact) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
   const packet = artifact.packet;
-  if (!p4JsonEqual(packet.dependencies, task.inputArtifactRefs)) {
-    throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  const declaredRefs = new Set(task.inputArtifactRefs.map((ref) => `${ref.artifactId}@${ref.artifactVersion}`));
+  const seenDependencies = /* @__PURE__ */ new Set();
+  for (const ref of packet.dependencies) {
+    const key = `${ref.artifactId}@${ref.artifactVersion}`;
+    if (seenDependencies.has(key)) {
+      throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
+    }
+    if (!declaredRefs.has(key)) {
+      throw new P2Error(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    }
+    seenDependencies.add(key);
   }
   if (packet.sessionId !== contract.envelope.sessionId) {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
@@ -7154,9 +7201,20 @@ function readWorkReceipt(contract, task, scope, input) {
   }
   const supersedes = requireSupersedes(raw.supersedes);
   const trusted = trustedInputRefs(task);
+  const binding = {
+    sessionId: workShort(contract.envelope.sessionId),
+    problemHash: workHash(contract.problemFullText),
+    contractVersion: workSeq(contract.contractVersion),
+    taskId: workShort(task.taskId),
+    goalId: workShort(task.goalId),
+    scopeId: workShort(scope.scopeId),
+    routeId: workShort(routeId),
+    sourceRequestId: workShort(sourceRequestId)
+  };
   let packet = null;
   try {
-    packet = parseP2WorkPacketAny(raw.text);
+    const canonicalText = canonicalizeP2WorkPacketText(raw.text, binding);
+    packet = parseP2WorkPacketAny(canonicalText);
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;
@@ -12099,7 +12157,16 @@ function checkRevisionTarget(value, contract, task, route, trustedScope, provena
   }
   let parsed;
   try {
-    parsed = parseP2WorkPacketAny(rawText);
+    parsed = parseP2WorkPacketAny(canonicalizeP2WorkPacketText(rawText, {
+      sessionId: contract.envelope.sessionId,
+      problemHash: contract.problemHash,
+      contractVersion: contract.contractVersion,
+      taskId: task.taskId,
+      goalId: task.goalId,
+      scopeId: task.scopeId,
+      routeId: route.routeId,
+      sourceRequestId: row.sourceRequestId
+    }));
   } catch (error) {
     if (error instanceof P2Error) {
       fail17(P2_ERROR_CODES.PACKET_BINDING);

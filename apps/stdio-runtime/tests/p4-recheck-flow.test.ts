@@ -333,9 +333,11 @@ test("an upstream stop before the fourth call never opens a recheck", () => {
     derivation: "😀 Divide by x. Then x=1.",
     candidateProposal: "x=1",
   });
-  const wrongSource = JSON.stringify({
+  // A forged assumption is still a fixed rejection even though the eight
+  // identity fields of a repair packet are rebound to the trusted request.
+  const foreignAssumption = JSON.stringify({
     ...(JSON.parse(material.childRaw) as Record<string, unknown>),
-    sourceRequestId: "model-1",
+    assumptions: ["undeclared"],
   });
   const goodFour = receiptsFor(material, "NO_ISSUE");
   const withSlot = (
@@ -352,7 +354,7 @@ test("an upstream stop before the fourth call never opens a recheck", () => {
     ["repair3-truncated", withSlot(2, { transportStatus: "TRUNCATED", text: material.childRaw }), 3, 0],
     ["repair3-malformed", withSlot(2, { transportStatus: "COMPLETE", text: "{" }), 3, 0],
     ["repair3-noop", withSlot(2, { transportStatus: "COMPLETE", text: noopChild }), 3, 0],
-    ["repair3-wrong-source", withSlot(2, { transportStatus: "COMPLETE", text: wrongSource }), 3, 0],
+    ["repair3-foreign-assumption", withSlot(2, { transportStatus: "COMPLETE", text: foreignAssumption }), 3, 0],
   ];
   for (const [label, receipts, calls, rechecks] of cases) {
     const result = runP4RecheckFixture(RECHECK_PROBLEM, RECHECK_SESSION, receipts, options());

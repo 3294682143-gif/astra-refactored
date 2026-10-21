@@ -113,11 +113,20 @@ test("zero budget consumes nothing while a rejected packet consumes one", () => 
   const notReady = runP2Fixture(contract, [{ ...unit(1), taskId: "missing" }], options);
   assert.equal(notReady.summary.fixtureReceiptsConsumed, 0);
   assert.equal(notReady.summary.stopReason, "TASK_NOT_READY");
-  const badSession = runP2Fixture(contract, [unit(1, "COMPLETE", { sessionId: "other" })], options);
-  assert.equal(badSession.summary.fixtureReceiptsConsumed, 1);
-  assert.equal(badSession.summary.stopReason, "PACKET_REJECTED");
-  assert.equal(badSession.privateState.artifacts.length, 0);
-  assert.equal(badSession.privateState.requests[0]!.errorCode, "PACKET_BINDING");
+  // The eight packet identity fields are control data: a model copy error is
+  // rebound to the trusted binding instead of being accepted as authority or
+  // rejected as a mismatch.
+  const rebound = runP2Fixture(contract, [unit(1, "COMPLETE", { sessionId: "other", problemHash: "f".repeat(64) })], options);
+  assert.equal(rebound.summary.fixtureReceiptsConsumed, 1);
+  assert.equal(rebound.summary.status, "candidate");
+  assert.equal(rebound.summary.candidateProposal, "fixture candidate");
+  assert.equal(rebound.privateState.artifacts.length, 1);
+  // A packet whose mathematics is unusable is still a fixed rejection.
+  const blankClaim = runP2Fixture(contract, [unit(1, "COMPLETE", { claim: "   " })], options);
+  assert.equal(blankClaim.summary.fixtureReceiptsConsumed, 1);
+  assert.equal(blankClaim.summary.stopReason, "PACKET_REJECTED");
+  assert.equal(blankClaim.privateState.artifacts.length, 0);
+  assert.equal(blankClaim.privateState.requests[0]!.errorCode, "PACKET_DELIVERY");
 });
 
 const CHAIN_PROBLEM = "求全部实数解";
@@ -249,7 +258,7 @@ test("a late delivery is invalidated and a rejected packet keeps the first candi
   assert.equal(late.summary.fixtureReceiptsConsumed, 1);
   assert.equal(late.privateState.artifacts[0]!.availability, "STALE");
   assert.equal(late.summary.trace[0]!.code, "DEADLINE_EXCEEDED");
-  const rejected = runP2Fixture(chainContract, [chainUnit(1), { ...chainUnit(2), text: JSON.stringify({ ...JSON.parse(chainUnit(2).text), sessionId: "wrong" }) }], options);
+  const rejected = runP2Fixture(chainContract, [chainUnit(1), { ...chainUnit(2), text: JSON.stringify({ ...JSON.parse(chainUnit(2).text), claim: "  " }) }], options);
   assert.equal(rejected.summary.fixtureReceiptsConsumed, 2);
   assert.equal(rejected.summary.stopReason, "PACKET_REJECTED");
   assert.equal(rejected.summary.candidateProposal, "candidate-1");
