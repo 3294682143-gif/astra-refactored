@@ -17,3 +17,5 @@ wasi-assets/
 mathagent/resources/platform-python.json
 *.sqlite3
 *.sqlite3-*
+var/*
+!var/**/.gitkeep

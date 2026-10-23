@@ -1,0 +1,40 @@
+{
+  "properties": {
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "server_version": {
+      "default": "0.1.0",
+      "title": "Server Version",
+      "type": "string"
+    },
+    "supported_engines": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supported Engines",
+      "type": "array"
+    },
+    "max_concurrent_runs": {
+      "default": 1,
+      "title": "Max Concurrent Runs",
+      "type": "integer"
+    },
+    "supports_cancellation": {
+      "default": true,
+      "title": "Supports Cancellation",
+      "type": "boolean"
+    },
+    "default_budget": {
+      "additionalProperties": true,
+      "title": "Default Budget",
+      "type": "object"
+    }
+  },
+  "title": "CapabilitiesDto",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-contract-version": "1.0.0"
+}

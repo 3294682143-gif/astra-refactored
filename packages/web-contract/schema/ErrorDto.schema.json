@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "ErrorCategory": {
+      "description": "错误归类 (供前端 UI 决策重试/降级).",
+      "enum": [
+        "validation",
+        "provider",
+        "timeout",
+        "budget",
+        "internal"
+      ],
+      "title": "ErrorCategory",
+      "type": "string"
+    }
+  },
+  "description": "错误对象.",
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Code",
+      "type": "string"
+    },
+    "message": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/ErrorCategory",
+      "default": "internal"
+    },
+    "retryable": {
+      "default": false,
+      "title": "Retryable",
+      "type": "boolean"
+    },
+    "details": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Details"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "ErrorDto",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-contract-version": "1.0.0"
+}

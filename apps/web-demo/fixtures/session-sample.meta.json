@@ -1,0 +1,67 @@
+{
+  "generatedBy": "apps/demo-web/tools/make-snapshot.mjs",
+  "producedByRepoCode": true,
+  "problemText": "Compute 2+2",
+  "options": {
+    "remainingMs": 20000,
+    "maxModelCalls": 8,
+    "maxWorkUnits": 3,
+    "maxEffects": 1,
+    "maxReviews": 1,
+    "maxR0": 1
+  },
+  "schemaVersion": "session-log-v1",
+  "version": 11,
+  "eventCount": 11,
+  "census": {
+    "distinctKinds": 6,
+    "perKind": {
+      "CONTRACT": 1,
+      "FINAL": 1,
+      "MODEL_REQUEST": 4,
+      "REVIEW_CHALLENGE": 1,
+      "SESSION_INIT": 1,
+      "WORKUNIT": 3
+    },
+    "missingKinds": [
+      "CONTRACT_REVISED",
+      "TASK_STARTED",
+      "TOOL_OBSERVATION",
+      "METHOD_LOAD",
+      "REPAIR",
+      "CONSENSUS",
+      "TRUNCATION"
+    ]
+  },
+  "replay": {
+    "ok": true,
+    "mismatches": [],
+    "requestCount": 4,
+    "finalStatus": "candidate",
+    "finalCandidateVerified": false
+  },
+  "tamperCheck": {
+    "ok": false,
+    "mismatches": [
+      3,
+      3,
+      4,
+      5,
+      5,
+      6,
+      7,
+      7,
+      8,
+      9,
+      9,
+      10,
+      11,
+      11
+    ]
+  },
+  "runSummary": {
+    "status": "candidate",
+    "finalResponse": "4",
+    "stopReason": "REVIEWS_COMPLETE"
+  }
+}
