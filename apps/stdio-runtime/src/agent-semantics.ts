@@ -986,6 +986,73 @@ const GF2_NULLSPACE_ROUTE: SemanticToolRoute = Object.freeze({
     '{"rows":[<nonnegative integer bit rows>],"width":<integer 1..8>}',
 });
 
+const TRANSITION_COUNT_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "TRANSITION_COUNT",
+  toolName: "transition_count",
+  operation: "TRANSITION_COUNT",
+  argsTemplate:
+    '{"length":3,"num_states":2,"transitions":[[0,1],[1,0],[1,1]]}',
+});
+
+const INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "INDEPENDENCE_POLYNOMIAL_CHAIN",
+  toolName: "independence_polynomial_chain",
+  operation: "INDEPENDENCE_POLYNOMIAL_CHAIN",
+  argsTemplate: '{"n":5}',
+});
+
+const COUNT_BY_DIGIT_PROPERTY_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "COUNT_BY_DIGIT_PROPERTY",
+  toolName: "count_by_digit_property",
+  operation: "COUNT_BY_DIGIT_PROPERTY",
+  argsTemplate:
+    '{"digit_set":[1,2,3],"max_digits":3,"modulus":3,"residue":0,"include_zero":false}',
+});
+
+const ROOK_NUMBERS_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "ROOK_NUMBERS",
+  toolName: "rook_numbers",
+  operation: "ROOK_NUMBERS",
+  argsTemplate: '{"n":3,"forbidden":[[0,0],[1,1],[2,2]]}',
+});
+
+const COUNT_AVOIDING_PERMUTATIONS_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "COUNT_AVOIDING_PERMUTATIONS",
+  toolName: "count_avoiding_permutations",
+  operation: "COUNT_AVOIDING_PERMUTATIONS",
+  argsTemplate: '{"n":4,"forbidden":[[0,0],[1,1],[2,2],[3,3]]}',
+});
+
+const MARKOV_EXPECTED_STEPS_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "MARKOV_EXPECTED_STEPS",
+  toolName: "markov_expected_steps",
+  operation: "MARKOV_EXPECTED_STEPS",
+  argsTemplate:
+    '{"transition":[[0.0,1.0,0.0],[0.5,0.0,0.5],[0.0,0.0,1.0]],"start":0,"targets":[2]}',
+});
+
+const COVER_TIME_COMPLETE_GRAPH_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "COVER_TIME_COMPLETE_GRAPH",
+  toolName: "cover_time_complete_graph",
+  operation: "COVER_TIME_COMPLETE_GRAPH",
+  argsTemplate: '{"num_vertices":4}',
+});
+
+const FINITE_DIFFERENCE_DERIVATIVE_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "FINITE_DIFFERENCE_DERIVATIVE",
+  toolName: "finite_difference_derivative",
+  operation: "FINITE_DIFFERENCE_DERIVATIVE",
+  argsTemplate: '{"f":"x**3","x":1.0,"h":0.01,"method":"central"}',
+});
+
+const RICHARDSON_EXTRAPOLATE_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "RICHARDSON_EXTRAPOLATE",
+  toolName: "richardson_extrapolate",
+  operation: "RICHARDSON_EXTRAPOLATE",
+  argsTemplate:
+    '{"f":"x**3","x":1.0,"h":0.01,"method":"central","order":2}',
+});
+
 function exactRoute(operation: string, argsTemplate: string): SemanticToolRoute {
   return Object.freeze({
     id: `EXACT_${operation}`,
@@ -1030,7 +1097,128 @@ function continuousProbabilityWording(problemText: string): boolean {
   );
 }
 
+/**
+ * Phase-3 finite-state/transition wording. The state-transition family needs
+ * both an explicit transition/graph context and a state-count or length/step
+ * phrase; random-walk and Markov items keep their own more specific family.
+ */
+function transitionCountWording(problemText: string): boolean {
+  const transitionContext =
+    /(状态转移|转移图|(?:有向图|directed\s+graph)[^\n。；;]{0,24}(?:顶点序列|vertex\s+sequences?)|transition\s+graph|state\s+transitions?|\btransitions?\b)/iu.test(
+      problemText,
+    );
+  if (!transitionContext) {
+    return false;
+  }
+  if (
+    /(马尔可夫|Markov|转移概率矩阵|transition\s+probability\s+matrix|随机游走|random\s+walk|覆盖时间|cover\s+time)/iu.test(
+      problemText,
+    )
+  ) {
+    return false;
+  }
+  return /(?:状态数|状态个数|\b[0-9]+\s*个状态|\b[0-9]+\s+states\b|\bnum(?:ber)?\s+of\s+states\b|步数|步长|长度|长为|\blength\b|\bsteps?\b)/iu.test(
+    problemText,
+  );
+}
+
+/** Independent-set coefficients of the explicit path P_n. */
+function independencePolynomialChainWording(problemText: string): boolean {
+  if (/(独立集多项式|independence\s+polynomial)/iu.test(problemText)) {
+    return true;
+  }
+  const pathContext =
+    /(?:路图|路径图|path\s+(?:graph|P\s*_?\s*\{?\s*n\s*\}?)|P\s*_?\s*\{?\s*n\s*\}?)/iu.test(
+      problemText,
+    );
+  if (pathContext && /(?:独立集|independent\s+sets?)/iu.test(problemText)) {
+    return true;
+  }
+  return /(?:不相邻顶点[^\n。；;]{0,12}子集|non[- ]?adjacent\s+vertex\s+subsets?)/iu.test(
+    problemText,
+  );
+}
+
+/** Decimal digit-set / digit-DP property counting. */
+function countByDigitPropertyWording(problemText: string): boolean {
+  return /(十进制数位|数位\s*DP|digit\s*DP|digit\s+property|数字集合[^\n。；;]{0,20}组成|(?:各位|每个)数字[^\n。；;]{0,24}(?:属于|来自|在)[^\n。；;]{0,24}集合[^\n。；;]{0,24}(?:整除|倍数)|digits?[^\n。；;]{0,24}(?:from|belong)[^\n。；;]{0,24}(?:set|collection)[^\n。；;]{0,32}(?:divisible|multiple))/iu.test(
+    problemText,
+  );
+}
+
+/** Rook polynomial / rook numbers on an explicit forbidden board. */
+function rookNumbersWording(problemText: string): boolean {
+  return /(车多项式|禁位棋盘[^\n。；;]{0,20}(?:车数|车多项式)|rook\s+polynomial|rook\s+numbers?)/iu.test(
+    problemText,
+  );
+}
+
+/** Permutations avoiding an explicit forbidden-cell/position set. */
+function countAvoidingPermutationsWording(problemText: string): boolean {
+  return /(错排|禁位排列|禁止位置[^\n。；;]{0,16}排列|permutations?\s+avoiding[^\n。；;]{0,24}(?:forbidden|cells?)|derangements?|forbidden\s+(?:positions?|cells?)[^\n。；;]{0,24}permutations?)/iu.test(
+    problemText,
+  );
+}
+
+/** A Markov-chain hitting/absorption expectation, not a stationary law. */
+function markovExpectedStepsWording(problemText: string): boolean {
+  const markovContext =
+    /(马尔可夫链|马尔可夫|Markov\s+chain|转移概率矩阵|transition\s+probability\s+matrix)/iu.test(
+      problemText,
+    );
+  if (!markovContext) {
+    return false;
+  }
+  return /(期望[^\n。；;]{0,8}步数|期望步数|首次击中时间|击中时间|吸收时间|expected\s+(?:number\s+of\s+)?steps?|hitting\s+time|absorption\s+time)/iu.test(
+    problemText,
+  );
+}
+
+/** Cover time of the uniform no-self-loop walk on the complete graph K_n. */
+function coverTimeCompleteGraphWording(problemText: string): boolean {
+  const completeGraph =
+    /(完全图|complete\s+graph|(?<![A-Za-z0-9])K\s*_?\s*(?:\{?\s*n\s*\}?|[0-9]+)(?![A-Za-z0-9]))/iu.test(
+      problemText,
+    );
+  if (!completeGraph) {
+    return false;
+  }
+  return /(覆盖时间|访问(?:所有|全部)顶点[^\n。；;]{0,24}(?:期望|平均)[^\n。；;]{0,12}(?:步数|步|时间)|访问(?:所有|全部)顶点[^\n。；;]{0,16}(?:需要|要)[^\n。；;]{0,8}(?:多少|几)步|cover\s+time|expected\s+(?:number\s+of\s+)?steps?[^\n。；;]{0,32}(?:visit|cover)\s+all\s+vertices|time\s+to\s+visit\s+all\s+vertices)/iu.test(
+    problemText,
+  );
+}
+
+/** Plain finite-difference derivative at an explicit step, never Richardson. */
+function finiteDifferenceDerivativeWording(problemText: string): boolean {
+  if (/(Richardson|理查森|外推|extrapolat)/iu.test(problemText)) {
+    return false;
+  }
+  return /(有限差分|中心差分|向前差分|向后差分|前向差分|finite[-\s]+difference(?:\s+derivative)?|central\s+difference|forward\s+difference|backward\s+difference)/iu.test(
+    problemText,
+  );
+}
+
+/** Explicit Richardson extrapolation wording. */
+function richardsonExtrapolateWording(problemText: string): boolean {
+  return /(?:Richardson\s*(?:外推|extrapolat\w*)|理查森外推)/iu.test(problemText);
+}
+
 function finiteCountingWording(problemText: string): boolean {
+  // Phase-3 families are appended after the seventeen existing routes, so the
+  // broad finite-enumeration family must yield to their explicit wording.
+  if (
+    transitionCountWording(problemText) ||
+    independencePolynomialChainWording(problemText) ||
+    countByDigitPropertyWording(problemText) ||
+    rookNumbersWording(problemText) ||
+    countAvoidingPermutationsWording(problemText) ||
+    markovExpectedStepsWording(problemText) ||
+    coverTimeCompleteGraphWording(problemText) ||
+    finiteDifferenceDerivativeWording(problemText) ||
+    richardsonExtrapolateWording(problemText)
+  ) {
+    return false;
+  }
   const continuous = continuousProbabilityWording(problemText);
   const probabilityDraw =
     /(概率|probability)/iu.test(problemText) &&
@@ -1061,6 +1249,11 @@ function finiteCountingWording(problemText: string): boolean {
 }
 
 function polynomialExpandWording(problemText: string): boolean {
+  // Rook and path-independence polynomials expose coefficients, but their
+  // finite combinatorial families own those requests.
+  if (rookNumbersWording(problemText) || independencePolynomialChainWording(problemText)) {
+    return false;
+  }
   // The determinant/eigenvalue family owns characteristic-polynomial items.
   if (
     /(特征多项式|特征值|行列式|determinant|characteristic\s+polynomial|eigenvalue)/iu.test(
@@ -1518,6 +1711,37 @@ export function semanticToolRoute(problemText: string): SemanticToolRoute | null
   if (gf2RankWording(problemText)) {
     return GF2_RANK_ROUTE;
   }
+  // Phase-3 families are appended after every pre-existing route, so the
+  // original seventeen priorities and results stay untouched. Within this
+  // block the Markov/random-walk and Richardson exclusions in the shared
+  // predicates keep the overlapping families disjoint.
+  if (transitionCountWording(problemText)) {
+    return TRANSITION_COUNT_ROUTE;
+  }
+  if (independencePolynomialChainWording(problemText)) {
+    return INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE;
+  }
+  if (countByDigitPropertyWording(problemText)) {
+    return COUNT_BY_DIGIT_PROPERTY_ROUTE;
+  }
+  if (rookNumbersWording(problemText)) {
+    return ROOK_NUMBERS_ROUTE;
+  }
+  if (countAvoidingPermutationsWording(problemText)) {
+    return COUNT_AVOIDING_PERMUTATIONS_ROUTE;
+  }
+  if (markovExpectedStepsWording(problemText)) {
+    return MARKOV_EXPECTED_STEPS_ROUTE;
+  }
+  if (coverTimeCompleteGraphWording(problemText)) {
+    return COVER_TIME_COMPLETE_GRAPH_ROUTE;
+  }
+  if (finiteDifferenceDerivativeWording(problemText)) {
+    return FINITE_DIFFERENCE_DERIVATIVE_ROUTE;
+  }
+  if (richardsonExtrapolateWording(problemText)) {
+    return RICHARDSON_EXTRAPOLATE_ROUTE;
+  }
   return null;
 }
 /**
@@ -1691,6 +1915,15 @@ const TOOL_ROUTE_PREFERRED_METHOD: Readonly<Record<string, string>> = Object.fre
   POLYNOMIAL_FUNCTION_CHECK: "domain-equivalence",
   GF2_RANK: "linearization-spectral",
   GF2_NULLSPACE: "linearization-spectral",
+  TRANSITION_COUNT: "finite-state-dp",
+  INDEPENDENCE_POLYNOMIAL_CHAIN: "finite-state-dp",
+  COUNT_BY_DIGIT_PROPERTY: "finite-state-dp",
+  ROOK_NUMBERS: "counting-bijections",
+  COUNT_AVOIDING_PERMUTATIONS: "counting-bijections",
+  MARKOV_EXPECTED_STEPS: "conditioning-indicators",
+  COVER_TIME_COMPLETE_GRAPH: "conditioning-indicators",
+  FINITE_DIFFERENCE_DERIVATIVE: "numerical-approximation",
+  RICHARDSON_EXTRAPOLATE: "numerical-approximation",
 });
 
 /**

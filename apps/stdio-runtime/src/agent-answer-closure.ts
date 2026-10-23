@@ -37,7 +37,12 @@ export type AnswerClosureKind =
   | "OLS_MISMATCH"
   | "GROUP_STRUCTURE_MISMATCH"
   | "OPTION_NUMERIC_CONTRADICTION"
-  | "OPTION_VERDICT_CONTRADICTION";
+  | "OPTION_VERDICT_CONTRADICTION"
+  | "GF2_RANK_MISMATCH"
+  | "GF2_NULLITY_MISMATCH"
+  | "EXACT_COUNT_MISMATCH"
+  | "COVER_TIME_MISMATCH"
+  | "IDENTITY_VERDICT_MISMATCH";
 
 /**
  * What actually grounds one defect. This is provenance for the operator metric,
@@ -1404,6 +1409,556 @@ function optionVerdictContradictionDefect(
   return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
 
+// ---------------------------------------------------------------------------
+// Observation-grounded diagnostics for the exact count/algebra/verdict tools:
+//
+//   `gf2_rank`                  bare integer rank
+//   `gf2_nullspace`             kernel basis array -> nullity = basis length
+//   `bounded_enumeration`       `{ count }` (an exact count, never a fraction)
+//   `transition_count`          bare non-negative integer count
+//   `count_by_digit_property`   bare non-negative integer count
+//   `count_avoiding_permutations` bare non-negative integer count
+//   `cover_time_complete_graph` exact rational (`n` or `p/q`)
+//   `polynomial_function_check` `{ identity_holds, witness? }`
+//
+// The same fail-closed contract as the option diagnostics above holds here:
+//
+//   - a number is attributed to a quantity only through an explicit label in
+//     the SAME clause; any digit left unattributed makes that clause unusable;
+//   - two different values for one quantity make that quantity ambiguous, and
+//     an ambiguous statement never produces a defect;
+//   - an absent, malformed or internally ambiguous observation yields nothing;
+//   - a negated or hedged clause (`不/非/未/可能/not/may/might/non-`) asserts
+//     nothing;
+//   - chosen options are read only for the letters the candidate selected, and
+//     prose outside the option block is never read;
+//   - a fraction/probability candidate is never compared to an integer count.
+// ---------------------------------------------------------------------------
+
+/** One exact quantity an observed tool reports and a statement may contradict. */
+type ValuedQuantityId = "GF2_RANK" | "GF2_NULLITY" | "EXACT_COUNT" | "COVER_TIME";
+
+/** One comparable quantity, with the exact label that states it in prose. */
+interface ValuedQuantityFamily {
+  readonly id: ValuedQuantityId;
+  readonly label: string;
+  /** Integer families compare as exact integers, never through a float. */
+  readonly integer: boolean;
+  readonly patterns: readonly RegExp[];
+}
+
+/**
+ * The GF(2) rank, only from an explicit binary-field label. A bare `秩为 3` is
+ * a rank over some unspecified field and is never compared with a GF(2) rank.
+ */
+const GF2_RANK_PATTERNS: readonly RegExp[] = [
+  /(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|mod\s*2)[^0-9]{0,16}?(?:秩|rank)[^0-9]{0,6}(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu,
+  /(?:秩|rank)\s*(?:为|是|等于|[:：=]|\bis\b)\s*([0-9]{1,6})\s*(?:over|在|于)\s*(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|F\s*_?2)/giu,
+];
+
+/** The nullspace dimension, only from an explicit nullspace/kernel label. */
+const GF2_NULLITY_PATTERNS: readonly RegExp[] = [
+  /(?:零空间|核空间|核)(?:的)?(?:维数|维度)\s*(?:为|是|等于|[:：=])?\s*([0-9]{1,6})/gu,
+  /(?:零空间|核空间)(?:的)?\s*(?:为|是|等于)\s*([0-9]{1,6})\s*维/gu,
+  /([0-9]{1,6})\s*维(?:的)?\s*(?:零空间|核空间)/gu,
+  /(?:nullity|null\s*-?space\s+dimension|dimension\s+of\s+the\s+null\s*-?space)\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu,
+  /(?:null\s*-?space|kernel)\s+(?:has\s+)?dimension\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu,
+];
+
+/** An exact count, only from an explicit counting label. */
+const EXACT_COUNT_PATTERNS: readonly RegExp[] = [
+  /(?:共有?|一共|总计|总共有?|恰有)\s*([0-9]{1,9})\s*(?:种|个|条|项|组)/gu,
+  /(?:个数|数目|数量|方案数|总数)\s*(?:为|是|等于|[:：=])?\s*([0-9]{1,9})/gu,
+  /([0-9]{1,9})\s*(?:种|个)?\s*(?:可能的?|方法|排列|方案|序列)/gu,
+  /\bcount\b\s*(?:为|是|等于|[:：=]|\bis\b)\s*([0-9]{1,9})/giu,
+];
+
+/** The expected cover time, only from an explicit cover-time label. */
+const COVER_TIME_PATTERNS: readonly RegExp[] = [
+  /(?:期望覆盖时间|覆盖时间|cover\s+time)\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([+-]?[0-9]{1,9}(?:\/[1-9][0-9]{0,8})?)/giu,
+  /\bE\s*\[\s*T\s*\]\s*=\s*([+-]?[0-9]{1,9}(?:\/[1-9][0-9]{0,8})?)/gu,
+];
+
+/**
+ * The compared families in their fixed declaration order. That order, then the
+ * statement-source order (candidate first, then the chosen options in letter
+ * order), is the deterministic order of one closure pass.
+ */
+const VALUED_QUANTITY_FAMILIES: readonly ValuedQuantityFamily[] = [
+  { id: "GF2_RANK", label: "GF(2) rank", integer: true, patterns: GF2_RANK_PATTERNS },
+  {
+    id: "GF2_NULLITY",
+    label: "nullspace dimension",
+    integer: true,
+    patterns: GF2_NULLITY_PATTERNS,
+  },
+  { id: "EXACT_COUNT", label: "exact count", integer: true, patterns: EXACT_COUNT_PATTERNS },
+  { id: "COVER_TIME", label: "expected cover time", integer: false, patterns: COVER_TIME_PATTERNS },
+];
+
+/** One observed exact value a statement can be compared against. */
+interface ObservedValuedQuantity {
+  readonly id: ValuedQuantityId;
+  readonly source: string;
+  /** Exact observed value as text, for the defect detail. */
+  readonly text: string;
+  /** Set for an integer-valued quantity, otherwise null. */
+  readonly integer: bigint | null;
+  /** Set for a rational-valued quantity, otherwise null. */
+  readonly rational: string | null;
+}
+
+/** The producers whose payload is one exact count, in fixed declaration order. */
+const COUNT_OBSERVATIONS: readonly { readonly name: string; readonly source: string }[] = [
+  { name: "bounded_enumeration", source: "the exact bounded enumeration" },
+  { name: "transition_count", source: "the exact transition count" },
+  { name: "count_by_digit_property", source: "the exact digit-property count" },
+  { name: "count_avoiding_permutations", source: "the exact forbidden-cell permutation count" },
+];
+
+/**
+ * Exact non-negative integer of a counting payload, or null.
+ *
+ * `bounded_enumeration` reports `{count}`; the three counting operators report
+ * a bare integer. A payload that carries the parts of a reduced fraction is NOT
+ * read as a plain integer: its numerator counts favourable cases of a
+ * probability question, which is a different quantity from "how many are
+ * there", so the plain-integer comparison is skipped instead of comparing a
+ * numerator with a total.
+ */
+function exactCountObservation(result: unknown): number | null {
+  const record = recordValue(result);
+  if (record !== null) {
+    const count = observationInteger(record["count"]);
+    if (count !== null && count >= 0) return count;
+    if (record["fraction"] !== undefined || record["total"] !== undefined) return null;
+    const favourable = observationInteger(record["favorable"]);
+    return favourable !== null && favourable >= 0 ? favourable : null;
+  }
+  const bare = observationInteger(result);
+  return bare !== null && bare >= 0 ? bare : null;
+}
+
+/**
+ * Nullity of a `gf2_nullspace` payload: the basis length.
+ *
+ * The payload is the basis array itself or an object carrying it under
+ * `nullspace`. Every vector has to be a bounded non-negative bit-packed integer
+ * before the length is trusted as an exact dimension.
+ */
+function nullityObservation(result: unknown): number | null {
+  if (Array.isArray(result)) {
+    if (result.length > 64) return null;
+    const valid = result.every(
+      (vector) => typeof vector === "number" && Number.isSafeInteger(vector) && vector >= 0,
+    );
+    return valid ? result.length : null;
+  }
+  const record = recordValue(result);
+  if (record === null) return null;
+  const basis = record["nullspace"];
+  return Array.isArray(basis) ? nullityObservation(basis) : null;
+}
+
+/**
+ * Exact rational of a producer payload (`n`, `n/d`, or `{value: ...}`), or null.
+ *
+ * A float, a decimal or a symbolic expression never participates: only an exact
+ * integer or an exact `p/q` string is comparable.
+ */
+function exactRationalFromPayload(value: unknown): string | null {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? String(value) : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.replace(/\s+/gu, "");
+    return exactRationalOf(trimmed) === null ? null : trimmed;
+  }
+  const record = recordValue(value);
+  return record === null ? null : exactRationalFromPayload(record["value"]);
+}
+
+/** Every quantity this run actually observed, in family declaration order. */
+function observedValuedQuantities(
+  observations: readonly ToolObservationView[] | null | undefined,
+): readonly ObservedValuedQuantity[] {
+  const out: ObservedValuedQuantity[] = [];
+  const rank = observationInteger(lastObservation(observations, "gf2_rank")?.result);
+  if (rank !== null && rank >= 0) {
+    out.push({
+      id: "GF2_RANK",
+      source: "the exact GF(2) elimination",
+      text: String(rank),
+      integer: BigInt(rank),
+      rational: null,
+    });
+  }
+  const nullity = nullityObservation(lastObservation(observations, "gf2_nullspace")?.result);
+  if (nullity !== null) {
+    out.push({
+      id: "GF2_NULLITY",
+      source: "the exact GF(2) kernel basis",
+      text: String(nullity),
+      integer: BigInt(nullity),
+      rational: null,
+    });
+  }
+  // Several counting operators may have run. With two different exact counts in
+  // one run the candidate's number can no longer be attributed to one of them,
+  // so no count is compared at all.
+  const counts: { readonly value: number; readonly source: string }[] = [];
+  for (const entry of COUNT_OBSERVATIONS) {
+    const count = exactCountObservation(lastObservation(observations, entry.name)?.result);
+    if (count !== null) counts.push({ value: count, source: entry.source });
+  }
+  const distinctCounts = [...new Set(counts.map((row) => row.value))];
+  if (distinctCounts.length === 1) {
+    out.push({
+      id: "EXACT_COUNT",
+      source: counts[counts.length - 1]!.source,
+      text: String(distinctCounts[0]!),
+      integer: BigInt(distinctCounts[0]!),
+      rational: null,
+    });
+  }
+  const cover = exactRationalFromPayload(
+    lastObservation(observations, "cover_time_complete_graph")?.result,
+  );
+  if (cover !== null) {
+    out.push({
+      id: "COVER_TIME",
+      source: "the exact cover-time closed form",
+      text: cover,
+      integer: null,
+      rational: cover,
+    });
+  }
+  return out;
+}
+
+/** One piece of text that may state a quantity: the candidate or one option. */
+interface ClaimSource {
+  /** Either `the candidate` or `option B`; used verbatim in the detail. */
+  readonly label: string;
+  readonly text: string;
+}
+
+/**
+ * The statements that may assert a quantity: the candidate first, then only the
+ * options the candidate actually chose, in letter order.
+ */
+function claimSources(problemText: string, candidate: string): readonly ClaimSource[] {
+  const sources: ClaimSource[] = [{ label: "the candidate", text: candidate }];
+  for (const option of chosenOptionTexts(problemText, candidate)) {
+    sources.push({ label: "option " + option.letter, text: option.text });
+  }
+  return sources;
+}
+
+/**
+ * Every quantity one statement explicitly asserts, in clause order.
+ *
+ * A number counts only when a quantity label in the SAME clause binds it. A
+ * clause that still carries an unattributed digit is dropped entirely (that is
+ * the "two or more numbers, at least one unattributed" silence), and so is a
+ * negated or hedged clause.
+ */
+function assertedValuedQuantities(
+  text: string,
+  families: readonly ValuedQuantityFamily[],
+): readonly { readonly family: ValuedQuantityFamily; readonly value: string }[] {
+  const asserted: { family: ValuedQuantityFamily; value: string }[] = [];
+  const body = text.length > MAX_VALUE_SCAN_CHARS ? text.slice(0, MAX_VALUE_SCAN_CHARS) : text;
+  for (const rawClause of body.split(CLAUSE_SPLIT)) {
+    const clause = rawClause.trim();
+    if (clause.length === 0) continue;
+    // A negated or hedged clause asserts nothing.
+    if (OPTION_ASSERTION_HEDGE.test(clause)) continue;
+    // 1. Mask labelled quantities these checks never compare.
+    const ignored: TextSpan[] = [];
+    for (const pattern of UNCOMPARED_LABELLED_QUANTITIES) {
+      for (const match of clause.matchAll(pattern)) {
+        ignored.push({ start: match.index ?? 0, length: match[0].length });
+      }
+    }
+    const work = maskSpans(clause, ignored);
+    // 2. Bind one number per family through its own explicit label.
+    const attributed: TextSpan[] = [];
+    const found: { family: ValuedQuantityFamily; value: string }[] = [];
+    for (const family of families) {
+      for (const pattern of family.patterns) {
+        for (const match of work.matchAll(pattern)) {
+          const value = match[1];
+          // An unparsable or over-long value is never attributed to a quantity.
+          if (typeof value !== "string" || exactRationalOf(value) === null) continue;
+          attributed.push({ start: match.index ?? 0, length: match[0].length });
+          found.push({ family, value: value.replace(/\s+/gu, "") });
+        }
+      }
+    }
+    // 3. A leftover digit is a number with no label in this clause: ambiguous.
+    if (/[0-9]/u.test(maskSpans(work, attributed))) continue;
+    asserted.push(...found);
+  }
+  return asserted;
+}
+
+/** One observed value against one claim: skip, agree or contradict. */
+function compareValuedQuantity(
+  family: ValuedQuantityFamily,
+  observed: ObservedValuedQuantity,
+  claim: string,
+): QuantityVerdict {
+  if (family.integer) {
+    if (observed.integer === null) return "skip";
+    if (!/^[0-9]{1,9}$/u.test(claim)) return "skip";
+    return BigInt(claim) === observed.integer ? "agree" : "contradict";
+  }
+  if (observed.rational === null) return "skip";
+  if (exactRationalOf(claim) === null) return "skip";
+  return sameRational(observed.rational, claim) ? "agree" : "contradict";
+}
+
+/** Every explicit contradiction between a statement source and an observation. */
+function valuedMismatchParts(
+  sources: readonly ClaimSource[],
+  observed: readonly ObservedValuedQuantity[],
+): readonly string[] {
+  const families = VALUED_QUANTITY_FAMILIES.filter((family) =>
+    observed.some((row) => row.id === family.id),
+  );
+  if (families.length === 0) return [];
+  const parts: string[] = [];
+  for (const source of sources) {
+    const asserted = assertedValuedQuantities(source.text, families);
+    for (const family of families) {
+      const observation = observed.find((row) => row.id === family.id);
+      if (observation === undefined) continue;
+      const claim = uniqueStatedValue(
+        asserted.filter((row) => row.family.id === family.id).map((row) => row.value),
+      );
+      if (claim === null) continue;
+      if (compareValuedQuantity(family, observation, claim) !== "contradict") continue;
+      parts.push(
+        source.label +
+          " asserts " +
+          family.label +
+          " " +
+          claim +
+          ", but " +
+          observation.source +
+          " reports exactly " +
+          observation.text,
+      );
+    }
+  }
+  return parts;
+}
+
+/** One observed integer vs one statement, as a bounded defect line. */
+function integerMismatchPart(
+  subject: string,
+  observed: ObservedValuedQuantity,
+  stated: number,
+): string {
+  return (
+    subject +
+    " states " +
+    stated +
+    ", but " +
+    observed.source +
+    " reports exactly " +
+    observed.text
+  );
+}
+
+/**
+ * A problem that asks for a rank over GF(2), so that a whole numeric candidate
+ * states that rank and nothing else. The binary-field label is mandatory: without
+ * it a bare integer is a rank over some other field and is never compared.
+ */
+function problemNamesGf2Rank(problemText: string): boolean {
+  const text = problemText.length > MAX_VALUE_SCAN_CHARS
+    ? problemText.slice(0, MAX_VALUE_SCAN_CHARS)
+    : problemText;
+  return (
+    /(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|mod\s*2)[^。；;\n]{0,24}(?:秩|rank)/iu.test(text) ||
+    /(?:秩|rank)[^。；;\n]{0,24}(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|over\s+GF)/iu.test(text)
+  );
+}
+
+function gf2RankMismatchDefect(
+  problemText: string,
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "GF2_RANK",
+  );
+  if (observed.length === 0) return null;
+  const observation = observed[0]!;
+  const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
+  // A whole numeric candidate for a GF(2)-rank problem states the rank itself.
+  const pure = problemNamesGf2Rank(problemText) ? candidateInteger(candidate, false) : null;
+  if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
+    parts.push(integerMismatchPart("the candidate", observation, pure));
+  }
+  if (parts.length === 0) return null;
+  return defect("GF2_RANK_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+
+function gf2NullityMismatchDefect(
+  problemText: string,
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "GF2_NULLITY",
+  );
+  if (observed.length === 0) return null;
+  const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
+  if (parts.length === 0) return null;
+  return defect("GF2_NULLITY_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+
+function exactCountMismatchDefect(
+  problemText: string,
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "EXACT_COUNT",
+  );
+  if (observed.length === 0) return null;
+  const observation = observed[0]!;
+  const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
+  // A pure integer candidate is the count itself. `candidateInteger` accepts no
+  // `/`, so a probability such as `223/8330` can never reach this comparison,
+  // and `observation.integer` is null for a fraction-shaped observation.
+  const pure = candidateInteger(candidate, true);
+  if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
+    parts.push(integerMismatchPart("the candidate", observation, pure));
+  }
+  if (parts.length === 0) return null;
+  return defect("EXACT_COUNT_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+
+function coverTimeMismatchDefect(
+  problemText: string,
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "COVER_TIME",
+  );
+  if (observed.length === 0) return null;
+  const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
+  if (parts.length === 0) return null;
+  return defect("COVER_TIME_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+
+/**
+ * The pure verdict tokens an identity answer can be.
+ *
+ * Their meaning is exact, so the recognition is restricted to a statement that
+ * IS one of them after stripping a labelled prefix, math delimiters and trailing
+ * punctuation. Anything longer ("该恒等式成立当且仅当…") is prose that may hedge
+ * or qualify, and prose never asserts a verdict here.
+ */
+const AFFIRMATIVE_VERDICT_TOKENS: readonly string[] = [
+  "真",
+  "成立",
+  "恒成立",
+  "是",
+  "正确",
+  "true",
+  "yes",
+  "correct",
+];
+
+const NEGATIVE_VERDICT_TOKENS: readonly string[] = [
+  "假",
+  "不成立",
+  "否",
+  "错误",
+  "false",
+  "no",
+  "incorrect",
+];
+
+function pureVerdict(candidate: string): "affirmative" | "negative" | null {
+  let text = candidate.trim();
+  if (text.length === 0 || text.length > 64) return null;
+  text = text
+    .replace(/^(?:最终答案|答案|回答|判定|final\s+answer|verdict)\s*[:：]?\s*/iu, "")
+    .trim();
+  const math = /^\$([^$]+)\$$/su.exec(text);
+  if (math !== null) text = (math[1] as string).trim();
+  const boxed = /^\\boxed\{([\s\S]*)\}$/u.exec(text);
+  if (boxed !== null) text = (boxed[1] as string).trim();
+  text = text.replace(/[。．.！!]+$/u, "").trim();
+  // NOTE: the generic hedge regex is deliberately NOT applied here. `不成立`
+  // contains a negation character and IS the negative verdict this check needs.
+  const key = text.toLowerCase();
+  if (AFFIRMATIVE_VERDICT_TOKENS.includes(key)) return "affirmative";
+  if (NEGATIVE_VERDICT_TOKENS.includes(key)) return "negative";
+  return null;
+}
+
+/** `polynomial_function_check` payload, validated field by field. */
+interface IdentityObservationView {
+  readonly identityHolds: boolean;
+  /** `point [1] residual 3/2`, or null when the payload carries no usable one. */
+  readonly witness: string | null;
+}
+
+function identityObservation(result: unknown): IdentityObservationView | null {
+  const record = recordValue(result);
+  if (record === null) return null;
+  const holds = record["identity_holds"];
+  if (typeof holds !== "boolean") return null;
+  return { identityHolds: holds, witness: witnessText(record["witness"]) };
+}
+
+function witnessText(raw: unknown): string | null {
+  const record = recordValue(raw);
+  if (record === null) return null;
+  const point = record["point"];
+  if (!Array.isArray(point) || point.length === 0 || point.length > 4) return null;
+  if (!point.every((value) => typeof value === "number" && Number.isSafeInteger(value))) {
+    return null;
+  }
+  const residual = exactRationalFromPayload(record["residual"]);
+  if (residual === null) return null;
+  return "point [" + point.join(",") + "] residual " + residual;
+}
+
+function identityVerdictMismatchDefect(
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const observation = lastObservation(observations, "polynomial_function_check");
+  if (observation === null) return null;
+  const observed = identityObservation(observation.result);
+  if (observed === null) return null;
+  const verdict = pureVerdict(candidate);
+  if (verdict === null) return null;
+  // Only a verdict the exact residual computation actually refutes counts.
+  const contradicted = observed.identityHolds
+    ? verdict === "negative"
+    : verdict === "affirmative";
+  if (!contradicted) return null;
+  return defect(
+    "IDENTITY_VERDICT_MISMATCH",
+    "the exact residual computation reports identity_holds=" +
+      String(observed.identityHolds) +
+      (observed.witness === null ? "" : " with witness " + observed.witness) +
+      ", but the candidate states the pure verdict " +
+      boundedNoteExcerpt(candidate, 48),
+    "OBSERVATION",
+  );
+}
+
 /**
  * The exact observation for ONE operation, or null when this run never recorded
  * it. The keyed index is consulted first; the legacy single slot counts only
@@ -1437,7 +1992,12 @@ function exactObservationFor(
  *   8. `GROUP_STRUCTURE_MISMATCH`   `finite_group_structure` observation
  *   9. `OPTION_NUMERIC_CONTRADICTION` chosen option text vs an observation
  *  10. `OPTION_VERDICT_CONTRADICTION` chosen option text vs an observation
- *  11. `SOLUTION_COMPLETENESS`      certificate / independently solved set
+ *  11. `GF2_RANK_MISMATCH`           `gf2_rank` bare integer observation
+ *  12. `GF2_NULLITY_MISMATCH`        `gf2_nullspace` basis-length observation
+ *  13. `EXACT_COUNT_MISMATCH`        `bounded_enumeration`/counting observation
+ *  14. `COVER_TIME_MISMATCH`         `cover_time_complete_graph` observation
+ *  15. `IDENTITY_VERDICT_MISMATCH`   `polynomial_function_check` observation
+ *  16. `SOLUTION_COMPLETENESS`       certificate / independently solved set
  *
  * The observation-grounded kinds stay adjacent; the exhaustiveness check
  * remains last because it is the only one that can fire on its own. Within one
@@ -1504,6 +2064,35 @@ export function answerClosureDefects(
     input.toolObservations,
   );
   if (optionVerdict !== null) defects.push(optionVerdict);
+  const gf2Rank = gf2RankMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations,
+  );
+  if (gf2Rank !== null) defects.push(gf2Rank);
+  const gf2Nullity = gf2NullityMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations,
+  );
+  if (gf2Nullity !== null) defects.push(gf2Nullity);
+  const exactCount = exactCountMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations,
+  );
+  if (exactCount !== null) defects.push(exactCount);
+  const coverTime = coverTimeMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations,
+  );
+  if (coverTime !== null) defects.push(coverTime);
+  const identityVerdict = identityVerdictMismatchDefect(
+    input.candidate,
+    input.toolObservations,
+  );
+  if (identityVerdict !== null) defects.push(identityVerdict);
   const completeness = solutionCompletenessDefect(
     input.candidate,
     input.packet,
@@ -1540,6 +2129,31 @@ export function answerClosureNote(defects: readonly AnswerClosureDefect[]): stri
   if (kinds.has("GROUP_STRUCTURE_MISMATCH")) {
     hints.push(
       "If the answer states a group order or a conjugacy-class count, use exactly the observed values named above.",
+    );
+  }
+  if (kinds.has("GF2_RANK_MISMATCH")) {
+    hints.push(
+      "If the answer states a rank over GF(2), use exactly the observed rank named above; a rank over another field is a different quantity.",
+    );
+  }
+  if (kinds.has("GF2_NULLITY_MISMATCH")) {
+    hints.push(
+      "If the answer states a nullspace dimension, use exactly the observed basis length named above.",
+    );
+  }
+  if (kinds.has("EXACT_COUNT_MISMATCH")) {
+    hints.push(
+      "If the answer is a count, use exactly the observed exact count named above; a probability is not a count and is never compared with one.",
+    );
+  }
+  if (kinds.has("COVER_TIME_MISMATCH")) {
+    hints.push(
+      "If the answer is an expected cover time, use exactly the observed exact rational named above.",
+    );
+  }
+  if (kinds.has("IDENTITY_VERDICT_MISMATCH")) {
+    hints.push(
+      "If the answer is a verdict on the functional identity, state the verdict the exact residual computation reports above, or state the corrected function.",
     );
   }
   // Option-level defects: the chosen option's own text carries the rejected

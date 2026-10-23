@@ -14,6 +14,7 @@ import hashlib
 import json
 
 import copy
+import os
 import time
 from pathlib import Path
 
@@ -93,6 +94,55 @@ _SUMMARY_FIELDS = (
     "methodLoads", "stopReason", "unresolvedObligations",
 )
 _TRACE_FIELDS = ("seq", "kind", "id", "state", "code")
+
+# Stage D: the single environment variable an operator may use to provision an
+# already-accepted WASI profile. Absent or empty means "no sandbox", which must
+# stay byte-identical to the pre-Stage-D default path (no file I/O at all).
+WASI_PROFILE_ENV = "ASTRA_WASI_PROFILE"
+# Fixed diagnostic code for an unavailable generated-Python runtime. Nothing
+# else (no path, no message, no traceback) is ever carried.
+_WASI_UNAVAILABLE = "WASI_SANDBOX_UNAVAILABLE"
+
+
+def _resolve_python_sandbox_profile(python_sandbox_profile):
+    """The explicit profile, else a non-empty ``ASTRA_WASI_PROFILE``.
+
+    ``None`` means "no sandbox and no file I/O". An explicitly supplied profile
+    always wins over the environment, so a configured deployment is never
+    silently overridden by an ambient variable.
+    """
+    if python_sandbox_profile is not None:
+        return python_sandbox_profile
+    try:
+        value = os.environ.get(WASI_PROFILE_ENV)
+    except Exception:  # noqa: BLE001 - an unreadable environment is "no profile"
+        return None
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _build_python_sandbox(python_sandbox_profile=None):
+    """Return ``(sandbox, identity, diagnostic)`` for an optional WASI profile.
+
+    With no profile this returns ``(None, None, None)`` and reads nothing at
+    all, so every existing Host/Runtime path is unchanged. With a profile it
+    builds ``mathagent.tools.PythonSandbox`` once and binds its identity; an
+    unusable runtime degrades to ``None`` plus one fixed diagnostic code instead
+    of raising, so a caller has exactly two states: a usable sandbox or None.
+    """
+    profile = _resolve_python_sandbox_profile(python_sandbox_profile)
+    if profile is None:
+        return None, None, None
+    try:
+        from mathagent.tools import PythonSandbox
+
+        sandbox = PythonSandbox(profile=profile)
+    except Exception:  # noqa: BLE001 - an unavailable WASI runtime is not a crash
+        return None, None, _WASI_UNAVAILABLE
+    if not getattr(sandbox, "available", False):
+        return None, None, _WASI_UNAVAILABLE
+    return sandbox, getattr(sandbox, "identity", None), None
 
 
 def _p4_hash(value):
@@ -176,7 +226,7 @@ class AgentHost(_Host):
     """Host-side unified AgentLoop callback state machine."""
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
-                 options, client):
+                 options, client, *, python_sandbox_profile=None):
         if manifest.get("protocolVersion") != AGENT_HOST_VERSION:
             _fail()
         super().__init__(manifest, session_id, None, deadline)
@@ -237,6 +287,16 @@ class AgentHost(_Host):
         self.problem = problem
         self.problem_hash = problem_hash
         self.client = client
+        # Stage D: an optional, already-accepted WASI profile. ``None`` means no
+        # sandbox and no file I/O, so the default Host path is byte-identical.
+        self.python_sandbox_profile = _resolve_python_sandbox_profile(
+            python_sandbox_profile
+        )
+        (
+            self.python_sandbox,
+            self.python_sandbox_identity,
+            self.python_sandbox_diagnostic,
+        ) = _build_python_sandbox(self.python_sandbox_profile)
         self.stop_acked = False
         self.history = {}
         self.effects = []
@@ -338,6 +398,32 @@ class AgentHost(_Host):
         if left > _MAX_REMAINING_MS:
             return _MAX_REMAINING_MS
         return left
+
+    def generated_exploration(self, request, code, *, gate, scope=None):
+        """Internal, explicitly-called seam; never reachable from the Node wire.
+
+        The P3 vocabulary is ``("tool", "method")`` only, so no wire action can
+        request generated Python today. This method is therefore *not* called by
+        any callback: a trusted caller that owns an approved
+        ``GenerativeExecutionGate`` calls it directly to let one bounded guest
+        program run through the already-accepted ``self.python_sandbox``.
+
+        The decision is taken by the gate before anything executes; without a
+        sandbox (the default path) the result is the fixed ``REFUSED_NO_PROFILE``
+        refusal and no code runs. A successful run is a
+        ``BOUNDED_OBSERVATION`` tagged ``BOUNDED_OBSERVATION_NOT_PROOF``.
+        """
+        from .generated_execution_gate import DEFAULT_SCOPE, execute_with_gate
+
+        return execute_with_gate(
+            gate,
+            self.python_sandbox,
+            request,
+            code,
+            deadline=self.deadline,
+            problem_id=self.session_id,
+            scope=DEFAULT_SCOPE if scope is None else scope,
+        )
 
     def _common(self):
         return {"protocolVersion": AGENT_HOST_VERSION, "sessionId": self.session_id}
@@ -909,9 +995,13 @@ class AgentHost(_Host):
             if expected_kind == "method":
                 result = perform_effect(
                     bound, root_deadline=self.deadline, catalog=self.method_catalog,
+                    python_sandbox=self.python_sandbox,
                 )
             else:
-                result = perform_effect(bound, root_deadline=self.deadline)
+                result = perform_effect(
+                    bound, root_deadline=self.deadline,
+                    python_sandbox=self.python_sandbox,
+                )
         except Exception:  # noqa: BLE001 - an unknown outcome is never a proof
             result = failure_receipt(bound, "UNKNOWN", "UNKNOWN_OUTCOME")
         try:

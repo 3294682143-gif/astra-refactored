@@ -850,7 +850,16 @@ var init_p3 = __esm({
       "solve_system_guarded_expr",
       "polynomial_function_check",
       "gf2_rank",
-      "gf2_nullspace"
+      "gf2_nullspace",
+      "transition_count",
+      "independence_polynomial_chain",
+      "count_by_digit_property",
+      "rook_numbers",
+      "count_avoiding_permutations",
+      "markov_expected_steps",
+      "cover_time_complete_graph",
+      "finite_difference_derivative",
+      "richardson_extrapolate"
     ]);
   }
 });
@@ -14428,6 +14437,20 @@ var init_agent_loop_context = __esm({
       "choose is the number of objects selected, and distinct(i) counts distinct values of attribute i",
       "across the selected subset. A tool observation is an input-relative computation, not a proof",
       "that the model mapped the problem correctly.",
+      "The fifteen Phase-2 tools take these exact JSON argument signatures; pass integer and number",
+      "fields as JSON numbers, never quoted strings:",
+      "solve_quadratic_diophantine(a, b, c, d, e, f, optional y_bound);",
+      "symbolic_diophantine_with_timeout(lhs, optional rhs, optional variables, timeout_ms);",
+      "solve_system_guarded_expr(expressions, variables, timeout_ms, n_starts, seed);",
+      "polynomial_function_check(equation, function, argument, variables, expression);",
+      "gf2_rank(rows); gf2_nullspace(rows, width);",
+      "transition_count(length, num_states, transitions, optional starts, ends; omit defaults, never null);",
+      "independence_polynomial_chain(n);",
+      "count_by_digit_property(digit_set, max_digits, optional modulus, residue, include_zero);",
+      "rook_numbers(n, forbidden); count_avoiding_permutations(n, forbidden);",
+      "markov_expected_steps(transition, start, targets); cover_time_complete_graph(num_vertices);",
+      "finite_difference_derivative(f, x, h, optional method);",
+      "richardson_extrapolate(f, x, h, optional method, order).",
       "When a problem leaves a formula, estimator, interval, normalization or branch convention",
       "unspecified and standard conventions produce different values, name the convention used,",
       "put the textbook/default value first, retain the materially different standard value, and",
@@ -15607,7 +15630,62 @@ function exactRoute(operation, argsTemplate) {
 function continuousProbabilityWording(problemText) {
   return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(problemText);
 }
+function transitionCountWording(problemText) {
+  const transitionContext = /(状态转移|转移图|(?:有向图|directed\s+graph)[^\n。；;]{0,24}(?:顶点序列|vertex\s+sequences?)|transition\s+graph|state\s+transitions?|\btransitions?\b)/iu.test(problemText);
+  if (!transitionContext) {
+    return false;
+  }
+  if (/(马尔可夫|Markov|转移概率矩阵|transition\s+probability\s+matrix|随机游走|random\s+walk|覆盖时间|cover\s+time)/iu.test(problemText)) {
+    return false;
+  }
+  return /(?:状态数|状态个数|\b[0-9]+\s*个状态|\b[0-9]+\s+states\b|\bnum(?:ber)?\s+of\s+states\b|步数|步长|长度|长为|\blength\b|\bsteps?\b)/iu.test(problemText);
+}
+function independencePolynomialChainWording(problemText) {
+  if (/(独立集多项式|independence\s+polynomial)/iu.test(problemText)) {
+    return true;
+  }
+  const pathContext = /(?:路图|路径图|path\s+(?:graph|P\s*_?\s*\{?\s*n\s*\}?)|P\s*_?\s*\{?\s*n\s*\}?)/iu.test(problemText);
+  if (pathContext && /(?:独立集|independent\s+sets?)/iu.test(problemText)) {
+    return true;
+  }
+  return /(?:不相邻顶点[^\n。；;]{0,12}子集|non[- ]?adjacent\s+vertex\s+subsets?)/iu.test(problemText);
+}
+function countByDigitPropertyWording(problemText) {
+  return /(十进制数位|数位\s*DP|digit\s*DP|digit\s+property|数字集合[^\n。；;]{0,20}组成|(?:各位|每个)数字[^\n。；;]{0,24}(?:属于|来自|在)[^\n。；;]{0,24}集合[^\n。；;]{0,24}(?:整除|倍数)|digits?[^\n。；;]{0,24}(?:from|belong)[^\n。；;]{0,24}(?:set|collection)[^\n。；;]{0,32}(?:divisible|multiple))/iu.test(problemText);
+}
+function rookNumbersWording(problemText) {
+  return /(车多项式|禁位棋盘[^\n。；;]{0,20}(?:车数|车多项式)|rook\s+polynomial|rook\s+numbers?)/iu.test(problemText);
+}
+function countAvoidingPermutationsWording(problemText) {
+  return /(错排|禁位排列|禁止位置[^\n。；;]{0,16}排列|permutations?\s+avoiding[^\n。；;]{0,24}(?:forbidden|cells?)|derangements?|forbidden\s+(?:positions?|cells?)[^\n。；;]{0,24}permutations?)/iu.test(problemText);
+}
+function markovExpectedStepsWording(problemText) {
+  const markovContext = /(马尔可夫链|马尔可夫|Markov\s+chain|转移概率矩阵|transition\s+probability\s+matrix)/iu.test(problemText);
+  if (!markovContext) {
+    return false;
+  }
+  return /(期望[^\n。；;]{0,8}步数|期望步数|首次击中时间|击中时间|吸收时间|expected\s+(?:number\s+of\s+)?steps?|hitting\s+time|absorption\s+time)/iu.test(problemText);
+}
+function coverTimeCompleteGraphWording(problemText) {
+  const completeGraph = /(完全图|complete\s+graph|(?<![A-Za-z0-9])K\s*_?\s*(?:\{?\s*n\s*\}?|[0-9]+)(?![A-Za-z0-9]))/iu.test(problemText);
+  if (!completeGraph) {
+    return false;
+  }
+  return /(覆盖时间|访问(?:所有|全部)顶点[^\n。；;]{0,24}(?:期望|平均)[^\n。；;]{0,12}(?:步数|步|时间)|访问(?:所有|全部)顶点[^\n。；;]{0,16}(?:需要|要)[^\n。；;]{0,8}(?:多少|几)步|cover\s+time|expected\s+(?:number\s+of\s+)?steps?[^\n。；;]{0,32}(?:visit|cover)\s+all\s+vertices|time\s+to\s+visit\s+all\s+vertices)/iu.test(problemText);
+}
+function finiteDifferenceDerivativeWording(problemText) {
+  if (/(Richardson|理查森|外推|extrapolat)/iu.test(problemText)) {
+    return false;
+  }
+  return /(有限差分|中心差分|向前差分|向后差分|前向差分|finite[-\s]+difference(?:\s+derivative)?|central\s+difference|forward\s+difference|backward\s+difference)/iu.test(problemText);
+}
+function richardsonExtrapolateWording(problemText) {
+  return /(?:Richardson\s*(?:外推|extrapolat\w*)|理查森外推)/iu.test(problemText);
+}
 function finiteCountingWording(problemText) {
+  if (transitionCountWording(problemText) || independencePolynomialChainWording(problemText) || countByDigitPropertyWording(problemText) || rookNumbersWording(problemText) || countAvoidingPermutationsWording(problemText) || markovExpectedStepsWording(problemText) || coverTimeCompleteGraphWording(problemText) || finiteDifferenceDerivativeWording(problemText) || richardsonExtrapolateWording(problemText)) {
+    return false;
+  }
   const continuous = continuousProbabilityWording(problemText);
   const probabilityDraw = /(概率|probability)/iu.test(problemText) && /(抽取|选取|随机取|从中取|draw|choose|select|hand)/iu.test(problemText);
   if (probabilityDraw) {
@@ -15629,6 +15707,9 @@ function finiteCountingWording(problemText) {
   return /(排列|组合|整数|正整数|自然数|集合|子集|元素|群元素|子群|共轭类|生成元|顶点|边|图|树|字符串|元组|划分|方式|方法|选法|\bways?\b|permutation|combination|integer|set|subset|element|group|conjugacy|generator|vertex|vertices|edge|graph|tree|string|tuple|partition)/iu.test(problemText);
 }
 function polynomialExpandWording(problemText) {
+  if (rookNumbersWording(problemText) || independencePolynomialChainWording(problemText)) {
+    return false;
+  }
   if (/(特征多项式|特征值|行列式|determinant|characteristic\s+polynomial|eigenvalue)/iu.test(problemText)) {
     return false;
   }
@@ -15858,6 +15939,33 @@ function semanticToolRoute(problemText) {
   if (gf2RankWording(problemText)) {
     return GF2_RANK_ROUTE;
   }
+  if (transitionCountWording(problemText)) {
+    return TRANSITION_COUNT_ROUTE;
+  }
+  if (independencePolynomialChainWording(problemText)) {
+    return INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE;
+  }
+  if (countByDigitPropertyWording(problemText)) {
+    return COUNT_BY_DIGIT_PROPERTY_ROUTE;
+  }
+  if (rookNumbersWording(problemText)) {
+    return ROOK_NUMBERS_ROUTE;
+  }
+  if (countAvoidingPermutationsWording(problemText)) {
+    return COUNT_AVOIDING_PERMUTATIONS_ROUTE;
+  }
+  if (markovExpectedStepsWording(problemText)) {
+    return MARKOV_EXPECTED_STEPS_ROUTE;
+  }
+  if (coverTimeCompleteGraphWording(problemText)) {
+    return COVER_TIME_COMPLETE_GRAPH_ROUTE;
+  }
+  if (finiteDifferenceDerivativeWording(problemText)) {
+    return FINITE_DIFFERENCE_DERIVATIVE_ROUTE;
+  }
+  if (richardsonExtrapolateWording(problemText)) {
+    return RICHARDSON_EXTRAPOLATE_ROUTE;
+  }
   return null;
 }
 function preferredMethodForToolRoute(route) {
@@ -15935,7 +16043,7 @@ function semanticMethodRoute(problemText, entries) {
   }
   return Object.freeze([...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4));
 }
-var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, SOLVE_QUADRATIC_DIOPHANTINE_ROUTE, SYMBOLIC_DIOPHANTINE_ROUTE, SYSTEM_OF_EXPRESSIONS_ROUTE, POLYNOMIAL_FUNCTION_CHECK_ROUTE, GF2_RANK_ROUTE, GF2_NULLSPACE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER;
+var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, SOLVE_QUADRATIC_DIOPHANTINE_ROUTE, SYMBOLIC_DIOPHANTINE_ROUTE, SYSTEM_OF_EXPRESSIONS_ROUTE, POLYNOMIAL_FUNCTION_CHECK_ROUTE, GF2_RANK_ROUTE, GF2_NULLSPACE_ROUTE, TRANSITION_COUNT_ROUTE, INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE, COUNT_BY_DIGIT_PROPERTY_ROUTE, ROOK_NUMBERS_ROUTE, COUNT_AVOIDING_PERMUTATIONS_ROUTE, MARKOV_EXPECTED_STEPS_ROUTE, COVER_TIME_COMPLETE_GRAPH_ROUTE, FINITE_DIFFERENCE_DERIVATIVE_ROUTE, RICHARDSON_EXTRAPOLATE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER;
 var init_agent_semantics = __esm({
   "apps/stdio-runtime/dist/src/agent-semantics.js"() {
     "use strict";
@@ -16157,6 +16265,60 @@ var init_agent_semantics = __esm({
       operation: "GF2_NULLSPACE",
       argsTemplate: '{"rows":[<nonnegative integer bit rows>],"width":<integer 1..8>}'
     });
+    TRANSITION_COUNT_ROUTE = Object.freeze({
+      id: "TRANSITION_COUNT",
+      toolName: "transition_count",
+      operation: "TRANSITION_COUNT",
+      argsTemplate: '{"length":3,"num_states":2,"transitions":[[0,1],[1,0],[1,1]]}'
+    });
+    INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE = Object.freeze({
+      id: "INDEPENDENCE_POLYNOMIAL_CHAIN",
+      toolName: "independence_polynomial_chain",
+      operation: "INDEPENDENCE_POLYNOMIAL_CHAIN",
+      argsTemplate: '{"n":5}'
+    });
+    COUNT_BY_DIGIT_PROPERTY_ROUTE = Object.freeze({
+      id: "COUNT_BY_DIGIT_PROPERTY",
+      toolName: "count_by_digit_property",
+      operation: "COUNT_BY_DIGIT_PROPERTY",
+      argsTemplate: '{"digit_set":[1,2,3],"max_digits":3,"modulus":3,"residue":0,"include_zero":false}'
+    });
+    ROOK_NUMBERS_ROUTE = Object.freeze({
+      id: "ROOK_NUMBERS",
+      toolName: "rook_numbers",
+      operation: "ROOK_NUMBERS",
+      argsTemplate: '{"n":3,"forbidden":[[0,0],[1,1],[2,2]]}'
+    });
+    COUNT_AVOIDING_PERMUTATIONS_ROUTE = Object.freeze({
+      id: "COUNT_AVOIDING_PERMUTATIONS",
+      toolName: "count_avoiding_permutations",
+      operation: "COUNT_AVOIDING_PERMUTATIONS",
+      argsTemplate: '{"n":4,"forbidden":[[0,0],[1,1],[2,2],[3,3]]}'
+    });
+    MARKOV_EXPECTED_STEPS_ROUTE = Object.freeze({
+      id: "MARKOV_EXPECTED_STEPS",
+      toolName: "markov_expected_steps",
+      operation: "MARKOV_EXPECTED_STEPS",
+      argsTemplate: '{"transition":[[0.0,1.0,0.0],[0.5,0.0,0.5],[0.0,0.0,1.0]],"start":0,"targets":[2]}'
+    });
+    COVER_TIME_COMPLETE_GRAPH_ROUTE = Object.freeze({
+      id: "COVER_TIME_COMPLETE_GRAPH",
+      toolName: "cover_time_complete_graph",
+      operation: "COVER_TIME_COMPLETE_GRAPH",
+      argsTemplate: '{"num_vertices":4}'
+    });
+    FINITE_DIFFERENCE_DERIVATIVE_ROUTE = Object.freeze({
+      id: "FINITE_DIFFERENCE_DERIVATIVE",
+      toolName: "finite_difference_derivative",
+      operation: "FINITE_DIFFERENCE_DERIVATIVE",
+      argsTemplate: '{"f":"x**3","x":1.0,"h":0.01,"method":"central"}'
+    });
+    RICHARDSON_EXTRAPOLATE_ROUTE = Object.freeze({
+      id: "RICHARDSON_EXTRAPOLATE",
+      toolName: "richardson_extrapolate",
+      operation: "RICHARDSON_EXTRAPOLATE",
+      argsTemplate: '{"f":"x**3","x":1.0,"h":0.01,"method":"central","order":2}'
+    });
     EXACT_MAXIMAL_MINORS_ROUTE = exactRoute("MAXIMAL_MINORS", '{"operation":"MAXIMAL_MINORS","matrix":<explicit matrix>,"variable":"t"}');
     EXACT_FACTOR_OVER_EXTENSION_ROUTE = exactRoute("FACTOR_OVER_EXTENSION", '{"operation":"FACTOR_OVER_EXTENSION","expression":"<polynomial>","variable":"x","minimal_polynomials":[<minimal polynomials>]}');
     EXACT_DENSITY_CHECK_ROUTE = exactRoute("DENSITY_CHECK", '{"operation":"DENSITY_CHECK","density":"<density valid on its support>","variable":"x","lower":"0","upper":"oo"}');
@@ -16321,7 +16483,16 @@ var init_agent_semantics = __esm({
       SYSTEM_OF_EXPRESSIONS: "domain-equivalence",
       POLYNOMIAL_FUNCTION_CHECK: "domain-equivalence",
       GF2_RANK: "linearization-spectral",
-      GF2_NULLSPACE: "linearization-spectral"
+      GF2_NULLSPACE: "linearization-spectral",
+      TRANSITION_COUNT: "finite-state-dp",
+      INDEPENDENCE_POLYNOMIAL_CHAIN: "finite-state-dp",
+      COUNT_BY_DIGIT_PROPERTY: "finite-state-dp",
+      ROOK_NUMBERS: "counting-bijections",
+      COUNT_AVOIDING_PERMUTATIONS: "counting-bijections",
+      MARKOV_EXPECTED_STEPS: "conditioning-indicators",
+      COVER_TIME_COMPLETE_GRAPH: "conditioning-indicators",
+      FINITE_DIFFERENCE_DERIVATIVE: "numerical-approximation",
+      RICHARDSON_EXTRAPOLATE: "numerical-approximation"
     });
     MAX_METHOD_ROUTE_CANDIDATES = 3;
     TOOL_ROUTE_METHOD_BOOST = 1024;
@@ -17100,6 +17271,282 @@ function optionVerdictContradictionDefect(problemText, candidate, observations) 
     return null;
   return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
+function exactCountObservation(result) {
+  const record = recordValue(result);
+  if (record !== null) {
+    const count = observationInteger(record["count"]);
+    if (count !== null && count >= 0)
+      return count;
+    if (record["fraction"] !== void 0 || record["total"] !== void 0)
+      return null;
+    const favourable = observationInteger(record["favorable"]);
+    return favourable !== null && favourable >= 0 ? favourable : null;
+  }
+  const bare = observationInteger(result);
+  return bare !== null && bare >= 0 ? bare : null;
+}
+function nullityObservation(result) {
+  if (Array.isArray(result)) {
+    if (result.length > 64)
+      return null;
+    const valid = result.every((vector) => typeof vector === "number" && Number.isSafeInteger(vector) && vector >= 0);
+    return valid ? result.length : null;
+  }
+  const record = recordValue(result);
+  if (record === null)
+    return null;
+  const basis = record["nullspace"];
+  return Array.isArray(basis) ? nullityObservation(basis) : null;
+}
+function exactRationalFromPayload(value) {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? String(value) : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.replace(/\s+/gu, "");
+    return exactRationalOf(trimmed) === null ? null : trimmed;
+  }
+  const record = recordValue(value);
+  return record === null ? null : exactRationalFromPayload(record["value"]);
+}
+function observedValuedQuantities(observations) {
+  const out = [];
+  const rank = observationInteger(lastObservation(observations, "gf2_rank")?.result);
+  if (rank !== null && rank >= 0) {
+    out.push({
+      id: "GF2_RANK",
+      source: "the exact GF(2) elimination",
+      text: String(rank),
+      integer: BigInt(rank),
+      rational: null
+    });
+  }
+  const nullity = nullityObservation(lastObservation(observations, "gf2_nullspace")?.result);
+  if (nullity !== null) {
+    out.push({
+      id: "GF2_NULLITY",
+      source: "the exact GF(2) kernel basis",
+      text: String(nullity),
+      integer: BigInt(nullity),
+      rational: null
+    });
+  }
+  const counts = [];
+  for (const entry of COUNT_OBSERVATIONS) {
+    const count = exactCountObservation(lastObservation(observations, entry.name)?.result);
+    if (count !== null)
+      counts.push({ value: count, source: entry.source });
+  }
+  const distinctCounts = [...new Set(counts.map((row) => row.value))];
+  if (distinctCounts.length === 1) {
+    out.push({
+      id: "EXACT_COUNT",
+      source: counts[counts.length - 1].source,
+      text: String(distinctCounts[0]),
+      integer: BigInt(distinctCounts[0]),
+      rational: null
+    });
+  }
+  const cover = exactRationalFromPayload(lastObservation(observations, "cover_time_complete_graph")?.result);
+  if (cover !== null) {
+    out.push({
+      id: "COVER_TIME",
+      source: "the exact cover-time closed form",
+      text: cover,
+      integer: null,
+      rational: cover
+    });
+  }
+  return out;
+}
+function claimSources(problemText, candidate) {
+  const sources = [{ label: "the candidate", text: candidate }];
+  for (const option of chosenOptionTexts(problemText, candidate)) {
+    sources.push({ label: "option " + option.letter, text: option.text });
+  }
+  return sources;
+}
+function assertedValuedQuantities(text8, families) {
+  const asserted = [];
+  const body = text8.length > MAX_VALUE_SCAN_CHARS ? text8.slice(0, MAX_VALUE_SCAN_CHARS) : text8;
+  for (const rawClause of body.split(CLAUSE_SPLIT)) {
+    const clause = rawClause.trim();
+    if (clause.length === 0)
+      continue;
+    if (OPTION_ASSERTION_HEDGE.test(clause))
+      continue;
+    const ignored = [];
+    for (const pattern of UNCOMPARED_LABELLED_QUANTITIES) {
+      for (const match of clause.matchAll(pattern)) {
+        ignored.push({ start: match.index ?? 0, length: match[0].length });
+      }
+    }
+    const work = maskSpans(clause, ignored);
+    const attributed = [];
+    const found = [];
+    for (const family of families) {
+      for (const pattern of family.patterns) {
+        for (const match of work.matchAll(pattern)) {
+          const value = match[1];
+          if (typeof value !== "string" || exactRationalOf(value) === null)
+            continue;
+          attributed.push({ start: match.index ?? 0, length: match[0].length });
+          found.push({ family, value: value.replace(/\s+/gu, "") });
+        }
+      }
+    }
+    if (/[0-9]/u.test(maskSpans(work, attributed)))
+      continue;
+    asserted.push(...found);
+  }
+  return asserted;
+}
+function compareValuedQuantity(family, observed, claim) {
+  if (family.integer) {
+    if (observed.integer === null)
+      return "skip";
+    if (!/^[0-9]{1,9}$/u.test(claim))
+      return "skip";
+    return BigInt(claim) === observed.integer ? "agree" : "contradict";
+  }
+  if (observed.rational === null)
+    return "skip";
+  if (exactRationalOf(claim) === null)
+    return "skip";
+  return sameRational(observed.rational, claim) ? "agree" : "contradict";
+}
+function valuedMismatchParts(sources, observed) {
+  const families = VALUED_QUANTITY_FAMILIES.filter((family) => observed.some((row) => row.id === family.id));
+  if (families.length === 0)
+    return [];
+  const parts = [];
+  for (const source of sources) {
+    const asserted = assertedValuedQuantities(source.text, families);
+    for (const family of families) {
+      const observation = observed.find((row) => row.id === family.id);
+      if (observation === void 0)
+        continue;
+      const claim = uniqueStatedValue(asserted.filter((row) => row.family.id === family.id).map((row) => row.value));
+      if (claim === null)
+        continue;
+      if (compareValuedQuantity(family, observation, claim) !== "contradict")
+        continue;
+      parts.push(source.label + " asserts " + family.label + " " + claim + ", but " + observation.source + " reports exactly " + observation.text);
+    }
+  }
+  return parts;
+}
+function integerMismatchPart(subject, observed, stated) {
+  return subject + " states " + stated + ", but " + observed.source + " reports exactly " + observed.text;
+}
+function problemNamesGf2Rank(problemText) {
+  const text8 = problemText.length > MAX_VALUE_SCAN_CHARS ? problemText.slice(0, MAX_VALUE_SCAN_CHARS) : problemText;
+  return /(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|mod\s*2)[^。；;\n]{0,24}(?:秩|rank)/iu.test(text8) || /(?:秩|rank)[^。；;\n]{0,24}(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|over\s+GF)/iu.test(text8);
+}
+function gf2RankMismatchDefect(problemText, candidate, observations) {
+  const observed = observedValuedQuantities(observations).filter((row) => row.id === "GF2_RANK");
+  if (observed.length === 0)
+    return null;
+  const observation = observed[0];
+  const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
+  const pure = problemNamesGf2Rank(problemText) ? candidateInteger(candidate, false) : null;
+  if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
+    parts.push(integerMismatchPart("the candidate", observation, pure));
+  }
+  if (parts.length === 0)
+    return null;
+  return defect("GF2_RANK_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+function gf2NullityMismatchDefect(problemText, candidate, observations) {
+  const observed = observedValuedQuantities(observations).filter((row) => row.id === "GF2_NULLITY");
+  if (observed.length === 0)
+    return null;
+  const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
+  if (parts.length === 0)
+    return null;
+  return defect("GF2_NULLITY_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+function exactCountMismatchDefect(problemText, candidate, observations) {
+  const observed = observedValuedQuantities(observations).filter((row) => row.id === "EXACT_COUNT");
+  if (observed.length === 0)
+    return null;
+  const observation = observed[0];
+  const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
+  const pure = candidateInteger(candidate, true);
+  if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
+    parts.push(integerMismatchPart("the candidate", observation, pure));
+  }
+  if (parts.length === 0)
+    return null;
+  return defect("EXACT_COUNT_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+function coverTimeMismatchDefect(problemText, candidate, observations) {
+  const observed = observedValuedQuantities(observations).filter((row) => row.id === "COVER_TIME");
+  if (observed.length === 0)
+    return null;
+  const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
+  if (parts.length === 0)
+    return null;
+  return defect("COVER_TIME_MISMATCH", parts.join("; "), "OBSERVATION");
+}
+function pureVerdict(candidate) {
+  let text8 = candidate.trim();
+  if (text8.length === 0 || text8.length > 64)
+    return null;
+  text8 = text8.replace(/^(?:最终答案|答案|回答|判定|final\s+answer|verdict)\s*[:：]?\s*/iu, "").trim();
+  const math = /^\$([^$]+)\$$/su.exec(text8);
+  if (math !== null)
+    text8 = math[1].trim();
+  const boxed = /^\\boxed\{([\s\S]*)\}$/u.exec(text8);
+  if (boxed !== null)
+    text8 = boxed[1].trim();
+  text8 = text8.replace(/[。．.！!]+$/u, "").trim();
+  const key = text8.toLowerCase();
+  if (AFFIRMATIVE_VERDICT_TOKENS.includes(key))
+    return "affirmative";
+  if (NEGATIVE_VERDICT_TOKENS.includes(key))
+    return "negative";
+  return null;
+}
+function identityObservation(result) {
+  const record = recordValue(result);
+  if (record === null)
+    return null;
+  const holds = record["identity_holds"];
+  if (typeof holds !== "boolean")
+    return null;
+  return { identityHolds: holds, witness: witnessText(record["witness"]) };
+}
+function witnessText(raw) {
+  const record = recordValue(raw);
+  if (record === null)
+    return null;
+  const point = record["point"];
+  if (!Array.isArray(point) || point.length === 0 || point.length > 4)
+    return null;
+  if (!point.every((value) => typeof value === "number" && Number.isSafeInteger(value))) {
+    return null;
+  }
+  const residual = exactRationalFromPayload(record["residual"]);
+  if (residual === null)
+    return null;
+  return "point [" + point.join(",") + "] residual " + residual;
+}
+function identityVerdictMismatchDefect(candidate, observations) {
+  const observation = lastObservation(observations, "polynomial_function_check");
+  if (observation === null)
+    return null;
+  const observed = identityObservation(observation.result);
+  if (observed === null)
+    return null;
+  const verdict = pureVerdict(candidate);
+  if (verdict === null)
+    return null;
+  const contradicted = observed.identityHolds ? verdict === "negative" : verdict === "affirmative";
+  if (!contradicted)
+    return null;
+  return defect("IDENTITY_VERDICT_MISMATCH", "the exact residual computation reports identity_holds=" + String(observed.identityHolds) + (observed.witness === null ? "" : " with witness " + observed.witness) + ", but the candidate states the pure verdict " + boundedNoteExcerpt(candidate, 48), "OBSERVATION");
+}
 function exactObservationFor(input, operation) {
   const indexed = input.exactObservations?.get(operation) ?? null;
   if (indexed !== null)
@@ -17141,6 +17588,21 @@ function answerClosureDefects(input) {
   const optionVerdict = optionVerdictContradictionDefect(input.problemText, input.candidate, input.toolObservations);
   if (optionVerdict !== null)
     defects.push(optionVerdict);
+  const gf2Rank = gf2RankMismatchDefect(input.problemText, input.candidate, input.toolObservations);
+  if (gf2Rank !== null)
+    defects.push(gf2Rank);
+  const gf2Nullity = gf2NullityMismatchDefect(input.problemText, input.candidate, input.toolObservations);
+  if (gf2Nullity !== null)
+    defects.push(gf2Nullity);
+  const exactCount = exactCountMismatchDefect(input.problemText, input.candidate, input.toolObservations);
+  if (exactCount !== null)
+    defects.push(exactCount);
+  const coverTime = coverTimeMismatchDefect(input.problemText, input.candidate, input.toolObservations);
+  if (coverTime !== null)
+    defects.push(coverTime);
+  const identityVerdict = identityVerdictMismatchDefect(input.candidate, input.toolObservations);
+  if (identityVerdict !== null)
+    defects.push(identityVerdict);
   const completeness = solutionCompletenessDefect(input.candidate, input.packet, input.expectedSolutionKeys, input.requiresExhaustive === true);
   if (completeness !== null)
     defects.push(completeness);
@@ -17162,6 +17624,21 @@ function answerClosureNote(defects) {
   if (kinds.has("GROUP_STRUCTURE_MISMATCH")) {
     hints.push("If the answer states a group order or a conjugacy-class count, use exactly the observed values named above.");
   }
+  if (kinds.has("GF2_RANK_MISMATCH")) {
+    hints.push("If the answer states a rank over GF(2), use exactly the observed rank named above; a rank over another field is a different quantity.");
+  }
+  if (kinds.has("GF2_NULLITY_MISMATCH")) {
+    hints.push("If the answer states a nullspace dimension, use exactly the observed basis length named above.");
+  }
+  if (kinds.has("EXACT_COUNT_MISMATCH")) {
+    hints.push("If the answer is a count, use exactly the observed exact count named above; a probability is not a count and is never compared with one.");
+  }
+  if (kinds.has("COVER_TIME_MISMATCH")) {
+    hints.push("If the answer is an expected cover time, use exactly the observed exact rational named above.");
+  }
+  if (kinds.has("IDENTITY_VERDICT_MISMATCH")) {
+    hints.push("If the answer is a verdict on the functional identity, state the verdict the exact residual computation reports above, or state the corrected function.");
+  }
   for (const row of defects) {
     if (row.kind === "OPTION_NUMERIC_CONTRADICTION" || row.kind === "OPTION_VERDICT_CONTRADICTION") {
       hints.push("Reconcile the chosen option with the exact observation: " + boundedNoteExcerpt(row.detail) + ".");
@@ -17180,7 +17657,7 @@ function answerClosureNote(defects) {
   ];
   return lines.join("\n");
 }
-var EXACT_RATIONAL_TEXT, MAX_VALUE_SCAN_CHARS, SLOPE_PATTERNS, INTERCEPT_PATTERNS, GROUP_ORDER_PATTERNS, CONJUGACY_CLASS_PATTERNS, MAX_OPTION_TEXT_CHARS, OPTION_MARKER, CLAUSE_SPLIT, UNCOMPARED_LABELLED_QUANTITIES, OPTION_GROUP_ORDER_PATTERNS, OPTION_REAL_ROOT_PATTERNS, OPTION_SPLITTING_FIELD_PATTERNS, OPTION_SLOPE_PATTERNS, OPTION_INTERCEPT_PATTERNS, OPTION_QUANTITY_FAMILIES, OPTION_ASSERTION_HEDGE, GROUP_PROPERTY_ASSERTIONS;
+var EXACT_RATIONAL_TEXT, MAX_VALUE_SCAN_CHARS, SLOPE_PATTERNS, INTERCEPT_PATTERNS, GROUP_ORDER_PATTERNS, CONJUGACY_CLASS_PATTERNS, MAX_OPTION_TEXT_CHARS, OPTION_MARKER, CLAUSE_SPLIT, UNCOMPARED_LABELLED_QUANTITIES, OPTION_GROUP_ORDER_PATTERNS, OPTION_REAL_ROOT_PATTERNS, OPTION_SPLITTING_FIELD_PATTERNS, OPTION_SLOPE_PATTERNS, OPTION_INTERCEPT_PATTERNS, OPTION_QUANTITY_FAMILIES, OPTION_ASSERTION_HEDGE, GROUP_PROPERTY_ASSERTIONS, GF2_RANK_PATTERNS, GF2_NULLITY_PATTERNS, EXACT_COUNT_PATTERNS, COVER_TIME_PATTERNS, VALUED_QUANTITY_FAMILIES, COUNT_OBSERVATIONS, AFFIRMATIVE_VERDICT_TOKENS, NEGATIVE_VERDICT_TOKENS;
 var init_agent_answer_closure = __esm({
   "apps/stdio-runtime/dist/src/agent-answer-closure.js"() {
     "use strict";
@@ -17264,6 +17741,63 @@ var init_agent_answer_closure = __esm({
         observedField: "is_cyclic",
         observedValue: (observation) => observation.isCyclic
       }
+    ];
+    GF2_RANK_PATTERNS = [
+      /(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|mod\s*2)[^0-9]{0,16}?(?:秩|rank)[^0-9]{0,6}(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu,
+      /(?:秩|rank)\s*(?:为|是|等于|[:：=]|\bis\b)\s*([0-9]{1,6})\s*(?:over|在|于)\s*(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|F\s*_?2)/giu
+    ];
+    GF2_NULLITY_PATTERNS = [
+      /(?:零空间|核空间|核)(?:的)?(?:维数|维度)\s*(?:为|是|等于|[:：=])?\s*([0-9]{1,6})/gu,
+      /(?:零空间|核空间)(?:的)?\s*(?:为|是|等于)\s*([0-9]{1,6})\s*维/gu,
+      /([0-9]{1,6})\s*维(?:的)?\s*(?:零空间|核空间)/gu,
+      /(?:nullity|null\s*-?space\s+dimension|dimension\s+of\s+the\s+null\s*-?space)\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu,
+      /(?:null\s*-?space|kernel)\s+(?:has\s+)?dimension\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([0-9]{1,6})/giu
+    ];
+    EXACT_COUNT_PATTERNS = [
+      /(?:共有?|一共|总计|总共有?|恰有)\s*([0-9]{1,9})\s*(?:种|个|条|项|组)/gu,
+      /(?:个数|数目|数量|方案数|总数)\s*(?:为|是|等于|[:：=])?\s*([0-9]{1,9})/gu,
+      /([0-9]{1,9})\s*(?:种|个)?\s*(?:可能的?|方法|排列|方案|序列)/gu,
+      /\bcount\b\s*(?:为|是|等于|[:：=]|\bis\b)\s*([0-9]{1,9})/giu
+    ];
+    COVER_TIME_PATTERNS = [
+      /(?:期望覆盖时间|覆盖时间|cover\s+time)\s*(?:为|是|等于|[:：=]|\bis\b)?\s*([+-]?[0-9]{1,9}(?:\/[1-9][0-9]{0,8})?)/giu,
+      /\bE\s*\[\s*T\s*\]\s*=\s*([+-]?[0-9]{1,9}(?:\/[1-9][0-9]{0,8})?)/gu
+    ];
+    VALUED_QUANTITY_FAMILIES = [
+      { id: "GF2_RANK", label: "GF(2) rank", integer: true, patterns: GF2_RANK_PATTERNS },
+      {
+        id: "GF2_NULLITY",
+        label: "nullspace dimension",
+        integer: true,
+        patterns: GF2_NULLITY_PATTERNS
+      },
+      { id: "EXACT_COUNT", label: "exact count", integer: true, patterns: EXACT_COUNT_PATTERNS },
+      { id: "COVER_TIME", label: "expected cover time", integer: false, patterns: COVER_TIME_PATTERNS }
+    ];
+    COUNT_OBSERVATIONS = [
+      { name: "bounded_enumeration", source: "the exact bounded enumeration" },
+      { name: "transition_count", source: "the exact transition count" },
+      { name: "count_by_digit_property", source: "the exact digit-property count" },
+      { name: "count_avoiding_permutations", source: "the exact forbidden-cell permutation count" }
+    ];
+    AFFIRMATIVE_VERDICT_TOKENS = [
+      "\u771F",
+      "\u6210\u7ACB",
+      "\u6052\u6210\u7ACB",
+      "\u662F",
+      "\u6B63\u786E",
+      "true",
+      "yes",
+      "correct"
+    ];
+    NEGATIVE_VERDICT_TOKENS = [
+      "\u5047",
+      "\u4E0D\u6210\u7ACB",
+      "\u5426",
+      "\u9519\u8BEF",
+      "false",
+      "no",
+      "incorrect"
     ];
   }
 });
@@ -17875,6 +18409,36 @@ function methodToolInputConstraint(route) {
     case "circle_laplacian_expr":
     case "planar_laplacian_expr":
       return "Expression and variable names must be quoted JSON strings; copy the input exactly.";
+    case "solve_quadratic_diophantine":
+      return "Pass a, b, c, d, e, f (and optional y_bound) as JSON integers with |coeff|<=32 and a!=0; do not quote numbers.";
+    case "symbolic_diophantine_with_timeout":
+      return "Pass lhs (and optional rhs) as polynomial strings using ** for powers, and optional two-variable list variables.";
+    case "solve_system_guarded_expr":
+      return "Pass expressions as an array of <=6 polynomial strings (using **) and variables as an array of <=3 variable names.";
+    case "polynomial_function_check":
+      return "Pass exactly the five fields equation, function, argument, variables and univariate rational polynomial expression.";
+    case "gf2_rank":
+      return "Pass rows ONLY as an array of <=8 non-negative JSON integers encoding binary rows (<=8 bits); do not pass width or strings.";
+    case "gf2_nullspace":
+      return "Pass rows (<=8 non-negative JSON integers) and integer width (1..8) only; do not quote integers.";
+    case "transition_count":
+      return "Pass integer length (1..6), integer num_states (1..4), transitions as [u,v] integer pairs, and optional integer arrays starts/ends (omit if default, never null).";
+    case "independence_polynomial_chain":
+      return "Pass n as a non-negative JSON integer (0..16); do not quote n.";
+    case "count_by_digit_property":
+      return "Pass digit_set (array of ints 0..9), max_digits (1..3), and optional modulus (1..64), residue (0..modulus-1), include_zero (boolean).";
+    case "rook_numbers":
+      return "Pass integer n (1..5) and forbidden as an array of <=10 [r,c] integer pairs with 0<=r,c<n.";
+    case "count_avoiding_permutations":
+      return "Pass integer n (1..6) and forbidden as an array of [i, pi_i] integer pairs with 0<=i,pi_i<n.";
+    case "cover_time_complete_graph":
+      return "Pass num_vertices as a JSON integer in 2..8.";
+    case "markov_expected_steps":
+      return "Pass transition as a <=6x6 matrix of exact decimal numbers summing to 1 per row, integer start, and non-empty integer array targets.";
+    case "finite_difference_derivative":
+      return "Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method (central/forward/backward).";
+    case "richardson_extrapolate":
+      return "Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method and integer order (1..8).";
     default:
       if (route.operation === "MAXIMAL_MINORS") {
         return "Every matrix entry must be a quoted JSON string; copy the exact entries from the statement.";
@@ -17888,8 +18452,11 @@ function methodToolInputConstraint(route) {
       return "Every expression and matrix entry must be a quoted JSON string; copy it exactly.";
   }
 }
+function semanticToolTurnNote(route) {
+  return "\n\nSEMANTIC TOOL TURN (" + route.operation + "). This problem contains a " + route.operation + ' object that must be computed from the problem statement. Before delivering a WorkPacket, return exactly one JSON tool action {"action":"tool","name":"' + route.toolName + '","args":' + route.argsTemplate + ',"scope":"<what is computed from the problem statement>"} and nothing else. ' + methodToolInputConstraint(route) + " Never substitute a different tool. Do not return a WorkPacket in this turn. The observation is input-relative and is not a proof of the mapping. After the observation, return a COMPLETE WorkPacket with a best-effort candidate.";
+}
 function methodToolCoPrompt(methodId2, route) {
-  const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId2 + ", routed tool " + route.toolName + '). Prefer one tool turn over writing the final WorkPacket from memory: {"action":"tool","name":"' + route.toolName + '","args":' + route.argsTemplate + ',"scope":"<what is computed from the problem statement>"}. ' + methodToolInputConstraint(route) + " After the PROGRAM_OBSERVATION arrives, submit the complete WorkPacket as usual.";
+  const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId2 + ", tool " + route.toolName + '). Prefer one tool turn over a final WorkPacket: {"action":"tool","name":"' + route.toolName + '","args":' + route.argsTemplate + ',"scope":"<what is computed from the problem statement>"}. ' + methodToolInputConstraint(route) + " After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
   const chars = [...block];
   return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS ? block : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
 }
@@ -18054,6 +18621,9 @@ function checkerSupportsObligation(action, problemText) {
     return false;
   }
   const args = action.args;
+  if (action.name === "linear_system_solution_set") {
+    return Array.isArray(args.matrix) && Array.isArray(args.rhs);
+  }
   const expression = typeof args.expression === "string" ? args.expression : null;
   if (expression === null) {
     return false;
@@ -18696,7 +19266,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           };
         } else if (forcedSemanticToolSelection && forcedSemanticToolRoute !== null) {
           const route2 = forcedSemanticToolRoute;
-          const note = "\n\nSEMANTIC TOOL TURN (" + route2.operation + "). This problem contains a " + route2.operation + ' object that must be computed from the problem statement. Before delivering a WorkPacket, return exactly one JSON tool action {"action":"tool","name":"' + route2.toolName + '","args":' + route2.argsTemplate + ',"scope":"<what is computed from the problem statement>"} and nothing else. Copy the explicit expression, polynomial or function exactly from the problem statement; never place raw arithmetic outside a quoted JSON string and never substitute a different tool. Do not return a WorkPacket in this turn. The observation is input-relative and is not a proof of the mapping. After the observation, return a COMPLETE WorkPacket with a best-effort candidate.';
+          const note = semanticToolTurnNote(route2);
           const messages = [
             {
               role: "system",

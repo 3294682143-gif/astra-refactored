@@ -38,7 +38,7 @@
 - 输入约束：`matrix` 1..12 行 × 1..6 列，元素为精确整数或分数字符串（不得用浮点）；`rhs` 每行一个；`variables` 顺序对齐列；`domain` 只能 `RATIONAL` 或 `REAL`；恰好这四个字段，不得增加。
 - 输出边界：输出是这份显式系统的解集，不替你证明它就是原问题的线性化。
 
-### `exact_check_expr（`operation` = `MAXIMAL_MINORS`）`
+### `exact_check_expr`（`operation` = `MAXIMAL_MINORS`）
 - 何时用：参数矩阵的秩／退化分类：取全部最大子式的因式分解与符号规范化结果。
 - `args` 模板：
 ```json

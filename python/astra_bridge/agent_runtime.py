@@ -21,7 +21,11 @@ import uuid
 from pathlib import Path
 
 from .agent_client import AgentClient
-from .agent_host import AgentHost
+from .agent_host import (
+    AgentHost,
+    _build_python_sandbox,
+    _resolve_python_sandbox_profile,
+)
 from . import host_carriers, host_checkpoint
 from .agent_protocol import AGENT_HOST_VERSION, load_manifest, payload
 from .p0_probe import ProbeError, _child_env, _close_streams, _reap
@@ -379,7 +383,9 @@ class AgentRuntime:
 
     The constructor only validates its arguments and captures the injected
     public client; it performs no call, spawns nothing and reads no environment
-    variable beyond the child allowlist used at spawn time.
+    variable beyond the child allowlist used at spawn time, plus the single
+    optional ``ASTRA_WASI_PROFILE`` that may name an already-accepted generated
+    Python profile. With no such profile it reads no file at all.
     """
 
     def __init__(
@@ -399,6 +405,7 @@ class AgentRuntime:
         derive_budget=False,
         node="node",
         mode="platform",
+        python_sandbox_profile=None,
     ):
         if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 256:
             raise ValueError("invalid max_model_calls")
@@ -442,6 +449,18 @@ class AgentRuntime:
         self.node = node
         self.mode = mode
         self.client = AgentClient(client)
+        # Stage D: an optional, already-accepted generated-Python profile. With
+        # no profile (argument and ``ASTRA_WASI_PROFILE`` both absent) this is
+        # ``(None, None, None)`` and no file is opened, so the default runtime is
+        # byte-identical to the pre-Stage-D one.
+        self.python_sandbox_profile = _resolve_python_sandbox_profile(
+            python_sandbox_profile
+        )
+        (
+            self.python_sandbox,
+            self.python_sandbox_identity,
+            self.python_sandbox_diagnostic,
+        ) = _build_python_sandbox(self.python_sandbox_profile)
         self._solve_lock = threading.Lock()
         self.last_journal = None
         # Defect 3: the real immutable SessionLog events and the real accumulated
@@ -657,7 +676,7 @@ class AgentRuntime:
             host_options["resumeHistory"] = resume.get("history")
         host = AgentHost(
             manifest, session_id, deadline, problem, problem_hash, host_options,
-            self.client,
+            self.client, python_sandbox_profile=self.python_sandbox_profile,
         )
         proc = None
         reaped = False

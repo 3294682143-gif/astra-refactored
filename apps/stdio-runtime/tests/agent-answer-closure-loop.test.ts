@@ -703,3 +703,108 @@ test("selecting the option that matches the observation spends no closure turn",
   assert.equal(row.data["candidateChanged"], false);
   assert.equal(run.result.summary.finalResponse, "A");
 });
+
+// ---------------------------------------------------------------------------
+// The GF(2) rank observation family grounds `observationUsed` exactly like the
+// maximal-minor family: a labelled GF(2)-rank claim that contradicts the exact
+// elimination opens one bounded closure turn, and a matching claim never does.
+// ---------------------------------------------------------------------------
+
+const GF2_RANK_PROBLEM = "求给定二元矩阵 M 在 GF(2) 上的秩。";
+
+/** One literal `gf2_rank` action for the explicit bit-packed rows. */
+function gf2RankAction(): string {
+  return JSON.stringify({
+    action: "tool",
+    name: "gf2_rank",
+    args: { rows: [1, 2, 4] },
+    scope: "rank over GF(2) of the explicit bit-packed rows",
+  });
+}
+
+/** One COMPLETE `gf2_rank` receipt: the payload is the bare integer rank 3. */
+function gf2RankEffect(request: P3EffectRequest): P3EffectReceipt {
+  const observation = JSON.stringify({
+    tool: "gf2_rank",
+    result: 3,
+    interpretation: "OBSERVATION_NOT_PROOF",
+  });
+  return {
+    effectId: request.effectId,
+    binding: request.binding,
+    status: "COMPLETE",
+    source: "PROGRAM_OBSERVATION",
+    observation,
+    observationHash: p4Hash(observation),
+    level: "PROVISIONAL",
+    checkResult: "UNKNOWN",
+  };
+}
+
+async function runGf2Rank(options: {
+  readonly candidate: string;
+  readonly closureCandidate: string;
+}) {
+  let turn = 0;
+  const ports = reactivePorts({
+    work: (request: AgentModelRequest) => {
+      turn += 1;
+      if (request.messages[0]!.content.includes("ANSWER CLOSURE")) {
+        return reactiveWork(request, { candidate: options.closureCandidate });
+      }
+      // The routed tool turn comes first; every later turn delivers a packet.
+      if (turn === 1) return gf2RankAction();
+      return reactiveWork(request, { candidate: options.candidate });
+    },
+    effect: gf2RankEffect,
+  });
+  const result = await runAgentLoop(
+    GF2_RANK_PROBLEM,
+    "s",
+    {
+      remainingMs: 8000,
+      maxModelCalls: 12,
+      maxWorkUnits: 1,
+      maxReviews: 0,
+      maxEffects: 1,
+      maxConsensus: 1,
+      now: () => 0,
+    },
+    { model: ports.model, effect: ports.effect },
+  );
+  return { result, requests: ports.requests, rows: closureRowsOf(result) };
+}
+
+test("a GF(2) rank observation grounds observationUsed and is repaired", async () => {
+  const run = await runGf2Rank({
+    candidate: "该矩阵在 GF(2) 上的秩为 2",
+    closureCandidate: "该矩阵在 GF(2) 上的秩为 3",
+  });
+  assert.equal(run.rows.length, 1, "exactly one closure evaluation");
+  const row = run.rows[0]!;
+  assert.equal(row.data["stage"], "ANSWER_CLOSURE");
+  assert.deepEqual(row.data["defects"], ["GF2_RANK_MISMATCH"]);
+  assert.equal(row.data["observationViews"], 1);
+  assert.equal(row.data["observationUsed"], true, "the bare integer rank grounded it");
+  assert.equal(row.data["closureRequested"], true, "one bounded closure turn was spent");
+  assert.equal(row.data["candidateChanged"], true);
+  assert.deepEqual(row.data["remainingDefects"], []);
+  assert.equal(run.result.summary.finalResponse, "该矩阵在 GF(2) 上的秩为 3");
+  assert.equal(run.result.summary.candidateVerified, false);
+});
+
+test("a GF(2) rank claim that matches the observed rank never grounds a defect", async () => {
+  const run = await runGf2Rank({
+    candidate: "该矩阵在 GF(2) 上的秩为 3",
+    closureCandidate: "该矩阵在 GF(2) 上的秩为 3",
+  });
+  assert.equal(run.rows.length, 1, "the evaluation is logged even with no defect");
+  const row = run.rows[0]!;
+  assert.equal(row.data["stage"], "ANSWER_CLOSURE");
+  assert.deepEqual(row.data["defects"], []);
+  assert.equal(row.data["observationViews"], 1, "the observation really was recorded");
+  assert.equal(row.data["observationUsed"], false);
+  assert.equal(row.data["closureRequested"], false);
+  assert.equal(row.data["candidateChanged"], false);
+  assert.equal(run.result.summary.finalResponse, "该矩阵在 GF(2) 上的秩为 3");
+});

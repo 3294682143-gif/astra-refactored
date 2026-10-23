@@ -28,7 +28,7 @@
 
 本节只列当前 P3 协议白名单（11 个注册算子）里本卡真正可调用的注册工具。工具只对显式输入重算一次精确结果并给独立校验，不判定“题目→输入”的映射是否正确，也不替代原题的证明义务。
 
-### `exact_check_expr（`operation` = `DEFINITE_INTEGRAL`）`
+### `exact_check_expr`（`operation` = `DEFINITE_INTEGRAL`）
 - 何时用：核对定积分值（含对称区间、互补变换归约后的值），同时取符号结果与数值近似。
 - `args` 模板：
 ```json
@@ -37,7 +37,7 @@
 - 输入约束：`lower`/`upper` 为字符串，可写 `0`、`pi`、`oo`、`-oo`；被积式须落在白名单 AST 内；积分可能返回未求值形式，此时只有数值近似可用。
 - 输出边界：工具不判断积分是否收敛、也不判断对称归约的合法性；发散不能用形式相消掩盖。
 
-### `exact_check_expr（`operation` = `TRIG_REDUCE`）`
+### `exact_check_expr`（`operation` = `TRIG_REDUCE`）
 - 何时用：核对换元／合并后三角式的化简结果（降到 exp 再取实部并与原式比零差）。
 - `args` 模板：
 ```json

@@ -111,7 +111,15 @@ def _method_effect(request, catalog, deadline):
     return receipt(request, "COMPLETE", observation)
 
 
-def perform_effect(request, *, executor=None, catalog=None, clock=time.monotonic, root_deadline=None):
+def perform_effect(
+    request,
+    *,
+    executor=None,
+    catalog=None,
+    python_sandbox=None,
+    clock=time.monotonic,
+    root_deadline=None,
+):
     """Validate one request and perform at most one effect.
 
     The clock is read before validation, so no execution can start before the
@@ -121,6 +129,16 @@ def perform_effect(request, *, executor=None, catalog=None, clock=time.monotonic
     ``root_deadline`` is an optional absolute monotonic deadline owned by the
     caller. When supplied it can only tighten the local deadline; it never
     refreshes or extends it.
+
+    ``python_sandbox`` is the optional, already-accepted generated-Python
+    provider (``mathagent.tools.PythonSandbox``) carried by the trusted caller.
+    The P3 wire vocabulary is ``("tool", "method")`` only: there is *no*
+    generated-exploration action, so this keyword never changes a
+    wire-reachable path and every existing caller is byte-identical when it is
+    ``None``. The generated-exploration seam that may actually reach
+    ``generated_execution_gate.execute_with_gate`` is
+    ``agent_host.AgentHost.generated_exploration``, which is called explicitly
+    and never from the Node wire.
     """
     try:
         started = clock()

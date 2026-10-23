@@ -42,7 +42,7 @@
 - 输入约束：`expression` 必须是多项式，不得先约去含变量的分母（含变量分母会被直接拒绝）；乘幂必须写 `**`（该族桥算子会拒绝 `^`）；次数 ≤ 6，系数分子/分母 ≤ 128；`variable` 可选（短标识符），`timeout_ms` 可选。
 - 输出边界：计数只认证所给这个多项式；定义域与原方程解集是否一致仍由你论证。
 
-### `exact_check_expr（`operation` = `SIMPLIFY`）`
+### `exact_check_expr`（`operation` = `SIMPLIFY`）
 - 何时用：核对“变形前后等价”这一步，取独立实现的化简式与零差证据。
 - `args` 模板：
 ```json

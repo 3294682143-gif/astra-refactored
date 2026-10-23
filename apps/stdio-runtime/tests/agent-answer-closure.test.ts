@@ -745,7 +745,11 @@ function optionsRow(problemText: string, candidate: string): string {
 function optionClosure(
   problemText: string,
   candidate: string,
-  toolObservations?: readonly { name: string; operation: string; result: unknown }[],
+  toolObservations?: readonly {
+    name: string;
+    operation: string | null;
+    result: unknown;
+  }[],
 ) {
   return answerClosureDefects({
     problemText,
@@ -1081,4 +1085,745 @@ test("the closure note names the option letter with observed and asserted values
   assert.match(note, /Reconcile the chosen option with the exact observation: option B/u);
   assert.match(note, /Reconcile the chosen option with the exact observation: option D/u);
   assert.doesNotMatch(note, /#\d+|item\s+\d+/iu);
+});
+
+// ---------------------------------------------------------------------------
+// Observation-grounded diagnostics for the exact count/algebra/verdict tools:
+// `gf2_rank`, `gf2_nullspace`, `bounded_enumeration`, `transition_count`,
+// `count_by_digit_property`, `count_avoiding_permutations`,
+// `cover_time_complete_graph` and `polynomial_function_check`.
+//
+// Every case is input-relative and fail-closed: one explicitly labelled number
+// against one explicit observation, or no defect at all.
+// ---------------------------------------------------------------------------
+
+const GF2_RANK_PROBLEM = "求给定二元矩阵 M 在 GF(2) 上的秩。";
+
+/** One `gf2_rank` observation view carrying a caller-given payload. */
+function gf2RankObservation(result: unknown) {
+  return [{ name: "gf2_rank", operation: null, result }];
+}
+
+/** One `gf2_nullspace` observation view carrying a caller-given payload. */
+function gf2NullspaceObservation(result: unknown) {
+  return [{ name: "gf2_nullspace", operation: null, result }];
+}
+
+/** One exact-count observation view for a counting operator. */
+function countObservation(name: string, result: unknown) {
+  return [{ name, operation: null, result }];
+}
+
+/** One `cover_time_complete_graph` observation view. */
+function coverTimeObservation(result: unknown) {
+  return [{ name: "cover_time_complete_graph", operation: null, result }];
+}
+
+/** One `polynomial_function_check` observation view. */
+function identityObservation(result: unknown) {
+  return [{ name: "polynomial_function_check", operation: null, result }];
+}
+
+const IDENTITY_PROBLEM = "判断 f(x)=x 是否满足 f(x+y)=f(x)+f(y)。";
+
+test("a GF(2) rank observation contradicts only an explicit binary-field rank claim", () => {
+  const wrong = answerClosureDefects({
+    problemText: GF2_RANK_PROBLEM,
+    candidate: "该矩阵在 GF(2) 上的秩为 2",
+    packet: { candidateProposal: "该矩阵在 GF(2) 上的秩为 2" },
+    toolObservations: gf2RankObservation(3),
+  });
+  assert.equal(wrong.length, 1);
+  assert.equal(wrong[0]?.kind, "GF2_RANK_MISMATCH");
+  assert.equal(wrong[0]?.evidence, "OBSERVATION");
+  assert.equal(
+    wrong[0]?.detail,
+    "the candidate asserts GF(2) rank 2, but the exact GF(2) elimination " +
+      "reports exactly 3",
+  );
+
+  // The whole numeric candidate of a problem that *is* a GF(2)-rank question
+  // states that rank itself.
+  const bare = answerClosureDefects({
+    problemText: GF2_RANK_PROBLEM,
+    candidate: "$2$",
+    packet: { candidateProposal: "2" },
+    toolObservations: gf2RankObservation(3),
+  });
+  assert.equal(bare[0]?.kind, "GF2_RANK_MISMATCH");
+  assert.equal(
+    bare[0]?.detail,
+    "the candidate states 2, but the exact GF(2) elimination reports exactly 3",
+  );
+
+  // Negatives: the agreeing claim, a bare rank over an unspecified field, a
+  // problem that never names GF(2), and an absent observation.
+  for (const agreeing of ["该矩阵在 GF(2) 上的秩为 3", "rank over GF(2) = 3", "3"]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: GF2_RANK_PROBLEM,
+        candidate: agreeing,
+        packet: { candidateProposal: agreeing },
+        toolObservations: gf2RankObservation(3),
+      }),
+      [],
+    );
+  }
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "求给定矩阵的秩。",
+      candidate: "秩为 2",
+      packet: { candidateProposal: "秩为 2" },
+      toolObservations: gf2RankObservation(3),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "求给定矩阵的秩。",
+      candidate: "2",
+      packet: { candidateProposal: "2" },
+      toolObservations: gf2RankObservation(3),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: GF2_RANK_PROBLEM,
+      candidate: "该矩阵在 GF(2) 上的秩为 2",
+      packet: { candidateProposal: "该矩阵在 GF(2) 上的秩为 2" },
+    }),
+    [],
+  );
+});
+
+test("a GF(2) nullspace observation contradicts only an explicit nullspace dimension", () => {
+  const problem = "求该二元矩阵零空间的维数。";
+  const wrong = answerClosureDefects({
+    problemText: problem,
+    candidate: "零空间维数为 3",
+    packet: { candidateProposal: "零空间维数为 3" },
+    toolObservations: gf2NullspaceObservation([3, 5]),
+  });
+  assert.equal(wrong.length, 1);
+  assert.equal(wrong[0]?.kind, "GF2_NULLITY_MISMATCH");
+  assert.equal(wrong[0]?.evidence, "OBSERVATION");
+  assert.equal(
+    wrong[0]?.detail,
+    "the candidate asserts nullspace dimension 3, but the exact GF(2) kernel " +
+      "basis reports exactly 2",
+  );
+
+  // The producer may hand the basis over as `{nullspace: [...]}`; the nullity is
+  // the basis length either way. An empty basis is the exact dimension 0.
+  assert.equal(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "nullity = 3",
+      packet: { candidateProposal: "nullity = 3" },
+      toolObservations: gf2NullspaceObservation({ nullspace: [1, 2] }),
+    })[0]?.kind,
+    "GF2_NULLITY_MISMATCH",
+  );
+  assert.equal(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "零空间维数为 1",
+      packet: { candidateProposal: "零空间维数为 1" },
+      toolObservations: gf2NullspaceObservation([]),
+    })[0]?.kind,
+    "GF2_NULLITY_MISMATCH",
+  );
+
+  // Negatives: agreement, a `维数` that is not a nullspace dimension, and an
+  // absent observation.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "零空间维数为 2",
+      packet: { candidateProposal: "零空间维数为 2" },
+      toolObservations: gf2NullspaceObservation([3, 5]),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "该矩阵的列空间维数为 3",
+      packet: { candidateProposal: "该矩阵的列空间维数为 3" },
+      toolObservations: gf2NullspaceObservation([3, 5]),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "零空间维数为 3",
+      packet: { candidateProposal: "零空间维数为 3" },
+    }),
+    [],
+  );
+});
+
+test("an exact count observation never compares a fraction and never guesses between counts", () => {
+  const problem = "求满足条件的序列个数。";
+  const pureWrong = answerClosureDefects({
+    problemText: problem,
+    candidate: "5",
+    packet: { candidateProposal: "5" },
+    toolObservations: countObservation("transition_count", 8),
+  });
+  assert.equal(pureWrong.length, 1);
+  assert.equal(pureWrong[0]?.kind, "EXACT_COUNT_MISMATCH");
+  assert.equal(pureWrong[0]?.evidence, "OBSERVATION");
+  assert.equal(
+    pureWrong[0]?.detail,
+    "the candidate states 5, but the exact transition count reports exactly 8",
+  );
+
+  // The labelled form and a chosen option are read the same way.
+  assert.equal(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "共有 5 种",
+      packet: { candidateProposal: "共有 5 种" },
+      toolObservations: countObservation("count_by_digit_property", 8),
+    })[0]?.detail,
+    "the candidate asserts exact count 5, but the exact digit-property count " +
+      "reports exactly 8",
+  );
+  const optionProblem = [
+    "求满足条件的排列个数，选择正确的选项：",
+    "A. 共有 8 种",
+    "B. 共有 5 种",
+  ].join("\n");
+  const optionDefect = optionClosure(
+    optionProblem,
+    "B",
+    countObservation("count_avoiding_permutations", 8),
+  );
+  assert.equal(optionDefect.length, 1);
+  assert.equal(optionDefect[0]?.kind, "EXACT_COUNT_MISMATCH");
+  assert.equal(
+    optionDefect[0]?.detail,
+    "option B asserts exact count 5, but the exact forbidden-cell permutation " +
+      "count reports exactly 8",
+  );
+  assert.deepEqual(
+    optionClosure(optionProblem, "A", countObservation("count_avoiding_permutations", 8)),
+    [],
+  );
+
+  // The fraction-skip rule: a probability answer is never compared to a count,
+  // and a fraction-shaped observation never grounds a plain-integer comparison.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "求从中随机取两个对象恰好满足条件的概率。",
+      candidate: "223/8330",
+      packet: { candidateProposal: "223/8330" },
+      toolObservations: countObservation("bounded_enumeration", { count: 223 }),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "共有 5 种",
+      packet: { candidateProposal: "共有 5 种" },
+      toolObservations: countObservation("bounded_enumeration", {
+        favorable: 3,
+        total: 10,
+        fraction: "3/10",
+      }),
+    }),
+    [],
+  );
+  // Two different exact counts in one run make the candidate's number
+  // unattributable, so nothing is compared.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "5",
+      packet: { candidateProposal: "5" },
+      toolObservations: [
+        { name: "transition_count", operation: null, result: 8 },
+        { name: "count_by_digit_property", operation: null, result: 9 },
+      ],
+    }),
+    [],
+  );
+  // `bounded_enumeration` reports `{count}`: that is the exact count.
+  assert.equal(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "共有 5 种",
+      packet: { candidateProposal: "共有 5 种" },
+      toolObservations: countObservation("bounded_enumeration", { count: 8 }),
+    })[0]?.detail,
+    "the candidate asserts exact count 5, but the exact bounded enumeration " +
+      "reports exactly 8",
+  );
+  // An agreeing count, a suffix-carrying agreeing count and a non-count payload
+  // are all clean.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "$8$ 个",
+      packet: { candidateProposal: "$8$ 个" },
+      toolObservations: countObservation("transition_count", 8),
+    }),
+    [],
+  );
+  for (const payload of [-5, 1.5, "many", { count: -1 }, null]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: problem,
+        candidate: "5",
+        packet: { candidateProposal: "5" },
+        toolObservations: countObservation("transition_count", payload),
+      }),
+      [],
+    );
+  }
+});
+
+test("a cover-time observation contradicts only an explicit exact cover-time claim", () => {
+  const problem = "求完全图 K_4 上简单随机游走的期望覆盖时间。";
+  const wrong = answerClosureDefects({
+    problemText: problem,
+    candidate: "期望覆盖时间为 5",
+    packet: { candidateProposal: "期望覆盖时间为 5" },
+    toolObservations: coverTimeObservation("11/2"),
+  });
+  assert.equal(wrong.length, 1);
+  assert.equal(wrong[0]?.kind, "COVER_TIME_MISMATCH");
+  assert.equal(wrong[0]?.evidence, "OBSERVATION");
+  assert.equal(
+    wrong[0]?.detail,
+    "the candidate asserts expected cover time 5, but the exact cover-time " +
+      "closed form reports exactly 11/2",
+  );
+
+  // Negatives: the exact rational in another notation, a float payload (never an
+  // exact value), an unlabelled number and an absent observation.
+  for (const candidate of ["期望覆盖时间为 11/2", "cover time = 11/2"]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: problem,
+        candidate,
+        packet: { candidateProposal: candidate },
+        toolObservations: coverTimeObservation("11/2"),
+      }),
+      [],
+    );
+  }
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "期望覆盖时间为 5",
+      packet: { candidateProposal: "期望覆盖时间为 5" },
+      toolObservations: coverTimeObservation(5.5),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "游走 5 步后返回",
+      packet: { candidateProposal: "游走 5 步后返回" },
+      toolObservations: coverTimeObservation("11/2"),
+    }),
+    [],
+  );
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "期望覆盖时间为 5",
+      packet: { candidateProposal: "期望覆盖时间为 5" },
+    }),
+    [],
+  );
+  // An exact integer closed form is compared exactly.
+  assert.equal(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "期望覆盖时间为 5",
+      packet: { candidateProposal: "期望覆盖时间为 5" },
+      toolObservations: coverTimeObservation({ value: 4 }),
+    })[0]?.kind,
+    "COVER_TIME_MISMATCH",
+  );
+});
+
+test("a pure verdict contradicts polynomial_function_check only when the residual refutes it", () => {
+  const refuted = {
+    identity_holds: false,
+    residual_terms: [[[1, 1], "2"]],
+    witness: { point: [1, 1], residual: "2" },
+  };
+  const affirmative = answerClosureDefects({
+    problemText: IDENTITY_PROBLEM,
+    candidate: "成立",
+    packet: { candidateProposal: "成立" },
+    toolObservations: identityObservation(refuted),
+  });
+  assert.equal(affirmative.length, 1);
+  assert.equal(affirmative[0]?.kind, "IDENTITY_VERDICT_MISMATCH");
+  assert.equal(affirmative[0]?.evidence, "OBSERVATION");
+  assert.equal(
+    affirmative[0]?.detail,
+    "the exact residual computation reports identity_holds=false with witness " +
+      "point [1,1] residual 2, but the candidate states the pure verdict 成立",
+  );
+
+  // The symmetric case: a negative verdict against a proven identity.
+  const negative = answerClosureDefects({
+    problemText: IDENTITY_PROBLEM,
+    candidate: "$\\boxed{假}$",
+    packet: { candidateProposal: "假" },
+    toolObservations: identityObservation({ identity_holds: true, witness: null }),
+  });
+  assert.equal(negative.length, 1);
+  assert.equal(
+    negative[0]?.detail,
+    "the exact residual computation reports identity_holds=true, but the " +
+      "candidate states the pure verdict $\\boxed{假}$",
+  );
+
+  // Negatives: the verdict that agrees, prose, a hedged verdict and a payload
+  // whose verdict field is not a real boolean.
+  for (const candidate of ["不成立", "该函数成立当且仅当 x=1", "不一定成立"]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: IDENTITY_PROBLEM,
+        candidate,
+        packet: { candidateProposal: candidate },
+        toolObservations: identityObservation(refuted),
+      }),
+      [],
+    );
+  }
+  for (const payload of [
+    null,
+    [],
+    { identity_holds: "false" },
+    { identity_holds: 0 },
+    { residual_terms: [] },
+  ]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: IDENTITY_PROBLEM,
+        candidate: "成立",
+        packet: { candidateProposal: "成立" },
+        toolObservations: identityObservation(payload),
+      }),
+      [],
+    );
+  }
+});
+
+test("the new observation diagnostics stay silent on ambiguity, negation and hedges", () => {
+  const sequenceCount = countObservation("transition_count", 8);
+  const twoNumbersProblem = "求满足条件的序列个数，选择正确的选项：";
+  // Two labelled numbers in one clause: which one is the count is undecidable.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: twoNumbersProblem,
+      candidate: "共有 5 种或 6 种",
+      packet: { candidateProposal: "共有 5 种或 6 种" },
+      toolObservations: sequenceCount,
+    }),
+    [],
+  );
+  // Two labelled numbers in two clauses: the count claim is still ambiguous.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: twoNumbersProblem,
+      candidate: "共有 5 种情形，另有 6 种排列",
+      packet: { candidateProposal: "共有 5 种情形，另有 6 种排列" },
+      toolObservations: sequenceCount,
+    }),
+    [],
+  );
+  // An unattributed number in the same clause yields no defect at all.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: twoNumbersProblem,
+      candidate: "该矩阵的 2 个行向量共有 5 个满足条件的序列",
+      packet: { candidateProposal: "该矩阵的 2 个行向量共有 5 个满足条件的序列" },
+      toolObservations: sequenceCount,
+    }),
+    [],
+  );
+  // Negations and hedges never assert a value.
+  for (const candidate of ["共有 5 种不成立", "可能共有 5 种", "未必共有 5 种", "一定不是 5 种"]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: twoNumbersProblem,
+        candidate,
+        packet: { candidateProposal: candidate },
+        toolObservations: sequenceCount,
+      }),
+      [],
+    );
+  }
+  // The same rules hold for the GF(2) families.
+  for (const candidate of ["GF(2) 上秩为 2 或 3", "GF(2) 上的秩不是 2", "秩可能为 2"]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: GF2_RANK_PROBLEM,
+        candidate,
+        packet: { candidateProposal: candidate },
+        toolObservations: gf2RankObservation(3),
+      }),
+      [],
+    );
+  }
+});
+
+test("malformed observations for the new diagnostics never throw", () => {
+  const cases: readonly {
+    readonly problemText: string;
+    readonly candidate: string;
+    readonly observations: readonly { name: string; operation: null; result: unknown }[];
+  }[] = [
+    {
+      problemText: GF2_RANK_PROBLEM,
+      candidate: "该矩阵在 GF(2) 上的秩为 2",
+      observations: gf2RankObservation({ rank: 3 }),
+    },
+    {
+      problemText: GF2_RANK_PROBLEM,
+      candidate: "该矩阵在 GF(2) 上的秩为 2",
+      observations: gf2RankObservation(-3),
+    },
+    {
+      problemText: GF2_RANK_PROBLEM,
+      candidate: "该矩阵在 GF(2) 上的秩为 2",
+      observations: gf2RankObservation("三"),
+    },
+    {
+      problemText: "求零空间维数。",
+      candidate: "零空间维数为 3",
+      observations: gf2NullspaceObservation({ rows: [3, 5] }),
+    },
+    {
+      problemText: "求零空间维数。",
+      candidate: "零空间维数为 3",
+      observations: gf2NullspaceObservation([1.5, 3]),
+    },
+    {
+      problemText: "求零空间维数。",
+      candidate: "零空间维数为 3",
+      observations: gf2NullspaceObservation("basis"),
+    },
+    {
+      problemText: "求序列个数。",
+      candidate: "共有 5 种",
+      observations: countObservation("transition_count", { value: "8/3" }),
+    },
+    {
+      problemText: "求覆盖时间。",
+      candidate: "期望覆盖时间为 5",
+      observations: coverTimeObservation("five"),
+    },
+    {
+      problemText: "求覆盖时间。",
+      candidate: "期望覆盖时间为 5",
+      observations: coverTimeObservation([1, 2]),
+    },
+    {
+      problemText: IDENTITY_PROBLEM,
+      candidate: "成立",
+      observations: identityObservation("false"),
+    },
+  ];
+  for (const row of cases) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: row.problemText,
+        candidate: row.candidate,
+        packet: { candidateProposal: row.candidate },
+        toolObservations: row.observations,
+      }),
+      [],
+    );
+  }
+  // An unusable witness does not make the verdict unusable: the defect is still
+  // reported, without a witness phrase it cannot justify.
+  const noWitness = answerClosureDefects({
+    problemText: IDENTITY_PROBLEM,
+    candidate: "成立",
+    packet: { candidateProposal: "成立" },
+    toolObservations: identityObservation({ identity_holds: false, witness: "x=1" }),
+  });
+  assert.equal(noWitness.length, 1);
+  assert.equal(
+    noWitness[0]?.detail,
+    "the exact residual computation reports identity_holds=false, but the " +
+      "candidate states the pure verdict 成立",
+  );
+  // A structurally broken observation list is ignored rather than thrown on.
+  for (const broken of [null, [], [null], [{ name: "gf2_rank" }]]) {
+    assert.deepEqual(
+      answerClosureDefects({
+        problemText: GF2_RANK_PROBLEM,
+        candidate: "该矩阵在 GF(2) 上的秩为 2",
+        packet: { candidateProposal: "该矩阵在 GF(2) 上的秩为 2" },
+        toolObservations: broken as never,
+      }),
+      [],
+    );
+  }
+});
+
+test("the new defect kinds sit after the option kinds and before solution completeness", () => {
+  const problem = [
+    "关于给定二元矩阵与相关计数，选择正确的选项：",
+    "A. 该群的阶为 6",
+    "B. 该群的阶为 8",
+    "C. 该群是可交换群",
+    "D. 该群是循环群",
+  ].join("\n");
+  const candidate =
+    "B、C；另外 M 在 GF(2) 上的秩为 2；零空间维数为 3；共有 5 种；期望覆盖时间为 5";
+  const defects = answerClosureDefects({
+    problemText: problem,
+    candidate,
+    packet: {
+      candidateProposal: candidate,
+      suggestedChecks: [
+        "CERT1|OPTIONS|A=TRUE,B=TRUE,C=TRUE,D=FALSE",
+      ],
+    },
+    toolObservations: [
+      {
+        name: "finite_group_structure",
+        operation: "GROUP_STRUCTURE",
+        result: OPTION_GROUP_OBSERVATION,
+      },
+      { name: "gf2_rank", operation: null, result: 3 },
+      { name: "gf2_nullspace", operation: null, result: [1, 2] },
+      { name: "transition_count", operation: null, result: 8 },
+      { name: "cover_time_complete_graph", operation: null, result: "11/2" },
+    ],
+    expectedSolutionKeys: ["1/1"],
+    requiresExhaustive: true,
+  });
+  assert.deepEqual(
+    defects.map((row) => row.kind),
+    [
+      "OPTION_NUMERIC_CONTRADICTION",
+      "OPTION_VERDICT_CONTRADICTION",
+      "GF2_RANK_MISMATCH",
+      "GF2_NULLITY_MISMATCH",
+      "EXACT_COUNT_MISMATCH",
+      "COVER_TIME_MISMATCH",
+      "SOLUTION_COMPLETENESS",
+    ],
+  );
+  // Every new kind is observation-grounded.
+  for (const row of defects.slice(2, 6)) {
+    assert.equal(row.evidence, "OBSERVATION");
+  }
+  // The identity verdict kind is documented between the option kinds and the
+  // completeness check as well.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: IDENTITY_PROBLEM,
+      candidate: "成立",
+      packet: { candidateProposal: "成立" },
+      toolObservations: identityObservation({ identity_holds: false }),
+      expectedSolutionKeys: ["1/1"],
+      requiresExhaustive: true,
+    }).map((row) => row.kind),
+    ["IDENTITY_VERDICT_MISMATCH", "SOLUTION_COMPLETENESS"],
+  );
+  // The same input always yields the same order.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate,
+      packet: {
+        candidateProposal: candidate,
+        suggestedChecks: [
+          "CERT1|OPTIONS|A=TRUE,B=TRUE,C=TRUE,D=FALSE",
+        ],
+      },
+      toolObservations: [
+        {
+          name: "finite_group_structure",
+          operation: "GROUP_STRUCTURE",
+          result: OPTION_GROUP_OBSERVATION,
+        },
+        { name: "gf2_rank", operation: null, result: 3 },
+        { name: "gf2_nullspace", operation: null, result: [1, 2] },
+        { name: "transition_count", operation: null, result: 8 },
+        { name: "cover_time_complete_graph", operation: null, result: "11/2" },
+      ].reverse(),
+      expectedSolutionKeys: ["1/1"],
+      requiresExhaustive: true,
+    }).map((row) => row.kind),
+    defects.map((row) => row.kind),
+  );
+});
+
+test("the '[' bracket is still not an option marker for the new option checks", () => {
+  // `[E:Q]=8` inside an option body must not be read as option E, so the block
+  // stays a clean A..B table and only the chosen letter is compared.
+  const problem = [
+    "求二元矩阵在 GF(2) 上的秩，选择正确的选项：",
+    "A. [E:Q]=8，GF(2) 上的秩为 3",
+    "B. [E:Q]=6，GF(2) 上的秩为 2",
+  ].join("\n");
+  assert.deepEqual(problemOptionTexts(problem), [
+    { letter: "A", text: "[E:Q]=8，GF(2) 上的秩为 3" },
+    { letter: "B", text: "[E:Q]=6，GF(2) 上的秩为 2" },
+  ]);
+  const wrong = optionClosure(problem, "B", gf2RankObservation(3));
+  assert.equal(wrong.length, 1);
+  assert.equal(wrong[0]?.kind, "GF2_RANK_MISMATCH");
+  assert.equal(
+    wrong[0]?.detail,
+    "option B asserts GF(2) rank 2, but the exact GF(2) elimination reports " +
+      "exactly 3",
+  );
+  assert.deepEqual(optionClosure(problem, "A", gf2RankObservation(3)), []);
+});
+
+test("the closure note names the observed value for each new defect kind", () => {
+  const rankNote = answerClosureNote([
+    {
+      kind: "GF2_RANK_MISMATCH",
+      detail: "the candidate asserts GF(2) rank 2, but the exact GF(2) elimination reports exactly 3",
+    },
+  ]);
+  assert.match(rankNote, /- GF2_RANK_MISMATCH: the candidate asserts GF\(2\) rank 2/u);
+  assert.match(rankNote, /rank over GF\(2\)/u);
+  assert.match(
+    answerClosureNote([
+      { kind: "GF2_NULLITY_MISMATCH", detail: "nullspace dimension 3 versus 2" },
+    ]),
+    /nullspace dimension/u,
+  );
+  assert.match(
+    answerClosureNote([{ kind: "EXACT_COUNT_MISMATCH", detail: "5 versus 8" }]),
+    /a probability is not a count/u,
+  );
+  assert.match(
+    answerClosureNote([{ kind: "COVER_TIME_MISMATCH", detail: "5 versus 11\/2" }]),
+    /expected cover time/u,
+  );
+  assert.match(
+    answerClosureNote([
+      { kind: "IDENTITY_VERDICT_MISMATCH", detail: "identity_holds=false" },
+    ]),
+    /verdict on the functional identity/u,
+  );
+  // An unrelated defect set gets none of these hints.
+  const unrelated = answerClosureNote([
+    { kind: "DEGREE_CONSERVATION", detail: "degree 6 versus 2" },
+  ]);
+  assert.doesNotMatch(unrelated, /GF\(2\) rank|expected cover time|functional identity/u);
+  assert.doesNotMatch(rankNote, /#\d+|item\s+\d+/iu);
 });

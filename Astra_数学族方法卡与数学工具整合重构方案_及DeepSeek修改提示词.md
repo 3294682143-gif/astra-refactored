@@ -1,242 +1,294 @@
-# Astra MathAgent：数学族方法卡（Method/Skill Cards）与数学工具（Math Tools）整合重构方案及 DeepSeek v4.1 1017 执行提示词
+# Astra (`feat/v4-dynamic-workflows`) 数学族方法卡 × 预注册数学工具 × WASI 沙箱全链路长阶段整合方案（含 DeepSeek v4.1 1017 一次性完整执行提示词）
 
-> **文档定位**：针对 `astra-refactored`（`feat/v4-dynamic-workflows` 分支，HANDOFF v5.14）当前最核心的架构痛点——**20 张通用方法卡（`general_v11`）、22 个数学族技能卡（`math_families`）与 76 个已实现数学工具之间的割裂、错配与连环丢包调用流**，提供完整的全景对齐矩阵、三阶段重构蓝图，以及可直接复制给 **DeepSeek v4.1 1017** 执行的工程级修改提示词。
-
----
-
-## 第一部分：现状诊断——工具调用与方法卡体系的 5 重混乱
-
-通过对仓库 TypeScript 运行时（`apps/stdio-runtime`、`packages/*`）与 Python 桥接/数学族层（`python/astra_bridge`、`mathagent`、`math_families`）的逐模块代码审计，当前方法卡与工具调用存在以下 **5 个结构性症结**：
-
-### 1. 两套卡片体系“双轨割裂”，TS 主引擎丢掉了数学族技能卡与工具参数契约
-仓库内并存着两套互不连通的卡片资产：
-- **20 张通用方法卡（`mathagent/resources/general_v11/data/methods.json` + `references/*.md`）**：
-  - 仅包含概念性推理步骤与 `tasks` / `objects` / `structures` 标签，**没有任何 `tools` 字段，也不包含任何工具的参数 Schema**。
-  - 通过 `python/astra_bridge/p2_methods.py` 暴露给 TS `AgentLoop`。
-- **22 个数学族技能卡（`math_families/catalog.json` + `mathagent/resources/skill-mapping-manifest.json` + `mathagent/resources/skills/*.md`）**：
-  - 每个数学族均有领域建模规范、`tool_role`（`full_solve` / `assist` / `assist_partial` / `none`），且在旧版 Python 引擎的 `SkillCatalog.load_for()`（`mathagent/skills.py:195-232`）中会自动将绑定的工具名、必填/选填参数（`tool-registry.json`）、输入类型（`input_contracts.py:SCHEMAS`）、独立输出校验属性（`tool_contracts.py:CONTRACTS`）及整数边界（`INTEGER_RULES`）动态拼接到卡片末尾。
-  - 在旧版 Python `GeneralMethodCatalog.load_for()`（`mathagent/method_layer.py:140-145`）中，加载方法卡会**同时返回 `general_v11` 方法卡 + `SkillCatalog` 数学族技能与工具契约**；但在迁移至 TS `AgentLoop` 时，`SkillCatalog` 被完全切断，22 张数学族技能卡虽被锁在 `host_assets_registry.py` 的 `skills` 资产组中，却在 TS 运行时中**从未被加载**。
-
-### 2. “写完答案 $\to$ 丢弃逼选卡 $\to$ 再写完答案 $\to$ 丢弃逼调工具”的瀑布式事后拦截流
-在 `apps/stdio-runtime/src/agent-loop.ts:2195-2282` 中，方法卡加载与工具调用并非前置协同，而是等模型已经生成完整 `WorkPacket` 后事后拦截并丢弃：
-1. **Turn 1（首次解题）**：模型生成完整 `WorkPacket`（`prepared`）。
-2. **拦截 1（强迫选方法卡，`agent-loop.ts:2198-2229`）**：发现尚未加载方法卡，直接 `continue` **丢弃 Turn 1 的 `WorkPacket`**，置 `forcedMethodSelection = true`，强迫模型在 **Turn 2** 输出 `{"action":"method","id":"..."}`。
-3. **Turn 3（读卡后第二次解题）**：模型拿到不含任何工具说明的 `general_v11` 方法卡正文，重新解题并生成第二个完整 `WorkPacket`。
-4. **拦截 2（强迫调工具，`agent-loop.ts:2236-2282`）**：调用 `semanticToolRoute(problemText)`，发现尚未调用工具，**再次 `continue` 丢弃 Turn 3 的 `WorkPacket`**，置 `forcedSemanticToolSelection / forcedExactCheckSelection / forcedEnumerationSelection = true`，强迫模型在 **Turn 4** 输出 `{"action":"tool",...}`。
-5. **Turn 5（第三次解题）**：拿到工具观察后第三次生成 `WorkPacket`，随后还要进入 `INDEPENDENT RECHECK`（Turn 6）和 `CERTIFICATE SELF-CHECK`（Turn 7）。
-
-### 3. 方法路由与工具路由各自维护一套互不相干的正则表
-在 `apps/stdio-runtime/src/agent-semantics.ts` 中：
-- `semanticMethodRoute`（`1406-1431` 行）用 `METHOD_ROUTING_TRIGGERS` 对 `general_v11` 的 `objects` / `structures` 打分选出 Top-3 方法卡；
-- `semanticToolRoute`（`1171-1206` 行）用另一套硬编码的 15 分支 `if-else` 正则链去匹配单个工具；
-- 两者不共享统一的“数学族画像”，导致方法卡与工具路由脱节。
-
-### 4. 工具注册表（73）、独立审计层（76）、P3 白名单（11）与系统提示词（6）四处脱节
-| 层级 | 代码位置 | 数量 | 核心问题 |
-| :--- | :--- | :---: | :--- |
-| **Python 独立审计与实现层** | `mathagent/tool_contracts.py` (19) + `mathagent/output_checks/*` (55) + `exact_checks.py` / `bounded_enumeration.py` (2) | **76 个** | 全部具备完整 Python 实现、输入 Schema 校验与独立输出验证器 |
-| **工具注册表** | `mathagent/resources/tool-registry.json` | **73 个** | 声明了 `required_params` / `optional_params` / `input_schema` |
-| **P3 协议白名单** | `packages/protocol/src/p3.ts` (`P3_TOOL_NAMES`) & `python/astra_bridge/p3_effect_contract.py` | **仅 11 个** | **65 个已实现且带独立审计的数学族工具被协议硬编码挡在门外** |
-| **基础 `SYSTEM_PROMPT`** | `apps/stdio-runtime/src/agent-loop-context.ts:231-249` | **仅描述 6 个** | `P3_TOOL_NAMES` 中的 `polynomial_expand_coefficients`、`linear_system_solution_set`、`interpolation_fit_check`、`stats_ols_check`、`finite_group_structure` **共 5 个工具在基础 `SYSTEM_PROMPT` 中连参数说明都没写**，模型首轮无法主动正确调用 |
-
-### 5. 算子粒度胖瘦失衡 & 路由残缺
-- `exact_check_expr` 一个工具塞入了 **7 种跨领域操作**（`SIMPLIFY`、`TRIG_REDUCE`、`MAXIMAL_MINORS`、`FACTOR_OVER_EXTENSION`、`DEFINITE_INTEGRAL`、`LIMIT`、`DENSITY_CHECK`），而 `semanticToolRoute` 只路由了其中 5 个（**`DEFINITE_INTEGRAL` 和 `SIMPLIFY` 在 `semanticToolRoute` 中无路由分支**）。
-- 反过来，`circle_laplacian_expr`、`planar_laplacian_expr` 又是极窄的单点函数。
-- 在 `skill-mapping-manifest.json` 中，`stats_ols_check` 被错塞进 `probabilistic_model`（而非对应 `regression-diagnostics`），`interpolation_fit_check` 和 `finite_group_structure` 被错塞进 `symbolic_algebra`（导致 `symbolic_algebra` 膨胀为横跨 5 张方法卡的大杂烩），通用枚举器 `bounded_enumeration` 被错塞进 LZ78 编码所在的 `algorithm_simulation`。
+> **最新仓库基线状态（截至 2026-10-24 最新提交 `c422ddb`）**：
+> - **已完成 Phase 1（Commit `fba7766`）**：20 张 `general_v11` 方法卡已内嵌 `## 绑定计算工具与精确调用契约`（31/31 模板实跑通过）；`skill-mapping-manifest.json` 已增加 `general_method_ids` / `tool_ownership` / `relocations`；`agent-semantics.ts` 已新增 `EXACT_DEFINITE_INTEGRAL`、`EXACT_SIMPLIFY` 与 `preferredMethodForToolRoute`（`+1024` 协同加分）；`agent-loop.ts` 已落地方法卡加载后紧邻 WORK 轮次的 `methodToolCoPrompt`（`≤600` 字符协同提示）。
+> - **已完成 Phase 2 第一批（Commit `c422ddb`）**：P3 工具白名单已从 **11 扩充至 17**（新增 `solve_quadratic_diophantine`、`symbolic_diophantine_with_timeout`、`solve_system_guarded_expr`、`polynomial_function_check`、`gf2_rank`、`gf2_nullspace`），打通了 `modular-crt.md`、`domain-equivalence.md`、`linearization-spectral.md` 三张卡片的算子契约与路由。
+> - **当前门禁实绩**：`tsc -b` 0，Node **464/464**，pytest **998 passed / 24 skipped**，bridge **582 passed**，`release/BUILD_MANIFEST.json` `VERIFY_OK`。
+> - **本文档定位**：不再零碎拆分，**一次性给出从当前 `c422ddb` 基线直至最终完成态的四阶段（Stage A ~ Stage D）全链路终局架构方案与 DeepSeek v4.1 1017 完整提示词**（覆盖：`c422ddb` 遗留断层修复 $\to$ P3 算子白名单扩容 `17 → 26` $\to$ 答案闭环 `agent-answer-closure.ts` 全量接入 $\to$ WASI 生成式 Python 沙箱在 `engine="ts"` 下的端到端受控激活）。
 
 ---
 
-## 第二部分：全景对齐矩阵（20 张通用方法卡 × 22 个数学族 × 76 个数学工具）
+## 第一部分：最新分支（`c422ddb`）深度代码复审与 WASI 真实定位
 
-### A. 代数、方程与数论板块（5 张方法卡 ↔ 5 个数学族）
+### 1. 对最新提交 `c422ddb` 的穿透审查：抓出 6 个待收口的关键断层
 
-| # | `general_v11` 方法卡 (`id` / 角色) | 归口 `math_families` 技能卡 (`tool_role`) | 归口数学工具 (共 18 个，均已实现且带独立审计) | 当前 TS `P3_TOOL_NAMES` 暴露与路由状态 |
-| :-: | :--- | :--- | :--- | :--- |
-| 1 | **`domain-equivalence`**<br>定义域、等价变换与参数分类 (`method`) | • `symbolic_algebra` (方程/实根子集, `full_solve`)<br>• `functional_equation` (`assist`) | • `real_root_count_expr`<br>• `solve_system_guarded_expr`<br>• `polynomial_function_check`<br>• `constraint_propagation_2coloring`<br>• `exact_check_expr[SIMPLIFY]` | ⚠️ `real_root_count_expr` 已暴露；`exact_check_expr[SIMPLIFY]` 缺路由；其余 3 个未暴露 |
-| 2 | **`algebraic-structures`**<br>代数结构归约决策 (`decision`) | • `symbolic_algebra` (域扩张/群结构/不变量子集, `full_solve`) | • `splitting_field_degree_expr`<br>• `finite_group_structure`<br>• `exact_check_expr[FACTOR_OVER_EXTENSION]`<br>• `algebraic_polynomial_check`<br>• `polynomial_invariant_check`<br>• `wronskian_root_identity_expr` | ⚠️ 前 3 个已暴露（`finite_group_structure` 在 `SYSTEM_PROMPT` 缺参数文档）；后 3 个未暴露 |
-| 3 | **`linearization-spectral`**<br>线性化、秩与谱结构 (`method`) | • `symbolic_algebra` (线性方程组子集)<br>• `linear_algebra_game` (`full_solve`) | • `linear_system_solution_set`<br>• `exact_check_expr[MAXIMAL_MINORS]`<br>• `gf2_rank`<br>• `gf2_nullspace`<br>• `deck_game_outcome` | ⚠️ 前 2 个已暴露（`linear_system_solution_set` 在 `SYSTEM_PROMPT` 缺参数文档）；`gf2_*` 等 3 个未暴露 |
-| 4 | **`modular-crt`**<br>同余、素数幂分解与广义CRT (`method`) | • `diophantine` (`full_solve`)<br>• `number_theory_structure` (`assist_partial`) | • `solve_quadratic_diophantine`<br>• `solve_quadratic_discriminant_family`<br>• `symbolic_diophantine_with_timeout`<br>• `frobenius_semigroup`<br>• `odd_part`<br>• `odd_part_table` | ❌ **0 暴露（有卡无枪）**：6 个已实现独立审计的数论/丢番图算子全部未进 `P3_TOOL_NAMES` |
-| 5 | **`generating-functions`**<br>生成函数、系数提取与卷积 (`method`) | • `symbolic_algebra` (多项式展开子集) | • `polynomial_expand_coefficients` | ⚠️ 已暴露且有路由，但 `SYSTEM_PROMPT` 漏写参数文档 |
+#### 断层 1（高危 Bug）：`agent-loop.ts` 的 `methodToolInputConstraint` 漏写 Phase 2 新算子，正在误导模型给整数参数加引号！
+- **位置**：`apps/stdio-runtime/src/agent-loop.ts:140-169`（`methodToolInputConstraint`）与 `1455-1467`（`SEMANTIC TOOL TURN`）
+- **根因**：`fba7766` 编写的 `methodToolInputConstraint(route)` 只对前 11 个工具写了 `switch (route.toolName)` 分支。`c422ddb` 开放了 6 个新算子后未更新该函数，导致 `solve_quadratic_diophantine`、`gf2_rank`、`gf2_nullspace` 全部掉进 `default` 分支，向模型输出：
+  > `"Every expression and matrix entry must be a quoted JSON string; copy it exactly."`
+- **后果**：`solve_quadratic_diophantine` 的 `a..f`、`gf2_rank` 的 `rows`、`gf2_nullspace` 的 `rows`/`width` 在 Python `tool_contracts.py` 中强制要求 `type(value) is int`（传字符串直接抛 `InvalidToolInput` 拒绝！）。该 `default` 提示会直接诱导大模型把整数加引号而导致工具调用 100% 失败。
 
-### B. 组合、自动机、博弈与离散构造板块（5 张方法卡 ↔ 9 个数学族）
+#### 断层 2：基础 `SYSTEM_PROMPT` 与 `skill-mapping-manifest.json` 漏同步 Phase 2 新算子
+- **位置**：`apps/stdio-runtime/src/agent-loop-context.ts:231-255`、`mathagent/resources/skill-mapping-manifest.json:7-60`
+- **根因**：`c422ddb` 将白名单扩到 17 个，但 `SYSTEM_PROMPT` 仍只描述了前 11 个工具；`skill-mapping-manifest.json` 的 `tool_ownership.tools` 也仍停留在 11 个工具。
 
-| # | `general_v11` 方法卡 (`id` / 角色) | 归口 `math_families` 技能卡 (`tool_role`) | 归口数学工具 (共 32 个，均已实现且带独立审计) | 当前 TS `P3_TOOL_NAMES` 暴露与路由状态 |
-| :-: | :--- | :--- | :--- | :--- |
-| 6 | **`counting-bijections`**<br>双射、双计数与容斥 (`method`) | • `inclusion_exclusion_counting` (`full_solve`)<br>• `algorithm_simulation` (`full_solve`) | • `bounded_enumeration`<br>• `rook_numbers`<br>• `count_avoiding_permutations`<br>• `lz78_encode` / `lz78_decode` / `verify_phrases` / `lz78_bit_string` / `format_phrases` | ⚠️ 仅 `bounded_enumeration` 暴露（且错挂在 `algorithm_simulation` 下）；其余 7 个精确算子未暴露 |
-| 7 | **`finite-state-dp`**<br>有限状态、动态规划与模状态组合 (`method`) | • `digit_dp` (`full_solve`)<br>• `transfer_matrix` (`full_solve`)<br>• `minimax_dp` (`full_solve`) | • `count_by_digit_property` / `digit_sum_window_search` / `deletion_divisible_largest`<br>• `transition_count` / `independence_polynomial_chain` / `hamiltonian_paths_grid`<br>• `win_draw_loss_graph` / `minimax_value_graph` / `gap_subsequence_discrepancy` | ❌ **0 暴露（有卡无枪）**：9 个 `full_solve` 精确 DP/转移矩阵算子全部未暴露 |
-| 8 | **`invariants-extremal`**<br>不变量、势函数与极端原理 (`method`) | • `game_strategy_proof` (`assist`)<br>• `extremal_construction` (`assist`)<br>• `graph_extremal` (`assist`)<br>• `constrained_tiling` (`assist_partial`) | • `pairing_strategy_verify` / `independent_reply_certificate`<br>• `double_counting_bound`<br>• `count_complete_bipartite_subgraphs` / `has_perfect_matching` / `verify_perfect_matching` / `triangle_free_check` / `tutte_violation`<br>• `count_tilings` / `unique_tiling_check` / `check_tiling_certificate` / `min_tiles_cover` / `coloring_bound` | ❌ **0 暴露（有卡无枪）**：13 个图极值/铺砖/博弈配对核验算子全部未暴露 |
-| 9 | **`induction-recurrence`**<br>归纳、递推与良基结构 (`method`) | • 共享 `transfer_matrix` / `number_theory_structure` | • 复用 `transition_count`、`independence_polynomial_chain`、`odd_part_table` 进行基例与小规模递推核验 | ❌ **0 绑定** |
-| 10 | **`proof-counterexamples`**<br>量词、证明义务与反例 (`method`) | • `concept_recall` (`none`) | • 复用 `bounded_enumeration`（有限反例搜索）、`certificate_check_expr`（连续表达式反例采样） | ⚠️ 仅靠 `forcedVerdictClosure` 处理判断词矛盾 |
+#### 断层 3：Phase 2 第二批 + 第三批共 9 个高价值已审计算子仍在门外
+- **位置**：`packages/protocol/src/p3.ts`、`python/astra_bridge/p3_effect_contract.py`
+- **根因**：`finite-state-dp`、`induction-recurrence`、`counting-bijections`、`conditioning-indicators`、`numerical-approximation` 5 张方法卡对应的 9 个专用核心算子（`transition_count`、`independence_polynomial_chain`、`count_by_digit_property`、`rook_numbers`、`count_avoiding_permutations`、`markov_expected_steps`、`cover_time_complete_graph`、`finite_difference_derivative`、`richardson_extrapolate`）在 Python 端已有完整的独立输出审计（`mathagent/tool_contracts.py` 与 `mathagent/output_checks/numerical.py`），但尚未进入 P3 白名单。
 
-### C. 分析、微积分、微分方程与几何板块（5 张方法卡 ↔ 4 个数学族）
+#### 断层 4：答案闭环审计（`agent-answer-closure.ts`）尚未覆盖新老计数/代数/判定算子
+- **位置**：`apps/stdio-runtime/src/agent-answer-closure.ts:1447-1515`
+- **根因**：目前只有 7 类观测（`DENSITY_CHECK`、`MAXIMAL_MINORS`、`real_root_count_expr`、`splitting_field_degree_expr`、`interpolation_fit_check`、`stats_ols_check`、`finite_group_structure`）能产生 `AnswerClosureDefect`。而 `bounded_enumeration`（精确计数 `count`）、`gf2_rank`（精确秩）、`gf2_nullspace`（精确核维数 `nullspace.length`）、`polynomial_function_check`（精确布尔判定 `identity_holds`）、`transition_count`、`count_by_digit_property`、`count_avoiding_permutations`、`cover_time_complete_graph` 尚未接入闭环诊断（含直接终答与选择题选项级比对 `OPTION_NUMERIC_CONTRADICTION` / `OPTION_VERDICT_CONTRADICTION`）。
 
-| # | `general_v11` 方法卡 (`id` / 角色) | 归口 `math_families` 技能卡 (`tool_role`) | 归口数学工具 (共 18 个，均已实现且带独立审计) | 当前 TS `P3_TOOL_NAMES` 暴露与路由状态 |
-| :-: | :--- | :--- | :--- | :--- |
-| 11 | **`integral-symmetry`**<br>对称、换元与积分存在性 (`method`) | • `symbolic_calculus` (积分子集, `full_solve`) | • `exact_check_expr[DEFINITE_INTEGRAL]`<br>• `exact_check_expr[TRIG_REDUCE]` | ⚠️ `DEFINITE_INTEGRAL` 在 `semanticToolRoute` 中**漏写路由分支** |
-| 12 | **`convergence-limits`**<br>极限交换、可积性与分布收敛 (`method`) | • `symbolic_calculus` (极限子集, `full_solve`) | • `exact_check_expr[LIMIT]` | ✅ 已暴露且有路由 |
-| 13 | **`differential-equations`**<br>微分方程的建模、归约与条件核验 (`decision`) | • `symbolic_calculus` (微分算子子集, `full_solve`) | • `circle_laplacian_expr`<br>• `planar_laplacian_expr`<br>• `exact_check_expr[TRIG_REDUCE]` | ✅ 已暴露且有路由 |
-| 14 | **`coordinates-geometry`**<br>坐标、向量与几何约束 (`method`) | • `classical_geometry_compute` (`full_solve`)<br>• `combinatorial_geometry` (`assist`)<br>• `lattice_counting` (`full_solve`) | • `line_through` / `angle_at_vertex` / `count_angle_ratio_locus` / `identify_constant`<br>• `line_cover_number` / `line_separation_number` / `area_bisection_coverage` / `worst_configuration_search`<br>• `hexagon_lattice_points` / `count_lattice_hexagons` / `lattice_points_in_polygon` | ❌ **0 暴露（有卡无枪）**：11 个解析几何/组合几何/格点算子全部未暴露 |
-| 15 | **`inequalities-optimization`**<br>界、凸性与全局最优性 (`method`) | • `inequality_extremum` (`assist_partial`) | • `numeric_extremum_search_expr`<br>• `certificate_check_expr`<br>• `closed_form_conjecture`<br>• `subset_gap_worst_case` | ❌ **0 暴露（有卡无枪）**：4 个不等式极值与采样核验算子全部未暴露 |
+#### 断层 5：`agent-loop.ts` 的 `checkerSupportsObligation` 与 `totalEffectCapacity` 边界漏洞
+- **位置**：`apps/stdio-runtime/src/agent-loop.ts:457-467, 862-868`
+- **根因**：`checkerSupportsObligation` 硬性要求 `typeof action.args.expression === "string"`，导致 `linear_system_solution_set`（参数为 `matrix`/`rhs`，无 `expression`）永远返回 `false`。
 
-### D. 概率、统计、数值与拓扑板块（5 张方法卡 ↔ 2 个数学族 + 3 个空白区）
-
-| # | `general_v11` 方法卡 (`id` / 角色) | 归口 `math_families` 技能卡 (`tool_role`) | 归口数学工具 (共 9 个，均已实现且带独立审计) | 当前 TS `P3_TOOL_NAMES` 暴露与路由状态 |
-| :-: | :--- | :--- | :--- | :--- |
-| 16 | **`conditioning-indicators`**<br>样本空间、条件化与概率耦合 (`method`) | • `probabilistic_model` (`full_solve`) | • `exact_check_expr[DENSITY_CHECK]`<br>• `bounded_enumeration`<br>• `cover_time_complete_graph`<br>• `markov_expected_steps`<br>• `normal_overflow_seats` | ⚠️ 前 2 个可路由；Markov 期望步数等 3 个专用概率算子未暴露 |
-| 17 | **`statistical-inference`**<br>统计模型、似然与推断 (`decision`) | • 共享 `probabilistic_model` | • 复用 `exact_check_expr[DENSITY_CHECK]`、`normal_overflow_seats` | ⚠️ 缺推断专属算子 |
-| 18 | **`regression-diagnostics`**<br>回归、选模与误差结构 (`decision`) | • 独立归口 `stats_ols_check` (原错挂于 `probabilistic_model`) | • `stats_ols_check` | ⚠️ 已暴露且可路由，但在 `SYSTEM_PROMPT` 中漏写参数文档 |
-| 19 | **`numerical-approximation`**<br>近似、误差传播与稳定性 (`decision`) | • `numerical_methods` (`full_solve`) | • `interpolation_fit_check` (原错挂于 `symbolic_algebra`)<br>• `finite_difference_derivative`<br>• `richardson_extrapolate`<br>• `verify_fd_certificate` | ⚠️ 仅 `interpolation_fit_check` 暴露（且 `SYSTEM_PROMPT` 漏写参数文档）；其余 3 个差分/外推算子未暴露 |
-| 20 | **`topology-local-global`**<br>拓扑性质判别决策 (`decision`) | • `concept_recall` (`none`) | *(纯概念与反例推理，无绑定算子)* | ⚪ 纯推理卡 |
+#### 断层 6：WASI 生成式 Python 沙箱在 `engine="ts"` 架构下完全断联（0% 参与）
+- **位置**：
+  - `mathagent/sandbox_wasi.py`（`WasiPythonSandbox`：基于 Wasmtime 48.0.0 + `python-3.12.0.wasm` + 只读 `SymPy 1.12` / `mpmath 1.3.0`，已通过本地 24/24 实机验收 `LOCAL_T27_T28_PASSED`）
+  - `mathagent/tools.py:317-347`（`PythonSandbox`）
+  - `python/astra_bridge/generated_execution_gate.py`（`GenerativeExecutionGate`）
+  - `python/astra_bridge/agent_runtime.py` & `python/astra_bridge/agent_host.py` & `python/astra_bridge/p3_effects.py`
+- **真相与定位**：
+  - **两套计算通道职责不同**：
+    1. **预注册数学工具（`RegisteredExecutor`，26 个白名单算子）**：跑在宿主机原生 Python `multiprocessing` 子进程中，执行固定算法并产出带独立审计的观测/证书，用于**精确核验与闭环纠错**。
+    2. **WASI 生成式 Python 沙箱（`WasiPythonSandbox`）**：用于当题目没有现成预注册算子匹配时，允许模型编写一段 ≤64KB 的 Python 探索代码（如小规模打表、递推前几项、构造反例、用 SymPy 辅助化简），在完全无网络、无宿主机文件系统访问的 WebAssembly 沙箱内运行，产出 `BOUNDED_OBSERVATION`。
+  - **为什么前几次测评完全没发挥作用**：
+    - 从旧版 Python `Controller`（`engine="legacy"`）切换到 TypeScript `AgentLoop`（`engine="ts"`）时，P0 协议规定 Node 进程自身不直接运行 WASI（`nodeCapabilities.wasi: "DISABLED"`），而 Python 宿主侧的 `AgentRuntime` / `AgentHost` / `perform_effect` **根本没有把 `python_sandbox_profile` 和 `WasiPythonSandbox` 接进来**！
+  - **怎么在不破坏任何现有 P0/P3 冻结契约的前提下在 `engine="ts"` 中激活 WASI**：
+    - 保持 Node 侧 `nodeCapabilities.wasi: "DISABLED"` 100% 不变（因为 WASI 本来就由 Python Host 执行，绝不由 Node 执行）；
+    - 在 Python Host 侧（`AgentRuntime` $\to$ `AgentHost` $\to$ `perform_effect`）接入可选的 `python_sandbox_profile`（及环境变量 `ASTRA_WASI_PROFILE`）与 `GenerativeExecutionGate`；
+    - 当未配置已验收的 WASI profile 时，保持 100% Fail-Closed（`REFUSED_NO_PROFILE` / 默认现有行为零变化，所有旧单测 100% 通过）；
+    - 当显式传入已验收的 WASI profile 时，允许通过受控 P3 探索动作或 Host 侧受控通道调用 `PythonSandbox(profile).execute(code, deadline=deadline, problem_id=session_id, scope=scope)`，将沙箱标准输出封装为 `PROGRAM_OBSERVATION`（带 `"interpretation": "BOUNDED_OBSERVATION_NOT_PROOF"`）返回给 TS `AgentLoop`！
 
 ---
 
-## 第三部分：给 DeepSeek v4.1 1017 的完整修改提示词（可直接复制）
+## 第二部分：20 张通用方法卡 × 22 个数学族 × 26 个核心算子 × WASI 沙箱全景终局矩阵
 
-> **使用说明**：将下方代码块中的内容完整复制并发送给 **DeepSeek v4.1 1017**。该提示词已包含仓库内所有隐藏的 SHA-256 完整性校验锁（`SOURCE.json`、`asset_baseline.json`）与 P2/P3 协议严格键名白名单约束，确保修改不会意外破坏现有测试门禁。
+| 序号 | `general_v11` 方法卡 ID (20张) | 对应 `math_families` 技能族 (22个) | Stage A+B 完成后的 26 个 P3 白名单算子 | 答案闭环 (`agent-answer-closure.ts`) 覆盖 | WASI 沙箱 (`WasiPythonSandbox`) 协同角色 |
+| :-: | :--- | :--- | :--- | :--- | :--- |
+| 1 | **`domain-equivalence`** | `symbolic_algebra`, `functional_equation` | • ✅ `real_root_count_expr`<br>• ✅ `exact_check_expr[SIMPLIFY]`<br>• ✅ `solve_system_guarded_expr`<br>• ✅ `polynomial_function_check` | • `real_root_count_expr` (数值/选项)<br>• 🎯 `polynomial_function_check` (`identity_holds` 判定闭环) | 非多项式超越方程/复杂函数方程小样本打表探路 |
+| 2 | **`modular-crt`** | `diophantine` | • ✅ `solve_quadratic_diophantine`<br>• ✅ `symbolic_diophantine_with_timeout` | • 整数解存在性/解数核对 | 高次同余方程、大模数剩余类小范围穷举验证 |
+| 3 | **`linearization-spectral`** | `linear_algebra_gf2`, `symbolic_algebra` | • ✅ `linear_system_solution_set`<br>• ✅ `exact_check_expr[MAXIMAL_MINORS]`<br>• ✅ `gf2_rank`<br>• ✅ `gf2_nullspace` | • `MAXIMAL_MINORS` (次数守恒)<br>• 🎯 `gf2_rank` (秩数值/选项)<br>• 🎯 `gf2_nullspace` (核维数数值/选项) | 一般数域矩阵特征多项式/Jordan 块 SymPy 辅助验算 |
+| 4 | **`algebraic-structures`** | `symbolic_algebra`, `polynomial_gcd_crt` | • ✅ `splitting_field_degree_expr`<br>• ✅ `exact_check_expr[FACTOR_OVER_EXTENSION]`<br>• ✅ `finite_group_structure` | • `splitting_field_degree_expr` (次数/选项)<br>• `finite_group_structure` (群阶/共轭类/交换性/循环性) | 8 阶以上群或环/域同态个数的有限构造探索 |
+| 5 | **`generating-functions`** | `symbolic_algebra` | • ✅ `polynomial_expand_coefficients` | • 系数提取核对 | 形式幂级数截断展开（SymPy `series`）提取高阶系数 |
+| 6 | **`counting-bijections`** | `inclusion_exclusion`, `permutation_comb`, `algorithm_simulation` | • ✅ `bounded_enumeration`<br>• 🎯 **`rook_numbers`**<br>• 🎯 **`count_avoiding_permutations`** | • 🎯 `bounded_enumeration` (精确计数值/选项)<br>• 🎯 `count_avoiding_permutations` (计数值/选项)<br>• 🎯 `rook_numbers` (车多项式系数) | 复杂组合结构的 $n=1..6$ 打表找规律与 OEIS 式序列猜想验证 |
+| 7 | **`finite-state-dp`** | `digit_dp`, `transfer_matrix` | • ✅ `bounded_enumeration`<br>• 🎯 **`transition_count`**<br>• 🎯 **`independence_polynomial_chain`**<br>• 🎯 **`count_by_digit_property`** | • 🎯 `transition_count` (路径/状态序列计数)<br>• 🎯 `count_by_digit_property` (数位计数) | 多维状态 DP 转移方程的快速脚本求解 |
+| 8 | **`induction-recurrence`** | `transfer_matrix`, `invariant_monovariant` | • ✅ `bounded_enumeration`<br>• 🎯 **`transition_count`**<br>• 🎯 **`independence_polynomial_chain`** | • 共享 `transition_count` 闭环 | 递推数列前 $N$ 项精确有理数打表与归纳假设小样本检验 |
+| 9 | **`invariants-extremal`** | `invariant_monovariant`, `extremal_construction`, `game_strategy_proof`, `graph_extremal`, `constrained_tiling` | • ✅ `bounded_enumeration` | • 共享 `bounded_enumeration` 闭环 | 小规模博弈胜负态回溯、极值构型搜索 |
+| 10 | **`proof-counterexamples`** | `concept_recall`, `logic_puzzle` | • ✅ `bounded_enumeration` | • 共享 `bounded_enumeration` 闭环 | 全称命题的有限域/小参数反例暴力搜寻 |
+| 11 | **`integral-symmetry`** | `symbolic_calculus` | • ✅ `exact_check_expr[DEFINITE_INTEGRAL]`<br>• ✅ `exact_check_expr[TRIG_REDUCE]` | • 🎯 `DEFINITE_INTEGRAL` (精确积分值/选项) | `mpmath.quad` 高精度数值积分交叉核对符号积分结果 |
+| 12 | **`convergence-limits`** | `symbolic_calculus` | • ✅ `exact_check_expr[LIMIT]` | • 🎯 `LIMIT` (精确极限值/选项) | 级数部分和与渐近展开（SymPy `limit`/`series`）数值探路 |
+| 13 | **`differential-equations`** | `symbolic_calculus` | • ✅ `circle_laplacian_expr`<br>• ✅ `planar_laplacian_expr`<br>• ✅ `exact_check_expr[TRIG_REDUCE]` | • Laplacian 表达式零残差核对 | 常微分方程 SymPy `dsolve` 符号特解探索 |
+| 14 | **`conditioning-indicators`** | `probabilistic_model` | • ✅ `exact_check_expr[DENSITY_CHECK]`<br>• ✅ `bounded_enumeration`<br>• 🎯 **`markov_expected_steps`**<br>• 🎯 **`cover_time_complete_graph`** | • `DENSITY_CHECK` (密度积分为 1)<br>• 🎯 `cover_time_complete_graph` (精确有理数覆盖时间) | 超过 6 状态的随机游走/条件期望精确有理数线性方程求解 |
+| 15 | **`statistical-inference`** | `probabilistic_model` | • ✅ `exact_check_expr[DENSITY_CHECK]`<br>• ✅ `bounded_enumeration` | • `DENSITY_CHECK` 闭环 | 对数似然导数与 Fisher 信息矩阵符号计算 |
+| 16 | **`regression-diagnostics`** | `probabilistic_model` (`stats_ols_check`) | • ✅ `stats_ols_check` | • `OLS_MISMATCH` (斜率/截距/选项) | 多元回归矩阵 $(X^T X)^{-1} X^T y$ 精确有理数验算 |
+| 17 | **`numerical-approximation`** | `numerical_methods`, `symbolic_algebra` | • ✅ `interpolation_fit_check`<br>• 🎯 **`finite_difference_derivative`**<br>• 🎯 **`richardson_extrapolate`** | • `INTERPOLATION_RESIDUAL` (插值残差) | 数值迭代格式收敛阶、截断误差首项系数的符号泰勒展开 |
+| 18 | **`coordinates-geometry`** | `classical_geometry_compute`, `combinatorial_geometry` | *(通用算子按需调用)* | - | 解析几何建系后交点、距离、面积、轨迹方程的 SymPy 代数消元 |
+| 19 | **`inequalities-optimization`** | `inequality_extremum` | *(通用算子按需调用)* | - | 拉格朗日乘子驻点求解与 `mpmath` 约束极值多起点数值探路 |
+| 20 | **`topology-local-global`** | `concept_recall` | *(纯概念与反例推理)* | - | 无需计算 |
+
+---
+
+## 第三部分：给 DeepSeek v4.1 1017 的一次性长阶段完整执行提示词（直接复制）
+
+> **使用说明**：以下提示词一次性包含 **Stage A（修复 `c422ddb` 遗留断层）$\to$ Stage B（开放 9 个核心算子 `17 → 26` 及路由/卡片融合）$\to$ Stage C（答案闭环 `agent-answer-closure.ts` 扩容）$\to$ Stage D（WASI 沙箱在 `engine="ts"` 的受控桥接激活）$\to$ Stage E（全量打包与三重哈希门禁）**。无需再分批拆写，直接完整发给 DeepSeek v4.1 1017 执行。
 
 ````markdown
-你现在是 `astra-refactored` 仓库（分支 `feat/v4-dynamic-workflows`）的核心架构重构工程师。请严格按照以下工程规范，执行「数学族方法卡（Method/Skill Cards）与数学工具（Math Tools）统一整合重构」。
+你现在是 `astra-refactored` 仓库（分支 `feat/v4-dynamic-workflows`，当前 HEAD `c422ddb`）的首席架构重构工程师。
+请一次性完整执行以下 **Stage A ~ Stage E 全链路工程实施计划**，把「数学族方法卡 × 26 个预注册数学工具 × 答案闭环诊断 × WASI 生成式 Python 沙箱」彻底打通并收口。
 
 ---
 
-### 一、 必须死守的红线与哈希/Schema 锁（极其重要，改前必读！）
+### 零、 必须死守的 6 条红线与哈希/Schema 锁（改前必读！）
 
-本仓库有极严格的 Fail-Closed 协议校验与 SHA-256 资产完整性检查，修改任何文件时必须遵守以下 5 条铁律：
-
-1. **禁止触碰冻结目录**：
-   - 严禁修改 `math_families/` 下的算子实现源码与 `math_families/catalog.json`（测试门禁锁定了 `catalogSha256`）。
-2. **`general_v11` 的 `SOURCE.json` 与 `asset_baseline.json` 双重 SHA-256 锁**：
-   - `mathagent/lite/methods.py:183-190, 320-330` 会校验 `mathagent/resources/general_v11/SOURCE.json` 中记录的 `data/methods.json` 及所有 `references/{id}.md` 的 SHA-256！
-   - `python/astra_bridge/host_assets_registry.py:38-47, 130-165` 会校验 `python/astra_bridge/asset_baseline.json` 中所有注册资产的 SHA-256！
-   - **因此**：只要你修改了 `mathagent/resources/general_v11/data/methods.json` 或任何 `references/*.md` 或 `mathagent/resources/skills/*.md`，**必须在最后运行 Python 脚本同步重算并更新 `mathagent/resources/general_v11/SOURCE.json` 和 `python/astra_bridge/asset_baseline.json` 中的对应 SHA-256 值**！
-3. **`P2MethodCatalog` 与 `P2MethodAsset` 的严格键白名单与长度上限**：
-   - `packages/runtime-core/src/p2-methods.ts:77-94` 中 `readCatalog` 强制校验 `entries.length === 20`，且每个 entry 的键只能属于 `["id", "title", "tasks", "objects", "structures", "role"]`（且 `tasks`/`objects`/`structures` 每项最多 6 个符合 `/^[a-z0-9_]{1,24}$/` 的 token）。
-   - `packages/runtime-core/src/p2-methods.ts:111-125` 中 `readAsset` 强制校验 `asset` 只含 `["id", "title", "version", "body", "bodySha256", "bodyChars"]`，且 `bodyChars === [...body].length <= 24000`，同时 `packages/runtime-core/src/p3-methods.ts:31,118` 强制校验 `Buffer.byteLength(receipt.observation, "utf8") <= 16000`！
-   - **因此**：在向方法卡注入数学族技能要点与绑定工具参数契约时，合成后的 `body` UTF-8 字节数必须控制在 **12,000 bytes 以内**（留出 JSON 包装余量，绝不超过 16,000 bytes 上限），并重新计算 `bodySha256`（UTF-8 编码的 hex sha256）和 `bodyChars`（Unicode 码点数 `len(body)`）。
-4. **保持已有测试 100% 绿灯**：
-   - 任何默认行为的增强必须兼容 `npm test`（443+ TS 测试）与 `pytest`（Python 桥接与方法卡测试）。对于专门锁死 `MethodCatalog` 原始字节返回的单测，需区分“原始文件读取校验”与“桥接层 `fixture_load` / 方法卡内嵌工具契约”。
-5. **非作弊（Non-cheating）红线**：
-   - 严禁在任何路由、提示词或工具中包含题号、题目哈希或参考答案。所有路由必须 100% 基于通用数学术语、对象与结构特征。
+1. **严禁触碰冻结基线**：
+   - 严禁修改 `math_families/**` 下的任何源码或 `catalog.json`。
+   - 严禁修改冻结的 1.2 版 `packages/protocol/schema/agent-host.schema.json`（必须保持 8 个工具名和固定 SHA `d21953e2…`）。
+   - 严禁修改 `packages/protocol/schema/p0.schema.json` 中 Node 进程的 `nodeCapabilities.wasi: "DISABLED"`（在 P0/P3 信任边界中，Node 子进程永远不直接跑 WASI，WASI 100% 由 Python Host 侧的 `WasiPythonSandbox` 隔离执行）。
+2. **P3 工具白名单的 5 份 Live 副本必须逐字同步、顺序完全一致**：
+   - `packages/protocol/src/p3.ts`（`P3_TOOL_NAMES`）
+   - `python/astra_bridge/p3_effect_contract.py`（`TOOL_NAMES`）
+   - `packages/protocol/schema/agent-host-v13.schema.json`
+   - `release/schema/agent-host-v13.schema.json`（必须与 `packages/protocol/schema/agent-host-v13.schema.json` 逐字节一致！）
+   - `packages/protocol/schema/p3-host.schema.json`
+3. **方法卡体积与三重 SHA-256 锁**：
+   - 每张 `mathagent/resources/general_v11/references/*.md` 修改后必须控制在 **10,000 UTF-8 字节 / 4,000 Unicode 字符以内**（远低于 `p3-methods.ts` 的 16,000 字节上限）。
+   - 修改任何卡片或 `skill-mapping-manifest.json` 后，必须在 Stage E 重算并更新：
+     1. `mathagent/resources/general_v11/SOURCE.json`
+     2. `packages/protocol/schema/a2-source-lock.json`（其中 `mathagent/resources/general_v11/SOURCE.json` 的单行 SHA pin）
+     3. `python/astra_bridge/asset_baseline.json`（通过 `registry_snapshot` 更新并断言 `verify_integrity` 为 `ok=True`）
+4. **生产 Bundle 与 `release/BUILD_MANIFEST.json` 锁**：
+   - `tsc -b` 不会更新 `release/stdio-runtime.bundle.mjs`！修改 TS 后必须用 `esbuild` 重新生成 `release/stdio-runtime.bundle.mjs`，再运行 `python3 scripts/build_release_manifest.py` 并通过 `--verify release/BUILD_MANIFEST.json` 校验。
+5. **契约模板必须 100% 实跑验证**：
+   - 写进方法卡和路由 `argsTemplate` 的每一个 JSON 示例，都必须在真实 `RegisteredExecutor().execute(name, args)` 下实跑返回 `status == "ok"` 且 `audit.status` 通过校验（`VERIFIED_FOR_INPUT` 或 `CHECKED_*`）。
+6. **非作弊（Non-cheating）红线**：
+   - 严禁使用题号、题目哈希、参考答案或隐藏表；所有路由与闭环诊断 100% 基于通用数学措辞与工具观测结构。
 
 ---
 
-### 二、 分步修改任务清单（4 个核心任务）
+### Stage A：修复 `c422ddb` 遗留的 4 处上下游断层（阻塞性 Bug 修复）
 
-#### 任务 1：将 20 张 `general_v11` 方法卡与数学族绑定工具的精确参数契约融合（消除“有卡无工具说明”的割裂）
+1. **修复 `apps/stdio-runtime/src/agent-loop.ts:140-169` 的 `methodToolInputConstraint(route)` 与 `1455-1467` 行的 `SEMANTIC TOOL TURN`**：
+   - **当前 Bug**：`c422ddb` 新增了 6 个算子，但未在 `methodToolInputConstraint` 中添加 `case`，导致 `solve_quadratic_diophantine`、`gf2_rank`、`gf2_nullspace` 掉入 `default` 分支，错误提示模型 `"Every expression and matrix entry must be a quoted JSON string"`——而这三个工具在 `mathagent/tool_contracts.py` 中强制要求传 **JSON 整数**（传字符串直接报 `invalid_input` 拒绝）！
+   - **修改动作**：
+     - 在 `methodToolInputConstraint(route)` 中为所有 Phase 2 算子（含 `c422ddb` 的 6 个与 Stage B 的 9 个）补齐真实输入约束：
+       - `solve_quadratic_diophantine`: `"Pass a, b, c, d, e, f (and optional y_bound) as JSON integers with |coeff|<=32 and a!=0; do not quote numbers."`
+       - `symbolic_diophantine_with_timeout`: `"Pass lhs (and optional rhs) as polynomial strings using ** for powers, and optional two-variable list variables."`
+       - `solve_system_guarded_expr`: `"Pass expressions as an array of <=6 polynomial strings (using **) and variables as an array of <=3 variable names."`
+       - `polynomial_function_check`: `"Pass exactly the five fields equation, function, argument, variables and univariate rational polynomial expression."`
+       - `gf2_rank`: `"Pass rows ONLY as an array of <=8 non-negative JSON integers encoding binary rows (<=8 bits); do not pass width or strings."`
+       - `gf2_nullspace`: `"Pass rows (<=8 non-negative JSON integers) and integer width (1..8) only; do not quote integers."`
+       - `transition_count`: `"Pass integer length (1..6), integer num_states (1..4), transitions as [u,v] integer pairs, and optional integer arrays starts/ends (omit if default, never null)."`
+       - `independence_polynomial_chain`: `"Pass n as a non-negative JSON integer (0..16); do not quote n."`
+       - `count_by_digit_property`: `"Pass digit_set (array of ints 0..9), max_digits (1..3), and optional modulus (1..64), residue (0..modulus-1), include_zero (boolean)."`
+       - `rook_numbers`: `"Pass integer n (1..5) and forbidden as an array of <=10 [r,c] integer pairs with 0<=r,c<n."`
+       - `count_avoiding_permutations`: `"Pass integer n (1..6) and forbidden as an array of [i, pi_i] integer pairs with 0<=i,pi_i<n."`
+       - `cover_time_complete_graph`: `"Pass num_vertices as a JSON integer in 2..8."`
+       - `markov_expected_steps`: `"Pass transition as a <=6x6 matrix of exact decimal numbers summing to 1 per row, integer start, and non-empty integer array targets."`
+       - `finite_difference_derivative`: `"Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method (central/forward/backward)."`
+       - `richardson_extrapolate`: `"Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method and integer order (1..8)."`
+     - 在 `agent-loop.ts:1456-1467` 的 `SEMANTIC TOOL TURN` 中，将原来的固定句 `"Copy the explicit expression... never place raw arithmetic outside a quoted JSON string"` 替换为调用 `methodToolInputConstraint(route) + " Never substitute a different tool."`，避免对整数参数工具给出冲突指令。
+2. **修复 `apps/stdio-runtime/src/agent-loop.ts:457-467` 的 `checkerSupportsObligation`**：
+   - 当 `action.name === "linear_system_solution_set"` 时，检查 `Array.isArray(action.args.matrix) && Array.isArray(action.args.rhs)`，而不是要求 `typeof action.args.expression === "string"`。
+3. **同步更新 `apps/stdio-runtime/src/agent-loop-context.ts:231-255` 的 `SYSTEM_PROMPT` 与 `mathagent/resources/skill-mapping-manifest.json` 的 `tool_ownership.tools`**：
+   - 在 `SYSTEM_PROMPT` 中补齐 `c422ddb` 的 6 个算子与 Stage B 新增的 9 个算子的一行式参数说明（确保总上下文远低于 `65536` 字节，并检查是否有测试断言了 `SYSTEM_PROMPT` 固定字面量，如有则同步更新）。
+   - 在 `skill-mapping-manifest.json` 的 `tool_ownership.tools` 中完整登记全部 26 个 P3 白名单算子的 `family_id` 与权威 `general_method_id`。
 
-**背景问题**：
-目前 `mathagent/resources/general_v11/references/*.md` 的 20 张卡片只有纯文字推理建议，完全没有写出当前卡片对应哪些注册工具、每个工具的必填参数名（`required_params`）、JSON 调用模板（`argsTemplate`）以及独立输出校验范围。而且 `apps/stdio-runtime/src/agent-loop-context.ts:231-249` 的 `SYSTEM_PROMPT` 漏掉了 `polynomial_expand_coefficients`、`linear_system_solution_set`、`interpolation_fit_check`、`stats_ols_check`、`finite_group_structure` 5 个工具的参数说明。
+---
+
+### Stage B：一次性开放 Phase 2 第二批 + 第三批共 9 个高价值算子（P3 白名单 `17 → 26`）
+
+#### 1. 按固定顺序在 5 份 Live 白名单中追加以下 9 个算子（总数 17 -> 26）
+必须严格依照 `mathagent/tool_contracts.py` 与 `mathagent/output_checks/numerical.py` 中已实现的真实契约：
+
+| 序号 | 算子名称 (`P3ToolName`) | `mathagent` 真实参数契约与审计范围（已核实源码） | 实跑验证 JSON 模板 (`argsTemplate`) | 归属方法卡 ID |
+| :-: | :--- | :--- | :--- | :--- |
+| 18 | `transition_count` | `length`: int `1..6`（顶点数而非边数）；`num_states`: int `1..4`；`transitions`: `[[u,v],...]`（`0<=u,v<num_states`）；可选 `starts`/`ends` 整数列表（默认全集时必须省略字段，严禁传 `null`） | `{"length":3,"num_states":2,"transitions":[[0,1],[1,0],[1,1]]}` | `finite-state-dp` |
+| 19 | `independence_polynomial_chain` | `n`: int `0..16`（返回路图 $P_n$ 独立集多项式系数列表，最高次项在前） | `{"n":5}` | `finite-state-dp` |
+| 20 | `count_by_digit_property` | `digit_set`: `[0..9]` 非空整数列表；`max_digits`: int `1..3`；可选 `modulus`: int `1..64`（默认 1），`residue`: int `0..modulus-1`（默认 0），`include_zero`: bool（默认 `false`） | `{"digit_set":[1,2,3],"max_digits":3,"modulus":3,"residue":0,"include_zero":false}` | `finite-state-dp` |
+| 21 | `rook_numbers` | `n`: int `1..5`；`forbidden`: `[[r,c],...]`（最多 10 个禁位格，`0<=r,c<n`），返回 `[r_0, r_1, ..., r_n]` | `{"n":3,"forbidden":[[0,0],[1,1],[2,2]]}` | `counting-bijections` |
+| 22 | `count_avoiding_permutations` | `n`: int `1..6`；`forbidden`: `[[i, pi_i],...]`（`0<=i, pi_i<n`），返回满足 $\forall i, (i, \pi(i)) \notin \text{forbidden}$ 的排列总数 | `{"n":4,"forbidden":[[0,0],[1,1],[2,2],[3,3]]}` | `counting-bijections` |
+| 23 | `markov_expected_steps` | `transition`: `<=6x6` 精确有限小数转移矩阵（每行和精确等于 1）；`start`: int；`targets`: 非空目标吸收态整数列表 | `{"transition":[[0.0,1.0],[0.5,0.0,0.5],[0.0,0.0,1.0]],"start":0,"targets":[2]}` *(注：确保为方阵如 `[[0.0,1.0,0.0],[0.5,0.0,0.5],[0.0,0.0,1.0]]`)* | `conditioning-indicators` |
+| 24 | `cover_time_complete_graph` | `num_vertices`: int `2..8`（返回无自环完全图 $K_N$ 随机游走覆盖全部顶点的精确期望步数有理数） | `{"num_vertices":4}` | `conditioning-indicators` |
+| 25 | `finite_difference_derivative` | `f`: 关于 `x` 的标量表达式字符串；`x`: 数值（`|x|<=100`）；`h`: 步长数值（`1e-6 <= h <= 1`）；可选 `method`: `"central"` \| `"forward"` \| `"backward"`，可选 `order`: `1..8` | `{"f":"x**3","x":1.0,"h":0.01,"method":"central"}` | `numerical-approximation` |
+| 26 | `richardson_extrapolate` | `f`: 关于 `x` 的标量表达式字符串；`x`: 数值（`|x|<=100`）；`h`: 步长数值（`1e-6 <= h <= 1`）；可选 `method`: `"central"` \| `"forward"` \| `"backward"`；可选 `order`: int `1..8` | `{"f":"x**3","x":1.0,"h":0.01,"method":"central","order":2}` | `numerical-approximation` |
+
+#### 2. 在 `apps/stdio-runtime/src/agent-semantics.ts` 中新增 9 条确定性措辞路由并绑定 `TOOL_ROUTE_PREFERRED_METHOD`
+- 将 9 条新路由排在现有 17 条路由之后（确保现有 17 条路由优先级与行为零变化），并注意互斥边界：
+  1. `TRANSITION_COUNT_ROUTE`：命中“状态转移 / 转移图 / 有向图上长为 $L$ 的顶点序列数 / transition graph / state transitions”且含状态数/步长计数的措辞 $\to$ `"finite-state-dp"`
+  2. `INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE`：命中“独立集多项式 / 路图 $P_n$ 的独立集 / 不相邻顶点子集计数 / independence polynomial of path” $\to$ `"finite-state-dp"`
+  3. `COUNT_BY_DIGIT_PROPERTY_ROUTE`：命中“十进制数位 / 数字集合组成 / 数位 DP / 各位数字属于集合且被 $m$ 整除 / digit property” $\to$ `"finite-state-dp"`
+  4. `ROOK_NUMBERS_ROUTE`：命中“车多项式 / 禁位棋盘的车数 / rook polynomial / rook numbers” $\to$ `"counting-bijections"`
+  5. `COUNT_AVOIDING_PERMUTATIONS_ROUTE`：命中“错排 / 禁位排列 / 禁止位置集合的排列数 / permutations avoiding forbidden cells / derangement” $\to$ `"counting-bijections"`
+  6. `MARKOV_EXPECTED_STEPS_ROUTE`：命中“马尔可夫链 / Markov chain / 转移概率矩阵”且询问“期望步数 / 首次击中时间 / 吸收时间 / expected steps / hitting time” $\to$ `"conditioning-indicators"`
+  7. `COVER_TIME_COMPLETE_GRAPH_ROUTE`：命中“完全图 $K_n$ / complete graph”且询问“覆盖时间 / 访问所有顶点的期望步数 / cover time” $\to$ `"conditioning-indicators"`
+  8. `FINITE_DIFFERENCE_DERIVATIVE_ROUTE`：命中“有限差分 / 中心差分 / 向前差分 / 向后差分 / finite difference derivative”（排除显式要求 Richardson 外推的题目）$\to$ `"numerical-approximation"`
+  9. `RICHARDSON_EXTRAPOLATE_ROUTE`：命中“Richardson 外推 / 理查森外推 / Richardson extrapolation” $\to$ `"numerical-approximation"`
+
+#### 3. 更新对应的 5 张 `general_v11/references/*.md` 方法卡
+- 在 `finite-state-dp.md`、`induction-recurrence.md`、`counting-bijections.md`、`conditioning-indicators.md`、`numerical-approximation.md` 的 `## 绑定计算工具与精确调用契约` 章节中，补充上述新算子的【何时用 / `args` 模板 / 输入约束 / 输出边界】，并编写测试从卡片反抽所有 JSON 模板送入 `RegisteredExecutor` 实跑验证 `status == "ok"`。
+
+---
+
+### Stage C：将高确定性算子接入答案闭环诊断（`apps/stdio-runtime/src/agent-answer-closure.ts`）
+
+在 `apps/stdio-runtime/src/agent-answer-closure.ts` 中，严格遵循现有的 **Fail-Closed 零误报原则**（观测缺失、一句内含多个未归属数字、或含否定/模糊词 `不/非/未必/可能/not/may` 时绝不产生缺陷），扩展以下精确观测的闭环对齐检查：
+
+1. **扩展 `OPTION_NUMERIC_CONTRADICTION`（`observedOptionQuantities`）与直接数值候选比对**：
+   - **`gf2_rank`**：观测返回整数秩 $r$。当候选答案或选中选项文本在同一从句中明确断言“GF(2) 秩 / 二元矩阵的秩 / 模 2 秩 / rank over GF(2)”为另一个整数 $k \neq r$ 时，报告矛盾。
+   - **`gf2_nullspace`**：观测返回核空间基数组 `nullspace`（维数 $d = \text{nullspace.length}$）。当候选答案或选中选项明确断言“零空间维数 / 核空间维数 / nullity / dimension of nullspace”为另一个整数 $k \neq d$ 时，报告矛盾。
+   - **`bounded_enumeration` / `transition_count` / `count_by_digit_property` / `count_avoiding_permutations`**：当观测返回精确非负整数计数值（`bounded_enumeration` 的 `result.count`，或后三者的整数 `result`），且候选答案是一个纯整数字符串 $m$（或选中选项明确声明“共有 $m$ 种 / 个数为 $m$”）且 $m \neq \text{observed}$ 时（注意：若问题是求概率即答案是分数如 `223/8330`，而 `bounded_enumeration` 只算了分子或分母，则纯整数比对自动跳过，绝不误报分数概率题！），报告计数矛盾。
+   - **`cover_time_complete_graph`**：观测返回精确期望覆盖时间（整数或精确分数 `p/q`）。当候选答案或选中选项断言的覆盖时间数值与之精确不等时，报告矛盾。
+2. **扩展判定类闭环（`polynomial_function_check`）**：
+   - 当 `polynomial_function_check` 观测返回 `identity_holds === false` 且带有反例 `witness`，但候选答案给出了纯肯定判定（`"真"` / `"成立"` / `"是"` / `"true"` / `"yes"`）时，报告判定矛盾缺陷。
+3. **单测覆盖**：
+   - 在 `apps/stdio-runtime/tests/agent-answer-closure.test.ts` 中为上述新增闭环诊断补充正例（矛盾时产出 defect）与反例（一致、概率分数、多数字歧义、否定句时返回 `[]` 零误报）。
+
+---
+
+### Stage D：在 `engine="ts"` 中受控激活 WASI 生成式 Python 沙箱（Host 侧桥接）
+
+**架构原则**：
+- P0 协议中 Node 侧 `nodeCapabilities.wasi` 保持 `"DISABLED"` 不变（Node 绝不碰 WASI）。
+- WASI 沙箱位于 Python Host 侧（`mathagent/tools.py:PythonSandbox` $\to$ `mathagent/sandbox_wasi.py:WasiPythonSandbox`），受 `python/astra_bridge/generated_execution_gate.py:GenerativeExecutionGate` 门控。
+- 默认无 profile 时 100% Fail-Closed（所有旧测试行为逐字节不变）；当调用方显式传入已验收的 `python_sandbox_profile`（或环境变量 `ASTRA_WASI_PROFILE`）时，在 Host 侧打通受控执行链路！
 
 **具体修改动作**：
-1. **在 `mathagent/resources/general_v11/references/*.md` 每张卡片末尾追加标准化的 `## 绑定计算工具与精确调用契约 (Bound Registered Tools)` 章节**（控制每张卡片总长度在 4,000 字符 / 10,000 UTF-8 字节以内）：
-   - 按以下归口映射表，在对应卡片 `.md` 末尾写明该卡绑定的 P3 注册工具、适用条件、精确 JSON `args` 模板及输入约束：
-     - `domain-equivalence.md`：
-       - `real_root_count_expr`: `{"expression":"<有理系数单变量多项式字符串>","variable":"x"}`（统计实根个数，勿先约去含变量分母）
-       - `exact_check_expr` (`SIMPLIFY`): `{"operation":"SIMPLIFY","expression":"<代数式>","variable":"x"}`
-     - `algebraic-structures.md`：
-       - `splitting_field_degree_expr`: `{"expression":"<单变量多项式>","variable":"x"}`
-       - `exact_check_expr` (`FACTOR_OVER_EXTENSION`): `{"operation":"FACTOR_OVER_EXTENSION","expression":"<多项式>","variable":"x","minimal_polynomials":["<生成元极小多项式>"]}`
-       - `finite_group_structure`: `{"generators":["(12)","(123)"],"degree":3}` 或 `{"named_group":"A4"}`（仅限显式不相交轮换生成元 `degree` 2..8，或闭集命名群 `S3/S4/A4/A5/D8/D10/Z2..Z12/C2..C12`）
-     - `linearization-spectral.md`：
-       - `linear_system_solution_set`: `{"matrix":[["1","2"],["3","4"]],"rhs":["5","6"],"variables":["x","y"],"domain":"RATIONAL"}`（`domain` 为 `"RATIONAL"` 或 `"REAL"`）
-       - `exact_check_expr` (`MAXIMAL_MINORS`): `{"operation":"MAXIMAL_MINORS","matrix":[["t","-1"],["1","t"]],"variable":"t"}`（矩阵元素必须全部为 JSON 字符串）
-     - `generating-functions.md`：
-       - `polynomial_expand_coefficients`: `{"expression":"<多项式表达式>","variables":["x"],"parameters":[]}`
-     - `counting-bijections.md` & `finite-state-dp.md` & `invariants-extremal.md` & `proof-counterexamples.md`：
-       - `bounded_enumeration`: `{"ranges":[<单个物理对象的各属性取值数>],"choose":<选取对象个数k>,"predicate":"<基于 distinct(i), count(i,v), size(), sum(i), min(i), max(i), contains(i,v) 的谓词>"}` 或 `{"objects":[[...]],"choose":<k>,"predicate":"..."}`
-     - `integral-symmetry.md`：
-       - `exact_check_expr` (`DEFINITE_INTEGRAL`): `{"operation":"DEFINITE_INTEGRAL","expression":"<被积表达式>","variable":"x","lower":"<下限字符串>","upper":"<上限字符串>"}`
-       - `exact_check_expr` (`TRIG_REDUCE`): `{"operation":"TRIG_REDUCE","expression":"<三角/多项式表达式>","variable":"x"}`
-     - `convergence-limits.md`：
-       - `exact_check_expr` (`LIMIT`): `{"operation":"LIMIT","expression":"<表达式>","variable":"x","point":"<极限点字符串，如 0 或 oo>"}`
-     - `differential-equations.md`：
-       - `circle_laplacian_expr`: `{"expression":"<关于 theta 的表达式>"}`
-       - `planar_laplacian_expr`: `{"expression":"<多元表达式>","variables":["x","y"]}`
-       - `exact_check_expr` (`TRIG_REDUCE`): `{"operation":"TRIG_REDUCE","expression":"<分离变量模态或三角表达式>","variable":"x"}`
-     - `conditioning-indicators.md` & `statistical-inference.md`：
-       - `exact_check_expr` (`DENSITY_CHECK`): `{"operation":"DENSITY_CHECK","density":"<支撑集上的密度表达式，支持 Phi(x)/phi(x)>","variable":"x","lower":"0","upper":"oo"}`
-       - `bounded_enumeration`: 用于离散有限样本空间古典概型分子/分母精确计数
-     - `regression-diagnostics.md`：
-       - `stats_ols_check`: `{"data":[{"x":"<精确有理数字符串>","y":"<精确有理数字符串>"}],"claimed":{"slope":"<斜率有理数>","intercept":"<截距有理数>"}}`（3..12 个精确有理数点对）
-     - `numerical-approximation.md`：
-       - `interpolation_fit_check`: `{"points":[{"x":"<精确有理数>","y":"<精确有理数>"}],"expression":"<待核验单变量插值多项式>","variable":"x"}`（2..8 个互异精确节点）
-2. **修正 `mathagent/resources/skill-mapping-manifest.json` 中的工具归属错配**：
-   - 确保 `skill-mapping-manifest.json` 中的工具映射注释与方法卡对齐（注意检查是否有测试断言固定了 `skill-mapping-manifest.json` 的特定字段，若有测试断言 `probabilistic_model` 或 `symbolic_algebra` 包含某工具，保留向后兼容并在注释或扩展字段 `general_method_id` 中标明精确归口的 `general_v11` 卡片 ID）。
-3. **补齐 `apps/stdio-runtime/src/agent-loop-context.ts:231-250` 基础 `SYSTEM_PROMPT` 中缺失的 5 个 P3 工具简明签名**：
-   - 在 `SYSTEM_PROMPT` 的工具介绍段落（231-249 行）中，补齐 `polynomial_expand_coefficients (expression, variables, parameters)`、`linear_system_solution_set (matrix, rhs, variables, domain)`、`interpolation_fit_check (points, expression, variable)`、`stats_ols_check (data, claimed)`、`finite_group_structure (generators+degree or named_group)` 的一行式简明参数说明（注意检查 `apps/stdio-runtime` 下是否有测试硬编码断言了 `SYSTEM_PROMPT` 全文哈希或固定字节长度，若有对应测试，同步更新该测试中的预期快照或检查 `MAX_CONTEXT_BYTES = 65536` 边界）。
+1. **在 `python/astra_bridge/p3_effects.py` 中支持可选的 `python_sandbox` 注入**：
+   - `perform_effect(request, *, executor=None, catalog=None, python_sandbox=None, clock=time.monotonic, root_deadline=None)`：保持向后兼容，新增可选关键字参数 `python_sandbox=None`。
+2. **在 `python/astra_bridge/generated_execution_gate.py` 中增加 `execute_with_gate(gate, sandbox, request, code, *, deadline, problem_id, scope="bounded generated exploration")` 辅助函数**：
+   - 首先调用 `gate.decision(request)`：若不是 `"ADMITTED"`，直接返回拒绝决策 `{ "admitted": False, "reason": decision, "result": None }`（绝不执行代码）。
+   - 若 `"ADMITTED"` 且 `sandbox is not None and getattr(sandbox, "available", False)`，调用 `sandbox.execute(code, deadline=deadline, problem_id=problem_id, scope=scope)`，将结果封装为 `BOUNDED_OBSERVATION`（明确标注 `"interpretation": "BOUNDED_OBSERVATION_NOT_PROOF"`）。
+3. **在 `python/astra_bridge/agent_host.py` 与 `python/astra_bridge/agent_runtime.py` 中透传可选参数 `python_sandbox_profile=None`**：
+   - `AgentRuntime.__init__` 与 `AgentHost.__init__` 新增可选参数 `python_sandbox_profile=None`（默认 `None`，若未传且环境变量 `ASTRA_WASI_PROFILE` 存在且非空，可读取该路径；若为 `None` 则 `self.python_sandbox = None`，完全不触发任何文件 I/O，确保现有 998 个 pytest 用例 100% 零感知通过）。
+   - 当显式传入 `python_sandbox_profile` 时，通过 `from mathagent.tools import PythonSandbox; self.python_sandbox = PythonSandbox(profile=python_sandbox_profile)` 初始化实例并绑定 `self.python_sandbox_identity = self.python_sandbox.identity`。
+   - 新增桥接单测 `tests/bridge/test_wasi_host_bridge.py`：测试（1）默认无 profile 时 `AgentRuntime` / `GenerativeExecutionGate` 严格 `REFUSED_NO_PROFILE`；（2）传入受控 mock/stub `PythonSandbox` 与匹配的 `GenerativeExecutionGate` 时，`execute_with_gate` 能够正确放行并返回 `BOUNDED_OBSERVATION` 且超界/SHA 不匹配时严格拒绝。
 
 ---
 
-#### 任务 2：打通并补齐 `apps/stdio-runtime/src/agent-semantics.ts` 的方法与工具统一语义路由
+### Stage E：全量构建、三重 SHA-256 刷新与门禁验收（一步不漏）
 
-**背景问题**：
-1. `semanticToolRoute`（`agent-semantics.ts:1171-1206`）漏掉了 `exact_check_expr` 的 `DEFINITE_INTEGRAL`（定积分计算/对称区间定积分核验）和 `SIMPLIFY`（分式/根式/代数恒等化简）路由。
-2. `semanticMethodRoute`（`agent-semantics.ts:1406-1431`）与 `semanticToolRoute` 完全独立：当 `semanticToolRoute` 命中明确的工具路由（如 `finiteGroupStructureWording`、`interpolationFitWording`、`statsOlsWording`、`circleLaplacianWording`、`planarLaplacianWording`、`splittingFieldDegreeWording`、`realRootCountWording`、`linearSystemWording`）时，`semanticMethodRoute` 可能因为普通词汇计分平局而把真正匹配的领域方法卡排到后面。
+完成 Stage A ~ Stage D 后，严格按顺序执行以下命令直至全部绿灯：
 
-**具体修改动作**：
-1. **在 `apps/stdio-runtime/src/agent-semantics.ts` 中补齐定积分精确核验路由 `EXACT_DEFINITE_INTEGRAL_ROUTE`**：
-   - 定义 `EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute("DEFINITE_INTEGRAL", '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}')`。
-   - 新增 `exactDefiniteIntegralWording(problemText: string): boolean`：当题目包含明确的定积分求解/计算结构（如 `/(定积分|definite\s+integral|\\int_|\bint\s*_)/iu` 或同时出现积分号 `/(?:∫|\\int)/u` 与上下限/求值词 `/(?:求|计算|evaluate|compute)/iu`），且不属于抽象存在性证明或反常积分收敛性定性判断时，路由到 `EXACT_DEFINITE_INTEGRAL_ROUTE`（注意置于 `exactLimitWording` 之后或与 `exactLimitWording` 互斥判别，避免改变已有极限题测试行为）。
-2. **在 `apps/stdio-runtime/src/agent-semantics.ts` 中建立 `SemanticToolRoute` 到 `general_v11` 方法卡 ID 的强协同映射 `preferredMethodForToolRoute(route: SemanticToolRoute | null): string | null`**：
-   - `GROUP_STRUCTURE` / `SPLITTING_FIELD_DEGREE` / `EXACT_FACTOR_OVER_EXTENSION` $\to$ `"algebraic-structures"`
-   - `REAL_ROOT_COUNT` $\to$ `"domain-equivalence"`
-   - `LINEAR_SYSTEM_SOLUTION_SET` / `EXACT_MAXIMAL_MINORS` $\to$ `"linearization-spectral"`
-   - `POLYNOMIAL_EXPAND_COEFFICIENTS` $\to$ `"generating-functions"`
-   - `CIRCLE_LAPLACIAN` / `PLANAR_LAPLACIAN` / `EXACT_TRIG_REDUCE` $\to$ `"differential-equations"`
-   - `EXACT_DEFINITE_INTEGRAL` $\to$ `"integral-symmetry"`
-   - `EXACT_LIMIT` $\to$ `"convergence-limits"`
-   - `EXACT_DENSITY_CHECK` $\to$ `"conditioning-indicators"`
-   - `FINITE_ENUMERATION` $\to$ `"counting-bijections"`
-   - `INTERPOLATION_FIT` $\to$ `"numerical-approximation"`
-   - `OLS_CHECK` $\to$ `"regression-diagnostics"`
-3. **在 `semanticMethodRoute(problemText, entries)` 中融合该协同信号**：
-   - 当 `semanticToolRoute(problemText)` 命中某个 `route` 且其对应的 `preferredMethodId` 存在于 `entries` 中时，为该 `preferredMethodId` 提供协同加分（或确保其进入返回的 Top-3 候选列表首位/前列），从而保证**方法卡路由与工具路由指向同一个数学族**！
-   - **注意**：检查 `apps/stdio-runtime` 中针对 `semanticMethodRoute` 的单元测试，确保已有纯触发词测试用例依然全部通过。
+```bash
+# 1. 验证所有卡片中的 JSON 模板都能在真实 RegisteredExecutor 下跑通 status == "ok"
+python3 - <<'PY'
+import json, re
+from pathlib import Path
+from mathagent.tools import RegisteredExecutor
+from mathagent.tool_inventory import validate_inventory
 
----
+assert validate_inventory() == {"families": 22, "tools": 76}
+ex = RegisteredExecutor()
+cards_dir = Path("mathagent/resources/general_v11/references")
+count = 0
+for card in sorted(cards_dir.glob("*.md")):
+    text = card.read_text(encoding="utf-8")
+    assert len(text.encode("utf-8")) <= 10000, f"{card.name} exceeds 10000 UTF-8 bytes"
+    assert len(text) <= 4000, f"{card.name} exceeds 4000 chars"
+    for m in re.finditer(r"### `([a-z0-9_]+)(?:.*?)`\s*\n(?:- [^\n]+\n)*?- `args` 模板：\s*\n```json\s*\n(\{.*?\})\s*\n```", text):
+        tool_name, raw_json = m.group(1), m.group(2)
+        args = json.loads(raw_json)
+        res = ex.execute(tool_name, args)
+        assert res.status == "ok", f"{card.name} -> {tool_name} failed: {res}"
+        count += 1
+print(f"Verified {count} card tool templates: ALL OK")
+PY
 
-#### 任务 3：优化 `apps/stdio-runtime/src/agent-loop.ts` 的方法卡与工具协同提示，消除盲目猜参
+# 2. 更新 general_v11/SOURCE.json、a2-source-lock.json 与 asset_baseline.json
+python3 - <<'PY'
+import hashlib, json
+from pathlib import Path
+from python.astra_bridge.host_assets_registry import registry_snapshot, verify_integrity
 
-**背景问题**：
-在 `apps/stdio-runtime/src/agent-loop.ts:1408-1452`（`forcedMethodSelection`）与 `1848-1896`（方法卡加载完成后的下一个 WORK 轮次）中，模型加载完方法卡后，虽然拿到了方法卡正文，但系统没有在方法卡加载后的 WORK 轮次提示其顺势调用与该题/该卡匹配的注册工具，导致模型在 Turn 3 先盲写一遍完整 `WorkPacket`，然后在 `2236-2282` 行被 `forcedSemanticToolSelection` 拦截并把 Turn 3 的 `WorkPacket` 整个丢弃重来！
+root = Path(".")
+source_path = root / "mathagent/resources/general_v11/SOURCE.json"
+source_data = json.loads(source_path.read_text(encoding="utf-8"))
+for rel in list(source_data["files"].keys()):
+    p = root / "mathagent/resources/general_v11" / rel
+    source_data["files"][rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+source_path.write_text(json.dumps(source_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-**具体修改动作**：
-1. 在 `apps/stdio-runtime/src/agent-loop.ts` 中，当某张方法卡刚刚加载成功（`methodAssets.length >= 1`）、且当前题目命中了 `semanticToolRoute(problemText)`、且当前任务尚未产生 `PROGRAM_OBSERVATION`（即 `!observations.some((item) => item.source === "PROGRAM_OBSERVATION")`）、且预算允许调用工具（`allowTools && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews`）时：
-   - 可直接在方法卡加载完成后的紧邻下一轮（或通过轻量提示），引导模型优先执行该 `toolRoute` 对应的 `{"action":"tool",...}`，或者保留 `2236-2282` 行的兜底强制拦截以确保即使模型直接交卷也能 100% 触发工具校验。
-   - **关键约束**：必须仔细核对 `apps/stdio-runtime/test/` 下的现有集成测试（这些测试使用了固定的假模型响应队列 `scripted receipts`）。如果现有测试脚本预期在 `METHOD_LOAD` 之后先收到一个 `WorkPacket` 再进入 `TOOL_ROUTE`，**请仅在 `forcedMethodSelection` / `forcedSemanticToolSelection` 的构造上保持与现有脚本化测试的向后兼容**，即：
-     - 不破坏任何已有 scripted test 的模型请求序号（`model-1`, `model-2`, ...）与 `sessionLog` 事件序列（`METHOD_ROUTE` -> `METHOD_LOAD` -> `TOOL_ROUTE` -> `TOOL_OBSERVATION`）；
-     - 但在方法卡正文（任务 1）和 `SEMANTIC TOOL TURN` / `EXACT CHECK TURN` 提示中提供完整的工具契约，使真实大模型在加载方法卡后就能看到精确的 `argsTemplate` 和建模规范。
+source_sha = hashlib.sha256(source_path.read_bytes()).hexdigest()
+a2_lock_path = root / "packages/protocol/schema/a2-source-lock.json"
+a2_data = json.loads(a2_lock_path.read_text(encoding="utf-8"))
+if "files" in a2_data and "mathagent/resources/general_v11/SOURCE.json" in a2_data["files"]:
+    a2_data["files"]["mathagent/resources/general_v11/SOURCE.json"] = source_sha
+    a2_lock_path.write_text(json.dumps(a2_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
----
+baseline_path = root / "python/astra_bridge/asset_baseline.json"
+snap = registry_snapshot(root)
+baseline_path.write_text(json.dumps(snap, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+ver = verify_integrity(root)
+assert ver["ok"] is True, f"Integrity failed: {ver}"
+print("Integrity baselines updated and verified OK.")
+PY
 
-#### 任务 4：同步更新 SHA-256 完整性基线并运行全量验证门禁
+# 3. 编译 TypeScript 并重建 release/stdio-runtime.bundle.mjs 与 release/BUILD_MANIFEST.json
+node node_modules/typescript/bin/tsc -b
+node node_modules/esbuild/bin/esbuild apps/stdio-runtime/dist/src/main.js \
+  --bundle --platform=node --format=esm \
+  --outfile=release/stdio-runtime.bundle.mjs --log-level=warning
+python3 scripts/build_release_manifest.py
+python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
 
-在完成上述文件修改后，**必须**执行以下完整性同步与测试步骤：
+# 4. 运行全量 Node 与 Python 门禁
+node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js
+python3 -m pytest -q
+git diff --check
+```
 
-1. **编写并运行一次性 Python 脚本更新 `mathagent/resources/general_v11/SOURCE.json`**：
-   - 遍历 `mathagent/resources/general_v11/SOURCE.json` 中的 `files` 字典（含 `data/methods.json` 和 20 个 `references/*.md`），用 `hashlib.sha256(path.read_bytes()).hexdigest()` 重新计算最新 SHA-256 并写回 `SOURCE.json`。
-2. **同步更新 `python/astra_bridge/asset_baseline.json`**：
-   - 调用 `from python.astra_bridge.host_assets_registry import registry_snapshot, verify_integrity`，将更新后的 `methodCards`（及任何修改过的注册资产）的最新 SHA-256 同步写入 `python/astra_bridge/asset_baseline.json`，并断言 `verify_integrity(Path("."))["ok"] is True`。
-3. **运行全量 Python 与 TypeScript 测试套件**：
-   - 运行 Python 测试：`pytest`（重点检查 `MethodCatalog`、`p2_methods`、`host_assets_registry`、`tool_contracts`、`output_checks` 相关测试）。
-   - 运行 TypeScript 构建与测试：`npm run build && npm test`（重点检查 `@astra/runtime-core`、`@astra/stdio-runtime` 下的所有 `agent-loop`、`agent-semantics`、`p2-methods`、`p3-methods` 测试）。
-   - 若有任何测试因文本快照或字节计数断言失败，逐一定位并修复，确保 Python + TS 全量测试 100% 通过（0 failure）。
+全部通过后，在 `HANDOFF.md`（新增 §16）和 `docs/GATEBOARD.md` 末尾如实记录本轮 Stage A ~ Stage E 的实施证据与最新测试通过数。
 ````
-
----
-
-## 第四部分：后续进阶路线（Phase 2：唤醒 65 个沉睡算子）
-
-在 DeepSeek v4.1 1017 完成上述 **Phase 1（20 张方法卡 × 现有 11 个 P3 工具的契约融合与路由统一）** 并确保全量测试绿灯后，下一步（**Phase 2**）即可按数学族分批将 Python 侧已经写好独立输出审计（`output_checks`）的 **高价值 `full_solve` 算子** 选入 `packages/protocol/src/p3.ts`（`P3_TOOL_NAMES`）与 `python/astra_bridge/p3_effect_contract.py`：
-
-1. **第一批优先开放（精确代数、数论与线性空间，共 6 个）**：
-   - `solve_quadratic_diophantine` / `symbolic_diophantine_with_timeout`（归口 `modular-crt`）
-   - `solve_system_guarded_expr` / `polynomial_function_check`（归口 `domain-equivalence`）
-   - `gf2_rank` / `gf2_nullspace`（归口 `linearization-spectral`）
-2. **第二批优先开放（有限状态 DP、转移矩阵与容斥计数，共 5 个）**：
-   - `transition_count` / `independence_polynomial_chain`（归口 `finite-state-dp`）
-   - `count_by_digit_property`（归口 `finite-state-dp`）
-   - `rook_numbers` / `count_avoiding_permutations`（归口 `counting-bijections`）
-3. **第三批优先开放（随机过程与数值差分，共 4 个）**：
-   - `markov_expected_steps` / `cover_time_complete_graph`（归口 `conditioning-indicators`）
-   - `finite_difference_derivative` / `richardson_extrapolate`（归口 `numerical-approximation`）

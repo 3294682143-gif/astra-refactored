@@ -47,7 +47,7 @@
 - 输入约束：`variables` 1..3 个；乘幂写 `**`（拒绝 `^`）；总次数 ≤ 8 的有理系数多项式；不做含变量分母的约分。
 - 输出边界：与上同一契约；认证的是所给表达式，不是建模本身。
 
-### `exact_check_expr（`operation` = `TRIG_REDUCE`）`
+### `exact_check_expr`（`operation` = `TRIG_REDUCE`）
 - 何时用：核对分离变量后三角模态的化简（如 cos²−sin² 型恒等）。
 - `args` 模板：
 ```json

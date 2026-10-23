@@ -373,3 +373,23 @@ expanded permissions and default-engine switching retain their separate gates.
   `verify_integrity` ok with zero drift in untouched asset groups.
 - Gates: `tsc -b` 0; Node **464/464**; full pytest **998 passed / 24 skipped**; bridge **582 passed**;
   manifest `VERIFY_OK` after a bundle rebuild.
+
+### Session update — 2026-10-24 (Stages A–E: gaps closed, whitelist 26, closure expanded, WASI bridged)
+
+- Stage A fixed the four `c422ddb` gaps: 15 truthful per-tool input constraints (integer-parameter
+  tools no longer get the "quote everything" instruction), `semanticToolTurnNote(route)`,
+  `checkerSupportsObligation` now accepts `linear_system_solution_set` via matrix+rhs, and
+  SYSTEM_PROMPT / `tool_ownership` cover all 26 names.
+- Stage B opened the last nine audited operators (17 → 26) in all five live copies, each proven to
+  execute (`status == "ok"`, certified) and admitted by the real Host, with nine new wording-only
+  routes and nine `preferredMethodForToolRoute` rows; five cards document the verified contracts.
+- Stage C added five observation-grounded closure diagnostics (`GF2_RANK_MISMATCH`,
+  `GF2_NULLITY_MISMATCH`, `EXACT_COUNT_MISMATCH`, `COVER_TIME_MISMATCH`,
+  `IDENTITY_VERDICT_MISMATCH`) under the zero-false-positive rules (fraction skip, ambiguity,
+  negation, chosen-option-only).
+- Stage D bridged the WASI Python sandbox behind an optional `python_sandbox_profile` /
+  `ASTRA_WASI_PROFILE` seam with `execute_with_gate`, `BOUNDED_OBSERVATION` tagging and a
+  byte-identical default path (proven by file-I/O spies). No new wire action was added.
+- Stage E: 48/48 card templates re-verified by execution (0 failures, 0 oversized cards), 9 malformed
+  card headings fixed, triple SHA refresh with `verify_integrity` ok, bundle + manifest rebuilt
+  (`VERIFY_OK`), `tsc -b` 0, Node **508/508**, full pytest **1086 passed / 24 skipped**.

@@ -509,3 +509,206 @@ test("the Phase-2 semantic routes are deterministic and call-order independent",
     null,
   ]);
 });
+
+test("transition-count wording requires state transitions plus a count phrase", () => {
+  const route = semanticToolRoute(
+    "有向图有 3 个状态，状态转移如图，求长为 4 的顶点序列数。",
+  );
+  assert.equal(route?.id, "TRANSITION_COUNT");
+  assert.equal(route?.toolName, "transition_count");
+  assert.equal(route?.operation, "TRANSITION_COUNT");
+  for (const field of ["length", "num_states", "transitions"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(routeId("求有向图中长度为 3 的路径条数。"), null);
+  assert.notEqual(
+    routeId("求有向图中长度为 3 的路径条数。"),
+    "TRANSITION_COUNT",
+  );
+});
+
+test("independence-polynomial-chain wording is path-specific", () => {
+  const route = semanticToolRoute("求路图 P_5 的独立集多项式的系数。");
+  assert.equal(route?.id, "INDEPENDENCE_POLYNOMIAL_CHAIN");
+  assert.equal(route?.toolName, "independence_polynomial_chain");
+  assert.match(route?.argsTemplate ?? "", /"n"/u);
+  assert.notEqual(route?.id, "EXPAND_COEFFICIENTS");
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(routeId("求一般图的最大独立集。"), null);
+  assert.notEqual(routeId("求一般图的最大独立集。"), "INDEPENDENCE_POLYNOMIAL_CHAIN");
+});
+
+test("digit-property wording requires decimal digit-set or digit-DP context", () => {
+  const route = semanticToolRoute("由数字集合 {1,2,3} 组成且能被 3 整除的数有多少个？");
+  assert.equal(route?.id, "COUNT_BY_DIGIT_PROPERTY");
+  assert.equal(route?.toolName, "count_by_digit_property");
+  for (const field of ["digit_set", "max_digits", "modulus", "residue", "include_zero"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(routeId("一个数的各位数字之和是多少？"), null);
+  assert.notEqual(routeId("一个数的各位数字之和是多少？"), "COUNT_BY_DIGIT_PROPERTY");
+});
+
+test("rook-number wording requires an explicit forbidden-board rook request", () => {
+  const route = semanticToolRoute("求 3x3 棋盘禁位棋盘的车多项式的系数。");
+  assert.equal(route?.id, "ROOK_NUMBERS");
+  assert.equal(route?.toolName, "rook_numbers");
+  for (const field of ["n", "forbidden"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+  assert.notEqual(route?.id, "EXPAND_COEFFICIENTS");
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(routeId("求 8 皇后问题的解的个数。"), null);
+  assert.notEqual(routeId("求 8 皇后问题的解的个数。"), "ROOK_NUMBERS");
+});
+
+test("avoiding-permutation wording requires forbidden positions or derangements", () => {
+  const route = semanticToolRoute(
+    "求 4 个元素的禁止位置集合的排列数，避开所有禁位。",
+  );
+  assert.equal(route?.id, "COUNT_AVOIDING_PERMUTATIONS");
+  assert.equal(route?.toolName, "count_avoiding_permutations");
+  for (const field of ["n", "forbidden"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(routeId("求 5 个元素的全排列数。"), "FINITE_ENUMERATION");
+  assert.notEqual(routeId("求 5 个元素的全排列数。"), "COUNT_AVOIDING_PERMUTATIONS");
+});
+
+test("Markov expectation wording requires both a chain and a hitting expectation", () => {
+  const route = semanticToolRoute(
+    "设马尔可夫链的转移概率矩阵为 P，求从状态 0 到状态 2 的期望步数。",
+  );
+  assert.equal(route?.id, "MARKOV_EXPECTED_STEPS");
+  assert.equal(route?.toolName, "markov_expected_steps");
+  for (const field of ["transition", "start", "targets"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+  // The broad finite-enumeration family must never win this item.
+  assert.notEqual(route?.id, "FINITE_ENUMERATION");
+
+  assert.equal(
+    routeId("设马尔可夫链的转移概率矩阵为 P，求其平稳分布。"),
+    null,
+  );
+  assert.notEqual(
+    routeId("设马尔可夫链的转移概率矩阵为 P，求其平稳分布。"),
+    "MARKOV_EXPECTED_STEPS",
+  );
+});
+
+test("complete-graph cover-time wording requires complete-graph and cover wording", () => {
+  const route = semanticToolRoute("求完全图 K_4 上随机游走的覆盖时间。");
+  assert.equal(route?.id, "COVER_TIME_COMPLETE_GRAPH");
+  assert.equal(route?.toolName, "cover_time_complete_graph");
+  assert.match(route?.argsTemplate ?? "", /"num_vertices"/u);
+  // A cover-time walk is not the state-transition sequence family.
+  assert.notEqual(route?.id, "TRANSITION_COUNT");
+
+  const vertexCover = semanticToolRoute(
+    "求完全图 K_5 上随机游走访问所有顶点的期望步数。",
+  );
+  assert.equal(vertexCover?.id, "COVER_TIME_COMPLETE_GRAPH");
+  assert.notEqual(vertexCover?.id, "TRANSITION_COUNT");
+
+  assert.equal(routeId("求完全图 K_5 的边数。"), null);
+  assert.notEqual(routeId("求完全图 K_5 的边数。"), "COVER_TIME_COMPLETE_GRAPH");
+});
+
+test("finite-difference wording excludes explicit Richardson requests", () => {
+  const route = semanticToolRoute(
+    "用中心差分近似求 f(x)=x^3 在 x=1 处的导数，步长 h=0.01。",
+  );
+  assert.equal(route?.id, "FINITE_DIFFERENCE_DERIVATIVE");
+  assert.equal(route?.toolName, "finite_difference_derivative");
+  for (const field of ["f", "x", "h", "method"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(routeId("求 f(x)=x^3 在 x=1 处的精确导数。"), null);
+  assert.equal(
+    routeId("用 Richardson 外推改进中心差分的数值导数结果。"),
+    "RICHARDSON_EXTRAPOLATE",
+  );
+  assert.notEqual(
+    routeId("用 Richardson 外推改进中心差分的数值导数结果。"),
+    "FINITE_DIFFERENCE_DERIVATIVE",
+  );
+});
+
+test("Richardson extrapolation wording has its own route", () => {
+  const route = semanticToolRoute(
+    "使用 Richardson 外推法计算 f(x)=x^3 在 x=1 处的数值导数。",
+  );
+  assert.equal(route?.id, "RICHARDSON_EXTRAPOLATE");
+  assert.equal(route?.toolName, "richardson_extrapolate");
+  for (const field of ["f", "x", "h", "method", "order"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(
+    routeId("使用中心差分计算数值导数。"),
+    "FINITE_DIFFERENCE_DERIVATIVE",
+  );
+  assert.notEqual(
+    routeId("使用中心差分计算数值导数。"),
+    "RICHARDSON_EXTRAPOLATE",
+  );
+});
+
+test("the Phase-3 tool routes are deterministic and call-order independent", () => {
+  const samples = [
+    "有向图有 3 个状态，状态转移如图，求长为 4 的顶点序列数。",
+    "求有向图中长度为 3 的路径条数。",
+    "求路图 P_5 的独立集多项式的系数。",
+    "求一般图的最大独立集。",
+    "由数字集合 {1,2,3} 组成且能被 3 整除的数有多少个？",
+    "一个数的各位数字之和是多少？",
+    "求 3x3 棋盘禁位棋盘的车多项式的系数。",
+    "求 8 皇后问题的解的个数。",
+    "求 4 个元素的禁止位置集合的排列数，避开所有禁位。",
+    "求 5 个元素的全排列数。",
+    "设马尔可夫链的转移概率矩阵为 P，求从状态 0 到状态 2 的期望步数。",
+    "设马尔可夫链的转移概率矩阵为 P，求其平稳分布。",
+    "求完全图 K_4 上随机游走的覆盖时间。",
+    "求完全图 K_5 的边数。",
+    "用中心差分近似求 f(x)=x^3 在 x=1 处的导数，步长 h=0.01。",
+    "求 f(x)=x^3 在 x=1 处的精确导数。",
+    "使用 Richardson 外推法计算 f(x)=x^3 在 x=1 处的数值导数。",
+    "使用中心差分计算数值导数。",
+  ];
+  const forward = samples.map((problem) => semanticToolRoute(problem));
+  const reverse = [...samples].reverse().map((problem) => semanticToolRoute(problem)).reverse();
+  assert.deepEqual(forward, reverse);
+  for (const problem of samples) {
+    assert.deepEqual(semanticToolRoute(problem), semanticToolRoute(problem));
+  }
+  assert.deepEqual(forward.map((route) => route?.id ?? null), [
+    "TRANSITION_COUNT",
+    null,
+    "INDEPENDENCE_POLYNOMIAL_CHAIN",
+    null,
+    "COUNT_BY_DIGIT_PROPERTY",
+    null,
+    "ROOK_NUMBERS",
+    null,
+    "COUNT_AVOIDING_PERMUTATIONS",
+    "FINITE_ENUMERATION",
+    "MARKOV_EXPECTED_STEPS",
+    null,
+    "COVER_TIME_COMPLETE_GRAPH",
+    null,
+    "FINITE_DIFFERENCE_DERIVATIVE",
+    null,
+    "RICHARDSON_EXTRAPOLATE",
+    "FINITE_DIFFERENCE_DERIVATIVE",
+  ]);
+});

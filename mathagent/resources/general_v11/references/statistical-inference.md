@@ -29,7 +29,7 @@
 
 本节只列当前 P3 协议白名单（11 个注册算子）里本卡真正可调用的注册工具。工具只对显式输入重算一次精确结果并给独立校验，不判定“题目→输入”的映射是否正确，也不替代原题的证明义务。
 
-### `exact_check_expr（`operation` = `DENSITY_CHECK`）`
+### `exact_check_expr`（`operation` = `DENSITY_CHECK`）
 - 何时用：核对似然／后验所依赖的密度是否在支撑上归一化、是否非负。
 - `args` 模板：
 ```json

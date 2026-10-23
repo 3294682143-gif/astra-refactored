@@ -56,6 +56,66 @@
       "finite_group_structure": {
         "family_id": "symbolic_algebra",
         "general_method_id": "algebraic-structures"
+      },
+      "solve_quadratic_diophantine": {
+        "family_id": "diophantine",
+        "general_method_id": "modular-crt"
+      },
+      "symbolic_diophantine_with_timeout": {
+        "family_id": "diophantine",
+        "general_method_id": "modular-crt"
+      },
+      "solve_system_guarded_expr": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "domain-equivalence"
+      },
+      "polynomial_function_check": {
+        "family_id": "functional_equation",
+        "general_method_id": "domain-equivalence"
+      },
+      "gf2_rank": {
+        "family_id": "linear_algebra_game",
+        "general_method_id": "linearization-spectral"
+      },
+      "gf2_nullspace": {
+        "family_id": "linear_algebra_game",
+        "general_method_id": "linearization-spectral"
+      },
+      "transition_count": {
+        "family_id": "transfer_matrix",
+        "general_method_id": "finite-state-dp"
+      },
+      "independence_polynomial_chain": {
+        "family_id": "transfer_matrix",
+        "general_method_id": "finite-state-dp"
+      },
+      "count_by_digit_property": {
+        "family_id": "digit_dp",
+        "general_method_id": "finite-state-dp"
+      },
+      "rook_numbers": {
+        "family_id": "inclusion_exclusion_counting",
+        "general_method_id": "counting-bijections"
+      },
+      "count_avoiding_permutations": {
+        "family_id": "inclusion_exclusion_counting",
+        "general_method_id": "counting-bijections"
+      },
+      "markov_expected_steps": {
+        "family_id": "probabilistic_model",
+        "general_method_id": "conditioning-indicators"
+      },
+      "cover_time_complete_graph": {
+        "family_id": "probabilistic_model",
+        "general_method_id": "conditioning-indicators"
+      },
+      "finite_difference_derivative": {
+        "family_id": "numerical_methods",
+        "general_method_id": "numerical-approximation"
+      },
+      "richardson_extrapolate": {
+        "family_id": "numerical_methods",
+        "general_method_id": "numerical-approximation"
       }
     },
     "relocations": [

@@ -1,11 +1,12 @@
-"""Focused data-only tests: P3 tool whitelist (17 names) and effect-id capacity.
+"""Focused data-only tests: P3 tool whitelist (26 names) and effect-id capacity.
 
 Nothing here executes a model, spawns a process or opens a socket. The checks
 are:
 
 * the TS whitelist (`packages/protocol/src/p3.ts`), the compiled copy, the live
-  JSON schema copies and the Python contract all name the same seventeen tools
-  in the same order — the Phase 1 eleven followed by the Phase 2 batch-1 six;
+  JSON schema copies and the Python contract all name the same twenty-six tools
+  in the same order — the Phase 1 eleven, the Phase 2 batch-1 six and then the
+  Phase 2 batch-2 nine, appended after an unchanged seventeen-name prefix;
 * every schema `effectId` enum carries exactly six ids;
 * every whitelisted name passes the real Host-side validators (effect contract,
   Host context action parser, P3 host manifest payload, 1.3 and 1.2 manifests);
@@ -53,7 +54,7 @@ PHASE1_TOOLS = (
     "finite_group_structure",
 )
 # The Phase 2 batch-1 additions, appended in the refactor plan's fixed order.
-PHASE2_TOOLS = (
+PHASE2_BATCH1_TOOLS = (
     "solve_quadratic_diophantine",
     "symbolic_diophantine_with_timeout",
     "solve_system_guarded_expr",
@@ -61,6 +62,20 @@ PHASE2_TOOLS = (
     "gf2_rank",
     "gf2_nullspace",
 )
+# The Phase 2 batch-2 additions: a strict append after the unchanged 17-name
+# prefix, in the refactor plan's fixed order.
+PHASE2_BATCH2_TOOLS = (
+    "transition_count",
+    "independence_polynomial_chain",
+    "count_by_digit_property",
+    "rook_numbers",
+    "count_avoiding_permutations",
+    "markov_expected_steps",
+    "cover_time_complete_graph",
+    "finite_difference_derivative",
+    "richardson_extrapolate",
+)
+PHASE2_TOOLS = PHASE2_BATCH1_TOOLS + PHASE2_BATCH2_TOOLS
 EXPECTED_TOOLS = PHASE1_TOOLS + PHASE2_TOOLS
 NEW_TOOLS = PHASE1_TOOLS[4:8]
 EXACT_DATA_TOOLS = PHASE1_TOOLS[8:10]
@@ -155,18 +170,18 @@ def _collect_enum_values(node, key):
 # --------------------------------------------------------------------- #
 # 1. One whitelist on every side
 # --------------------------------------------------------------------- #
-def test_python_contract_names_exactly_seventeen_tools():
+def test_python_contract_names_exactly_twenty_six_tools():
     assert isinstance(TOOL_NAMES, tuple)
-    assert len(TOOL_NAMES) == 17
+    assert len(TOOL_NAMES) == 26
     assert TOOL_NAMES == EXPECTED_TOOLS
-    assert len(set(TOOL_NAMES)) == 17
+    assert len(set(TOOL_NAMES)) == 26
 
 
 def test_phase2_names_are_appended_after_an_unchanged_phase1_prefix():
-    """Order stability: the six new names extend the table, they never reorder it."""
+    """Order stability: new names extend the table, they never reorder it."""
     assert TOOL_NAMES[:11] == PHASE1_TOOLS
     assert TOOL_NAMES[11:] == PHASE2_TOOLS
-    assert PHASE2_TOOLS == (
+    assert PHASE2_BATCH1_TOOLS == (
         "solve_quadratic_diophantine",
         "symbolic_diophantine_with_timeout",
         "solve_system_guarded_expr",
@@ -174,6 +189,23 @@ def test_phase2_names_are_appended_after_an_unchanged_phase1_prefix():
         "gf2_rank",
         "gf2_nullspace",
     )
+    assert PHASE2_BATCH2_TOOLS == (
+        "transition_count",
+        "independence_polynomial_chain",
+        "count_by_digit_property",
+        "rook_numbers",
+        "count_avoiding_permutations",
+        "markov_expected_steps",
+        "cover_time_complete_graph",
+        "finite_difference_derivative",
+        "richardson_extrapolate",
+    )
+
+
+def test_the_nine_new_names_follow_an_unchanged_seventeen_name_prefix():
+    assert TOOL_NAMES[:17] == PHASE1_TOOLS + PHASE2_BATCH1_TOOLS
+    assert TOOL_NAMES[17:] == PHASE2_BATCH2_TOOLS
+    assert len(TOOL_NAMES[:17]) == 17
 
 
 def test_typescript_whitelist_equals_the_python_one():
@@ -456,6 +488,43 @@ def test_phase2_tools_have_registry_contract_dispatch_and_input_contract():
         },
         "gf2_rank": {"rows": [1, 2, 4]},
         "gf2_nullspace": {"rows": [1, 2], "width": 3},
+        "transition_count": {
+            "length": 3,
+            "num_states": 2,
+            "transitions": [[0, 1], [1, 0], [1, 1]],
+        },
+        "independence_polynomial_chain": {"n": 5},
+        "count_by_digit_property": {
+            "digit_set": [1, 2, 3],
+            "max_digits": 3,
+            "modulus": 3,
+            "residue": 0,
+            "include_zero": False,
+        },
+        "rook_numbers": {"n": 3, "forbidden": [[0, 0], [1, 1], [2, 2]]},
+        "count_avoiding_permutations": {
+            "n": 4,
+            "forbidden": [[0, 0], [1, 1], [2, 2], [3, 3]],
+        },
+        "markov_expected_steps": {
+            "transition": [[0, 1, 0], [0, 0, 1], [0, 0, 1]],
+            "start": 0,
+            "targets": [2],
+        },
+        "cover_time_complete_graph": {"num_vertices": 4},
+        "finite_difference_derivative": {
+            "f": "x**3",
+            "x": 1,
+            "h": 1,
+            "method": "central",
+        },
+        "richardson_extrapolate": {
+            "f": "x**3",
+            "x": 1,
+            "h": 1,
+            "method": "central",
+            "order": 2,
+        },
     }
     assert tuple(cases) == PHASE2_TOOLS
     for name, args in cases.items():
@@ -468,7 +537,7 @@ def test_phase2_tools_have_registry_contract_dispatch_and_input_contract():
         validate_inputs(name, args)
 
 
-def test_every_live_copy_carries_the_seventeen_names_in_one_order():
+def test_every_live_copy_carries_the_twenty_six_names_in_one_order():
     """One order everywhere: source, compiled copy, schemas and Python contract."""
     copies = {
         "python": TOOL_NAMES,
@@ -484,7 +553,8 @@ def test_every_live_copy_carries_the_seventeen_names_in_one_order():
     assert len(copies) >= 5
     for label, names in copies.items():
         assert names == EXPECTED_TOOLS, label
-        assert names[11:] == PHASE2_TOOLS, label
+        assert names[:17] == PHASE1_TOOLS + PHASE2_BATCH1_TOOLS, label
+        assert names[17:] == PHASE2_BATCH2_TOOLS, label
 
 
 def test_new_expression_tools_accept_python_power_syntax_directly():
@@ -533,6 +603,33 @@ def _collect_named(node, name):
         for value in node:
             out.extend(_collect_named(value, name))
     return out
+
+
+def test_tool_ownership_covers_all_twenty_six_whitelisted_tools():
+    """Every live tool has one registry family and an authoritative card."""
+    manifest = _load(ROOT / "mathagent/resources/skill-mapping-manifest.json")
+    ownership = manifest["tool_ownership"]["tools"]
+    family_ids = {family["family_id"] for family in manifest["families"]}
+
+    assert len(ownership) == 26
+    assert set(ownership) == set(EXPECTED_TOOLS)
+    for name, record in ownership.items():
+        assert record["family_id"] in family_ids, name
+        assert record["general_method_id"], name
+
+    expected_new_ownership = {
+        "transition_count": "finite-state-dp",
+        "independence_polynomial_chain": "finite-state-dp",
+        "count_by_digit_property": "finite-state-dp",
+        "rook_numbers": "counting-bijections",
+        "count_avoiding_permutations": "counting-bijections",
+        "markov_expected_steps": "conditioning-indicators",
+        "cover_time_complete_graph": "conditioning-indicators",
+        "finite_difference_derivative": "numerical-approximation",
+        "richardson_extrapolate": "numerical-approximation",
+    }
+    for name, method_id in expected_new_ownership.items():
+        assert ownership[name]["general_method_id"] == method_id, name
 
 
 def test_legacy_manifest_keeps_its_eight_tool_enum():

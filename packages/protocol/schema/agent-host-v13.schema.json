@@ -2095,7 +2095,16 @@
                       "solve_system_guarded_expr",
                       "polynomial_function_check",
                       "gf2_rank",
-                      "gf2_nullspace"
+                      "gf2_nullspace",
+                      "transition_count",
+                      "independence_polynomial_chain",
+                      "count_by_digit_property",
+                      "rook_numbers",
+                      "count_avoiding_permutations",
+                      "markov_expected_steps",
+                      "cover_time_complete_graph",
+                      "finite_difference_derivative",
+                      "richardson_extrapolate"
                     ]
                   },
                   "args": {

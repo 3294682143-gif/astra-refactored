@@ -1620,3 +1620,91 @@ OPTION_VERDICT_CONTRADICTION → SOLUTION_COMPLETENESS`；同一轮内按选项�
 2. **新算子没有接进 answer closure**：它们目前只产生观测（`tool_names`/`observation_views`）、
    不会生成缺陷。要像 `finite_group_structure` 那样参与改答案，还需各自的诊断（下一轮）。
 3. **没有真实 API 实证**：本轮全是本地门禁 + 假 client；这 6 个算子在真实题上的命中率与收益未测。
+
+---
+
+## 16. 2026-10-24 Stage A–E：断层收口 + 白名单 17→26 + 闭环扩容 + WASI 桥接（按 `Astra_数学族方法卡与数学工具整合重构方案_及DeepSeek修改提示词.md` 新版）
+
+六个 agent 按文件归属并行（loop / 白名单 / 路由 / 卡片 / 闭环 / WASI），最后由我统一做 Stage E 的
+完整性同步与门禁。
+
+### 16.1 Stage A：修掉 `c422ddb` 的四个断层
+
+| 断层 | 修法 |
+| --- | --- |
+| `methodToolInputConstraint` 漏 15 个 Phase-2 算子 → 整数参数被误导加引号 | 补齐 **15 条**真实约束（6 个既有 + 9 个新增），整数参数工具不再收到"全部加引号"的默认提示 |
+| `SEMANTIC TOOL TURN` 固定句与整数参数冲突 | 改为 `semanticToolTurnNote(route)` = `methodToolInputConstraint(route) + " Never substitute a different tool."`；协同提示整块仍 ≤600 码点（实测最坏 598） |
+| `checkerSupportsObligation` 要求 `args.expression` → `linear_system_solution_set` 永远 false | 该工具改判 `Array.isArray(matrix) && Array.isArray(rhs)`；表达式族不变；未知形态仍 fail-closed |
+| `SYSTEM_PROMPT` / `tool_ownership` 只覆盖 11 个 | SYSTEM_PROMPT 补到 26 个（+993 B，总量 12,765 B）；`tool_ownership.tools` 登记 **26** 条（含 `family_id` + 权威 `general_method_id`），`validate_inventory()` 仍 `{families: 22, tools: 76}` |
+
+### 16.2 Stage B：白名单 17 → 26（九个算子，全部实跑验证）
+
+追加顺序：`transition_count`、`independence_polynomial_chain`、`count_by_digit_property`、`rook_numbers`、
+`count_avoiding_permutations`、`markov_expected_steps`、`cover_time_complete_graph`、
+`finite_difference_derivative`、`richardson_extrapolate`（五份 live 副本同序；两份 v13 逐字节一致；
+**冻结 1.2 仍是 8 个名字、SHA `d21953e2…` 未变**）。
+
+| 工具 | 实跑 payload | 结果 |
+| --- | --- | --- |
+| `transition_count` | `{"length":3,"num_states":2,"transitions":[[0,1],[1,0],[1,1]]}` | 5 |
+| `independence_polynomial_chain` | `{"n":5}` | `[1,6,5,1]` |
+| `count_by_digit_property` | `{"digit_set":[1,2,3],"max_digits":3,"modulus":3,"residue":0,"include_zero":false}` | 13 |
+| `rook_numbers` | `{"n":3,"forbidden":[[0,0],[1,1],[2,2]]}` | `[1,3,3,1]` |
+| `count_avoiding_permutations` | `{"n":4,"forbidden":[[0,0],[1,1],[2,2],[3,3]]}` | 9 |
+| `markov_expected_steps` | `{"transition":[[0.0,1.0,0.0],[0.5,0.0,0.5],[0.0,0.0,1.0]],"start":0,"targets":[2]}` | `4.0` |
+| `cover_time_complete_graph` | `{"num_vertices":4}` | `"11/2"` |
+| `finite_difference_derivative` | `{"f":"x**3","x":1.0,"h":0.01,"method":"central"}` | 3.0001… |
+| `richardson_extrapolate` | `{"f":"x**3","x":1.0,"h":0.01,"method":"central","order":2}` | 2.99999… |
+
+九个新语义路由 + 九行 `preferredMethodForToolRoute`（→ `finite-state-dp` / `counting-bijections` /
+`conditioning-indicators` / `numerical-approximation`），并显式互斥：Markov 不进 `FINITE_ENUMERATION`、
+cover-time 不进 `TRANSITION_COUNT`、Richardson 不被普通差分路由吃掉。
+
+五张卡片补契约（`finite-state-dp` 4945 B、`induction-recurrence` 3795 B、`counting-bijections` 3857 B、
+`conditioning-indicators` 4663 B、`numerical-approximation` 3953 B），**20 个模板从成品卡片反抽后重跑，0 失败**。
+
+### 16.3 Stage C：闭环扩容（5 个新观察型缺陷）
+
+`GF2_RANK_MISMATCH`、`GF2_NULLITY_MISMATCH`、`EXACT_COUNT_MISMATCH`、`COVER_TIME_MISMATCH`、
+`IDENTITY_VERDICT_MISMATCH`，全部 `evidence: "OBSERVATION"`，零误报规则照旧并加测试：
+概率分数（`223/8330`）绝不与整数计数比对；一句多数字/裸数字不归因；否定/模糊词丢弃；
+只读候选真选中的选项；观测缺失或畸形不产缺陷。缺陷顺序固定为
+`… OPTION_VERDICT_CONTRADICTION → 五个新缺陷 → SOLUTION_COMPLETENESS`。
+
+### 16.4 Stage D：WASI 生成式 Python 沙箱在 `engine="ts"` 下受控激活
+
+- `p3_effects.perform_effect(..., python_sandbox=None)`：只加可选关键字，行为不变。
+- 新增 `generated_execution_gate.execute_with_gate(gate, sandbox, request, code, *, deadline, problem_id, scope)`：
+  先问 `gate.decision(request)`，非 `"ADMITTED"` 直接拒绝且**绝不执行**；无可用沙箱 → `REFUSED_NO_PROFILE`；
+  边界/identity 非法 → `REFUSED_UNBOUNDED`；执行异常/超时 → `REFUSED_EXECUTION_FAILED`；
+  成功则封装 `{kind:"BOUNDED_OBSERVATION", interpretation:"BOUNDED_OBSERVATION_NOT_PROOF"}`，
+  不可序列化或 >64 KiB 一律拒绝（不截断、不伪造）。
+- `AgentHost` / `AgentRuntime` 新增可选 `python_sandbox_profile`（`None` 时再读 `ASTRA_WASI_PROFILE`）：
+  未配置时**完全不触发文件 I/O**（用 `Path.read_bytes`/`open`/`io.open` 打桩证明事件为 0），
+  `capabilities.generatedPython` 仍 `UNAVAILABLE`，Node 侧 `nodeCapabilities.wasi: "DISABLED"` 未动。
+- 新增 `AgentHost.generated_exploration(request, code, *, gate, scope)` 作为**唯一**可达入口；
+  P3 线上动作词表仍只有 `("tool","method")`，**没有**新增 wire action（有意为之，避免破坏冻结契约）。
+
+### 16.5 Stage E：完整性 + 门禁（本轮实测）
+
+- 卡片模板：**48/48 全部实跑 `status == "ok"`、0 失败、0 张卡片超限**（≤10000 B / ≤4000 chars）。
+  顺带修掉 8 张卡片里 9 处畸形标题（``### `exact_check_expr（…）` `` 缺闭合反引号，导致 markdown 渲染错乱）。
+- 三重 SHA：`general_v11/SOURCE.json`（12 条：8 张标题修正卡 + 5 张新契约卡，其中 1 张重叠）、
+  `a2-source-lock.json`（`general_v11/SOURCE.json` pin `20dac0c1…`）、
+  `asset_baseline.json`（按 `astra-asset-baseline-v1` 结构重算 12 张卡哈希），
+  `verify_integrity` → **ok=True, errors=[]**。
+- `tsc -b`：0
+- Node：**508/508**（基线 464，+44）
+- 全量 pytest：**1086 passed, 24 skipped**（基线 998，+88）
+- bundle 已重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**
+- `git diff --check`：clean
+
+### 16.6 已知限制
+
+1. **WASI 仍未接上真实 profile**：本轮只做了受控桥接与 fail-closed 默认路径；仓库里没有已验收的
+   `python-3.12.0.wasm` profile，所以真实运行时仍不会执行生成式 Python。
+2. **没有新增 wire action**：`generated_exploration` 只能被 Host 内部显式调用，TS 侧目前无法主动请求
+   一次沙箱探索；要打通需要在 P3 动作词表里加一个受控动作（会改动冻结契约，需单独决策）。
+3. **数值类算子的观测是浮点**（`finite_difference_derivative` / `richardson_extrapolate` /
+   `markov_expected_steps`），闭环对它们只做"显式断言且不等"的比对，不参与精确有理数闭环。
+4. **没有跑真实 API**：本轮全部是本地门禁 + 假 client，正确率口径仍是 §12.6 的旧数字。

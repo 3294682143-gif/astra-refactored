@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "fba77668b68168846f56e5132f671678eac6c2a7",
-    "tree": "c7663ffcf0f0db20035f5d3dc7c5921bb8bf712d"
+    "commit": "c422ddbb806ae8faacdb0e39bd7f63e46ac3f4c0",
+    "tree": "0999040d9f232a75b53bf878af2c82f82540354a"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "718cf139d76228c5638a3eb80f5579ee7ebd9702c525d0e1e0ff3f6e9e318c78",
-      "bytes": 180209
+      "sha256": "2ab1c36a4186df03441c7e15a5e42b9e35aeec34e5d6d5fc4717668e19fc1d9d",
+      "bytes": 182987
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -27,7 +27,7 @@
   "assets": {
     "protocolSchema": {
       "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "85cdadb2c1bcef5a90fa7c0e07de079f926574da90fcacd58d9db1d23659f0fe"
+      "sha256": "d8207f8102d4eeee6492a890c593f40c42e9f409475e2667a47c7b410f986f34"
     },
     "methodRegistry": {
       "path": "mathagent/resources/tool-registry.json",
@@ -35,7 +35,7 @@
     },
     "methodSkillMapping": {
       "path": "mathagent/resources/skill-mapping-manifest.json",
-      "sha256": "2332e68cafc9d870323ec80d4b270de708974fee29e80d5a8dd9816ebd1c46e4"
+      "sha256": "2ff35867c80bc69ade7807dc9b3c8a1036a2d604d56c7ab9db617971b1dec804"
     },
     "mathFamiliesCatalog": {
       "path": "math_families/catalog.json",
@@ -45,11 +45,11 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "f4ae3c261a06cd27775873dd6692edf9587d6a906653d4fbb238495f0862344d"
+      "sha256": "38a54848486caea0896d1b408724bee608bfd503614b2516dd753fb5249f19cc"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
-      "sha256": "85cdadb2c1bcef5a90fa7c0e07de079f926574da90fcacd58d9db1d23659f0fe"
+      "sha256": "d8207f8102d4eeee6492a890c593f40c42e9f409475e2667a47c7b410f986f34"
     }
   },
   "mathFamilyFiles": {

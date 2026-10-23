@@ -1,4 +1,4 @@
-"""Host acceptance for the six Phase 2 batch-1 operators.
+"""Host acceptance for all fifteen Phase 2 operators.
 
 Each test drives one real ``AgentHost`` through its ``on_effect`` gate with the
 *real* ``p3_effects.perform_effect`` body, so what is proven is the whole Host
@@ -80,6 +80,55 @@ TOOL_CASES = {
     ),
     "gf2_rank": ({"rows": [1, 2, 4]}, 3),
     "gf2_nullspace": ({"rows": [1, 2], "width": 3}, [4]),
+    "transition_count": (
+        {"length": 3, "num_states": 2, "transitions": [[0, 1], [1, 0], [1, 1]]},
+        5,
+    ),
+    "independence_polynomial_chain": ({"n": 5}, [1, 6, 5, 1]),
+    "count_by_digit_property": (
+        {
+            "digit_set": [1, 2, 3],
+            "max_digits": 3,
+            "modulus": 3,
+            "residue": 0,
+            "include_zero": False,
+        },
+        13,
+    ),
+    "rook_numbers": (
+        {"n": 3, "forbidden": [[0, 0], [1, 1], [2, 2]]},
+        [1, 3, 3, 1],
+    ),
+    "count_avoiding_permutations": (
+        {"n": 4, "forbidden": [[0, 0], [1, 1], [2, 2], [3, 3]]},
+        9,
+    ),
+    # The P0 admission parser rejects float tokens, so the Host-level payload
+    # uses an equivalent integer-valued deterministic chain: E_0 = 2.
+    "markov_expected_steps": (
+        {
+            "transition": [[0, 1, 0], [0, 0, 1], [0, 0, 1]],
+            "start": 0,
+            "targets": [2],
+        },
+        2.0,
+    ),
+    "cover_time_complete_graph": ({"num_vertices": 4}, "11/2"),
+    # Integer x=1 and h=1 stay inside the strict P0 JSON grammar.
+    "finite_difference_derivative": (
+        {"f": "x**3", "x": 1, "h": 1, "method": "central"},
+        4.0,
+    ),
+    "richardson_extrapolate": (
+        {
+            "f": "x**3",
+            "x": 1,
+            "h": 1,
+            "method": "central",
+            "order": 2,
+        },
+        3.0,
+    ),
 }
 TOOL_NAMES = tuple(TOOL_CASES)
 
@@ -245,7 +294,7 @@ def test_the_callback_frame_carries_the_bound_receipt(name):
 def test_a_second_tool_call_in_the_same_run_is_admitted():
     """The two-tool half of the six-id capacity, in one session window."""
     instance = host(maxEffects=2, maxMethodLoads=4)
-    first, second = "gf2_rank", "polynomial_function_check"
+    first, second = "gf2_rank", "transition_count"
 
     first_receipt = _spend(instance, 1, tool_action(first))
     second_receipt = _spend(instance, 2, tool_action(second))
@@ -269,6 +318,25 @@ def test_a_second_tool_call_in_the_same_run_is_admitted():
     assert excinfo.value.code == "BUDGET"
     assert instance.effect_calls == 2
     assert instance.tool_names == [first, second]
+
+
+def test_a_second_counting_tool_call_in_the_same_run_is_admitted():
+    """A Phase 2 batch-2 pair shares the same two-tool admission window."""
+    instance = host(maxEffects=2, maxMethodLoads=4)
+    first, second = "rook_numbers", "markov_expected_steps"
+
+    first_receipt = _spend(instance, 1, tool_action(first))
+    second_receipt = _spend(instance, 2, tool_action(second))
+
+    assert instance.effect_calls == 2
+    assert instance.tool_effect_count == 2
+    assert [entry["request"]["effectId"] for entry in instance.effects] == [
+        "effect-1",
+        "effect-2",
+    ]
+    assert instance.tool_names == [first, second]
+    assert json.loads(first_receipt["observation"])["result"] == TOOL_CASES[first][1]
+    assert json.loads(second_receipt["observation"])["result"] == TOOL_CASES[second][1]
 
 
 def test_two_tools_plus_four_methods_fill_the_six_id_window():

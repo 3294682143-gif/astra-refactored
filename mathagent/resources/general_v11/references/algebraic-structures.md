@@ -51,7 +51,7 @@
 - 输入约束：两种形态只能给一种：`generators` 为 1..4 个同一度数的互不相交轮换写法的生成元、`degree` 取 2..8；或 `named_group` 取闭集命名群 S3/S4/A4/A5/D8/D10/Z2..Z12/C2..C12；闭包 ≤ 600 个元素。
 - 输出边界：只做子群记账，不判断题目要的是母群还是子群，也不是同构分类的证明。
 
-### `exact_check_expr（`operation` = `FACTOR_OVER_EXTENSION`）`
+### `exact_check_expr`（`operation` = `FACTOR_OVER_EXTENSION`）
 - 何时用：给定显式极小多项式后，判断目标多项式在该扩张上是否完全分裂。
 - `args` 模板：
 ```json

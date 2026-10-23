@@ -41,7 +41,7 @@ const MAX_METHOD_TOOL_COPROMPT_CHARS = 600;
  * the route identity and template shape only; it adds no numeric limit that the
  * registered tool does not itself enforce.
  */
-function methodToolInputConstraint(route) {
+export function methodToolInputConstraint(route) {
     switch (route.toolName) {
         case "bounded_enumeration":
             return "Use positive integer range sizes and an integer choose; the predicate is a string.";
@@ -58,6 +58,36 @@ function methodToolInputConstraint(route) {
         case "circle_laplacian_expr":
         case "planar_laplacian_expr":
             return "Expression and variable names must be quoted JSON strings; copy the input exactly.";
+        case "solve_quadratic_diophantine":
+            return "Pass a, b, c, d, e, f (and optional y_bound) as JSON integers with |coeff|<=32 and a!=0; do not quote numbers.";
+        case "symbolic_diophantine_with_timeout":
+            return "Pass lhs (and optional rhs) as polynomial strings using ** for powers, and optional two-variable list variables.";
+        case "solve_system_guarded_expr":
+            return "Pass expressions as an array of <=6 polynomial strings (using **) and variables as an array of <=3 variable names.";
+        case "polynomial_function_check":
+            return "Pass exactly the five fields equation, function, argument, variables and univariate rational polynomial expression.";
+        case "gf2_rank":
+            return "Pass rows ONLY as an array of <=8 non-negative JSON integers encoding binary rows (<=8 bits); do not pass width or strings.";
+        case "gf2_nullspace":
+            return "Pass rows (<=8 non-negative JSON integers) and integer width (1..8) only; do not quote integers.";
+        case "transition_count":
+            return "Pass integer length (1..6), integer num_states (1..4), transitions as [u,v] integer pairs, and optional integer arrays starts/ends (omit if default, never null).";
+        case "independence_polynomial_chain":
+            return "Pass n as a non-negative JSON integer (0..16); do not quote n.";
+        case "count_by_digit_property":
+            return "Pass digit_set (array of ints 0..9), max_digits (1..3), and optional modulus (1..64), residue (0..modulus-1), include_zero (boolean).";
+        case "rook_numbers":
+            return "Pass integer n (1..5) and forbidden as an array of <=10 [r,c] integer pairs with 0<=r,c<n.";
+        case "count_avoiding_permutations":
+            return "Pass integer n (1..6) and forbidden as an array of [i, pi_i] integer pairs with 0<=i,pi_i<n.";
+        case "cover_time_complete_graph":
+            return "Pass num_vertices as a JSON integer in 2..8.";
+        case "markov_expected_steps":
+            return "Pass transition as a <=6x6 matrix of exact decimal numbers summing to 1 per row, integer start, and non-empty integer array targets.";
+        case "finite_difference_derivative":
+            return "Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method (central/forward/backward).";
+        case "richardson_extrapolate":
+            return "Pass f as an expression string in x, numeric x (|x|<=100), numeric step h (1e-6..1), and optional method and integer order (1..8).";
         default:
             if (route.operation === "MAXIMAL_MINORS") {
                 return "Every matrix entry must be a quoted JSON string; copy the exact entries from the statement.";
@@ -72,18 +102,34 @@ function methodToolInputConstraint(route) {
     }
 }
 /**
+ * The advisory system note of one forced semantic-tool turn. It names the routed
+ * tool, its safe argument skeleton and that route's exact input constraints;
+ * the note is prompt text only and never executes or validates the action.
+ */
+export function semanticToolTurnNote(route) {
+    return ("\n\nSEMANTIC TOOL TURN (" + route.operation + "). This problem contains a " +
+        route.operation + " object that must be computed from the problem statement. " +
+        "Before delivering a WorkPacket, return exactly one JSON tool action " +
+        "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
+        ",\"scope\":\"<what is computed from the problem statement>\"} " +
+        "and nothing else. " +
+        methodToolInputConstraint(route) + " Never substitute a different tool. " +
+        "Do not return a WorkPacket in this turn. The observation is input-relative and is not a proof of the mapping. " +
+        "After the observation, return a COMPLETE WorkPacket with a best-effort candidate.");
+}
+/**
  * Bounded advisory text appended to the user message of the first WORK turn
  * after a method card load. A routed tool is named with its exact safe args
  * skeleton so the model can act on the card instead of writing a final packet
  * from memory and being forced to discard it.
  */
 function methodToolCoPrompt(methodId, route) {
-    const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId + ", routed tool " + route.toolName + "). " +
-        "Prefer one tool turn over writing the final WorkPacket from memory: " +
+    const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId + ", tool " + route.toolName + "). " +
+        "Prefer one tool turn over a final WorkPacket: " +
         "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
         ",\"scope\":\"<what is computed from the problem statement>\"}. " +
         methodToolInputConstraint(route) + " " +
-        "After the PROGRAM_OBSERVATION arrives, submit the complete WorkPacket as usual.";
+        "After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
     const chars = [...block];
     return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS
         ? block
@@ -321,11 +367,14 @@ function reconstructResumedResult(events, session, problemHash, opts) {
  * constant is never equivalent to the problem relation, so it can never ground a
  * revision; `x*(x-1)` for `x(x-1)=0` is.
  */
-function checkerSupportsObligation(action, problemText) {
+export function checkerSupportsObligation(action, problemText) {
     if (action.action !== "tool" || !checkerArgsRelevant(action, problemVariableSet(problemText))) {
         return false;
     }
     const args = action.args;
+    if (action.name === "linear_system_solution_set") {
+        return Array.isArray(args.matrix) && Array.isArray(args.rhs);
+    }
     const expression = typeof args.expression === "string" ? args.expression : null;
     if (expression === null) {
         return false;
@@ -1200,15 +1249,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 }
                 else if (forcedSemanticToolSelection && forcedSemanticToolRoute !== null) {
                     const route = forcedSemanticToolRoute;
-                    const note = "\n\nSEMANTIC TOOL TURN (" + route.operation + "). This problem contains a " +
-                        route.operation + " object that must be computed from the problem statement. " +
-                        "Before delivering a WorkPacket, return exactly one JSON tool action " +
-                        "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
-                        ",\"scope\":\"<what is computed from the problem statement>\"} " +
-                        "and nothing else. Copy the explicit expression, polynomial or function exactly from the problem statement; " +
-                        "never place raw arithmetic outside a quoted JSON string and never substitute a different tool. " +
-                        "Do not return a WorkPacket in this turn. The observation is input-relative and is not a proof of the mapping. " +
-                        "After the observation, return a COMPLETE WorkPacket with a best-effort candidate.";
+                    const note = semanticToolTurnNote(route);
                     const messages = [
                         {
                             role: "system",

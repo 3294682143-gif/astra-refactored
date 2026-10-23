@@ -174,6 +174,15 @@ test("preferredMethodForToolRoute maps every registered route to its owning card
     ["POLYNOMIAL_FUNCTION_CHECK", "domain-equivalence"],
     ["GF2_RANK", "linearization-spectral"],
     ["GF2_NULLSPACE", "linearization-spectral"],
+    ["TRANSITION_COUNT", "finite-state-dp"],
+    ["INDEPENDENCE_POLYNOMIAL_CHAIN", "finite-state-dp"],
+    ["COUNT_BY_DIGIT_PROPERTY", "finite-state-dp"],
+    ["ROOK_NUMBERS", "counting-bijections"],
+    ["COUNT_AVOIDING_PERMUTATIONS", "counting-bijections"],
+    ["MARKOV_EXPECTED_STEPS", "conditioning-indicators"],
+    ["COVER_TIME_COMPLETE_GRAPH", "conditioning-indicators"],
+    ["FINITE_DIFFERENCE_DERIVATIVE", "numerical-approximation"],
+    ["RICHARDSON_EXTRAPOLATE", "numerical-approximation"],
   ];
   const ids = new Set(CATALOG.map((item) => item.id));
   for (const [routeId, methodId] of expected) {
@@ -286,4 +295,69 @@ test("a route whose owning card is not loaded never fabricates a candidate", () 
   assert.equal(routed.includes("regression-diagnostics"), false);
   // The word-only baseline for the remaining cards is untouched.
   assert.deepEqual([...routed], ["proof-counterexamples", "coordinates-geometry"]);
+});
+
+test("each Phase-3 tool route pulls its owning card to the top", () => {
+  const cases: ReadonlyArray<readonly [string, string, string]> = [
+    [
+      "有向图有 3 个状态，状态转移如图，求长为 4 的顶点序列数。",
+      "TRANSITION_COUNT",
+      "finite-state-dp",
+    ],
+    [
+      "求路图 P_5 的独立集多项式的系数。",
+      "INDEPENDENCE_POLYNOMIAL_CHAIN",
+      "finite-state-dp",
+    ],
+    [
+      "由数字集合 {1,2,3} 组成且能被 3 整除的数有多少个？",
+      "COUNT_BY_DIGIT_PROPERTY",
+      "finite-state-dp",
+    ],
+    [
+      "求 3x3 棋盘禁位棋盘的车多项式的系数。",
+      "ROOK_NUMBERS",
+      "counting-bijections",
+    ],
+    [
+      "求 4 个元素的禁止位置集合的排列数，避开所有禁位。",
+      "COUNT_AVOIDING_PERMUTATIONS",
+      "counting-bijections",
+    ],
+    [
+      "设马尔可夫链的转移概率矩阵为 P，求从状态 0 到状态 2 的期望步数。",
+      "MARKOV_EXPECTED_STEPS",
+      "conditioning-indicators",
+    ],
+    [
+      "求完全图 K_4 上随机游走的覆盖时间。",
+      "COVER_TIME_COMPLETE_GRAPH",
+      "conditioning-indicators",
+    ],
+    [
+      "用中心差分近似求 f(x)=x^3 在 x=1 处的导数，步长 h=0.01。",
+      "FINITE_DIFFERENCE_DERIVATIVE",
+      "numerical-approximation",
+    ],
+    [
+      "使用 Richardson 外推法计算 f(x)=x^3 在 x=1 处的数值导数。",
+      "RICHARDSON_EXTRAPOLATE",
+      "numerical-approximation",
+    ],
+  ];
+  for (const [problem, routeId, methodId] of cases) {
+    assert.equal(semanticToolRoute(problem)?.id, routeId);
+    assert.equal(preferredMethodForToolRoute(semanticToolRoute(problem)), methodId);
+    assert.equal(semanticMethodRoute(problem, CATALOG)[0], methodId);
+  }
+});
+
+test("Phase-3 route fusion leaves the no-route baseline unchanged", () => {
+  const baseline = [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)];
+  assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
+  assert.deepEqual(
+    baseline,
+    ["inequalities-optimization", "convergence-limits", "integral-symmetry"],
+  );
+  assert.deepEqual(semanticMethodRoute(PLAIN_PROBLEM, CATALOG), baseline);
 });

@@ -34,6 +34,15 @@ export const P3_TOOL_NAMES = Object.freeze([
   "polynomial_function_check",
   "gf2_rank",
   "gf2_nullspace",
+  "transition_count",
+  "independence_polynomial_chain",
+  "count_by_digit_property",
+  "rook_numbers",
+  "count_avoiding_permutations",
+  "markov_expected_steps",
+  "cover_time_complete_graph",
+  "finite_difference_derivative",
+  "richardson_extrapolate",
 ] as const);
 export type P3ToolName = (typeof P3_TOOL_NAMES)[number];
 

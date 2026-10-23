@@ -272,3 +272,59 @@ test("a wrong tool after fail-open is not recorded as the forced route", async (
   assert.equal(observations[0]?.["forced"], false);
   assert.equal(observations[0]?.["routeId"], null);
 });
+
+test("forced semantic Diophantine turn carries integer constraints, not the quote-all blanket", async () => {
+  const run = await runForced({
+    problem: "求丢番图方程 x^2+y^2=5 的整数解。",
+    prompt: "SEMANTIC TOOL TURN",
+    reply: (_turn, request) => reactiveWork(request),
+  });
+  const forcedRequest = run.requests.find((request) =>
+    request.messages[0]!.content.includes("SEMANTIC TOOL TURN"),
+  );
+  assert.ok(forcedRequest !== undefined);
+  const prompt = forcedRequest.messages[0]!.content;
+  assert.match(prompt, /solve_quadratic_diophantine/u);
+  assert.match(prompt, /JSON integers with \|coeff\|<=32 and a!=0/u);
+  assert.match(prompt, /do not quote numbers/u);
+  assert.doesNotMatch(
+    prompt,
+    /Every expression and matrix entry must be a quoted JSON string/u,
+  );
+});
+
+test("forced semantic GF(2) rank turn does not ask for quoted rows", async () => {
+  const run = await runForced({
+    problem: "计算 GF(2) 上矩阵的秩。",
+    prompt: "SEMANTIC TOOL TURN",
+    reply: (_turn, request) => reactiveWork(request),
+  });
+  const forcedRequest = run.requests.find((request) =>
+    request.messages[0]!.content.includes("SEMANTIC TOOL TURN"),
+  );
+  assert.ok(forcedRequest !== undefined);
+  const prompt = forcedRequest.messages[0]!.content;
+  const semanticNote = prompt.slice(prompt.lastIndexOf("\n\nSEMANTIC TOOL TURN"));
+  assert.match(semanticNote, /"name":"gf2_rank"/u);
+  assert.match(semanticNote, /non-negative JSON integers encoding binary rows/u);
+  assert.match(semanticNote, /do not pass width or strings/u);
+  assert.doesNotMatch(semanticNote, /quoted JSON string/u);
+});
+
+test("forced semantic GF(2) nullspace turn asks for an integer width", async () => {
+  const run = await runForced({
+    problem: "求 GF(2) 上矩阵的零空间。",
+    prompt: "SEMANTIC TOOL TURN",
+    reply: (_turn, request) => reactiveWork(request),
+  });
+  const forcedRequest = run.requests.find((request) =>
+    request.messages[0]!.content.includes("SEMANTIC TOOL TURN"),
+  );
+  assert.ok(forcedRequest !== undefined);
+  const prompt = forcedRequest.messages[0]!.content;
+  const semanticNote = prompt.slice(prompt.lastIndexOf("\n\nSEMANTIC TOOL TURN"));
+  assert.match(semanticNote, /"name":"gf2_nullspace"/u);
+  assert.match(semanticNote, /integer width \(1\.\.8\)/u);
+  assert.match(semanticNote, /do not quote integers/u);
+  assert.doesNotMatch(semanticNote, /quoted JSON string/u);
+});

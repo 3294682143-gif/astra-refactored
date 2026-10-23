@@ -114,26 +114,26 @@
   "methodCards": {
     "methodsJsonSha256": "789283c5abc0e17b84bddd9a292e95b037f900deeec55cec0fa7da401debe168",
     "files": {
-      "domain-equivalence": "6855440484a0bfe7347b78d58616d69fba220cb8890bedbeb65a6eda8b62b316",
+      "domain-equivalence": "82ccb911fb6306ea4da2958d667cc082a541e9667605fa7ff076bb118b148fe7",
       "proof-counterexamples": "cfacc482f7524e73692138233b3e8b64adb0b2a6ae3fa702cc29131d0045955e",
       "invariants-extremal": "6094a97dd28be3469eafff40cd75cd04605e81df4be0cfd0258aae0259264f45",
-      "induction-recurrence": "bba0be281e27e4bdf10dab9de067df2617be5fd19f11caa9baebb07d071e2221",
-      "finite-state-dp": "110340371d69d39e931df17786798532aef7717cb9fba5b44266162be5402490",
-      "counting-bijections": "013100bfa673c4a1c6c5ad2670355fe875389f62f53a80282ca7b13206c07a11",
+      "induction-recurrence": "c082087fd77a0b56de615bbd0dd268ed5f892bb10f8825e37a07e7e0a616043a",
+      "finite-state-dp": "05e84407770d4b222dfc85c852c3825623193f21a9b0e96831392daed3204aa1",
+      "counting-bijections": "cb81dea95e56ae23d602a0b816ec360c90dad62d7e20b0454e2b9bd602d948ab",
       "generating-functions": "313b35e0b30d74b8b647baa86131c2e16c14f05c6b25d0f19676d7d733b3ad17",
       "modular-crt": "d53958b156528cb80e88eb6e6f9867e57d90e0ab72641b9fcb33d19f0267acf8",
-      "integral-symmetry": "cc0254b8fd81c46147136427be3598dc0ded7e9014e94eaac96b881be0af8453",
+      "integral-symmetry": "16c6b8e5ea18a76068cca48d02d504162a9930f830a325d43c318e849a7827b8",
       "coordinates-geometry": "f43dcac80e9bb7d65bcf4f289f11e8a3ed47458cf68b7d8b2e727816101919e7",
       "inequalities-optimization": "7e7c07dfd9421e04d58103eae5bf50c8ccf2c26718ea7c02253da9910fda4e83",
-      "linearization-spectral": "bd2ea2263bf0a1e58402fead7f0e4da4a7b60c087dff8518cff6f35bdf052608",
-      "conditioning-indicators": "4d68482d45f158d8011902c5d5fa428e9a760ee8001969be8517b510fca32da4",
-      "convergence-limits": "2c24095225173357aa05ce8cac0b18f3698b3fe2b9f8984713b78881401a005c",
-      "differential-equations": "b71228b392705f279a447c417eaa278a970ec7c676a6fe409846b6747fa19ce4",
-      "algebraic-structures": "d0f79bcca9a33b046869fd625d90414b1efd747481f5eb987d98019786ea50f1",
+      "linearization-spectral": "fad5f65f8a9565ae648d04c5778ccb2cd33e7a3c9c048871cc78e0127cc73b16",
+      "conditioning-indicators": "238d90bf6a6dc4c76fed2071706ab4baf6b4a408ee062c02c09173892065b5f9",
+      "convergence-limits": "99d3f2cb4d179083a02358f4ac097d5615ae43d5c6fe9d67026bc7eb00fae910",
+      "differential-equations": "0e31bde722b2f5bcc1c2270fda3b641cd9191080f55049f3c19c9a0dee9732f9",
+      "algebraic-structures": "4f3fa09d553ec676de35f7956b7b7645570dddaf66b78cb063d12bc82a3c0d2f",
       "topology-local-global": "acd7fc0d2102989158f3606456224773c30bc26b11bd670d8349544063ce01cf",
-      "statistical-inference": "b876bf224475b9866d4ab7bf06ca96dfa9f345296554b87b85ac0d91a64ff4ee",
+      "statistical-inference": "a418e61689aaacd9c1363f6558acea109636b08ee213a7c95ed6c3e3ebe51dde",
       "regression-diagnostics": "30ac25573534fee0d06ae2bfdf1a5e06d15445e3c551a587ec535ab8e8d4fb8b",
-      "numerical-approximation": "9f194e007949397b00cde01109e64215c9ae315ac2937391accffa494f9395eb"
+      "numerical-approximation": "363e04a25915aa10422ec7b184ad2a0dc89de0bb3a0566175b992448c8008f32"
     }
   }
 }
