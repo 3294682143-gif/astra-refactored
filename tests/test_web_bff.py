@@ -184,7 +184,8 @@ def test_bff_capabilities_endpoint(temp_store: Store):
     resp = capabilities(req)
     assert resp.status_code == 200
     data = json.loads(resp.body.decode("utf-8"))
-    assert data["read_only"] is True
+    assert data["execution_queue"] is True
+    assert data["sse_streaming"] is True
     assert data["model_invoked"] is False
     assert "/api/runs" in data["routes"]
 
@@ -256,4 +257,70 @@ def test_bff_static_dist_mount(tmp_path: Path):
     # 验证路由表中已挂载静态资源
     route_names = [r.name for r in app.routes if hasattr(r, "name")]
     assert "web" in route_names
+
+
+def test_validate_run_request():
+    from python.astra_web.queue import validate_run_request, ValidationError
+
+    # 合法请求
+    valid = validate_run_request({
+        "problem": "证明质数有无穷多个",
+        "max_model_calls": 20,
+        "max_method_loads": 1,
+    })
+    assert valid["problem"] == "证明质数有无穷多个"
+    assert valid["max_method_loads"] == 1
+
+    # 允许 0
+    valid0 = validate_run_request({"problem": "test", "max_method_loads": 0})
+    assert valid0["max_method_loads"] == 0
+
+    # 严禁使用布尔型冒充数字 1
+    with pytest.raises(ValidationError, match="boolean is forbidden"):
+        validate_run_request({"problem": "test", "max_method_loads": True})
+
+    # 严禁超出 {0, 1}
+    with pytest.raises(ValidationError, match="exactly 0 or 1"):
+        validate_run_request({"problem": "test", "max_method_loads": 2})
+
+    # 严禁空问题
+    with pytest.raises(ValidationError, match="non-empty string"):
+        validate_run_request({"problem": "   "})
+
+
+def test_execution_manager_prepare_and_events(temp_store: Store):
+    from python.astra_web.queue import ExecutionManager
+
+    manager = ExecutionManager(temp_store)
+    run_id = manager.prepare_run(
+        problem="构造任意阶幻方",
+        max_model_calls=12,
+        max_method_loads=0,
+    )
+    assert run_id.startswith("run-")
+    assert manager.is_active(run_id)
+
+    # 初始状态已入库
+    saved = temp_store.get_run(run_id)
+    assert saved is not None
+    assert saved["status"] == "running"
+    assert saved["summary"]["candidate_verified"] is False  # 红线
+
+    # 追加事件
+    manager.append_event_sync(run_id, {
+        "seq": 1,
+        "kind": "SESSION_INIT",
+        "payload": {"sessionId": run_id},
+    })
+    manager.append_event_sync(run_id, {
+        "seq": 2,
+        "kind": "FINAL",
+        "payload": {"answer": "x=1", "candidate_verified": False},
+    })
+
+    history = manager.get_history_events(run_id)
+    assert len(history) == 2
+    assert history[0]["seq"] == 1
+    assert history[1]["seq"] == 2
+
 

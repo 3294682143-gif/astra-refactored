@@ -1,21 +1,22 @@
-"""Starlette 应用入口：只读 BFF + 静态资源托管。
+"""Starlette 应用入口：只读与实时 BFF + 静态资源托管。
 
 路由概览
 --------
-GET /api/health                 健康检查（保证不调用任何模型）
-GET /api/capabilities           能力声明
-GET /api/runs                   运行索引（L1 摘要）
-GET /api/runs/{run_id}          单条运行
-GET /api/replays                具备 L2 详细存档的运行
-GET /api/replays/{run_id}       读取 L2 详细存档内容
-GET /api/assets                 资产清单（可按 run_id 过滤）
-GET /api/assets/{asset_id:path} 下载资产（L3）
-GET /                           apps/web-demo/dist 静态资源（若存在，支持 SPA fallback）
-
-只读约束：本模块不暴露任何写入端点；导入入口在 `replays` 模块。
+GET  /api/health                 健康检查（保证不调用任何外部未授权模型）
+GET  /api/capabilities           能力声明
+GET  /api/runs                   运行索引（L1 摘要）
+POST /api/runs                   启动推导会话（参数校验 max_method_loads ∈ {0, 1}）
+GET  /api/runs/{run_id}          单条运行详情
+GET  /api/runs/{run_id}/events   实时 SSE 事件流通道（支持 Last-Event-ID 重连）
+GET  /api/replays                具备 L2 详细存档的运行
+GET  /api/replays/{run_id}       读取 L2 详细存档内容
+GET  /api/assets                 资产清单（可按 run_id 过滤）
+GET  /api/assets/{asset_id:path} 下载资产（L3）
+GET  /                           apps/web-demo/dist 静态资源（若存在，支持 SPA fallback）
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -25,10 +26,11 @@ from typing import Any
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from .queue import ExecutionManager
 from .storage import PathTraversalError, Store
 
 SERVICE_NAME = "astra-web-bff"
@@ -42,7 +44,7 @@ def _env_path(var: str, default: str) -> Path:
 
 
 def health(request: Request) -> JSONResponse:
-    """纯本地健康检查；不解析任何模型、不触网、不做网络 I/O。"""
+    """纯本地健康检查；不解析任何外部未授权模型、不触网、不做未授权 I/O。"""
     store: Store = request.app.state.store
     return JSONResponse({
         "status": "ok",
@@ -57,13 +59,17 @@ def capabilities(request: Request) -> JSONResponse:
     return JSONResponse({
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
-        "read_only": True,
+        "read_only": False,
+        "execution_queue": True,
+        "sse_streaming": True,
         "model_invoked": False,
         "schema_version": 1,
         "routes": [
             "/api/health",
             "/api/capabilities",
             "/api/runs",
+            "/api/runs/{run_id}",
+            "/api/runs/{run_id}/events",
             "/api/replays",
             "/api/assets",
         ],
@@ -72,10 +78,8 @@ def capabilities(request: Request) -> JSONResponse:
             "L2": "detailed archive (JSON on disk)",
             "L3": "binary/text artifacts on disk",
         },
-        "imports": {
-            "formats": ["json", "jsonl"],
-            "entrypoint": "astra_web.replays",
-            "via_http": False,
+        "limits": {
+            "max_method_loads_allowed": [0, 1],
         },
     })
 
@@ -92,6 +96,41 @@ def list_runs(request: Request) -> JSONResponse:
     return JSONResponse({"items": items, "count": len(items), "limit": limit, "offset": offset})
 
 
+async def create_run(request: Request) -> JSONResponse:
+    """POST /api/runs 接收新求解请求并启动执行任务。"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid JSON body")
+
+    problem = body.get("problem")
+    if not isinstance(problem, str) or not problem.strip():
+        raise HTTPException(status_code=422, detail="'problem' must be a non-empty string")
+
+    # 校验 max_method_loads ∈ {0, 1}（且禁止用 bool 冒充）
+    max_method_loads = body.get("max_method_loads", 1)
+    if isinstance(max_method_loads, bool) or max_method_loads not in (0, 1):
+        raise HTTPException(status_code=422, detail="'max_method_loads' must be exactly 0 or 1")
+
+    max_model_calls = body.get("max_model_calls", 24)
+    if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or max_model_calls <= 0:
+        raise HTTPException(status_code=422, detail="'max_model_calls' must be a positive integer")
+
+    engine = body.get("engine", "ts")
+    idempotency_key = request.headers.get("Idempotency-Key") or body.get("idempotency_key")
+
+    manager: ExecutionManager = request.app.state.execution_manager
+    run_id = await manager.enqueue_run(
+        problem=problem.strip(),
+        max_model_calls=max_model_calls,
+        max_method_loads=max_method_loads,
+        engine=engine,
+        idempotency_key=idempotency_key,
+    )
+
+    return JSONResponse({"run_id": run_id, "status": "running"}, status_code=201)
+
+
 def get_run(request: Request) -> JSONResponse:
     store: Store = request.app.state.store
     run_id = request.path_params["run_id"]
@@ -100,6 +139,84 @@ def get_run(request: Request) -> JSONResponse:
         raise HTTPException(status_code=404, detail="run not found")
     run["assets"] = store.list_assets(run_id=run_id)
     return JSONResponse(run)
+
+
+async def sse_events(request: Request) -> Response:
+    """GET /api/runs/{run_id}/events 提供实时 SSE 事件流，支持 Last-Event-ID 重连。"""
+    run_id = request.path_params["run_id"]
+    store: Store = request.app.state.store
+    manager: ExecutionManager = request.app.state.execution_manager
+
+    # 检查运行是否存在
+    if not manager.is_active(run_id) and not store.has_run(run_id):
+        raise HTTPException(status_code=404, detail="run not found")
+
+    # 解析起始 seq 游标
+    after_seq = 0
+    last_event_id_header = request.headers.get("Last-Event-ID")
+    if last_event_id_header and last_event_id_header.isdigit():
+        after_seq = int(last_event_id_header)
+    elif "after" in request.query_params and request.query_params["after"].isdigit():
+        after_seq = int(request.query_params["after"])
+
+    async def event_generator() -> AsyncIterator[str]:
+        cursor = after_seq
+
+        # 1. 回放历史已存事件
+        history = manager.get_history_events(run_id)
+        for ev in history:
+            seq = ev.get("seq", 0)
+            if seq > cursor:
+                kind = ev.get("kind") or ev.get("type", "message")
+                data_str = json.dumps(ev, ensure_ascii=False)
+                yield f"id: {seq}\nevent: {kind}\ndata: {data_str}\n\n"
+                cursor = seq
+
+        # 2. 如果任务已不在活跃状态，发送结束包
+        if not manager.is_active(run_id):
+            yield "event: close\ndata: {}\n\n"
+            return
+
+        # 3. 实时订阅
+        queue = manager.subscribe(run_id)
+        try:
+            while True:
+                try:
+                    ev = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # 保活心跳 ping
+                    yield ": ping\n\n"
+                    if not manager.is_active(run_id):
+                        break
+                    continue
+
+                if ev.get("kind") == "close":
+                    yield "event: close\ndata: {}\n\n"
+                    break
+
+                seq = ev.get("seq", cursor + 1)
+                if seq > cursor:
+                    kind = ev.get("kind") or ev.get("type", "message")
+                    data_str = json.dumps(ev, ensure_ascii=False)
+                    yield f"id: {seq}\nevent: {kind}\ndata: {data_str}\n\n"
+                    cursor = seq
+
+                # 如果收到终态 RESULT 事件且 run 不再活跃，结束
+                if ev.get("kind") == "RESULT":
+                    yield "event: close\ndata: {}\n\n"
+                    break
+        finally:
+            manager.unsubscribe(run_id, queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def list_replays(request: Request) -> JSONResponse:
@@ -172,12 +289,15 @@ def create_app(
     mount_static: bool = True,
 ) -> Starlette:
     store = Store(data_root or _env_path("ASTRA_DATA_ROOT", "./var/astra"))
+    execution_manager = ExecutionManager(store)
 
     routes = [
         Route("/api/health", health, methods=["GET"]),
         Route("/api/capabilities", capabilities, methods=["GET"]),
         Route("/api/runs", list_runs, methods=["GET"]),
+        Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),
+        Route("/api/runs/{run_id}/events", sse_events, methods=["GET"]),
         Route("/api/replays", list_replays, methods=["GET"]),
         Route("/api/replays/{run_id}", get_replay, methods=["GET"]),
         Route("/api/assets", list_assets, methods=["GET"]),
@@ -199,6 +319,7 @@ def create_app(
         exception_handlers={HTTPException: http_exception_handler},
     )
     app.state.store = store
+    app.state.execution_manager = execution_manager
     app.state.data_root = store.root
     app.state.web_dist = dist_path if dist_path.is_dir() else None
 
