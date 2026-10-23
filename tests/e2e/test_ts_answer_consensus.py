@@ -440,3 +440,27 @@ def test_option_certificate_closure_adds_missing_true_option(process_tracker):
     assert result["final_response"] == "A、C、D"
     assert client.answer_calls == 5
     assert process_tracker
+
+
+def test_canonical_fraction_keys_drive_majority_and_latest_tiebreak(process_tracker):
+    # Without canonical keys, "1/2" would have two votes and win. With the
+    # shared key all three attempts tie, so the existing latest tie-break keeps
+    # the certificate attempt's original text.
+    client = ConsensusClient(candidates=["1/2", "1/2", "\\frac12"])
+    agent = user_agent.ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_model_calls=8,
+        max_work_units=8,
+        max_effects=0,
+        max_reviews=0,
+        max_repairs=1,
+        max_consensus=2,
+        max_method_loads=0,
+    )
+    result = agent.solve(PROBLEM, {"source": "e2e"})
+
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "\\frac12"
+    assert client.answer_calls == 3
+    assert process_tracker

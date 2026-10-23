@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import selectors
 import subprocess
 import sys
@@ -42,6 +43,30 @@ _READ_CHUNK = 65536
 _NORMAL_FRAMES = 8
 _MAX_STDERR_BYTES = 65536
 _CALLBACK_ID = "node-1"
+# The child writes one fixed code on stderr and nothing else. Only a token that
+# matches this bounded shape is retained, so a child that ever wrote something
+# else could not smuggle text into a reported code.
+_STDERR_CODE = re.compile(r"\A[A-Z][A-Z0-9_]{0,31}\Z")
+_STDERR_CODE_BYTES = 64
+
+
+def _fixed_stderr_code(chunk):
+    """First bounded fixed code in one stderr chunk, or ``None``.
+
+    The result is either ``None`` or a short upper-case token. A line break, a
+    space or any punctuation means the child wrote something that is not a fixed
+    code, and nothing is retained in that case.
+    """
+    if not isinstance(chunk, (bytes, bytearray)):
+        return None
+    head = bytes(chunk[:_STDERR_CODE_BYTES]).split(b"\n", 1)[0].strip()
+    try:
+        text = head.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    if not _STDERR_CODE.match(text):
+        return None
+    return text
 
 
 class ProbeError(Exception):
@@ -91,6 +116,11 @@ class _Host:
         self.stop_acked = False
         self.stderr_seen = False
         self.stderr_bytes = 0
+        # First bounded stderr line of the child. The child writes exactly one
+        # fixed code there and nothing else, so keeping the first line turns an
+        # otherwise opaque failure into an auditable one without storing any
+        # message, traceback, problem text or model text.
+        self.stderr_code = None
         self.eof = {"stdout": False, "stderr": False}
         self.registered = {"stdout": False, "stderr": False, "stdin": False}
 
@@ -184,6 +214,8 @@ class _Host:
             if chunk:
                 self.stderr_seen = True
                 self.stderr_bytes += len(chunk)
+                if self.stderr_code is None:
+                    self.stderr_code = _fixed_stderr_code(chunk)
                 if self.stderr_bytes > _MAX_STDERR_BYTES:
                     raise ProbeError("FRAME_TOO_LARGE")
             return
@@ -518,7 +550,12 @@ def _catalog_entries():
         raise ProbeError("FIELD_VALUE")
     if len(entries) != _EXPECTED_CATALOG:
         raise ProbeError("FIELD_VALUE")
-    return entries
+    # The frozen P0 probe catalog is id/title only. Routing metadata belongs to
+    # the live Agent Host 1.3 path, so project it away here.
+    return [
+        {"id": entry["id"], "title": entry["title"]}
+        for entry in entries
+    ]
 
 
 def main(argv=None):

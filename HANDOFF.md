@@ -2,7 +2,16 @@
 
 > 本文件写给**新上下文的执行者**。只记录本会话已核实的事实与下一步动作。
 > 不要相信任何"已完成/已提分"的叙述，除非重新跑出证据。
-> **状态（2026-10-21 最终校正，必须先读这一条）：**
+> **状态（2026-10-22 校正，先读这五条）：**
+> 1. 现行主口径见 §12：两臂全量 + 逐题人审 + 三次稳定率，重试臂 81 正确 / 14 错误 / 4 争议 / 1 未解，**三次全对率仅 59%**。
+> 2. 86 / 91 / 96 / 97 **永久不得作为成绩引用**（合并 + 人工翻案 + 定向重跑）。
+> 3. 稳定性主因已定位：投票按原文比、语义路由只覆盖 6 类、强制轮不是门禁、方法卡与工具共享 effect 预算、只有 `exact_check_expr` 结果进闭合（§12.3）。
+> 4. **最新门禁以 §12.6.1 为准**：Node 370/370、Python 869 passed/24 skipped；
+>    顶部旧状态块里的 341/722 与 §1.2 历史值均已过期。
+> 5. 路由/门禁/闭合已按 §12.5 落地并跑过 9 题 pilot（§12.7），但 `observation_used` 仍为 0，
+>    闭合是否真的改变候选**尚未验证**（§12.6.2）。
+
+> **以下为 2026-10-21 的旧状态，保留供追溯：**
 > 稳定性已收口，`FIELD_VALUE` 类丢题已清零。同一份 100 题输入（A 组
 > `input.test0.jsonl`、同 runner 配置、no-retry 客户端、本地 ReferenceJudge）
 > 的新全量实跑 `/tmp/astra-full100-c9` 为：
@@ -16,10 +25,18 @@
 > 8 争议、strict 18/100、1459 请求、12 个未解全部 `FIELD_VALUE`；它现在是
 > **修复前基线**，不能再当作当前能力。96/97/91/86 仍是“定向修复重跑”或
 > “合并快照+人工复核”口径，不是盲跑成绩。
-> 本地门禁全绿：`tsc -b` 0、Node **334/334**、Python **718 passed /
-> 24 skipped / 0 failed**、manifest `VERIFY_OK`。**改动未提交、未推送（用户要求）。**
-> 正确率仍是唯一目标：97/100 候选只是把“能得分”的前置条件做到了，逐题人审
-> 仍有多题答案错误（见文末“逐题口径”）。
+> 本地门禁全绿：`tsc -b` 0、Node **341/341**、Python **722 passed /
+> 24 skipped / 0 failed**、manifest `VERIFY_OK`。代码与文档已提交并推送到
+> `origin/feat/v4-dynamic-workflows`（`b359733`、`6447829`、`59e8aca`）。
+> §10.3 本轮新增的答案闭合代码、测试与文档仍**未提交、未推送**。
+> 逐项复核已完成（§10.3）：**77 正确 / 20 错误 / 3 未解**；3 个未解题补跑后
+> **79 正确 / 21 错误 / 0 未解**。严格判分器 23/100 只是格式匹配，不是准确率。
+> 独立批次 B（§11.1，`/tmp/astra-item-audit-20261022`）为 **73 正确 / 19 错误 /
+> 5 争议 / 3 未解**；A/B 两批并列保留，不互相覆盖。
+> 2026-10-22 §10.3 两臂复跑：传输重试主臂 **99/100 候选、strict 27/100**
+> （1551 calls / 10.426M tokens）；no-retry 对照 **88/100 候选、strict 22/100**
+> （1501 calls / 10.015M tokens）。主臂唯一未解 #15 是模型非法 JSON 转义，
+> 不是传输；单题复跑可出候选（但另一次复跑答案错误）。正确率仍是下一步唯一目标。
 
 ---
 
@@ -76,14 +93,18 @@ python3 -m pytest -q
 git diff --check
 ```
 
-预期（2026-10-21 实测）：
+预期（**2026-10-22 最新实测**，源码改动之后重跑）：
 
 - `tsc -b`：0
-- Node：**334/334 pass**
-- Python：**718 passed, 24 skipped, 0 failed**
-- manifest：`VERIFY_OK`（commit `eb36a5a`）
+- Node（protocol + stdio-runtime）：**370/370 pass**
+- Python 全量：**869 passed, 24 skipped, 0 failed**
+- manifest：`VERIFY_OK`（记录 source commit `eb36a5a`；HEAD 为 `59e8aca` + 未提交改动，
+  祖先规则允许）
 - `git diff --check`：clean
 - 仓库内无真实 API key
+
+> 历史值供对照：`59e8aca` 提交时是 Node 334/334、Python 718 passed；
+> `answer-closure` 批次加入后升到 370/869。数字变大是**新增测试**，不是回归。
 
 ### 1.3 真实 API 与客户端（密钥不落盘）
 
@@ -277,7 +298,8 @@ setsid nohup bash -c '
 - 本地严格 `ReferenceJudge`：**23/100**（格式敏感，仅供对照，不等于数学正确率）
 - 3 个未出候选：`#11`、`#15`、`#48`，全部是传输层故障；开启传输重试后 3 题
   全部出候选（`#11` 答案 `223/8330` 与参考一致），即有效 **100/100 候选**
-- 逐题正确率尚未做新的全量人审；已知的旧逐题结论不能直接搬到新 run 上
+- 逐题复核（§10.3）：**77 正确 / 20 错误 / 3 未解**；补跑 3 题后 **79 / 21 / 0**
+- 严格判分器把 53 道正确答案判成 B（记号差异），因此不能当准确率引用
 
 **修复前基线（frozen commit `36e056f`，A 组旧全量，仅作对照）：**
 
@@ -411,9 +433,9 @@ setsid nohup bash -c '
 ## 3. 当前红灯（2026-10-21 已清零，保留历史结论供定位）
 
 ```
-pytest -q → 718 passed, 24 skipped, 0 failed
+pytest -q → 869 passed, 24 skipped, 0 failed
 node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js
-          → 334 pass, 0 fail
+          → 370 pass, 0 fail
 python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json → VERIFY_OK
 ```
 
@@ -492,6 +514,9 @@ require("node:fs").writeFileSync("/tmp/s2entry.json", JSON.stringify({
 | --- | --- | --- | --- |
 | `c3fcd623`（= c3fcd62） | 稳定 0.9.8 + **原 22 族方法层** | **76/100** | 5303 请求 / 9.99M tokens / 199.5 min |
 | `2e5f35bf`（= 2e5f35b） | 0.9.8 + **General Math 1.1，20 方法卡**（`family_count=20`） | **75/100** | 6261 请求 / 20.0M tokens / 165.1 min |
+
+> **状态（2026-10-23）：本节 1–5 项已全部落地并跑过门禁，逐项落点与证据见 §13。**
+> 仍未移植的是 69 个注册工具中除白名单 8 个以外的其余工具（不在本节范围）。
 
 要移植的不是"分数"，而是**方法层 + 调度**：
 
@@ -789,13 +814,677 @@ no-retry 客户端、本地 ReferenceJudge）：
 - 多选题漏项（#36 类）需要 `CERT1|OPTIONS` 逐项覆盖率检查成为强制闭合，而不是
   只有模型自己愿意写证书时才生效。
 
-### 10.3 下一步（按性价比排序）
+### 10.3 全量逐项复核结果 — 复核批次 A（2026-10-21，数据 `/tmp/astra-full100-review-v3/`）
 
-1. **全量逐题人审**（97 个候选）：产出新的 `正确/错误/争议` 三类清单，替代旧的
-   86/91 口径。
+> 本批与 §11.1 的批次 B 是**两次独立复核**，方法不同、数字接近，两者并列保留，
+> 不要互相覆盖：A = 77/20/3，B = 73/19/5 争议/3。
+
+
+复核方式：4 名评审先各审 24–25 题，再把 74 道非未解题交给 3 名对抗评审重判
+（只允许在记号/等价形式/参考本身错误时翻案），并用本地严格判分器做第三路交叉。
+
+| 口径 | 正确 | 错误 | 未解 |
+| --- | --- | --- | --- |
+| **逐项复核（主结果）** | **77** | **20** | **3** |
+| 带传输重试后的有效口径 | **79** | **21** | **0** |
+| 严格 ReferenceJudge | 23 | 77 | 0 |
+
+- 严格判分器的 23 个 A 与复核的“正确”完全一致；它把 53 道正确答案判成 B，
+  全部是记号/等价式/中英文差异 → 严格分不是准确率。
+- 二轮推翻 3 个初判：`52`、`69`（错→对）、`94`（对→错，漏 D）。
+- 20 道错题分类：漏选/选项不完整 `29,36,47,94,96`；数值或公式错 `1,6,12,18`；
+  完备性/多解遗漏 `16,20,22,45`；概念或模型选错 `26,76,83,95`；
+  其他 `34,43,98`。
+- **参考本身有错**至少 4 题：`1`（分裂域次数给 16，实际 8）、`64`、`87`、`99`
+  （后三题复核按数学判对，参考值错）。
+- 未解 3 题补跑：`11` → `223/8330`（对）、`15` → 退化 δ₁ + 对数正态密度（对）、
+  `48` → “两问都正确”（**错**，反例 `A=E12, B=E21`）。
+- 全表 `A_item_review_v3.md` / `.json`，23 题仅单轮复核（其余 74 题双轮）。
+
+### 10.4 下一步（按性价比排序）
+
+1. ~~全量逐题人审~~ **已完成**（见 §10.3）：77 正确 / 20 错误 / 3 未解，
+   带传输重试 79/21/0。旧的 86/91 口径作废。
 2. 按错误族做通用闭合（不写题号、不写答案）：次数守恒、归一化、选项覆盖、
    多解完备性。每加一条都要有 e2e（假 client 即可）钉住。
 3. 稳定复跑：`item/api` 并发 4/4 + **传输重试**（`real_client_factory_retry`）作为
    默认实测臂，另跑 no-retry 臂做对照；两臂都要报候选率与严格分。
 4. 迭代门禁不变：`tsc -b` → esbuild → manifest `--verify` → Node 全测 → pytest 全测
    → 才允许跑真实 100 题。
+
+---
+
+## 11. 2026-10-22 执行 §10.3（已完成）
+
+### 11.1 全量 100 题逐题人审（已完成）
+
+- 被审对象：`/tmp/astra-full100-c9`（97 个候选；3 个传输未解）。
+- 方法：两遍独立分批复核（每批 ≤10 题，共 10 批/遍），5 个分歧进入第三遍
+  裁决；两遍状态一致率 95/100。
+- 结果：**73 正确 / 19 错误 / 5 争议 / 3 未解**。
+- 参考本身有误：**#1、#64**（#1 的 `Q(∜5,i)` 不是 `x^4+5` 的分裂域；
+  HANDOFF §10.1 旧说法需按此纠正。#64 候选 `假` 才是对的）。
+- 完整证据：`/tmp/astra-item-audit-20261022/review.jsonl`
+  sha256 `de2a91be1d06e0227b45ecfd6ae824e687ec365f342a1cd7b411e4ad118a2494`；
+  `/tmp/astra-item-audit-20261022/AUDIT.md`
+  sha256 `33829c1598f5bd1ea7814280a8afbfb67b33aab37a526401f20c8623cbf8424c`；
+  `/tmp/astra-item-audit-20261022/adjudication/decisions.jsonl`
+  sha256 `f6c795e1cbf85e18851785324ec4c2c3c603fb0e99d87099f2849e77873f4ab1`。
+- 仓库内摘要：`docs/ITEM_AUDIT_20261022.md`。
+
+### 11.2 通用答案闭合（已完成）
+
+- 新增 `apps/stdio-runtime/src/agent-answer-closure.ts`：选项覆盖、次数守恒
+  （MAXIMAL_MINORS 精确观察）、密度归一化、解集完备性四类诊断。
+- `agent-loop.ts` 在 consensus/certificate 之后最多花一轮有界 WORK 关闭缺陷；
+  只有闭合包严格减少缺陷数时才替换候选；`maxConsensus < 1` 时完全关闭。
+- 新增 `apps/stdio-runtime/tests/agent-answer-closure.test.ts`（7 例）和
+  `tests/e2e/test_ts_answer_closures.py`（4 例）。
+- 复验：`tsc -b` 0；Node **341/341**；Python **722 passed / 24 skipped**；
+  manifest `VERIFY_OK`；bundle 已重建。详见 `docs/ANSWER_CLOSURE_103.md`。
+
+### 11.3 两臂全量复跑（已完成）
+
+- 主臂（传输重试）：`/tmp/astra-full100-103-retry`
+- 对照臂（no-retry）：`/tmp/astra-full100-103-noretry`
+- 两臂使用同一输入 sha256、4/4 并发、10000 calls、8192 max tokens、同一
+  `MAX_PROFILE`；只有注入客户端的传输重试不同。
+
+| 臂 | 候选 | 严格 `ReferenceJudge` | calls | tokens | calls/题 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 传输重试（主） | **99/100** | **27/100** | 1551 | 10,426,268 | 15.51 |
+| no-retry（对照） | **88/100** | **22/100** | 1501 | 10,014,540 | 15.01 |
+
+- 主臂唯一未解是 **#15**：`FIELD_VALUE`，模型返回含未转义 LaTeX 反斜杠的
+  WorkPacket（`remote_outcome_unknown=false`），不是传输层故障。单题用重试
+  客户端复跑 9 calls 出候选且密度数学正确
+  `/tmp/astra-one15-103-debug`；另一次单题复跑出候选但把对数正态参数写错
+  `/tmp/astra-lost15-103`。该失败是随机的模型/协议输出问题，不是确定性绑定
+  错误。按“原始全量”口径不把单题复跑合并进 99/100。
+- no-retry 的 12 个未解中，9 个 `remote_outcome_unknown=true`（传输/HTTP），
+  3 个是 malformed-content `FIELD_VALUE`（#11/#15/#46）。两者在报告里必须
+  分开，不能把 12 个都算成数学错误。
+- 严格分仍是格式敏感的本地 `ReferenceJudge`，不是平台分；未解、异常都计入
+  100 的分母。相对 c9（97 候选、strict 23），主臂候选 +2、strict +4，但这是
+  不同模型运行的比较，不是配对因果实验。
+- 两臂汇总 JSON：`/tmp/astra-full100-103-summary.json`
+  sha256 `4f628325f5ffef20dd7ee6f6d19a2c9163b6c74a6982ddc2d796b7c657bd6c75`。
+
+---
+
+## 12. 逐题复核批次 C（103 两臂）+ 稳定率 + 工具/方法卡改动计划
+
+> 本节所有数字都由**单次盲跑 + 逐题人审**产生，禁止与 §10 的 targeted/合并口径混用。
+
+### 12.1 两臂结果（同一输入 `/home/ma-user/work/input/test0.txt`，4/4 并发，10000 calls）
+
+| 臂 | report-dir | 候选 | 未解 | 模型调用 | 逐题复核（正确/错误/争议/未解） | 严格分 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 重试 | `/tmp/astra-full100-103-retry` | **99/100** | 1 (`#15`) | 1551 | **81 / 14 / 4 / 1** | 27/100 |
+| 不重试 | `/tmp/astra-full100-103-noretry` | 88/100 | 12 | 1501 | **67 / 17 / 4 / 12** | 22/100 |
+
+- 不重试臂 12 个未解里 **9 个是传输层 `OUTCOME_UNKNOWN`**（`#2,#3,#4,#6,#7,#13,#14,#18,#42`），
+  换成重试客户端后全部出候选 → **重试臂的 +14 分几乎全部来自"传输救回"，不是数学变强**。
+- 逐题复核数据：`/tmp/astra-103-review/out/{retry,noretry}_all.txt`（格式 `idx|verdict|conf|tags|note`）。
+
+### 12.2 稳定率：三次独立盲跑（c9 / 103-retry / 103-noretry）
+
+| 稳定度 | 题数 | 题号 |
+| --- | --- | --- |
+| **3/3 全对（稳定正确）** | **59** | 见下 |
+| 2/3 对 | 19 | `2,3,4,7,13,14,19,23,24,28,29,38,46,52,53,76,84,94,96` |
+| 1/3 对 | 10 | `5,6,11,20,22,42,43,45,82,98` |
+| **0/3 对（稳定失败）** | **12** | `1,12,15,16,18,26,34,36,47,48,83,95` |
+
+- 单次均值 **75.0/100**；三次全对率 **59%**；"至少对一次"上界 **88/100**。
+- 说明：**能力上界约 88，稳定输出只有 59** —— 这 29 分的差就是"能做对但不稳定"。
+- 0/3 的 12 题是真正的能力缺口，必须靠工具/方法卡补，不是靠多采样。
+
+### 12.3 为什么"能做对却不稳定"（有代码定位）
+
+> **本表是 2026-10-21 诊断时的状态**。§12.7 之后：语义路由（6 类→10 条）✅、强制轮门禁 ✅、
+> 方法卡脱 effect 预算 ✅、所有工具结果进闭合视图 ✅、白名单（4→8）✅；
+> **仍未修的是"投票按原文比对"**（第 1 行），它直接决定多次采样能否收敛。
+
+| 原因 | 位置 | 诊断时状态（修前） |
+| --- | --- | --- |
+| 投票按原文比对 | `agent-loop.ts` consensus `counts.set(attempt.candidate, …)` | `1/2` 与 `\frac12` 算两票 → 明明都对却投不出多数 |
+| 语义路由表只有 6 类 | `agent-loop.ts` L1733–1752 `exactOperation` + L1723 `finiteCountingProblem` | 我的 20 道错题里 14 道**结构上不在表内** |
+| 强制轮是"提示"不是"门禁" | L1722–1770 | 模型直接交 WorkPacket 也算过，`*Attempted` 已置位 → 机会烧掉 |
+| 方法卡与工具共享 effect 预算 | `reserveEffect`（`max_effects=2`）+ L1698 方法卡轮排在工具轮之前 | 卡先吃 1 个 effect，工具只剩 1 次 |
+| 只有 `exact_check_expr` 结果能喂闭合 | L1318 | 调 `bounded_enumeration`/`linear_system_solution_set` 白调 |
+| 白名单只有 4 个工具 | `packages/protocol/src/p3.ts` `P3_TOOL_NAMES` | 73 个注册、11 个有实现，能用的 4 个 |
+| 实测工具命中率 | c9 全量 100 题 | 只有 **17 题**真调过工具（17%）；**81 题**的唯一 effect 是方法卡；**2 题**既没调工具也没加载卡 |
+
+### 12.4 方法卡到底改什么、改在哪
+
+- **是什么**：`mathagent/resources/general_v11/data/methods.json`（20 张）+ `references/<id>.md` 正文
+  （单张 ≈2–5KB，`_MAX_BODY_CHARS=24000`），读取器 `mathagent/lite/methods.py:MethodCatalog`，
+  协议动作 `{"action":"method","id":...}`，Host `p3_host_methods.py`/`agent_host.py:_methods_enabled`，
+  Node `packages/runtime-core` `p3MethodCatalog` + `agent-loop.ts:allowMethods/forcedMethodSelection`，
+  正文作为 `methodAssets` 注入下一轮（`agent-loop-context.ts`）。
+- **本轮只改"何时必选/如何记录"，不改 20 张卡的内容**。
+
+### 12.5 改动清单（按冲突面分成两类）
+
+**A 类：不碰 `agent-loop.ts`（可立即做）**
+
+| 改动 | 文件 | 锚点 |
+| --- | --- | --- |
+| 路由漏斗指标 `routed/forced/obeyed/observationUsed` | `python/astra_bridge/agent_runtime.py` | metrics 字典（`remote_outcome_unknown` 附近 L604/L690） |
+| 记录加载过的卡 id | `python/astra_bridge/agent_host.py` | `method_loads += 1` 处 |
+| 记录工具名与 operation | `python/astra_bridge/agent_host.py` | effect receipt 处 |
+| 白名单 4→8（纯数据） | `packages/protocol/src/p3.ts`、`mathagent/input_contracts.py`、`math_families/bridge/dispatch.py` | `P3_TOOL_NAMES` L12 / L221 / L411–420 |
+
+**B 类：必须改 `agent-loop.ts`（等批次 103 的未提交改动落地后）**
+
+| 改动 | 锚点 |
+| --- | --- |
+| 强制轮改协议门禁（没返回 tool 就再发一轮，bounded 1 次） | L1722–1770 |
+| 方法卡脱离 effect 预算 | `reserveEffect` 的 method 分支（L707 附近） |
+| 所有工具结果都进 `exactObservation` | L1318–1340 |
+| 语义表扩容（Laplacian/根的个数/关系复合/回归诊断） | L1733–1752 |
+
+**明确不动**：`mathagent/resources/general_v11/**`（20 卡内容）、`packages/math-workunit/**`、
+`packages/math-audit/**`、另一会话在建的 `agent-answer-closure.ts` / `agent-semantics.ts` /
+`tests/e2e/test_ts_answer_closures.py`。
+
+> **实施状态（2026-10-22 核对）**：A 类 4 项、B 类 4 项均已在工作树落地并通过门禁，
+> 详见 §12.7；唯一**没有**落地的是 §12.3 第 1 行的"投票键规范化"（见 §12.6.3）。
+
+### 12.6 验收标准（替代旧的"97"口径）
+
+| 指标 | 现状 | 目标 |
+| --- | --- | --- |
+| 单次盲跑正确（逐题人审） | 81（retry）/ 67（noretry） | ≥88 |
+| **三次全对率** | **59%** | ≥92% |
+| 单次极差（两臂 81 vs 67；三次含 c9=77 亦为 14） | 14 | ≤3 |
+| 工具命中率 | 17% | 语义命中题 100% |
+| `FIELD_VALUE` | 0 | 0 |
+
+**永久禁用为"成绩"的数字**：86 / 91 / 96 / 97（合并 + 人工翻案 + 定向重跑）、任何单题挑最好；
+它们只能出现在"诊断"章节。
+
+#### 12.6.1 门禁数字的时点对照（避免把旧数当回归）
+
+| 时点 | Node | Python | 说明 |
+| --- | --- | --- | --- |
+| `59e8aca`（本文件提交的那版） | 334/334 | 718 passed / 24 skipped | 只有 binding/parity 批次 |
+| 2026-10-22 `answer-closure` 批次（§12.7，未提交） | **370/370** | **869 passed / 24 skipped** | +36 Node 例、+151 Python 例 |
+| 本文件顶部"2026-10-21 旧状态"块里的 341/722 | 341/341 | 722 passed | 那是 §10.3 审计批次时的中间值，**已过期** |
+
+#### 12.6.2 闭合接观察（**2026-10-23 已闭环**，原"9 题 pilot 暴露的缺口"）
+
+原缺口：9 题 pilot 里 `observation_used` 全为 0，无法区分"闭合跑了但没发现缺陷"和
+"闭合根本没跑"。本轮把三个层次都修掉并拿到正样本：
+
+1. **观察视图按任务重置（结构性根因）**：`toolObservationViews` / `exactObservation`
+   原先声明在**单个任务循环体内部**，而语义路由经常在**更早的任务**上触发，
+   于是答案任务开始时视图已被清空。已hoist 到 `runAgentLoop` 作用域，
+   `exactObservation` 改为按 operation 建索引（`exactObservations: Map<string, …>`），
+   一个无关的 `LIMIT` 结果再也不会顶掉 `MAXIMAL_MINORS` 的结果。
+2. **`observationUsed` 从"硬编码 kind 白名单"改为真实溯源**：每个缺陷带
+   `evidence: "OBSERVATION" | "CERTIFICATE" | "TEXT"`，指标只看
+   `evidence === "OBSERVATION"`；OPTION_COVERAGE / SOLUTION_COMPLETENESS 仍是证书类，
+   不会虚报成"用了观察"。
+3. **每次闭合判定都留痕**：`CONSENSUS`/`ANSWER_CLOSURE` 行现在**每次都写**，带
+   `requestId` / `defects` / `observationViews` / `observationUsed` /
+   `closureRequested` / `candidateChanged` / `remainingDefects`；Python 侧新增
+   `closure_evaluations` / `closure_defects` / `observation_views` 三个指标。
+4. **候选解析补 unicode 上下标**：`t²-t+1` 之前解析成 `null`（`polynomialOf` 只认
+   `^`/`**`），导致真实中文答案基本不可能触发次数守恒。现支持 `²³⁴`、`⁻¹`、`−`、`·`、`×`。
+
+**真实 API 正样本**（`/tmp/astra-observe6-107`，6 题：分裂域/密度/结点 Alexander/组合计数/
+圆 Laplacian/分离变量，item-concurrency 3，400 calls 上限）：
+
+| 题 | 路由命中 | 闭合判定 | 缺陷 | 观察视图 | `observation_used` | 结论 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| #2 分裂域次数 | 2 | 1 | 0 | 1 | 0 | 观察到达闭合且与候选一致（度 8），无缺陷 → 指标**如实为 0** |
+| #35 结的 Alexander 多项式 | 2 | 1 | **1** | 1 | **1** | 观察落地成 DEGREE_CONSERVATION 缺陷 → 花掉一次有界闭合轮 |
+| #16 密度极限 | 1 | 0 | 0 | 0 | 0 | 未进入共识块，闭合未评估（见下） |
+| #27 圆 Laplacian | 2 | 1 | 0 | 0 | 0 | 闭合跑了，该族没有观察型诊断 |
+| #24 分离变量 PDE | 2 | 1 | 0 | 1 | 0 | 观察到达闭合，无缺陷 |
+
+- **可复现**：单题复跑 `/tmp/astra-one35-108`（21 calls，同一 bundle）再次得到
+  `closure_evaluations=1 / closure_defects=1 / observation_views=1 / observation_used=1`，
+  候选仍是 `t^2-3*t+1` → 观察落地与指标是确定性的，不是偶然。
+- 该 run 的第 6 题（#12 组合计数）在收尾前被 shell 重置打断，没有 `run_summary.json`；
+  它属于 `FINITE_ENUMERATION`，本来就没有观察型闭合诊断，不影响上面的结论。
+- 所以 §12.6.2 想要的两件事都成立：**`observation_used > 0` 的样本存在**（#35），
+  且**指标会区分**"观察确认无缺陷（views=1, def=0）"与"观察落地成缺陷（def=1, USED=1）"。
+- 仍未证明的是**修复率**：#35 的候选仍是降阶的 `t^2-3t+1`，缺陷被记录、闭合轮被花掉，
+  但一次有界轮没能把它改成 6 次不变式（fail-closed：只有缺陷严格减少才替换候选）。
+  这条要单独统计，不能算成"闭合已提升正确率"。
+- 另一条待办：`#16` 这类题没进入共识块（`answerBearingTask` / 任务归属判定），
+  所以闭合根本未被评估；`closure_evaluations` 现在能让这类沉默情况可见，
+  但让更多答案任务走进闭合路径仍需单独一轮改动。
+
+#### 12.6.3 投票键规范化（**已落地**，原"唯一未落地项"作废）
+
+原文（作废）：计票仍是 `counts.set(attempt.candidate, …)` 逐字比较，`1/2` 与 `\frac12`
+算两票。**这条描述的是改动前的代码**，现已不成立。
+
+实际状态（2026-10-23 逐行核对）：
+
+- `apps/stdio-runtime/src/agent-loop.ts` 唯一计票点用**规范键**：
+  `const key = canonicalAnswerKey(attempt.candidate); counts.set(key, (counts.get(key) ?? 0) + 1);`，
+  tie-break 重扫同样用规范键；选中的仍是 `attempt.prepared/outcome`，**输出保留模型原文**。
+- 规范键实现 `apps/stdio-runtime/src/agent-answer-key.ts`（`truth:` / `rat:n/d` / `set:` /
+  `options:` / `poly:` / `text:` 六族，含 `\frac12`、`(A)`、`A、C`、`AC`、集合排序、
+  多项式系数标准化）；保守守卫：带选项字母的整句仍是 `text:`，单个小写字母仍是变量。
+- Python 侧 `agent_history.ballot_choice` 用 `answer_semantics.canonical_answer_key` 计票，
+  tie-break 与 TS 反向扫描等价；`tests/bridge/test_answer_semantics_parity.py` 做
+  Node↔Python 差分对拍（`fixtures/canonical_answer_keys.v2.json`，16 同 / 12 异）。
+- 回归：`tests/e2e/test_ts_answer_consensus.py::test_canonical_fraction_keys_drive_majority_and_latest_tiebreak`
+  （`["1/2", "1/2", "\\frac12"]` → 输出 `\\frac12`，逐字比较会退化成 `1/2`）；
+  `tests/bridge/test_answer_semantics.py` 的 `test_ballot_counts_canonical_keys_not_raw_text` /
+  `test_ballot_keeps_the_latest_tie_break`；`apps/stdio-runtime/tests/agent-answer-key.test.ts`。
+- 本轮补的一处一致性：`agent-loop.ts` 证书闭合判定原用 `!==` 比较候选文本，会把
+  `1/2` 与 `\frac12` 当成矛盾并白烧一次闭合轮；已改为 `sameAnswerKey`。
+- 遗留：`agreement` 遥测字段仍是逐字 `===`（只写日志、不影响计票），保留原语义以便对照。
+
+### 12.7 §12.5 实施与验收（本轮落地结果）
+
+**A 类（不碰 `agent-loop.ts`）已全部落地**
+
+| 改动 | 落点 |
+| --- | --- |
+| 漏斗指标 `routed/forced/obeyed/observation_used/tool_effect_calls/method_effect_calls/tool_names/method_ids` | `python/astra_bridge/agent_runtime.py` `_funnel_metrics`，只从真实 SessionLog 行与 effect 记录推导；`observation_used` 只在 `data.observationUsed === true` 时加一 |
+| 已加载方法卡 id、工具名与 operation | `python/astra_bridge/agent_host.py` effect/method 记录处 |
+| 工具白名单 4→8 | `packages/protocol/src/p3.ts`、`python/astra_bridge/p3_effect_contract.py` 及全部 schema 副本（`packages/protocol/schema/*`、`release/schema/*`） |
+
+**B 类（改 `agent-loop.ts`）已全部落地**
+
+| 改动 | 落点 |
+| --- | --- |
+| 强制轮改协议门禁：一次 bounded 重试，之后 fail-open 成 best-effort packet，不伪造回执 | `buildSchemaRepairMessages` + `FORCED_TURN_RETRY`/`TOOL_ROUTE` 事件 |
+| 方法卡脱离 effect 预算：对外 `maxEffects <= 2`，内部总容量 `maxEffects + maxMethodLoads`（3），Node 与 Host 两侧按类分别记账 | `agent-session.ts`、`p3-gate.ts`、`agent_host.py` |
+| 所有工具结果进 answer closure 视图；只有显式 `observationUsed` 才算“用过观察” | `agent-answer-closure.ts` + `agent-loop.ts` 调用点 |
+| 语义表扩容（根的个数、分裂域次数、圆/平面 Laplacian、显式解集）并收窄行列式/密度正则 | `agent-semantics.ts`（纯措辞匹配，无题号/答案/隐藏表） |
+
+语义表当前是 10 条确定性路由（首个命中生效）：`bounded_enumeration`、`real_root_count_expr`、
+`splitting_field_degree_expr`、`circle_laplacian_expr`、`planar_laplacian_expr`，以及
+`exact_check_expr` 的 5 个 operation（`MAXIMAL_MINORS` / `FACTOR_OVER_EXTENSION` /
+`DENSITY_CHECK` / `TRIG_REDUCE` / `LIMIT`）。白名单里另外两个老工具
+（`polynomial_expand_coefficients`、`linear_system_solution_set`）**故意不加路由**：§12.5 要求扩容的
+是“根的个数 / 分裂域 / Laplacian / 关系复合 / 回归诊断”这几族，老工具由模型按需自选，
+避免为措辞宽泛的题目强行塞一个用不上的观测。
+
+**另外两处必须修的工具缝**
+
+1. `summary.effectCalls.maximum` 在三份 schema 里还是 2，导致 3 次 effect 的合法运行被整帧拒成
+   `FIELD_VALUE`（上一轮 9 题 pilot 的直接死因）。三份副本 + `release/schema` 已统一为 3。
+2. `^` 与 `**` 的幂语法只在执行缝归一（`mathagent/tools.py`），`math_families/**` 冻结基线未动，
+   `test_g7_registry` / scoped asset 门禁保持通过。
+
+**门禁（最后一次源码改动之后重跑）**
+
+- `tsc -b`：0
+- Node（protocol + stdio-runtime）：**370/370**
+- 全量 pytest：**869 passed, 24 skipped**
+- 聚焦 bridge（规范答案键、TS/Py 一致性、白名单/effect id、Host effect 预算、unsolved 码表）：**458 passed**
+- 聚焦 agent e2e（closure / forced / consensus）：**20 passed**
+- `release/BUILD_MANIFEST.json`：`VERIFY_OK`（3 JS + 4 assets + 2 bundle），bundle 在最后一次源码改动后重建
+- 未 commit、未 push
+
+**9 题真实 API pilot**（`/tmp/astra-tools9-103c`，item-concurrency 3，240 model calls）
+
+- 9/9 题正常返回，无 runner 异常：8 题 candidate + 1 题诚实 unsolved。
+- 每题 effect 数为 1 或 3，从未超过容量；`tool_effect_calls <= 2`、`method_effect_calls <= 1` 全部成立。
+- 命中路由的 5 题全部 `routed == forced == obeyed`（每条路由都被强制且被遵守，无漏记也未误记）。
+- `observation_used` 全为 0：这些题没有触发 closure，因此没有把“抓到观察”冒充成“用了观察”。
+- 早前 pilot 的 `FIELD_VALUE`（effect 预算 = 2 的 schema 旧绑定）不再出现。
+
+**唯一异常题（第 2 题，52 张牌“花色数 > 点数数”概率）**：18 次模型调用、142k tokens、
+最后一次响应被截断，最终 `unsolved`，码是旧的通用 `FIELD_VALUE`。它没有给出任何答案，
+所以这是“基础设施码导致的丢题”，不是错答。为避免同类题继续不可定位，本轮补了三处码表
+和一处留证：
+
+| 情况 | 新码 | 位置 |
+| --- | --- | --- |
+| 驱动层未预期异常 | `EXC_<类型名>`（只取类型名，长度/字符集受限，绝不带消息） | `agent_runtime._exception_code` |
+| 子进程干净退出却没给 `session.solve` 结果 | `NO_SOLVE_RESULT` | `agent_runtime` wait 分支 |
+| 相位非法帧（例如 solve 未完成就 stop） | `ILLEGAL_TRANSITION` | `agent-host-flow.onRequest` |
+| 模型/评审/修复/共识/effect 预算被拒 | `BUDGET` | `agent_host.on_model` / `on_effect` 相位门禁 |
+| 根截止时间触底 | `DEADLINE_EXCEEDED` | `agent_host` 回调 deadline 检查 |
+
+`p0_probe.py` 另保留子进程自己写的固定 stderr 码（只取首个大写 token），unsolved 投影新增
+`code` / `stage` / `childExit` / `childCode` 四个有界字段。两次复跑把这条题定位到
+`stage: session.solve`、`childExit: None`、`childCode: None`，即失败发生在 solve 期间某一帧被
+Host 侧判退，而不是子进程崩溃。
+
+**该题单题复跑（第 3 次）已经给出正确候选**：21 次模型调用、549 秒、3 次 effect
+（2 工具 + 1 方法）、`routed = forced = obeyed = 2`、`observation_used = 0`，答案是
+`223/8330`；离线穷举 52 选 5 的 2,598,960 个手牌得到 69,576 / 2,598,960 = 223/8330，
+与该候选逐字一致。也就是说这题不是“做不出”，而是“长跑时会被一个笼统码判死”。
+
+顺带把 Host 侧的两类判退也各自给了码：预算类（模型/评审/修复/共识/effect 配额）→ `BUDGET`，
+根截止时间触底 → `DEADLINE_EXCEEDED`。此前它们都是 `FIELD_VALUE`，长跑题目一旦踩到就会被
+当成“格式错”，这一轮之后不会再混在一起。
+
+**口径**：以上是 9 题 pilot，不是成绩；§12.6 的 100 题盲跑口径不变，
+86 / 91 / 96 / 97 仍然禁止被当作分数引用。
+
+**过程注记**：实现期间一个子代理在排查类型错误时误把 `agent-loop.ts` /
+`agent-semantics.ts` 从 HEAD 还原过一次；之后两文件被重新核对，上面所有门禁都在当前工作树上
+重跑过，因此这些数字反映的是本轮改动的真实实现。
+
+### 12.8 2026-10-23 闭合接观察 + 计票规范化收口（agent team 执行）
+
+**改动（Node，两个 agent 协作）**
+
+| 改动 | 文件 | 要点 |
+| --- | --- | --- |
+| 观察视图提升到 run 作用域 | `apps/stdio-runtime/src/agent-loop.ts` | `toolObservationViews` / `exactObservations` / `answerClosureAttempted` 从"每个任务重置"改为"每次 run 累计"，修掉"工具在早任务触发、答案任务视图为空"的结构性根因 |
+| exact 观察按 operation 建索引 | 同上 + `agent-answer-closure.ts` | `ExactObservationIndex.get(operation)`；`LIMIT` 结果不再顶掉 `MAXIMAL_MINORS`；不匹配的 operation 永远不能满足诊断 |
+| 观察溯源取代 kind 白名单 | `agent-answer-closure.ts` + `agent-loop.ts` | 每个缺陷带 `evidence: OBSERVATION / CERTIFICATE / TEXT`；`observationUsed` 只看 `OBSERVATION` |
+| 每次闭合判定都留痕 | `agent-loop.ts` | `ANSWER_CLOSURE` 行带 `requestId/defects/observationViews/observationUsed/closureRequested/candidateChanged/remainingDefects` |
+| 候选解析补 unicode 记号 | `agent-semantics.ts` | `x² x³ x⁴ x⁻¹`、`−`、`·`、`×`；`t²-t+1` 之前解析失败导致次数守恒永不触发 |
+| 多 minor 观察 | `agent-answer-closure.ts` | 接受字符串或 `{polynomial}` 条目；多个非零 minor 必须同 degree 或同多项式（差常数）才取最高次，否则返回 null，绝不编造 |
+| 证书闭合改规范键比较 | `agent-loop.ts` | `1/2` vs `\frac12` 不再被当成矛盾白烧一轮 |
+
+**改动（Python）**
+
+- `python/astra_bridge/agent_runtime.py`：`_funnel_metrics` 新增 `closure_evaluations` /
+  `closure_defects` / `observation_views`（防类型污染，坏字段忽略而不抛），
+  `_unsolved` 投影同步带这三个键。
+
+**测试**
+
+- Node 新增 15 例（总 **385/385**）：unicode 上下标解析、次数守恒用 `t²-t+1`、
+  `REAL_ROOT_COUNT` / `SPLITTING_FIELD_DEGREE` 用真实裸整数 payload、
+  多 minor 一致/不一致、R1（工具在单元 1、答案在单元 3 仍能用地基观察）、
+  R2（`LIMIT→MAXIMAL_MINORS` 与反向顺序都能读到正确观察）、
+  R3（选项缺陷是证书类、无视图时 `observationUsed` 恒假）。
+  三个回归都做了变异验证：把 per-task 重置、latest-slot、`views>0` 三个旧写法逐个放回去，
+  对应测试分别变红，再恢复。
+- Python 新增 `tests/bridge/test_closure_metrics.py`（6 例，bridge 套件 **464 passed**）。
+
+**门禁（最后一次源码改动之后）**
+
+- `tsc -b`：0
+- Node：**385/385**
+- 全量 pytest：**875 passed, 24 skipped**
+- 聚焦 bridge：**464 passed**
+- bundle 已重建；`release/BUILD_MANIFEST.json`：`VERIFY_OK`（3 JS + 4 assets + 2 bundle）
+- 未 commit、未 push
+
+**真实 API 证据**：见 §12.6.2 的表（`/tmp/astra-observe6-107`：5/6 题完成，
+#35 拿到 `closure_evaluations=1 / closure_defects=1 / observation_views=1 /
+observation_used=1`，#2 拿到 `views=1 / def=0 / USED=0` 的对照）。
+
+**已知限制（不要当成已完成）**
+
+1. **修复率未证明**：#35 的缺陷被观察到、闭合轮被花掉，候选仍是降阶的 `t^2-3t+1`。
+   一次有界轮不保证修好；要单独统计"缺陷→修好"的转化率。
+2. **观察视图未按输入键控**：现在按 run 累计，同一 run 里不同子问题的观察理论上可能串用；
+   方向是 fail-closed（缺陷只花一轮、且只有缺陷严格减少才替换候选），但仍应按 task/输入哈希分区。
+3. **闭合每 run 最多一次**（原来按任务）——与既有设计意图一致，但多任务 run 的后继答案任务不再评估。
+4. **`#16` 类题进不了共识块**：`closure_evaluations=0` 说明闭合未被评估；
+   现在能看见这种沉默，但让它进入闭合路径仍要单独改任务归属判定。
+5. 100 题盲跑**未做**：本轮只有 6 题诊断集，正确率口径仍是 §12.6 的旧数字（81/67，三次全对 59%）。
+
+---
+
+## 13. 2026-10-23 §5 方法层移植（agent team 执行，已落地）
+
+五个 agent 串/并行完成，每个都带独立门禁；最后一次源码改动之后重跑了全量门禁。
+
+### 13.1 逐项落点
+
+| §5 项 | 状态 | 落点 |
+| --- | --- | --- |
+| 1. 方法卡池（20 卡真实池 + 路由元数据上线） | 已落地 | `mathagent/lite/methods.py`：`catalog(include_metadata=True)` 额外返回 `tasks/objects/structures/role`（有界 token，≤6 项、≤24 字符）；默认仍是 `{id,title}`，lite 旧路径字节不变。`p2_methods.fixture_catalog` 显式请求元数据并对越界字段丢弃；`p3_host_methods.checked_catalog` 严格校验；v13 schema 条目新增这四个可选字段（两份副本逐字节一致）。P3/P0 路径仍投影回 `{id,title}`。 |
+| 2. 有界多次取卡（1 → ≤4） | 已落地 | `_MAX_METHOD_LOADS = 4`、`AGENT_MAX_METHOD_LOADS = 4`；effect id 由 3 个扩到 **6** 个（`effect-1..6`，6 处 TS 副本 + 全部 schema 副本），`summary.effectCalls.maximum = 6`，`maxMethodLoads` 上界 4。容量 = `maxEffects(≤2) + maxMethodLoads(≤4) = ≤6`，按类分账不变。**1.2 旧契约保持 `effect-1/2` 与 bound 3**，并新增 `test_legacy_manifest_keeps_its_narrow_effect_table` 钉住这条边界。 |
+| 3. 软路由（元数据先看、正文后载） | 已落地 | `semanticMethodRoute(problemText, entries)`（`agent-semantics.ts`）：按卡片自身 `objects/structures` 与题面的静态双语触发表打分，最多 3 个候选，分数降序 + id 升序 tie-break，永不返回目录外的 id；`agent-loop-context.ts` 的方法选择轮只列 `id — title — objects`（无正文），其余 id 仍全列；`sessionLog` 记 `REPAIR/METHOD_ROUTE`。目录无元数据时提示词与日志与改动前完全一致（有测试）。 |
+| 4. 阶段配额（前置 ≤25%、尾部保留 10%） | 已落地 | Host：`front_budget = max(1, ceil(cap*25/100))`、`tail_reserve = max(1, ceil(cap*10/100))`，纯整数运算；`R0/R2/R4` 越 fronts 上限 → `BUDGET`；已有候选阶段（`R2/R4/REPAIR/CONSENSUS` 出现过）后，`WORK/CONSENSUS` 在剩余 ≤ `tail_reserve` 时 → `BUDGET`；复核/修复调用不受尾部保留阻挡。指标新增 `front_budget/tail_reserve/front_spent`。启用 `maxR0=1` 时 fronts 允许量抬到该阶段的固定 4 次调用（否则第 3 次评审会被配额饿死）。 |
+| 5. R0 三评审 + 汇总 + 一次定向复核 | 已落地 | 角色 `MEANING/METHOD/TASK_TOOL` 各绑定一个既有维度，三次**独立** `model.generate`（不同根 id、互斥 system prompt 与 user payload）；纯函数聚合 `p4-r0-aggregate.ts`（任一 ISSUES ⇒ ISSUES，否则任一 UNKNOWN ⇒ UNKNOWN，否则 NO_ISSUE；`dissents`/`missing` 有界且只含枚举值，不取模型文本）；ISSUES 才进入"至多一次修订 + **恰好一次** `R0_RECHECK`"；根预算界 4 → 5，不足时 `INSUFFICIENT_BUDGET` 且**零模型调用**；`maxR0` 仍是 0/1 开关。审计：每角色一行 `R0_REVIEW` + 一行 `AGGREGATE`。 |
+
+### 13.2 门禁（最后一次源码改动之后）
+
+- `tsc -b`：0
+- Node（protocol + stdio-runtime）：**407/407**
+- 全量 pytest：**909 passed, 24 skipped**
+- bundle 已重建；`release/BUILD_MANIFEST.json`：`VERIFY_OK`（3 JS + 4 assets + 2 bundle）
+- `git diff --check`：clean
+- 未 commit、未 push（HEAD 仍是 `59e8aca`）
+
+### 13.3 本轮修掉的真实缝
+
+1. **`MethodCatalog.catalog()` 的旧契约不能漂移**：新元数据改为 `include_metadata=True` 显式请求，默认形状仍 `{id,title}`，
+   `tests/test_lite_methods.py` 的旧断言因此保持原样而不是被放宽；`a2-source-lock.json` 随 `methods.py` 变更重算。
+2. **R0 阶段没有 Host 门禁**：`max_r0` 之前只存不读，R0 帧走 `else` 分支无约束；本轮把 fronts 配额与阶段形状接上。
+3. **effect-id 词汇与容量分家**：把"配额"（`maxEffects` 仍 ≤2）与"id 总量"（6）拆开后，方法卡才能多次加载而不挤占工具。
+4. **配额会饿死它所保护的阶段**：`maxR0=1` 且小预算时，25% 的 fronts 允许量装不下固定的 4 次 R0 调用；已用显式下限修正，并加测试。
+
+### 13.4 已知限制（不要当成已完成）
+
+1. **软路由只在措辞重合时才给候选**：100 题输入里有 87 题不命中任何工具路由，方法路由同理会有大量"无候选"，
+   此时行为与改动前一致；没有"未命中也要给默认 3 张"的兜底（有意为之，避免噪声）。
+2. **R0 仍是单轮聚合**：三次评审串行、共用一个根预算；没有并行派发，也没有跨题缓存。
+3. **阶段配额是硬门禁**：它按 25%/10% 的固定比例拒绝请求，不做动态再平衡；真实长跑里可能把有用调用拒早，
+   需要下一轮用真实 100 题观察"被 BUDGET 拒掉的调用是否都是浪费"。
+4. **方法正文仍是 24000 字符上限**、单卡一次加载；多卡组合推理（软路由给 3 个候选但只能载 1 张）还没有做。
+5. **本轮没有跑真实 API**：全部是本地门禁 + 假 client e2e；正确率口径仍是 §12.6 的旧数字。
+
+### 13.5 2026-10-23 第二轮：路由扩容 + 第二张卡 + 20 题真实 pilot
+
+#### 路由扩容（`semanticToolRoute`）
+
+新增两族并放宽两族，**旧族优先级不变**、仍然只按措辞匹配：
+
+| 族 | 工具 | 触发 | 明确排除 |
+| --- | --- | --- | --- |
+| `POLYNOMIAL_EXPAND_COEFFICIENTS` | `polynomial_expand_coefficients` | 展开/展开式/化简为多项式/系数/乘积展开/因式分解后相乘、expand、collect coefficients | 单纯提到多项式、求根/解方程、特征多项式/行列式 |
+| `LINEAR_SYSTEM_SOLUTION_SET` | `linear_system_solution_set` | 线性方程组/解方程组/高斯消元/联立方程、`\begin{cases}`、solve the system | 单方程、只有特征值/特征向量措辞 |
+| 放宽 `FINITE_ENUMERATION` | `bounded_enumeration` | 追加 枚举/列举/计数/有多少种/排列数/组合数/共轭类的个数/生成元的个数、number of ways | 连续型密度/分布/期望、无限范围 |
+| 放宽 `EXACT_LIMIT` | `exact_check_expr`（LIMIT） | 追加 级数(的)和/求和/收敛(到|于)/发散、sum of the series、asymptotic limit | 单纯求积分 |
+
+100 题静态扫描：命中 **13 → 14 题**（`POLYNOMIAL_EXPAND_COEFFICIENTS` 与
+`LINEAR_SYSTEM_SOLUTION_SET` 在这套输入上都是 0 命中）。这不是实现失败，而是这套输入的
+性质：22 道"多项式"题全是概念选择/证明（主理想整环判定、勒让德生成函数、拉格朗日插值、
+龙格现象、回归模型选择），**没有一道在要求展开或求系数**——路由器按设计拒绝过度匹配。
+结论：这套输入的工具可达上限约 **14–17%**，要再提高必须**移植新工具**（§5 提到的 69 个
+注册工具里目前只接了 8 个），不是继续调路由。
+
+#### 第二张方法卡（`AGENT_MAX_METHOD_ASSETS = 2`）
+
+- 首次加载成功后，仅当 `METHOD_ROUTE` 候选 ≥2、首张卡与候选 2 不同、方法配额还有余、
+  `methodLoad` 可用、id 容量有空间、`callsLeft() >= 2 + maxReviews` 时，才**提供**第二次加载；
+  模型直接作答同样接受（提示是邀请，不是强制）。
+- 上限固定 2（`min(maxMethodLoads, 2)`），第三次请求被拒且整轮仍能出候选；
+  `maxMethodLoads = 1` 时行为与改动前完全一致。
+- `METHOD_LOAD` 行新增 `ordinal`（1/2）。锁定 profile 的 `maxMethodLoads` 由 1 → **2**（manifest 已重建）。
+
+#### 20 题真实 pilot（`/tmp/astra-pilot20b-109`，4/4 并发，1200 calls）
+
+按族抽样 20 题（多项式 6 / 概率 5 / 级数 3 / 线代 2 / ODE 2 / 拓扑 2）：
+
+| 指标 | 结果 |
+| --- | --- |
+| 出候选 | **19/20**（1 题 `unsolved`：convergence-limits，`exact_check_expr` 后仍无候选） |
+| 路由命中并被遵守 | **8/20**（`routed == obeyed == 2`），tool effect 合计 17 次 |
+| 方法卡加载 | 20/20 各 1 张；**0 题载 2 张** |
+| 闭合判定 | 19/20 评估；其中 2 题有缺陷（均为证书类） |
+| `observation_used` | **0**（两处缺陷都不是观察型，指标如实为 0） |
+| `front_spent / front_budget` | 0 或 1 / 64 —— 25% 配额在 cap=256 下**不咬合**（设计如此） |
+
+**第二张卡为何未触发（补充实测）**：另外跑了两组（`/tmp/astra-twocard8-110` 8 题、
+`/tmp/astra-twocard4-111` 4 题，后者专门挑 `METHOD_ROUTE` 候选 ≥2 且
+`max_method_loads=2` 的题），12 题仍然全部只载 1 张。也就是说机制可用、单元与 e2e 都覆盖，
+但**模型拿到第一张正文后就直接作答**、不再申请第二张。下一步要么在提示层让"多域题"更倾向
+再取一张，要么把第二张变成多域题的强制门禁——这是策略选择，不是实现缺陷。
+
+#### 门禁（第二轮改动之后）
+
+- `tsc -b`：0
+- Node：**417/417**
+- 全量 pytest：**910 passed, 24 skipped**
+- bundle 已重建；manifest `VERIFY_OK`，`lockedRunProfile.maxMethodLoads = 2`
+- 未 commit、未 push
+
+### 13.6 2026-10-23 第三轮：新增 3 个确定性工具 + 接进闭合
+
+#### 为什么不是"移植那 69 个"
+
+清点 `tool-registry.json`（73 个注册工具）后确认：未移植的 69 个绝大多数是**特定谜题工具**
+（铺砌计数、LZ78 编解码、rook 数、Tutte 集、牌组博弈……），与这套大学数学 100 题
+（环论/群论/分析/概率）几乎不重叠——移植它们**不会提高这套题的覆盖率**。真正缺的是
+三个"题面给了显式数据，答案是一个可被精确核对的模型"的能力，于是按这个方向新写：
+
+| 新工具 | 作用 | 载荷要点 | 边界 |
+| --- | --- | --- | --- |
+| `interpolation_fit_check` | 给定 2–8 个精确有理点 + 一个候选表达式，逐点精确求残差 | `residuals`（精确有理串）、`all_zero`、`degree`、`interpolating_polynomial` | 点数 >8 或次数 > n−1 → out_of_scope；重复 x、非精确数、多变量、不可解析 → invalid_input；全程 `Fraction`，无浮点 |
+| `stats_ols_check` | 给定 3–12 对精确数据（可带 slope/intercept 声称），精确算 OLS | `slope`/`intercept`/`sse`/`sst`/`r_squared`/`claim_matches`/`residuals` | 全部 x 相等 → 拒绝而非除零；越界 → out_of_scope |
+| `finite_group_structure` | 给定 1–4 个置换生成元（圈记号），闭包枚举子群 | `order`/`is_abelian`/`is_cyclic`/`exponent`/`center_size`/`element_orders`/`conjugacy_classes` | 生成元 >4 或 degree 越界 → out_of_scope；圈记号畸形/点越界 → invalid_input；闭包 >600 元素 → out_of_scope |
+
+落地方式：实现放在 `mathagent/exact_data_checks.py` 与 `mathagent/finite_group_tools.py`
+（**没有动冻结的 `math_families/**`**），`tool_contracts.py` 加契约与派发、`tool-registry.json`
+加条目；P3 白名单 **8 → 11**，同步 `p3.ts`、`p3_effect_contract.py`、两份 v13 schema 与
+`p3-host.schema.json`（两份 v13 逐字节一致）；**冻结的 1.2 `agent-host.schema.json` 仍是 8 个名字**，
+SHA 未变。
+
+#### 路由与闭合
+
+- 新路由族：`INTERPOLATION_FIT`（插值/拉格朗日/牛顿插值/过这些点的多项式）、`OLS_CHECK`
+  （最小二乘/OLS/回归系数/拟合直线/残差）、`GROUP_STRUCTURE`（共轭类/置换群/元素的阶/生成子群，
+  **必须同时出现显式圈记号**如 `(123)`，只有"群同态命题判断"这类背景措辞不路由）。
+- 100 题静态命中：**14 → 22 题**（OLS 5、插值 3、加上原有 14）。群结构族在这套输入上 0 命中，
+  因为题面给的是 `$A_4$` 这类名字而不是置换圈记号——这是设计的排除规则，不是 bug。
+- 三个新工具接进 answer closure，新增三个**观察型**缺陷（`evidence: "OBSERVATION"`）：
+
+| 缺陷 | 触发 | 何时不触发 |
+| --- | --- | --- |
+| `INTERPOLATION_RESIDUAL` | 观察到 `all_zero === false`，且候选写了一个与观测插值多项式不（规范）相等的多项式 | `all_zero === true`、候选没写显式多项式、载荷畸形 |
+| `OLS_MISMATCH` | 观察 `claim_matches === false`，且候选显式写了 slope/截距（或 `y=mx+b`）且与观测值不等 | `claim_matches` 为 true/null、候选没写系数、候选给的数有歧义 |
+| `GROUP_STRUCTURE_MISMATCH` | 观察到的 order 或共轭类个数与候选显式陈述的不一致 | 候选两者都没写、载荷自相矛盾、畸形 |
+
+缺陷顺序固定为 `OPTION_COVERAGE → NORMALIZATION → DEGREE_CONSERVATION → REAL_ROOT_COUNT →
+SPLITTING_FIELD_DEGREE → INTERPOLATION_RESIDUAL → OLS_MISMATCH → GROUP_STRUCTURE_MISMATCH →
+SOLUTION_COMPLETENESS`，`observationUsed` 仍只由 `evidence === "OBSERVATION"` 推导，闭合轮次不变（≤1 评估 + ≤1 轮）。
+
+#### 门禁（本轮最后一次源码改动之后）
+
+- `tsc -b`：0
+- Node：**426/426**
+- 全量 pytest：**935 passed, 24 skipped**
+- bundle 已重建；manifest `VERIFY_OK`（`lockedRunProfile.maxMethodLoads = 2`）
+- 冻结基线：1.2 schema SHA 未变、`math_families/**` 未动、两份 v13 逐字节一致
+- 未 commit、未 push
+
+#### 已知限制
+
+1. **三个新工具还没有真实 API 实证**：目前只有 bridge 单测 + 假 client e2e；要证明它们改变候选，
+   必须挑 OLS/插值/群论题跑真实 pilot（`observation_used` 是否从 0 变正）。
+2. **群结构族在现有输入上 0 命中**：题面给的是 `A_4` 这种群名，不写圈记号；要覆盖这类题，
+   需要再做一个"按群名建群"的输入形态（例如 `named_group: "A4"`），那属于新契约，未做。
+3. **新工具的证据只到"精确核对"层**：`all_zero`/`claim_matches`/`order` 都是对**给定数据**的核对，
+   不会判断题面该用哪个模型，也不构成证明。
+
+### 13.7 2026-10-23 第四轮：named group 输入形态 + 12 题真实验证
+
+#### named group（让"题面只给群名"的题也能用工具）
+
+`finite_group_structure` 现在接受两种输入形态之一：
+
+- `generators`：原有 1–4 个置换（圈记号）。
+- `named_group`：封闭小群词表 `S3, S4, A4, A5, D8, D10, Z2..Z12`（`C_n` 是 `Z_n` 的别名），
+  内部展开成最小忠实置换度上的生成元，再走**同一条**闭包枚举路径：
+  `S3=(12),(123)`、`S4=(12),(1234)`、`A4=(123),(124)`、`A5=(12345),(123)`、
+  `D8=(1234),(13)`、`D10=(12345),(25)(34)`、`Z_n=(1..n)`。
+
+载荷除原有字段外新增 `input_mode: "generators" | "named_group"`，命名形态再带 `group_name`；
+其余字段与等价的显式生成元结果**逐字段相同**（有测试钉住 `S3` 的两种形态）。拒绝规则：
+两种形态同时给 / 都不给 / 名字不在词表 / `n` 越界 → `invalid_input`；闭包 >600 元素 → `out_of_scope`。
+
+路由也从"必须有圈记号"放宽为"(受支持群名 + 结构措辞) 或 显式圈记号"，仍排除：只有
+`设群 G 同态…` 这类没有群名/圈记号的措辞，以及任何 环/域/理想/扩域 措辞。
+
+#### 100 题静态路由命中
+
+**13 → 22 → 23**（本轮 +named group 之后：`GROUP_STRUCTURE` 2 题）。分布：
+OLS_CHECK 5、EXACT_TRIG_REDUCE 4、EXACT_LIMIT 3、INTERPOLATION_FIT 3、GROUP_STRUCTURE 2、
+FINITE_ENUMERATION 2、SPLITTING_FIELD_DEGREE / DENSITY / CIRCLE_LAPLACIAN / MAXIMAL_MINORS 各 1。
+
+#### 12 题真实 API 验证（`/tmp/astra-tools12-112`，4/4 并发，800 calls）
+
+挑的是**路由到新族/计数族的全部题**（`D_8` 命题、`A_4` 共轭类、两道组合计数、三道插值、
+五道 OLS）：
+
+| 指标 | 结果 |
+| --- | --- |
+| 出候选 | **12/12** |
+| 新族工具真的被调用 | **10/12**（`finite_group_structure` 2、`interpolation_fit_check` 3、`stats_ols_check` 5），另 2 题走 `bounded_enumeration` |
+| `routed == obeyed` | **12/12 全等** |
+| 观察进入闭合视图（`observation_views > 0`） | **8/12** |
+| 闭合判定 | 12/12 都评估了 |
+| `closure_defects` | **0** |
+| `observation_used` | **0** |
+| 模型调用合计 | 238（19–21 次/题） |
+
+**为什么还是 0 缺陷**：这 12 题的答案形态是"选项/判断/个数"，而不是"一个可与观测逐字比对的量"。
+观测确实到达了闭合（8 题 `views > 0`），但没有任何一条诊断能把它变成缺陷：插值题是
+"拉格朗日/牛顿插值是否精确经过数据点"的判断题，候选里没有多项式；OLS 题是"参数估计用哪种方法"的
+选择题，候选里没有 slope/截距；`D_8` 题是命题判断，候选里没有群阶或共轭类个数。
+按现有三族诊断的触发条件，这些题**正确地**不产生缺陷——不是 bug，是形态不匹配。
+
+#### 由此得到的下一步（明确、可执行）
+
+要让观测真正改变这类答案，闭合需要**选项级诊断**：把选中的选项文本里的数字/断言抽出来，
+与观测值比对（例如选项写"共轭类有 5 个"而观测是 4；选项写"|D8|=16"而观测是 8）。
+这属于新诊断形态（`OPTION_NUMERIC_CONTRADICTION`），需要选项文本解析 + 与观测量的对应关系，
+比现有三个诊断更难，但是唯一能把"概念题"接进闭合的路。
+
+#### 门禁（本轮最后一次源码改动之后）
+
+- `tsc -b`：0
+- Node：**426/426**
+- 全量 pytest：**941 passed, 24 skipped**
+- bundle 已重建；manifest `VERIFY_OK`（`lockedRunProfile.maxMethodLoads = 2`）
+- 冻结基线未动：1.2 schema SHA 不变、`math_families/**` clean、两份 v13 逐字节一致
+- 未 commit、未 push
+
+### 13.8 2026-10-23 第五轮：选项级闭合诊断（把"选择题/判断题"接进观测闭环）
+
+§13.7 的结论是"概念题接不进闭合"。本轮补上两个**选项级**观察型缺陷
+（`evidence: "OBSERVATION"`），仍然不加任何模型调用、不改闭合轮次上限：
+
+| 缺陷 | 触发 | 排除 |
+| --- | --- | --- |
+| `OPTION_NUMERIC_CONTRADICTION` | 候选选中的**选项自身文本**把某个数字绑定到某个量，而该量有观测：群的阶（`\|G\|`/群的阶/阶为/order）↔ `finite_group_structure.order`；共轭类个数（`N 个共轭类`/`共轭类…为 N`）↔ `conjugacy_classes.length`；实根个数 ↔ `real_root_count_expr`；分裂域次数（`[E:Q]=N`/扩张次数/分裂域…次数）↔ `splitting_field_degree_expr`；OLS 斜率/截距 ↔ `stats_ols_check` | `元素的阶` 先被掩蔽（它是分布不是单值）；`次数` 只在同句出现分裂域/扩张时才读；一句里出现多个数字或出现未被任何族匹配的裸数字 → **整条选项不产缺陷**；同一量出现两个不同值 → 不产缺陷；观测缺失/畸形 → 不产缺陷 |
+| `OPTION_VERDICT_CONTRADICTION` | 选中选项的同一从句断言 `可交换/交换群/阿贝尔/abelian` 与观测 `is_abelian === false` 冲突，或断言 `循环群/cyclic` 与 `is_cyclic === false` 冲突 | 从句里有任何否定/模糊词（`不/非/未/否/未必/不一定/可能/也许/是否/not/never/may/might/non-`）→ 不产缺陷；`元素的阶` 不比 |
+
+**选项解析**：新增导出 `problemOptionTexts`，只认"行/分句开头 + 字母 A–E + `.)、:：`"的标记
+（`[` 不在允许前缀里，所以 `[E:Q]=6` 不会被误读成选项 E），少于 2 个标记、字母重复、
+正文为空或 >320 字符都判为不可用；只读标记**之间**的正文，且只保留候选真正选中的字母。
+`detail` 会写出选项字母、量名、观测值与断言值；`answerClosureNote` 增加一条 ≤240 字符的
+`Reconcile the chosen option …` 提示。
+
+缺陷顺序（文档化）：`… GROUP_STRUCTURE_MISMATCH → OPTION_NUMERIC_CONTRADICTION →
+OPTION_VERDICT_CONTRADICTION → SOLUTION_COMPLETENESS`；同一轮内按选项字母升序、量族固定顺序。
+
+**测试**：`agent-answer-closure.test.ts` 新增 11 例（选项表只从选项块读、群阶/共轭类、实根、
+分裂域次数、OLS 斜率与截距的正确-错误两向、一句两数字不产缺陷、否定/模糊不产缺陷、
+确定性顺序、裸数字不归因、畸形观测不抛、note 文案），
+`agent-answer-closure-loop.test.ts` 新增 2 例（选项级群阶矛盾 ⇒ 一轮闭合 + `observationUsed: true`；
+选对时 `observationUsed: false` 且不花轮次）。Node 总数 426 → **439**。
+
+**真实 API 抽样**（`/tmp/astra-opt12-113`，12 题，4/4 并发；跑到 4 题时被 shell 重置打断）：
+
+| 题 | 工具 | routed | 观测视图 | 缺陷 | 结论 |
+| --- | --- | ---: | ---: | ---: | --- |
+| `D_8` 命题（选 B,D） | `finite_group_structure` | 2 | 1 | 0 | 选中的选项没有与观测冲突的明确量/性质 → 正确地不产缺陷 |
+| `A_4` 共轭类个数（答 `4`） | `finite_group_structure` | 2 | 1 | 0 | 答案与观测一致（A₄ 确有 4 个共轭类）→ 不产缺陷 |
+| 组合计数 ×2 | `bounded_enumeration` | 2 | 1/0 | 0 | 该族没有选项级量可比 |
+
+也就是说：**选项级诊断在真实样本里没有产生误报**，但这一轮也**没抓到真实的正例**
+（模型给的选项恰好与观测一致）。正例目前只有单元/循环级测试覆盖。
+
+#### 门禁（本轮最后一次源码改动之后）
+
+- `tsc -b`：0
+- Node：**439/439**
+- 全量 pytest：**941 passed, 24 skipped**
+- bundle 已重建；manifest `VERIFY_OK`（`lockedRunProfile.maxMethodLoads = 2`）
+- 冻结基线未动：1.2 schema SHA 不变、`math_families/**` clean、两份 v13 逐字节一致
+- 本轮结束按用户要求**提交并推送**

@@ -34,7 +34,7 @@ import {
 import { prepareP2Context } from "@astra/math-workunit";
 import { checkTaskScopeCoverage } from "@astra/math-workunit";
 import { p4Hash } from "@astra/protocol";
-import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
+import { AGENT_MAX_METHOD_ASSETS, p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import { readAsset } from "@astra/runtime-core";
 import {
   checkProtectedCandidate,
@@ -48,13 +48,22 @@ export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7" as cons
 export const AGENT_WORK_CONTEXT_PROGRESS_POLICY = AGENT_PROGRESS_POLICY;
 
 const MAX_CONTEXT_BYTES = 65536;
-const MAX_OBSERVATIONS = 2;
+// The shared effect-id window can hold six ids; the AgentLoop never loads more
+// than two bounded method bodies in one run.
+const MAX_OBSERVATIONS = 6;
 const MAX_OBSERVATION_BYTES = 16000;
-const MAX_METHOD_ASSETS = 1;
+const MAX_METHOD_ASSETS = AGENT_MAX_METHOD_ASSETS;
 const HASH = /^[0-9a-f]{64}$/u;
 const REQUEST_ORDINAL = /^model-(3[0-2]|[12][0-9]|[1-9])$/u;
 const PROVENANCE_ORDINAL = /^model-([1-3])$/u;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const RECEIPT_FIELDS = [
   "effectId",
   "binding",
@@ -224,6 +233,9 @@ const SYSTEM_PROMPT = [
   "FACTOR_OVER_EXTENSION, DEFINITE_INTEGRAL, LIMIT or DENSITY_CHECK on a bounded expression;",
   "bounded_enumeration exhaustively counts k-subsets of an explicit finite object table under a",
   "predicate built from distinct(i), count(i,v), size(), sum(i), min(i), max(i) and contains(i,v).",
+  "Four additional bounded tools are available: real_root_count_expr (expression, variable),",
+  "splitting_field_degree_expr (expression, variable), circle_laplacian_expr (expression in theta),",
+  "and planar_laplacian_expr (expression, variables). They return input-relative observations only.",
   "Use them when the answer involves a determinant or maximal minor, a trigonometric or polynomial",
   "expansion, factorization over an explicit algebraic extension, a definite integral or limit, a",
   "density normalization, or a finite combinatorial count. exact_check_expr takes operation plus",

@@ -11,6 +11,8 @@
 import {
   P2Error,
   P2_ERROR_CODES,
+  P4_R0_ROLE,
+  isP4R0RequestId,
   p2Snapshot,
   p4Hash,
   p4JsonEqual,
@@ -32,8 +34,9 @@ function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never
  * The preparation must pass `validateP4R0Input` and its action must be
  * `REQUEST_REVIEW`. The supplied snapshot is deep-frozen once; its record must
  * exist, be ACTIVE, be RETURNED with transport COMPLETE, code OK and a report
- * whose conclusion is ISSUES. The raw text is replayed through a fresh
- * `P4R0ReviewSession` and the resulting snapshot must be JSON-equal to the
+ * whose conclusion is ISSUES. The snapshot is one *role-scoped* review, so the
+ * raw text is replayed through a fresh `P4R0ReviewSession` bound to that same
+ * role and request id, and the resulting snapshot must be JSON-equal to the
  * supplied one, so a stale, altered or foreign record is rejected.
  */
 export function createP4R0RevisionTrigger(
@@ -89,11 +92,18 @@ export function createP4R0RevisionTrigger(
       fail(P2_ERROR_CODES.ILLEGAL_TRANSITION);
     }
 
+    const role = frozenReview.role;
+    if (!(P4_R0_ROLE as readonly string[]).includes(role)) {
+      fail(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (!isP4R0RequestId(record.requestId)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
     const session = new P4R0ReviewSession(prep);
-    session.admit(prep.remainingMs, prep.remainingRootCalls);
-    session.markDispatched();
-    session.settle("COMPLETE", record.rawResponseText, prep.remainingMs);
-    const replayed = session.snapshot();
+    session.admit(role, record.requestId, prep.remainingMs, prep.remainingRootCalls);
+    session.markDispatched(role);
+    session.settle(role, "COMPLETE", record.rawResponseText, prep.remainingMs);
+    const replayed = session.snapshot(role);
     if (!p4JsonEqual(replayed, frozenReview)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }

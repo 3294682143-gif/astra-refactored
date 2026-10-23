@@ -19,6 +19,7 @@ import {
   type P2GoalSpec,
   type P2TransportStatus,
 } from "@astra/protocol";
+import { AGENT_MAX_METHOD_LOADS } from "@astra/runtime-core";
 
 export const AGENT_IO_MIN_REMAINING_MS = 25 as const;
 export const AGENT_IO_MAX_REMAINING_MS = 3600000 as const;
@@ -260,7 +261,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const maxEffects = rawMaxEffects === undefined ? 1 : boundedInt(rawMaxEffects, 0, 2);
   const maxReviews = rawMaxReviews === undefined ? 1 : boundedInt(rawMaxReviews, 0, 3);
   const maxMethodLoads =
-    rawMaxMethodLoads === undefined ? 0 : boundedInt(rawMaxMethodLoads, 0, 1);
+    rawMaxMethodLoads === undefined ? 0 : boundedInt(rawMaxMethodLoads, 0, AGENT_MAX_METHOD_LOADS);
   const maxRepairs = rawMaxRepairs === undefined ? 0 : boundedInt(rawMaxRepairs, 0, 3);
   const maxConsensus =
     rawMaxConsensus === undefined ? 0 : boundedInt(rawMaxConsensus, 0, 8);

@@ -92,7 +92,7 @@ def _init_params(manifest):
     params["properties"]["maxMethodLoads"] = {
         "type": "integer",
         "minimum": 0,
-        "maximum": 1,
+        "maximum": 4,
     }
     # G3/PR4: the single evidence-triggered repair call budget (0 or 1). Optional
     # so an older sender that omits it still validates; the loop then runs with
@@ -117,6 +117,11 @@ def _solve_result(manifest):
             "minimum": 0,
             "maximum": 1,
         }
+    summary["properties"]["methodLoads"] = {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 4,
+    }
     for name in ("reason", "stopReason"):
         enum = summary["properties"][name]["enum"]
         for value in ("REPAIR", "REVISED_CANDIDATE", "REVISE_REJECTED"):

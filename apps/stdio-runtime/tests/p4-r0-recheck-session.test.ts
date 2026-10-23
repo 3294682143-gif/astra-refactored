@@ -174,17 +174,17 @@ test("group 4: oversized real child context is rejected without truncation", () 
   const original: P4R0Preparation = prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 4,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
   // Three UNKNOWN goals, each with ANSWER_REQUEST, INDEPENDENT_DERIVATION and
   // OUTPUT_COVERAGE.
   assert.equal(original.target.contract.obligations.length, 9);
   const review = new P4R0ReviewSession(original);
-  review.admit(1000, 4);
-  review.markDispatched();
-  review.settle("COMPLETE", r0Report(original, "ISSUES"), 900);
-  const trigger = createP4R0RevisionTrigger(original, review.snapshot());
+  review.admit("MEANING", "model-1", 1000, 5);
+  review.markDispatched("MEANING");
+  review.settle("MEANING", "COMPLETE", r0Report(original, "ISSUES"), 900);
+  const trigger = createP4R0RevisionTrigger(original, review.snapshot("MEANING"));
   const revisionSession = new P4R0PlanRevisionSession(original, trigger);
   revisionSession.admit(900, 2, 3);
   revisionSession.markDispatched();

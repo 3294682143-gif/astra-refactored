@@ -41,7 +41,7 @@ def test_catalog_and_load_touch_only_the_named_reference(monkeypatch):
     payload = p2_methods.fixture_catalog(catalog)
     assert payload["version"] == methods_module.EXPECTED_VERSION
     assert len(payload["entries"]) == 20
-    assert all(set(row) == {"id", "title"} for row in payload["entries"])
+    assert all({"id", "title"} <= set(row) for row in payload["entries"])
     assert calls == ["SOURCE.json", "data/methods.json"]
     calls.clear()
     loaded = p2_methods.fixture_load("linearization-spectral", catalog=catalog)

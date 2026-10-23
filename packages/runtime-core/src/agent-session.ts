@@ -28,13 +28,41 @@ export const AGENT_SESSION_VERSION = "0.0.0-agent" as const;
 export const AGENT_MIN_REMAINING_MS = 25 as const;
 export const AGENT_MAX_REMAINING_MS = 3_600_000 as const;
 export const AGENT_MAX_MODEL_CALLS = 256 as const;
-export const AGENT_MAX_EFFECTS = 2 as const;
+/**
+ * Effect id capacity of one root session: six ids exist so up to four method
+ * cards and two tool effects can coexist in one window. This is the size of
+ * the id table only; it is not a widened caller tool budget.
+ */
+export const AGENT_MAX_EFFECTS = 6 as const;
+/**
+ * Hard ceiling of the public `maxEffects` option, unchanged at two: the extra
+ * ids are reserved for the bounded method-card quota and are never grantable
+ * through the tool option (`python/astra_bridge/agent_runtime.py` also accepts
+ * only 0..2).
+ */
+export const AGENT_MAX_EFFECT_OPTION = 2 as const;
+/** Host ceiling for method-card loads in one root session. */
+export const AGENT_MAX_METHOD_LOADS = 4 as const;
+/**
+ * AgentLoop ceiling for distinct method-card bodies in one run. The Host can
+ * admit up to {@link AGENT_MAX_METHOD_LOADS}, but one work path only offers a
+ * second card when the routed set genuinely has one; a third body is never
+ * requested.
+ */
+export const AGENT_MAX_METHOD_ASSETS = 2 as const;
 export const AGENT_MAX_TRACE_EVENTS = 128 as const;
 
 // Root model request ids are generated up to the hard cap; the preview profile
 // just uses a smaller budget. No fixed four-id table any more.
 const modelIdFor = (index: number): string => `model-${index + 1}`;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const PHASES = ["WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0"] as const;
 const TRANSPORTS = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"] as const;
 const TRACE_KINDS = ["MODEL", "EFFECT", "CONTROL"] as const;

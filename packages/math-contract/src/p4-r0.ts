@@ -11,6 +11,7 @@ import {
   P2_LIMITS,
   P2Error,
   P2_ERROR_CODES,
+  P4_R0_MAX_ROOT_CALLS,
   P4_R0_RISK_CODES,
   p2Snapshot,
   p4Hash,
@@ -25,7 +26,14 @@ import {
 
 import { compileP2Contract } from "./p2-compiler.js";
 
-/** Maximum size of the template plan text, in UTF-8 bytes. */
+/**
+ * Maximum size of the template plan text, in UTF-8 bytes.
+ *
+ * `P4_R0_MAX_ROOT_CALLS` is the number of root model calls the whole R0 stage
+ * may spend (three role reviews, one targeted recheck, at most one revision),
+ * so a root that cannot cover it gets `INSUFFICIENT_BUDGET` and the stage
+ * spends nothing at all.
+ */
 export const P4_R0_MAX_PLAN_BYTES = 65536;
 
 /** Fixed goal-kind to risk-code mapping. No keyword inference is performed. */
@@ -74,7 +82,7 @@ function readOptions(options: unknown): {
   if (!isBoundedInteger(planning, 1)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  if (!isBoundedInteger(options.remainingRootCalls, 4)) {
+  if (!isBoundedInteger(options.remainingRootCalls, P4_R0_MAX_ROOT_CALLS)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (!isBoundedInteger(options.remainingMs, 3_600_000)) {
@@ -180,7 +188,7 @@ export function prepareP4R0(contract: P2Contract, options: P4R0Options): P4R0Pre
       action = "SKIPPED_BY_POLICY";
     } else if (
       frozenOptions.planningModelCalls === 0 ||
-      frozenOptions.remainingRootCalls < 2 ||
+      frozenOptions.remainingRootCalls < P4_R0_MAX_ROOT_CALLS ||
       frozenOptions.remainingMs <= 25
     ) {
       action = "INSUFFICIENT_BUDGET";

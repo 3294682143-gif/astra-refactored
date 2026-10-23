@@ -14,7 +14,10 @@ import {
   P4_R0_CONCLUSION,
   P4_R0_DIMENSION,
   P4_R0_REVIEW_SCHEMA_VERSION,
+  P4_R0_ROLE,
+  P4_R0_ROLE_DIMENSION,
   P4_R0_VERDICT,
+  isP4R0RequestId,
   decodeFrame,
   detectDuplicateKeys,
   detectLoneSurrogates,
@@ -34,6 +37,7 @@ import {
   type P4R0RevisionChange,
   type P4R0RevisionReport,
   type P4R0RevisionTrigger,
+  type P4R0Role,
   type P4StepLocator,
 } from "@astra/protocol";
 
@@ -46,13 +50,14 @@ const MAX_CONTEXT_BYTES = 65536;
 const MAX_RATIONALE_CHARS = 2048;
 const MAX_QUOTE_CHARS = 4096;
 const MAX_CHANGES = 8;
-const CONTEXT_SCHEMA_VERSION = "p4-r0-context-v1" as const;
+const CONTEXT_SCHEMA_VERSION = "p4-r0-review-context-v1" as const;
 
 const TRIGGER_FIELDS = ["parent", "reviewHash", "issueDimensions", "review"] as const;
 const BINDING_FIELDS = ["sessionId", "problemHash", "contractVersion", "planHash"] as const;
-const REVIEW_FIELDS = ["target", "planHash", "availability", "record"] as const;
+const REVIEW_FIELDS = ["target", "planHash", "role", "availability", "record"] as const;
 const RECORD_FIELDS = [
   "requestId",
+  "role",
   "target",
   "planHash",
   "source",
@@ -74,6 +79,7 @@ const REPORT_FIELDS = [
   "schemaVersion",
   "requestId",
   "stage",
+  "role",
   "target",
   "planHash",
   "conclusion",
@@ -147,6 +153,8 @@ function checkContext(
   value: unknown,
   preparation: P4R0Preparation,
   binding: P4R0Preparation["target"]["binding"],
+  requestId: string,
+  role: P4R0Role,
 ): void {
   const context = exact(value, CONTEXT_FIELDS);
   need(Array.isArray(context.messages) && context.messages.length === 2);
@@ -170,6 +178,7 @@ function checkContext(
     "schemaVersion",
     "stage",
     "requestId",
+    "role",
     "target",
     "planHash",
     "problemFullText",
@@ -181,7 +190,8 @@ function checkContext(
   ]);
   need(body.schemaVersion === CONTEXT_SCHEMA_VERSION);
   need(body.stage === "R0");
-  need(body.requestId === "model-1");
+  need(body.requestId === requestId);
+  need(body.role === role);
   need(p4JsonEqual(body.target, binding));
   need(body.planHash === binding.planHash);
   const contract = preparation.target.contract;
@@ -189,7 +199,7 @@ function checkContext(
   need(body.planText === preparation.target.planText);
   need(p4JsonEqual(body.riskCodes, preparation.riskCodes));
   need(p4JsonEqual(body.reviewCoverage, contract.obligations.map((item) => item.obligationId)));
-  need(p4JsonEqual(body.dimensions, P4_R0_DIMENSION));
+  need(p4JsonEqual(body.dimensions, [P4_R0_ROLE_DIMENSION[role]]));
   need(typeof body.untrustedDataNotice === "string" && body.untrustedDataNotice.trim().length > 0);
 }
 
@@ -197,11 +207,14 @@ function checkReport(
   value: unknown,
   preparation: P4R0Preparation,
   binding: P4R0Preparation["target"]["binding"],
+  requestId: string,
+  role: P4R0Role,
 ): readonly P4R0Dimension[] {
   const report = exact(value, REPORT_FIELDS) as unknown as P4R0ReviewReport;
   need(report.schemaVersion === P4_R0_REVIEW_SCHEMA_VERSION);
-  need(report.requestId === "model-1");
+  need(report.requestId === requestId);
   need(report.stage === "R0");
+  need(report.role === role);
   need(p4JsonEqual(report.target, binding));
   need(report.planHash === binding.planHash);
   need(report.conclusion === "ISSUES");
@@ -212,22 +225,16 @@ function checkReport(
   for (let index = 0; index < expected.length; index += 1) {
     need(coverage[index] === expected[index]);
   }
-  need(Array.isArray(report.checks) && report.checks.length === P4_R0_DIMENSION.length);
-  const seen = new Set<string>();
+  // A role-scoped reply carries exactly one check: the dimension its role owns.
+  need(Array.isArray(report.checks) && report.checks.length === 1);
+  const row = exact(report.checks[0], CHECK_FIELDS);
+  need((P4_R0_DIMENSION as readonly string[]).includes(row.dimension as string));
+  const dimension = row.dimension as P4R0Dimension;
+  need(dimension === P4_R0_ROLE_DIMENSION[role]);
+  need((P4_R0_VERDICT as readonly string[]).includes(row.verdict as string));
   const issueDimensions: P4R0Dimension[] = [];
-  for (const item of report.checks) {
-    const row = exact(item, CHECK_FIELDS);
-    need((P4_R0_DIMENSION as readonly string[]).includes(row.dimension as string));
-    const dimension = row.dimension as P4R0Dimension;
-    need(!seen.has(dimension));
-    seen.add(dimension);
-    need((P4_R0_VERDICT as readonly string[]).includes(row.verdict as string));
-    if (row.verdict === "ISSUES") {
-      issueDimensions.push(dimension);
-    }
-  }
-  for (const dimension of P4_R0_DIMENSION) {
-    need(seen.has(dimension));
+  if (row.verdict === "ISSUES") {
+    issueDimensions.push(dimension);
   }
   need(issueDimensions.length > 0);
   return issueDimensions;
@@ -388,7 +395,9 @@ export function validateP4R0RevisionInput(
     need(review.availability === "ACTIVE");
 
     const record = exact(review.record, RECORD_FIELDS) as unknown as P4R0ReviewRecord;
-    need(record.requestId === "model-1");
+    need(isP4R0RequestId(record.requestId));
+    need((P4_R0_ROLE as readonly string[]).includes(record.role as string));
+    need(review.role === record.role);
     need(p4JsonEqual(record.target, binding));
     need(record.planHash === binding.planHash);
     need(record.source === "MODEL_REVIEW");
@@ -400,11 +409,17 @@ export function validateP4R0RevisionInput(
     need(record.state === "RETURNED");
     need(record.transportStatus === "COMPLETE");
     need(record.code === "OK");
-    checkContext(record.context, prep, binding);
+    checkContext(record.context, prep, binding, record.requestId, record.role);
     need(typeof record.rawResponseText === "string");
     const rawReport = strictJson(record.rawResponseText);
     need(p4JsonEqual(rawReport, record.report));
-    const issueDimensions = checkReport(record.report, prep, binding);
+    const issueDimensions = checkReport(
+      record.report,
+      prep,
+      binding,
+      record.requestId,
+      record.role,
+    );
 
     need(Array.isArray(triggerBody.issueDimensions));
     const declared = triggerBody.issueDimensions as readonly P4R0Dimension[];

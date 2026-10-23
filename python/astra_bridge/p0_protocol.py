@@ -12,6 +12,7 @@ a path or an underlying exception message.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -70,6 +71,12 @@ ERROR_CODES = frozenset(
         "UNKNOWN_SCHEMA_KEYWORD",
         "MANIFEST_INVALID",
         "EOF",
+        # Phase and budget refusals get their own codes. Without them a run that
+        # merely asked for more than the authorized budget, or outlived the root
+        # deadline, was reported as a generic field failure.
+        "ILLEGAL_TRANSITION",
+        "BUDGET",
+        "DEADLINE_EXCEEDED",
     }
 )
 
@@ -347,10 +354,35 @@ def _code_point_length(value):
     return count
 
 
+def _schema_debug(schema_node):
+    """Opt-in diagnostic: append the failing schema node, never the value.
+
+    Enabled only with ``ASTRA_DEBUG_SCHEMA=<path>`` and used while locating a
+    rejected field. It records the schema node alone, so no problem text, model
+    text or tool argument is ever written.
+    """
+    path = os.environ.get("ASTRA_DEBUG_SCHEMA")
+    if not path:
+        return
+    try:
+        row = json.dumps(schema_node, sort_keys=True, ensure_ascii=True)
+    except (TypeError, ValueError):
+        row = "<unserializable>"
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(row[:2000] + "\n")
+    except OSError:
+        pass
+
+
 def validate_against_schema(value, schema):
     """Validate one value against one schema node of the supported subset."""
+    def _bad(code):
+        _schema_debug(schema)
+        _fail(code)
+
     if not isinstance(schema, dict):
-        _fail("UNKNOWN_SCHEMA_KEYWORD")
+        _bad("UNKNOWN_SCHEMA_KEYWORD")
     assert_supported_schema(schema)
     node_type = schema.get("type")
     if node_type is not None:
@@ -376,37 +408,37 @@ def validate_against_schema(value, schema):
             if matched:
                 break
         if not matched:
-            _fail("FIELD_TYPE")
+            _bad("FIELD_TYPE")
     if "const" in schema and not _scalar_equals(value, schema["const"]):
-        _fail("FIELD_VALUE")
+        _bad("FIELD_VALUE")
     enum_values = schema.get("enum")
     if isinstance(enum_values, list) and not any(
         _scalar_equals(value, entry) for entry in enum_values
     ):
-        _fail("FIELD_VALUE")
+        _bad("FIELD_VALUE")
     if isinstance(value, str):
         length = _code_point_length(value)
         if length is None:
-            _fail("FIELD_VALUE")
+            _bad("FIELD_VALUE")
         min_length = schema.get("minLength")
         if isinstance(min_length, int) and not isinstance(min_length, bool):
             if length < min_length:
-                _fail("FIELD_VALUE")
+                _bad("FIELD_VALUE")
         max_length = schema.get("maxLength")
         if isinstance(max_length, int) and not isinstance(max_length, bool):
             if length > max_length:
-                _fail("FIELD_VALUE")
+                _bad("FIELD_VALUE")
     if _is_number(value):
         minimum = schema.get("minimum")
         if _is_number(minimum) and value < minimum:
-            _fail("FIELD_VALUE")
+            _bad("FIELD_VALUE")
         maximum = schema.get("maximum")
         if _is_number(maximum) and value > maximum:
-            _fail("FIELD_VALUE")
+            _bad("FIELD_VALUE")
     if isinstance(value, list):
         max_items = schema.get("maxItems")
         if _is_integer(max_items) and len(value) > max_items:
-            _fail("FIELD_VALUE")
+            _bad("FIELD_VALUE")
         items = schema.get("items")
         if items is not None:
             for item in value:
@@ -416,13 +448,13 @@ def validate_against_schema(value, schema):
         if isinstance(required, list):
             for key in required:
                 if isinstance(key, str) and key not in value:
-                    _fail("MISSING_FIELD")
+                    _bad("MISSING_FIELD")
         properties = schema.get("properties")
         props = properties if isinstance(properties, dict) else {}
         if schema.get("additionalProperties") is False:
             for key in value:
                 if key not in props:
-                    _fail("EXTRA_FIELD")
+                    _bad("EXTRA_FIELD")
         for key in props:
             if key in value:
                 validate_against_schema(value[key], props[key])

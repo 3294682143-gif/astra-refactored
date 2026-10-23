@@ -9,6 +9,7 @@ whether an unavailable resource should degrade to an empty catalog.
 from __future__ import annotations
 
 import copy
+import re
 
 from .p0_probe import ProbeError
 
@@ -19,6 +20,10 @@ _MAX_ENTRIES = 20
 _MAX_ID_CHARS = 64
 _MAX_TITLE_CHARS = 256
 _ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
+_MAX_ROUTING_TOKENS = 6
+_ROUTING_TOKEN_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+_ROUTING_FIELDS = ("tasks", "objects", "structures")
+_ROLES = frozenset({"method", "decision"})
 
 
 def _fail():
@@ -69,8 +74,22 @@ def _title(value):
     return value
 
 
+def _routing_tokens(value):
+    if not isinstance(value, list) or len(value) > _MAX_ROUTING_TOKENS:
+        _fail()
+    for item in value:
+        if not isinstance(item, str) or not _ROUTING_TOKEN_RE.fullmatch(item):
+            _fail()
+    return list(value)
+
+
 def checked_catalog(raw):
-    """Validate one catalog snapshot; an empty entry list is valid."""
+    """Validate one catalog snapshot; an empty entry list is valid.
+
+    ``id``/``title`` stay required. The optional advisory ``tasks``/``objects``/
+    ``structures`` lists and ``role`` are carried through only in their bounded
+    shapes; any out-of-shape value is refused as FIELD_VALUE.
+    """
     if not isinstance(raw, dict):
         _fail()
     if set(raw.keys()) != {"version", "entries"} or len(raw) != 2:
@@ -84,14 +103,25 @@ def checked_catalog(raw):
         _fail()
     seen = set()
     out = []
+    allowed = {"id", "title", *_ROUTING_FIELDS, "role"}
     for entry in entries:
         if not isinstance(entry, dict):
             _fail()
-        if set(entry.keys()) != {"id", "title"} or len(entry) != 2:
+        keys = set(entry.keys())
+        if not {"id", "title"}.issubset(keys) or not keys.issubset(allowed):
             _fail()
         method_id = _canonical_id(entry["id"])
         if method_id in seen:
             _fail()
         seen.add(method_id)
-        out.append({"id": method_id, "title": _title(entry["title"])})
+        checked = {"id": method_id, "title": _title(entry["title"])}
+        for field in _ROUTING_FIELDS:
+            if field in entry:
+                checked[field] = _routing_tokens(entry[field])
+        if "role" in entry:
+            role = entry["role"]
+            if not isinstance(role, str) or role not in _ROLES:
+                _fail()
+            checked["role"] = role
+        out.append(checked)
     return copy.deepcopy({"version": _VERSION, "entries": out})

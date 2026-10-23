@@ -64,7 +64,7 @@ test("group 1: clock sampling points stay bounded and never fabricate a candidat
   const problem = contract.problemFullText;
   const session = contract.envelope.sessionId;
   const cases = [
-    { maxModelCalls: 4, r0Enabled: true, planningPercent: 25, source: "model-2" },
+    { maxModelCalls: 5, r0Enabled: true, planningPercent: 25, source: "model-2" },
     { maxModelCalls: 1, r0Enabled: false, planningPercent: 25, source: "model-1" },
   ] as const;
   for (const row of cases) {
@@ -197,7 +197,7 @@ test("group 2: first-read option tampering and single-read getters", () => {
   const work2 = workRaw(contract2, "model-2");
   let reads = 0;
   const enabled = {
-    maxModelCalls: 4,
+    maxModelCalls: 5,
     get r0Enabled() {
       reads += 1;
       return true;
@@ -278,7 +278,7 @@ test("group 2b: callback tampering after the first clock read is ignored", () =>
     policy: "BEST_EFFORT" | "STRICT";
     now: () => number;
   } = {
-    maxModelCalls: 4,
+    maxModelCalls: 5,
     r0Enabled: true,
     planningPercent: 25,
     remainingMs: 1000,
@@ -302,7 +302,7 @@ test("group 2b: callback tampering after the first clock read is ignored", () =>
     mutable2 as P4R0FixtureOptions,
   );
   assert.equal(reviewed.summary.policy, "BEST_EFFORT");
-  assert.equal(reviewed.summary.rootMaxModelCalls, 4);
+  assert.equal(reviewed.summary.rootMaxModelCalls, 5);
   assert.equal(reviewed.summary.r0Action, "REQUEST_REVIEW");
   assert.equal(reviewed.summary.r0Conclusion, "NO_ISSUE");
   assert.equal(reviewed.summary.r0Calls, 1);
@@ -321,7 +321,7 @@ test("group 3: deadline boundary at 26/25 and pristine R0 plan binding", () => {
   const work = workRaw(contract, "model-2");
   const receipts = { r0: complete(r0Report(prep)), work: complete(work) };
   const options = {
-    maxModelCalls: 4,
+    maxModelCalls: 5,
     r0Enabled: true,
     planningPercent: 25,
     remainingMs: 5000,
@@ -391,7 +391,7 @@ test("group 4: late UNKNOWN R0 transport stops without retry", () => {
     session,
     { r0: { transportStatus: "UNKNOWN", text: good }, work: complete(work) },
     {
-      maxModelCalls: 4,
+      maxModelCalls: 5,
       r0Enabled: true,
       planningPercent: 25,
       remainingMs: 1000,

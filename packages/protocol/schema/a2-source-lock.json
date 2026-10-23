@@ -2,7 +2,7 @@
   "mathagent/__init__.py": "cf7227b4e433d81ee5241f95026d6c78a8418eaca3ce883f8134ec2f606da115",
   "mathagent/lite/runtime.py": "a39a2267c708ac5c4deecbfd0e35e91666434c097d3f6e90556d1fafc4e2d3d4",
   "mathagent/lite/protocol.py": "0b3048545ef05edc1e750faf2a92df6871e0aa8a7579be1ca6b174e90be0ed76",
-  "mathagent/lite/methods.py": "5f8cc671cea5e322b2896f8f27b1f71e777aca6903d462ef3001a48889bc3cfa",
+  "mathagent/lite/methods.py": "838d15ba9f96a15f4046592625b0ba246f6026bf3bf22f8ccae1fe13cf446686",
   "mathagent/runtime/platform_adapter.py": "53b3644bd358c62e36df9de9d09d24ff79822cbe8b6f3f497f312806c4c9fa73",
   "mathagent/runtime/platform_coordinator.py": "ed69424974af105ab292728aecd5e25112ab04bcc999f3c803439be0832d8a29",
   "mathagent/runtime/config.py": "2d0bd662f89dc42d6b3294681aea0c528cdd259d72013cfa402238b59a949ae6",

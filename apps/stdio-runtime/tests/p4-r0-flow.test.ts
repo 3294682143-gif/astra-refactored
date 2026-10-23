@@ -120,10 +120,10 @@ test("group 1: default shortpath and R0 NO_ISSUE shared root", () => {
     problem,
     session,
     { r0: complete(r0Report(prep)), work: complete(work2.raw) },
-    { maxModelCalls: 4, r0Enabled: true, planningPercent: 25, remainingMs: 1000, policy: "STRICT", now: () => 0 },
+    { maxModelCalls: 5, r0Enabled: true, planningPercent: 25, remainingMs: 1000, policy: "STRICT", now: () => 0 },
   );
   assert.equal(reviewed.summary.planningAllowance, 1);
-  assert.equal(reviewed.summary.rootMaxModelCalls, 4);
+  assert.equal(reviewed.summary.rootMaxModelCalls, 5);
   assert.equal(reviewed.summary.r0Action, "REQUEST_REVIEW");
   assert.equal(reviewed.summary.r0Conclusion, "NO_ISSUE");
   assert.equal(reviewed.summary.r0Calls, 1);
@@ -198,10 +198,15 @@ test("group 2: root quota and planning percent matrix", () => {
     { root: 4, percent: 50 },
     { root: 4, percent: 100 },
     { root: 4, percent: 0 },
+    // Only a root that can pay for the fixed five-call stage may review.
+    { root: 5, percent: 25 },
+    { root: 5, percent: 50 },
+    { root: 5, percent: 100 },
+    { root: 5, percent: 0 },
   ];
   for (const row of cases) {
     const allowance = Math.min(1, Math.floor((row.root * row.percent) / 100));
-    const reviewWanted = allowance >= 1 && row.root >= 2;
+    const reviewWanted = allowance >= 1 && row.root >= 5;
     const source = reviewWanted ? "model-2" : "model-1";
     const work = workRaw(contract, source);
     const receipts: { r0?: P4FixtureReceipt; work?: P4FixtureReceipt } = { work: complete(work.raw) };
@@ -240,10 +245,10 @@ test("group 2: root quota and planning percent matrix", () => {
       assert.equal(result.summary.modelCalls, 1);
       assert.equal(result.privateState.modelGate[0]!.requestId, "model-1");
       assert.equal(result.privateState.artifacts[0]!.artifact.sourceRequestId, "model-1");
-      if (row.root === 3 && row.percent === 25) {
-        assert.equal(result.summary.r0Action, "INSUFFICIENT_BUDGET");
-        assert.notEqual(result.summary.r0Action, "REQUEST_REVIEW");
-      }
+      // A root that cannot cover the five-call stage is refused up front and
+      // still spends nothing on R0.
+      assert.equal(result.summary.r0Action, "INSUFFICIENT_BUDGET");
+      assert.notEqual(result.summary.r0Action, "REQUEST_REVIEW");
     }
     assert.equal(result.summary.candidateVerified, false);
     assert.equal(result.summary.strictAcceptance, "NOT_PERFORMED");
@@ -256,7 +261,7 @@ test("group 2: root quota and planning percent matrix", () => {
     lowContract.problemFullText,
     lowContract.envelope.sessionId,
     { r0: complete(r0Report(low)), work: complete(lowWork.raw) },
-    { maxModelCalls: 4, r0Enabled: true, planningPercent: 100, remainingMs: 1000, policy: "BEST_EFFORT", now: () => 0 },
+    { maxModelCalls: 5, r0Enabled: true, planningPercent: 100, remainingMs: 1000, policy: "BEST_EFFORT", now: () => 0 },
   );
   assert.equal(lowResult.summary.r0Action, "SKIPPED_BY_POLICY");
   assert.equal(lowResult.summary.r0Calls, 0);
@@ -273,7 +278,7 @@ test("group 3: R0 stop, missing slots and malformed work", () => {
   const session = contract.envelope.sessionId;
   const work2 = workRaw(contract, "model-2");
   const options = {
-    maxModelCalls: 4,
+    maxModelCalls: 5,
     r0Enabled: true,
     planningPercent: 25,
     remainingMs: 1000,
@@ -378,7 +383,7 @@ test("group 4: strict option and receipt shape rejection", () => {
     "PACKET_BINDING",
   );
   rejects(
-    () => runP4R0Fixture(problem, session, { work: complete(work.raw) }, { ...base, maxModelCalls: 5 }),
+    () => runP4R0Fixture(problem, session, { work: complete(work.raw) }, { ...base, maxModelCalls: 6 }),
     "BOUND_EXCEEDED",
   );
   rejects(

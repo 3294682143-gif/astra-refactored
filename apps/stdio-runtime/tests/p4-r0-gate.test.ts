@@ -52,7 +52,7 @@ function runningTask(prep: P4R0Preparation): P2Task {
   return ledger.startTask(chosen.taskId);
 }
 
-function r0Admitted(prep: P4R0Preparation, cap = 4, percent = 25): P4R0ModelGate {
+function r0Admitted(prep: P4R0Preparation, cap = 5, percent = 25): P4R0ModelGate {
   const gate = gateFor(prep, cap, percent);
   gate.admitR0(prep, 1000);
   return gate;
@@ -60,13 +60,13 @@ function r0Admitted(prep: P4R0Preparation, cap = 4, percent = 25): P4R0ModelGate
 
 test("group 1: planning allowance matrix and shared-root sequencing", () => {
   const prep = makeR0("ALL_SOLUTIONS");
-  for (const cap of [0, 1, 2, 3, 4]) {
+  for (const cap of [0, 1, 2, 3, 4, 5]) {
     for (const percent of [0, 25, 50, 100]) {
       const gate = gateFor(prep, cap, percent);
       assert.equal(gate.planningAllowance(), Math.min(1, Math.floor((cap * percent) / 100)));
     }
   }
-  assert.equal(gateFor(prep, 4, 25).planningAllowance(), 1);
+  assert.equal(gateFor(prep, 5, 25).planningAllowance(), 1);
   assert.equal(gateFor(prep, 3, 25).planningAllowance(), 0);
   assert.equal(gateFor(prep, 2, 50).planningAllowance(), 1);
   assert.equal(gateFor(prep, 1, 100).planningAllowance(), 1);
@@ -74,7 +74,9 @@ test("group 1: planning allowance matrix and shared-root sequencing", () => {
   rejects(() => gateFor(prep, 3, 25).admitR0(prep, 1000), "BUDGET_EXHAUSTED");
   rejects(() => gateFor(prep, 0, 100).admitR0(prep, 1000), "BUDGET_EXHAUSTED");
 
-  const gate = gateFor(prep, 4, 25);
+  // The gate cap is the fixed five-call R0 stage design (three role reviews,
+  // one targeted recheck and at most one revision).
+  const gate = gateFor(prep, 5, 25);
   const r0 = gate.admitR0(prep, 1000);
   assert.equal(r0.requestId, "model-1");
   assert.equal(r0.phase, "R0");
@@ -125,17 +127,17 @@ test("group 2: atomic rejection of malformed bindings, tasks and preparations", 
   for (const binding of badBindings) {
     rejects(() => new P4R0ModelGate(binding as never, 4, 25), "PACKET_BINDING");
   }
-  rejects(() => new P4R0ModelGate(good, 5, 25), "PACKET_BINDING");
+  rejects(() => new P4R0ModelGate(good, 6, 25), "PACKET_BINDING");
   rejects(() => new P4R0ModelGate(good, 4, 101), "PACKET_BINDING");
   rejects(() => new P4R0ModelGate(good, 4, 1.5), "PACKET_BINDING");
 
-  const gate = gateFor(prep, 4, 25);
+  const gate = gateFor(prep, 5, 25);
   const before = JSON.stringify(gate.snapshot());
   const badPreps: readonly unknown[] = [
     { ...clone(prep), action: "SKIPPED_BY_POLICY" },
     { ...clone(prep), action: "INSUFFICIENT_BUDGET" },
     { ...clone(prep), planningModelCalls: 0 },
-    { ...clone(prep), remainingRootCalls: 5 },
+    { ...clone(prep), remainingRootCalls: 6 },
     { ...clone(prep), remainingRootCalls: 1 },
     { ...clone(prep), remainingMs: 3600001 },
     { ...clone(prep), semanticResult: "PASS" },

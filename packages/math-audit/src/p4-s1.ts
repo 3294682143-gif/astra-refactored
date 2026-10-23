@@ -31,7 +31,14 @@ import {
 import { p4Hash, p4JsonEqual, p4SameBinding, p4Target } from "@astra/protocol";
 
 const CHECK_IDS = ["check-1", "check-2"] as const;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const REQUEST_ID = /^model-(?:[1-9][0-9]{0,2})$/u;
 const TOOL_VERSION = "tool-registry-v1";
 const MAX_ARGS_BYTES = 10000;

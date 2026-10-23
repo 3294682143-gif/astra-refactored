@@ -67,7 +67,7 @@
           "remainingMs": { "type": "integer", "minimum": 1, "maximum": 5000 },
           "maxModelCalls": { "type": "integer", "minimum": 0, "maximum": 3 },
           "maxEffects": { "type": "integer", "minimum": 0, "maximum": 2 },
-          "maxMethodLoads": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "maxMethodLoads": { "type": "integer", "minimum": 0, "maximum": 4 },
           "maxTokens": { "type": "integer", "const": 8192 },
           "mode": { "type": "string", "const": "MOCK_ONLY" }
         }
@@ -112,10 +112,10 @@
           "candidateVerified": { "type": "boolean", "const": false },
           "strictAcceptance": { "type": "string", "const": "NOT_PERFORMED" },
           "modelCalls": { "type": "integer", "minimum": 0, "maximum": 3 },
-          "effectCalls": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "effectCalls": { "type": "integer", "minimum": 0, "maximum": 6 },
           "cachedEffects": { "type": "integer", "minimum": 0, "maximum": 2 },
           "catalogCalls": { "type": "integer", "minimum": 0, "maximum": 1 },
-          "methodLoads": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "methodLoads": { "type": "integer", "minimum": 0, "maximum": 4 },
           "candidateRequestId": { "type": ["string", "null"], "enum": [null, "model-1", "model-2", "model-3"] },
           "contextHash": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
           "stopReason": {
@@ -211,7 +211,7 @@
             "additionalProperties": false,
             "required": ["effectId", "binding", "action", "remainingMs"],
             "properties": {
-              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6"] },
               "binding": {
                 "type": "object",
                 "additionalProperties": false,
@@ -231,7 +231,7 @@
                 "required": ["action", "name", "args", "scope"],
                 "properties": {
                   "action": { "type": "string", "const": "tool" },
-                  "name": { "type": "string", "enum": ["polynomial_expand_coefficients", "linear_system_solution_set"] },
+                  "name": { "type": "string", "enum": ["polynomial_expand_coefficients", "linear_system_solution_set", "exact_check_expr", "bounded_enumeration", "real_root_count_expr", "splitting_field_degree_expr", "circle_laplacian_expr", "planar_laplacian_expr", "interpolation_fit_check", "stats_ols_check", "finite_group_structure"] },
                   "args": { "type": "object" },
                   "scope": { "type": "string", "minLength": 1, "maxLength": 256 }
                 }
@@ -253,7 +253,7 @@
             "additionalProperties": false,
             "required": ["effectId", "binding", "status", "source", "observation", "observationHash", "level", "checkResult"],
             "properties": {
-              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6"] },
               "binding": {
                 "type": "object",
                 "additionalProperties": false,
@@ -338,7 +338,7 @@
             "additionalProperties": false,
             "required": ["effectId", "binding", "action", "remainingMs"],
             "properties": {
-              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6"] },
               "binding": {
                 "type": "object",
                 "additionalProperties": false,
@@ -378,7 +378,7 @@
             "additionalProperties": false,
             "required": ["effectId", "binding", "status", "source", "observation", "observationHash", "level", "checkResult"],
             "properties": {
-              "effectId": { "type": "string", "enum": ["effect-1", "effect-2"] },
+              "effectId": { "type": "string", "enum": ["effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6"] },
               "binding": {
                 "type": "object",
                 "additionalProperties": false,

@@ -28,10 +28,12 @@ function clone<T>(value: T): Mutable<T> {
   return JSON.parse(JSON.stringify(value)) as Mutable<T>;
 }
 
+// The R0 stage is a fixed five-call design (three role reviews, one targeted
+// recheck, at most one revision), so five root calls is the admitted minimum.
 const GOOD_OPTIONS = {
   enabled: true,
   planningModelCalls: 1,
-  remainingRootCalls: 3,
+  remainingRootCalls: 5,
   remainingMs: 1000,
 } as const;
 
@@ -79,7 +81,7 @@ test("group 1: goal kinds, risk codes and M1 policy", () => {
   const hinted = prepareP4R0(compileP2Contract(ZERO_PROBLEM, "r0"), {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 3,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
   assert.deepEqual(hinted.riskCodes, ["BRANCH_COVERAGE", "EXPLICIT_RISK_HINT"]);
@@ -94,13 +96,18 @@ test("group 2: budget policy and option rejection", () => {
     { planningModelCalls: 0 },
     { remainingRootCalls: 0 },
     { remainingRootCalls: 1 },
+    // 2..4 calls can no longer pay for three reviews + one recheck + one
+    // revision, so the stage is refused instead of running a partial review.
+    { remainingRootCalls: 2 },
+    { remainingRootCalls: 3 },
+    { remainingRootCalls: 4 },
     { remainingMs: 0 },
     { remainingMs: 25 },
   ];
   for (const override of insufficient) {
     assert.equal(makeR0("ALL_SOLUTIONS", override).action, "INSUFFICIENT_BUDGET");
   }
-  assert.equal(makeR0("ALL_SOLUTIONS", { remainingMs: 26, remainingRootCalls: 2 }).action, "REQUEST_REVIEW");
+  assert.equal(makeR0("ALL_SOLUTIONS", { remainingMs: 26, remainingRootCalls: 5 }).action, "REQUEST_REVIEW");
   const contract = compileP2Contract(ALL_PROBLEM, "r0");
   const bad: readonly unknown[] = [
     { enabled: true, planningModelCalls: 1, remainingMs: 1000 },
@@ -108,7 +115,7 @@ test("group 2: budget policy and option rejection", () => {
     { enabled: "yes", planningModelCalls: 1, remainingRootCalls: 3, remainingMs: 1000 },
     { enabled: true, planningModelCalls: Number.NaN, remainingRootCalls: 3, remainingMs: 1000 },
     { enabled: true, planningModelCalls: 1, remainingRootCalls: 3, remainingMs: null },
-    { enabled: true, planningModelCalls: 1, remainingRootCalls: 5, remainingMs: 1000 },
+    { enabled: true, planningModelCalls: 1, remainingRootCalls: 6, remainingMs: 1000 },
     { enabled: true, planningModelCalls: 2, remainingRootCalls: 3, remainingMs: 1000 },
     { enabled: true, planningModelCalls: 1, remainingRootCalls: 3, remainingMs: 1000, extra: 1 },
   ];
@@ -205,7 +212,7 @@ test("group 3: tampered M1 material is rejected, not repaired", () => {
   const versionedPrep = prepareP4R0(versioned, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 3,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
   assert.equal(validateP4R0Input(versionedPrep).target.binding.contractVersion, 2);
@@ -233,7 +240,8 @@ test("group 4: M4 input re-derives bindings instead of trusting hashes", () => {
       value.target.contract.obligations[0]!.kind = "NOT_AN_OBLIGATION" as never;
     },
     (value) => {
-      value.remainingRootCalls = 5;
+      // A frozen view that under-funds the five-call stage is inconsistent.
+      value.remainingRootCalls = 4;
     },
     (value) => {
       value.action = "BAD" as never;
@@ -263,7 +271,9 @@ test("group 4: M4 input re-derives bindings instead of trusting hashes", () => {
   assert.equal(report.conclusion, "NO_ISSUE");
   assert.equal(report.requestId, "model-1");
   assert.equal(report.stage, "R0");
-  assert.equal((report.checks as readonly unknown[]).length, 3);
+  assert.equal(report.role, "MEANING");
+  // A role-scoped reply carries exactly the one dimension that role owns.
+  assert.equal((report.checks as readonly unknown[]).length, 1);
   assert.equal(prep.semanticResult, "UNKNOWN");
   assert.equal(prep.canSupportObligation, false);
   assert.equal(VALUE_PROBLEM.length > 0, true);

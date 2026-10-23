@@ -13,6 +13,7 @@ import {
   P2Error,
   P2_ERROR_CODES,
   P4_R0_ACTION,
+  P4_R0_MAX_ROOT_CALLS,
   P4_R0_RISK_CODES,
   canonicalScope,
   detectLoneSurrogates,
@@ -338,17 +339,21 @@ export function validateP4R0Input(preparation: P4R0Preparation): P4R0Preparation
     need(prep.semanticResult === "UNKNOWN");
     need(prep.canSupportObligation === false);
     const planningModelCalls = num(prep.planningModelCalls, 0, 1);
-    const remainingRootCalls = num(prep.remainingRootCalls, 0, 4);
+    const remainingRootCalls = num(prep.remainingRootCalls, 0, P4_R0_MAX_ROOT_CALLS);
     const remainingMs = num(prep.remainingMs, 0, 5000);
     need((P4_R0_ACTION as readonly string[]).includes(prep.action as string));
     if (prep.action === "REQUEST_REVIEW") {
       need(riskCodes.length > 0);
       need(planningModelCalls === 1);
-      need(remainingRootCalls >= 2);
+      need(remainingRootCalls >= P4_R0_MAX_ROOT_CALLS);
       need(remainingMs >= 26);
     } else if (prep.action === "INSUFFICIENT_BUDGET") {
       need(riskCodes.length > 0);
-      need(planningModelCalls === 0 || remainingRootCalls < 2 || remainingMs <= 25);
+      need(
+        planningModelCalls === 0 ||
+          remainingRootCalls < P4_R0_MAX_ROOT_CALLS ||
+          remainingMs <= 25,
+      );
     }
 
     return frozen;

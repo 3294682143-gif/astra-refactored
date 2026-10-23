@@ -120,7 +120,7 @@ def test_method_load_then_final(capture, repeat):
     host = capture[0][-1]
     first = _inner(host.history[0]["params"])
     assert len(first["methodCatalog"]) == 20
-    assert all(set(row) == {"id", "title"} for row in first["methodCatalog"])
+    assert all({"id", "title"} <= set(row) for row in first["methodCatalog"])
     assert MID in [row["id"] for row in first["methodCatalog"]]
     assert "LOAD_METHOD" in first["allowedActionIds"]
     assert "asset" not in json.dumps(first["methodCatalog"])
@@ -161,9 +161,11 @@ def test_method_and_tool_share_budget(capture, order):
 
 
 def test_second_effect_and_second_method_refused(capture):
-    one = go([method(), tool(), final()], max_effects=1)
+    # The method quota and the one public tool slot fit together (capacity 2),
+    # so a third effect on the same run is the first refusal.
+    one = go([method(), tool(), tool()], max_effects=1)
     assert one["stopReason"] == "BUDGET_EXHAUSTED"
-    assert one["effectCalls"] == 1
+    assert one["effectCalls"] == 2
     assert one["methodLoads"] == 1
     assert capture[2] == ["SOURCE.json", "data/methods.json", f"references/{MID}.md"]
     capture[2].clear()
@@ -249,7 +251,7 @@ def test_corrupt_body_is_error_not_complete(capture, monkeypatch, tmp_path):
     assert capture[2].count(f"references/{MID}.md") == 1
 
 
-@pytest.mark.parametrize("value", [-1, 2, True, 1.0])
+@pytest.mark.parametrize("value", [-1, 5, True, 1.0])
 def test_bad_max_method_loads_rejected_before_spawn(capture, value):
     with pytest.raises(ProbeError) as excinfo:
         go([final()], max_method_loads=value)

@@ -1,5 +1,5 @@
 /**
- * @astra/protocol — P2-A method-port DTOs (types only).
+ * @astra/protocol — P2-A method-port DTOs and the pure routing-metadata reader.
  *
  * These are shared data shapes for the on-demand method catalog/load port.
  * They carry no I/O, no environment access and no authorization: a
@@ -8,10 +8,91 @@
  * the exact bytes, not a mathematical proof of the method text.
  */
 
-/** One catalog row: a short canonical id and its title. No path, no body. */
-export interface P2MethodEntry {
+/** The closed advisory role set carried by a method card. */
+export type P2MethodRole = "method" | "decision";
+
+/** Runtime role values; the JSON schema carries the same closed set. */
+export const P2_METHOD_ROLE_VALUES = Object.freeze(["method", "decision"] as const);
+
+/** Routing lists are bounded exactly like the live `method.catalog` schema. */
+export const P2_METHOD_ROUTING_MAX_ITEMS = 6;
+export const P2_METHOD_ROUTING_MAX_CHARS = 24;
+export const P2_METHOD_ROUTING_TOKEN = /^[a-z0-9_]{1,24}$/u;
+export const P2_METHOD_ROUTING_FIELDS = Object.freeze([
+  "tasks",
+  "objects",
+  "structures",
+] as const);
+
+/** Optional routing metadata exposed before any explicit method-body load. */
+export interface P2MethodRoutingMetadata {
+  readonly tasks?: readonly string[];
+  readonly objects?: readonly string[];
+  readonly structures?: readonly string[];
+  readonly role?: P2MethodRole;
+}
+
+/** One catalog row: a short canonical id, its title and optional metadata. */
+export interface P2MethodEntry extends P2MethodRoutingMetadata {
   readonly id: string;
   readonly title: string;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+/**
+ * Strictly read the optional routing fields of one catalog row. A present but
+ * out-of-shape list or role returns `null` (the caller refuses it); absent
+ * fields stay absent and are never invented.
+ */
+export function checkedP2MethodRoutingMetadata(
+  value: unknown,
+): P2MethodRoutingMetadata | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const out: {
+    tasks?: readonly string[];
+    objects?: readonly string[];
+    structures?: readonly string[];
+    role?: P2MethodRole;
+  } = {};
+  for (const field of P2_METHOD_ROUTING_FIELDS) {
+    if (!hasOwn(value, field)) {
+      continue;
+    }
+    const raw = value[field];
+    if (!Array.isArray(raw) || raw.length > P2_METHOD_ROUTING_MAX_ITEMS) {
+      return null;
+    }
+    const tokens: string[] = [];
+    for (const item of raw) {
+      if (
+        typeof item !== "string" ||
+        item.length === 0 ||
+        item.length > P2_METHOD_ROUTING_MAX_CHARS ||
+        !P2_METHOD_ROUTING_TOKEN.test(item)
+      ) {
+        return null;
+      }
+      tokens.push(item);
+    }
+    out[field] = Object.freeze(tokens);
+  }
+  if (hasOwn(value, "role")) {
+    const role = value["role"];
+    if (role !== "method" && role !== "decision") {
+      return null;
+    }
+    out.role = role;
+  }
+  return Object.freeze(out);
 }
 
 /** Read-only catalog view. `entries` is empty when the catalog is unavailable. */

@@ -619,6 +619,56 @@ def _graph(value):
 def validate_inputs(name, args):
     from .output_checks import algebraic, computation
 
+    if name == "finite_group_structure":
+        from .finite_group_tools import normalize_group
+
+        normalized = normalize_group(args)
+        return {
+            "version": "finite-group-input-v1",
+            "validation": (
+                "explicit_disjoint_cycle_permutations_or_closed_named_group"
+            ),
+            "schema": {
+                "one_of": [
+                    {
+                        "generators": "1..4 cycle-notation strings on one degree",
+                        "degree": "optional integer 2..8; inferred from the largest moved point",
+                    },
+                    {
+                        "named_group": (
+                            "S3, S4, A4, A5, D8, D10, Z2..Z12 or C2..C12; "
+                            "Z_n/C_n spellings accepted"
+                        )
+                    },
+                ],
+            },
+            "input_mode": normalized["input_mode"],
+            "group_name": normalized.get("group_name"),
+            "degree": normalized["degree"],
+            "generator_count": normalized["generator_count"],
+            "mathematical_output_verified": False,
+        }
+
+    if name in {"interpolation_fit_check", "stats_ols_check"}:
+        from .exact_data_checks import normalize_interpolation, normalize_ols
+
+        if name == "interpolation_fit_check":
+            normalized = normalize_interpolation(args)
+            fields = ("points", "expression", "variable")
+        else:
+            normalized = normalize_ols(args)
+            fields = ("data", "claimed")
+        return {
+            "version": "exact-data-input-v1",
+            "validation": "exact_rational_structured_input",
+            "schema": {
+                key: "exact rational string / bounded expression"
+                for key in fields
+            },
+            "point_count": len(normalized.get("points", normalized.get("data", []))),
+            "mathematical_output_verified": False,
+        }
+
     if name in computation.CONTRACTS:
         computation.normalize(name, args)
         return {

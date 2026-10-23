@@ -28,9 +28,9 @@ import {
 } from "@astra/protocol";
 import { compileP2Contract, p2ProblemHashOf } from "@astra/math-contract";
 import { ContractLedger } from "@astra/math-contract";
-import { P2ModelGate, chooseP2ReadyTask } from "@astra/math-gateway";
+import { P2ModelGate, chooseP2ReadyTask, P3_MAX_EFFECTS } from "@astra/math-gateway";
 import { P3EffectGate, p3EffectFailure, p3EffectReceipt, parseP3Action } from "@astra/math-gateway";
-import { p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
+import { AGENT_MAX_METHOD_LOADS, p3MethodCatalog, p3MethodObservation } from "@astra/runtime-core";
 import { prepareP3Context, type P3ContextHistoryEntry } from "@astra/math-workunit";
 
 const MAX_DEADLINE_MS = 5000;
@@ -39,7 +39,14 @@ const MAX_FRAME_BYTES = 65536;
 const MAX_TOKENS = 8192;
 const TEMPERATURE = "0.2";
 const REQUEST_IDS = ["model-1", "model-2", "model-3"] as const;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const STOP_REASONS = [
   "FINAL", "UNSOLVED", "FIXTURE_EXHAUSTED", "BUDGET_EXHAUSTED", "TRANSPORT_STOP",
   "ACTION_REJECTED", "EFFECT_UNAVAILABLE", "EFFECT_UNKNOWN", "DEADLINE_EXCEEDED",
@@ -99,6 +106,7 @@ export class P3HostFlow {
   private cachedEffects = 0;
   private catalogCalls = 0;
   private methodLoads = 0;
+  private readonly methodIds = new Set<string>();
   private catalog: P2MethodCatalog = P3_EMPTY_METHOD_CATALOG;
   private history: P3ContextHistoryEntry[] = [];
   private effects: P3EffectReceipt[] = [];
@@ -202,7 +210,7 @@ export class P3HostFlow {
     if (typeof remainingMs !== "number" || !Number.isSafeInteger(remainingMs) || remainingMs < 1) fail("FIELD_VALUE");
     if (typeof maxCalls !== "number" || !Number.isSafeInteger(maxCalls) || maxCalls < 0 || maxCalls > 3) fail("FIELD_VALUE");
     if (typeof maxEffects !== "number" || !Number.isSafeInteger(maxEffects) || maxEffects < 0 || maxEffects > 2) fail("FIELD_VALUE");
-    if (typeof maxMethodLoads !== "number" || !Number.isSafeInteger(maxMethodLoads) || maxMethodLoads < 0 || maxMethodLoads > 1) fail("FIELD_VALUE");
+    if (typeof maxMethodLoads !== "number" || !Number.isSafeInteger(maxMethodLoads) || maxMethodLoads < 0 || maxMethodLoads > AGENT_MAX_METHOD_LOADS) fail("FIELD_VALUE");
     if (params["maxTokens"] !== MAX_TOKENS) fail("FIELD_VALUE");
     if (params["mode"] !== "MOCK_ONLY") fail("FIELD_VALUE");
     this.sessionId = sessionId;
@@ -256,8 +264,10 @@ export class P3HostFlow {
       contractVersion: contract.contractVersion,
       taskId: started.taskId,
       scopeId: started.scopeId,
-    }, this.maxEffects);
-    if (this.maxMethodLoads === 1 && this.maxCalls > 1 && this.maxEffects > 0 && this.io.remainingMs() > MIN_REMAINING_MS) {
+    }, this.maxEffects > 0 && this.maxMethodLoads > 0
+      ? Math.min(this.maxEffects + this.maxMethodLoads, P3_MAX_EFFECTS)
+      : this.maxEffects);
+    if (this.maxMethodLoads > 0 && this.maxCalls > 1 && this.maxEffects > 0 && this.io.remainingMs() > MIN_REMAINING_MS) {
       this.phase = "catalog";
       this.catalogCalls += 1;
       this.io.send({
@@ -325,9 +335,10 @@ export class P3HostFlow {
       return;
     }
     const remainingTurns = this.maxCalls - this.modelCalls;
+    const cachedMethod = this.effects.some((entry) => entry.source === "METHOD_REFERENCE");
     const allowed = effectGate
       .allowedActionIds(remainingTurns, remaining)
-      .filter((actionId) => actionId !== "LOAD_METHOD" || (this.maxMethodLoads === 1 && this.catalog.entries.length > 0));
+      .filter((actionId) => actionId !== "LOAD_METHOD" || ((this.methodLoads < this.maxMethodLoads || cachedMethod) && this.catalog.entries.length > 0));
     let context;
     try {
       context = prepareP3Context(contract, task, requestId, allowed, this.effects, this.history, this.catalog.entries);
@@ -433,6 +444,10 @@ export class P3HostFlow {
         this.finish("EFFECT_UNAVAILABLE");
         return;
       }
+      if (this.methodLoads >= this.maxMethodLoads && !this.methodIds.has(action.id)) {
+        this.finish("BUDGET_EXHAUSTED");
+        return;
+      }
       let known = false;
       for (const entry of this.catalog.entries) {
         if (entry.id === action.id) {
@@ -493,6 +508,7 @@ export class P3HostFlow {
     this.effectCalls += 1;
     if (request.action.action === "method") {
       this.methodLoads += 1;
+      this.methodIds.add(request.action.id);
     }
     this.phase = "effect";
     this.io.send(message, wire);

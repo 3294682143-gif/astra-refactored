@@ -6,6 +6,7 @@ from importlib.resources import files
 
 def validate_inventory():
     from math_families.bridge.dispatch import tool_names
+    from .exact_data_checks import TOOL_FUNCTIONS
 
     root = files("mathagent").joinpath("resources")
     registry = json.loads(
@@ -15,7 +16,9 @@ def validate_inventory():
         root.joinpath("skill-mapping-manifest.json").read_text(encoding="utf-8")
     )["families"]
     tools = registry["tools"]
-    if set(tools) != set(tool_names()):
+    # The frozen family dispatcher is extended at the mathagent seam with exact
+    # data tools whose implementations live outside ``math_families``.
+    if set(tools) != set(tool_names()) | set(TOOL_FUNCTIONS):
         raise ValueError("registered and bridged tool inventories differ")
     if registry["summary"]["total_tools"] != len(tools):
         raise ValueError("registered tool count metadata differs")

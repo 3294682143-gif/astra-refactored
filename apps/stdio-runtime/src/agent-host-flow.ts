@@ -31,7 +31,7 @@ import {
   type P3EffectRequest,
 } from "@astra/protocol";
 import { p3EffectReceipt } from "@astra/math-gateway";
-import { p3MethodCatalog } from "@astra/runtime-core";
+import { AGENT_MAX_METHOD_LOADS, p3MethodCatalog } from "@astra/runtime-core";
 import { runAgentLoop } from "./agent-loop.js";
 
 const MIN_REMAINING_MS = 25;
@@ -46,7 +46,7 @@ const MAX_MODEL_CALLS = 256;
 const MAX_WORK_UNITS = 64;
 const MAX_EFFECTS = 2;
 const MAX_REVIEWS = 3;
-const MAX_METHOD_LOADS = 1;
+const MAX_METHOD_LOADS = AGENT_MAX_METHOD_LOADS;
 const MAX_REMAINING_MS = 3600000;
 const HASH = /^[0-9a-f]{64}$/u;
 const CATALOG_FRAME_ID = "node-catalog-1";
@@ -210,24 +210,38 @@ export class AgentHostFlow {
 
   private onRequest(id: string, method: string, params: Record<string, unknown>): void {
     if (this.pending !== null) {
-      fail(ERROR_CODES.FIELD_VALUE);
+      // A second request while a Node-to-Host callback is still unanswered can
+      // only mean the peer ignored the pending slot. The code names that case
+      // instead of reporting a generic field failure.
+      fail(ERROR_CODES.ILLEGAL_TRANSITION);
     }
     if (method === "runtime.initialize") {
-      if (this.phase !== "INIT" || id !== HOST_INIT_ID) {
+      if (this.phase !== "INIT") {
+        fail(ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+      if (id !== HOST_INIT_ID) {
         fail(ERROR_CODES.FIELD_VALUE);
       }
       this.handleInitialize(id, params);
       return;
     }
     if (method === "session.solve") {
-      if (this.phase !== "READY" || id !== HOST_SOLVE_ID) {
+      if (this.phase !== "READY") {
+        fail(ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+      if (id !== HOST_SOLVE_ID) {
         fail(ERROR_CODES.FIELD_VALUE);
       }
       this.handleSolve(id, params);
       return;
     }
     if (method === "session.stop") {
-      if (this.phase !== "DONE" || id !== HOST_STOP_ID) {
+      if (this.phase !== "DONE") {
+        // e.g. a stop while `session.solve` is still running: the Host would
+        // otherwise see a clean exit with no solve result at all.
+        fail(ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+      if (id !== HOST_STOP_ID) {
         fail(ERROR_CODES.FIELD_VALUE);
       }
       this.handleStop(id, params);
@@ -311,7 +325,7 @@ export class AgentHostFlow {
     }
     this.effectAvailable = toolExecute === "AVAILABLE" && maxEffects > 0;
     this.methodAvailable =
-      methodLoad === "AVAILABLE" && maxMethodLoads === 1 && this.effectAvailable;
+      methodLoad === "AVAILABLE" && maxMethodLoads > 0 && this.effectAvailable;
     const deriveBudget = params["deriveBudget"] === true;
     this.options = Object.freeze({
       maxModelCalls,
@@ -465,6 +479,10 @@ export class AgentHostFlow {
     if (this.stopSent) {
       fail(ERROR_CODES.FIELD_VALUE);
     }
+    // Reaching this point means the phase gate already accepted the stop, so a
+    // stop while `session.solve` is still in flight can never end the process
+    // silently: it is rejected as ILLEGAL_TRANSITION by `onRequest` and no
+    // `stopped: true` is ever written for it.
     this.stopSent = true;
     this.phase = "STOP";
     this.io.stop({

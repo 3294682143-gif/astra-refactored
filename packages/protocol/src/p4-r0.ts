@@ -102,6 +102,46 @@ export const P4_R0_VERDICT = Object.freeze(["NO_ISSUE", "ISSUES", "UNKNOWN"] as 
 export type P4R0Verdict = (typeof P4_R0_VERDICT)[number];
 
 /**
+ * Fixed, closed reviewer-role vocabulary of the R0 three-review stage. Each
+ * role is one independent reviewer bound to exactly one review dimension, so
+ * the three reviews never share a prompt, a payload or a model call.
+ */
+export const P4_R0_ROLE = Object.freeze(["MEANING", "METHOD", "TASK_TOOL"] as const);
+export type P4R0Role = (typeof P4_R0_ROLE)[number];
+
+/** The single review dimension each role owns. The binding is never a rank. */
+export const P4_R0_ROLE_DIMENSION: Readonly<Record<P4R0Role, P4R0Dimension>> = Object.freeze({
+  MEANING: "PROBLEM_ALIGNMENT",
+  METHOD: "SCOPE",
+  TASK_TOOL: "TASK_COVERAGE",
+});
+
+/**
+ * Number of independent role reviews one R0 stage performs: exactly one per
+ * role. It bounds the review records of one `P4R0ReviewSession`.
+ */
+export const P4_R0_MAX_REVIEWS = 3 as const;
+
+/**
+ * Root model calls the whole R0 stage may spend: three role reviews, one
+ * targeted recheck and at most one plan revision. The stage is refused with
+ * `INSUFFICIENT_BUDGET` when the root cannot cover this fixed design; the
+ * public `maxR0` switch stays a 0/1 on/off flag and is never a call count.
+ */
+export const P4_R0_MAX_ROOT_CALLS = 5 as const;
+
+/**
+ * The `model-<n>` request-id shape used everywhere else in this codebase
+ * (`^model-([1-9][0-9]{0,2})$`): a bounded root ordinal, never free text.
+ */
+export const P4_R0_REQUEST_ID = /^model-[1-9][0-9]{0,2}$/u;
+
+/** True for a bounded root-ordinal request id, false for anything else. */
+export function isP4R0RequestId(value: unknown): value is string {
+  return typeof value === "string" && P4_R0_REQUEST_ID.test(value);
+}
+
+/**
  * One dimension check. `problemSpan` locates the exact codepoint slice of
  * `contract.problemFullText` and `planSpan` the exact slice of
  * `target.planText`; both may be null only for an `UNKNOWN` verdict.
@@ -121,13 +161,18 @@ export const P4_R0_CONCLUSION = Object.freeze(["NO_ISSUE", "ISSUES", "UNKNOWN"] 
 export type P4R0Conclusion = (typeof P4_R0_CONCLUSION)[number];
 
 /**
- * Strict model R0 report. `NO_ISSUE` is not a proof of correctness and
- * `reviewCoverage` lists only obligations the report claims to have covered.
+ * Strict model R0 review report — one *role-scoped* reply of the three review
+ * stage. `requestId` is the real root ordinal the call was dispatched under
+ * (any `model-<n>`, never free text) and `role` is the closed reviewer role;
+ * `checks` holds exactly that role's single dimension. `NO_ISSUE` is not a
+ * proof of correctness and `reviewCoverage` lists only obligations the report
+ * claims to have covered.
  */
 export interface P4R0ReviewReport {
   readonly schemaVersion: P4R0ReviewSchemaVersion;
-  readonly requestId: "model-1";
+  readonly requestId: string;
   readonly stage: "R0";
+  readonly role: P4R0Role;
   readonly target: P4R0Binding;
   readonly planHash: string;
   readonly conclusion: P4R0Conclusion;
@@ -137,7 +182,8 @@ export interface P4R0ReviewReport {
 
 /** Model R0 evidence: at most REVIEWED, always checkResult UNKNOWN. */
 export interface P4R0ReviewEvidence {
-  readonly requestId: "model-1";
+  readonly requestId: string;
+  readonly role: P4R0Role;
   readonly target: P4R0Binding;
   readonly planHash: string;
   readonly source: "MODEL_REVIEW";
@@ -162,10 +208,45 @@ export interface P4R0ReviewRecord extends P4R0ReviewEvidence {
   readonly code: P4ReviewCode;
 }
 
-/** Frozen view of one R0 target's review state. */
+/** Frozen view of one R0 target's review state for exactly one role. */
 export interface P4R0ReviewSnapshot {
   readonly target: P4R0Binding;
   readonly planHash: string;
+  readonly role: P4R0Role;
   readonly availability: "ACTIVE" | "STALE";
   readonly record: P4R0ReviewRecord | null;
+}
+
+/**
+ * One role whose recorded verdict differs from the aggregate conclusion. The
+ * row carries only enum verdicts, the role and its bound dimension: no model
+ * text, no rationale and no severity ranking may ever appear here.
+ */
+export interface P4R0Dissent {
+  readonly role: P4R0Role;
+  readonly dimension: P4R0Dimension;
+  readonly verdict: P4R0Verdict;
+}
+
+/**
+ * Which roles the aggregate actually saw. A role that never settled is listed
+ * in `missing` (never silently dropped) and appears in no dissent row.
+ */
+export interface P4R0AggregateCoverage {
+  readonly roles: readonly P4R0Role[];
+  readonly missing: readonly P4R0Role[];
+  readonly dimensions: readonly P4R0Dimension[];
+}
+
+/**
+ * Pure controller aggregation of the three independent role reviews. It is a
+ * bounded summary of enum verdicts only: never a proof, never a verification
+ * and never acceptance. A missing role, an unusable reply and an `UNKNOWN`
+ * verdict all keep the aggregate inconclusive.
+ */
+export interface P4R0Aggregate {
+  readonly conclusion: P4R0Conclusion;
+  readonly issueDimensions: readonly P4R0Dimension[];
+  readonly dissents: readonly P4R0Dissent[];
+  readonly coverage: P4R0AggregateCoverage;
 }

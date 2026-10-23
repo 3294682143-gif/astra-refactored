@@ -370,3 +370,168 @@ def test_strict_policy_does_not_verify_methods(process_tracker, spy_catalog):
     assert result["candidate_verified"] is False
     assert result["strictAcceptance"] == "NOT_PERFORMED"
     assert process_tracker
+
+class _RouteAwareMethodClient(FakeClient):
+    """Return a WorkPacket first, then obey the forced method-selection turn."""
+
+    def __init__(self, method_id):
+        super().__init__()
+        self.method_id = method_id
+        self.method_turns = 0
+        self.selection = None
+
+    def chat(self, messages, temperature=0.2, max_tokens=8192):
+        system = messages[0]["content"]
+        if "METHOD SELECTION TURN" in system:
+            self.seen.append((messages, temperature, max_tokens))
+            self.calls += 1
+            self.method_turns += 1
+            self.selection = (messages, temperature, max_tokens)
+            text = json.dumps({"action": "method", "id": self.method_id})
+            return {
+                "choices": [
+                    {"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": text}}
+                ]
+            }
+        return super().chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+
+class _SecondMethodClient(FakeClient):
+    """Load the first routed card, then optionally offer the second card."""
+
+    def __init__(self, first_id, second_id):
+        super().__init__()
+        self.first_id = first_id
+        self.second_id = second_id
+        self.selection_turns = []
+
+    def chat(self, messages, temperature=0.2, max_tokens=8192):
+        system = messages[0]["content"]
+        if "SECOND METHOD SELECTION TURN" in system:
+            self.seen.append((messages, temperature, max_tokens))
+            self.calls += 1
+            self.selection_turns.append("second")
+            text = json.dumps({"action": "method", "id": self.second_id})
+            return {
+                "choices": [
+                    {"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": text}}
+                ]
+            }
+        if "METHOD SELECTION TURN" in system:
+            self.seen.append((messages, temperature, max_tokens))
+            self.calls += 1
+            self.selection_turns.append("first")
+            text = json.dumps({"action": "method", "id": self.first_id})
+            return {
+                "choices": [
+                    {"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": text}}
+                ]
+            }
+        return super().chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+
+def test_second_routed_card_body_reaches_the_answering_turn(
+        process_tracker, spy_catalog, monkeypatch):
+    # This slice changes the freshly compiled loop; the release bundle is not
+    # rebuilt here. The public entry, Host and IPC remain the real ones.
+    monkeypatch.setenv("ASTRA_STDIO_RUNTIME", "dev")
+    first_id = "linearization-spectral"
+    second_id = "numerical-approximation"
+    client = _SecondMethodClient(first_id, second_id)
+    problem = "Compute the determinant of the matrix [[1,2],[3,4]] and its rank."
+    agent = user_agent.ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_model_calls=10,
+        max_work_units=8,
+        max_effects=1,
+        max_reviews=0,
+        max_repairs=1,
+        max_consensus=2,
+        max_method_loads=2,
+    )
+    result = agent.solve(problem, {"source": "e2e"})
+
+    assert result["status"] == "candidate"
+    assert client.selection_turns == ["first", "second"]
+    assert result["metrics"]["method_effect_calls"] == 2
+    assert result["metrics"]["method_loads"] == 2
+    assert result["metrics"]["effect_calls"] == 2
+    assert set(result["metrics"]["method_ids"]) == {first_id, second_id}
+    assert spy_catalog.loads == 2
+    bodies = [
+        json.loads(messages[1]["content"])
+        for messages, _temperature, _max_tokens in client.seen
+    ]
+    two_asset_bodies = [
+        body for body in bodies
+        if len(body.get("methodAssets", [])) == 2
+    ]
+    assert two_asset_bodies
+    assert any(
+        [asset["id"] for asset in body["methodAssets"]] == [first_id, second_id]
+        and all(asset["body"].strip() for asset in body["methodAssets"])
+        and all(asset["bodySha256"] == hashlib.sha256(
+            asset["body"].encode("utf-8")).hexdigest()
+            for asset in body["methodAssets"])
+        for body in two_asset_bodies
+    )
+    assert process_tracker
+
+
+def test_routed_candidates_appear_in_method_selection_before_the_body(
+        process_tracker):
+    method_id = "linearization-spectral"
+    expected = fixture_load(method_id)
+    assert expected["status"] == "loaded"
+    body = expected["asset"]["body"]
+    client = _RouteAwareMethodClient(method_id)
+    problem = "Compute the determinant of the matrix [[1,2],[3,4]] and its rank."
+    agent = user_agent.ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_model_calls=10,
+        max_work_units=8,
+        max_effects=1,
+        max_reviews=0,
+        max_repairs=1,
+        max_consensus=2,
+        max_method_loads=1,
+    )
+    result = agent.solve(problem, {"source": "e2e"})
+
+    assert result["status"] == "candidate"
+    assert result["final_response"] == "4"
+    assert client.method_turns == 1
+    assert result["metrics"]["catalog_calls"] == 1
+    assert result["metrics"]["method_loads"] == 1
+    assert result["metrics"]["effect_calls"] == 1
+    assert client.selection is not None
+    selected_messages, _temperature, _max_tokens = client.selection
+    system = selected_messages[0]["content"]
+    selected_body = json.loads(selected_messages[1]["content"])
+    assert "Routed method candidates (metadata only; bodies are not loaded):" in system
+    assert method_id in system
+    assert "Other available method ids:" in system
+    assert body not in system
+    assert body not in json.dumps(selected_messages, ensure_ascii=False)
+    assert selected_body["methodAssets"] == []
+    catalog_row = next(row for row in selected_body["methodCatalog"]
+                       if row["id"] == method_id)
+    assert catalog_row["objects"] == ["matrix", "linear_system", "linear_map",
+                                      "quadratic_form"]
+    assert catalog_row["structures"] == ["rank", "nullspace", "eigenvalue",
+                                         "change_of_basis"]
+    assert catalog_row["role"] == "method"
+
+    loaded_work = [
+        json.loads(messages[1]["content"])
+        for messages, _t, _m in client.seen
+        if "METHOD SELECTION TURN" not in messages[0]["content"]
+    ]
+    assert any(row["methodAssets"] and row["methodAssets"][0]["body"] == body
+               for row in loaded_work)
+    assert process_tracker

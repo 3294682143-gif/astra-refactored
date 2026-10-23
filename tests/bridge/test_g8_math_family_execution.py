@@ -10,14 +10,17 @@ import json
 from pathlib import Path
 
 from math_families.bridge.dispatch import call_tool, tool_names
+from mathagent.exact_data_checks import TOOL_FUNCTIONS
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_registered_tools_are_bridged_to_math_families():
     registry = json.loads((ROOT / "mathagent/resources/tool-registry.json").read_text(encoding="utf-8"))["tools"]
-    assert len(tool_names()) == len(registry) >= 20
+    bridged = set(tool_names()) | set(TOOL_FUNCTIONS)
+    assert bridged == set(registry) and len(registry) >= 20
     assert "lz78_encode" in registry and "lz78_encode" in tool_names()
+    assert {"interpolation_fit_check", "stats_ols_check"} <= set(TOOL_FUNCTIONS)
     # the family manifest actually claims the tool, tying execution to a family
     manifest = json.loads((ROOT / "mathagent/resources/skill-mapping-manifest.json").read_text(encoding="utf-8"))["families"]
     owner = [row["family_id"] for row in manifest if "lz78_encode" in row.get("tools", [])]

@@ -30,13 +30,14 @@ _MAX_ANSWER_CHARS = 4096
 _MAX_REASON_CHARS = 256
 _MAX_UNRESOLVED = 32
 _MAX_UNRESOLVED_CHARS = 256
-_MAX_RECEIPTS = 3
+_MAX_RECEIPTS = 6
 _MAX_CONTEXT_BYTES = 65536
 _DELIVERY_STATUS = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
 _CONTEXT_SCHEMA_VERSION = "p3-action-context-v2"
 _PROMPT_VERSION = "p3-actions-v1"
 _REQUEST_IDS = ("model-1", "model-2", "model-3")
-_EFFECT_IDS = ("effect-1", "effect-2")
+_EFFECT_IDS = ("effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6")
+_MAX_EFFECTS = len(_EFFECT_IDS)
 _ALLOWED_ACTION_IDS = ("PROPOSE_FINAL", "MARK_UNSOLVED", "CALL_REGISTERED_TOOL", "LOAD_METHOD")
 _HEX64 = frozenset("0123456789abcdef")
 
@@ -339,7 +340,7 @@ def _check_history(history, inner_history, ordinal):
 
 
 def _check_effects(effects, inner_effects):
-    if not isinstance(effects, list) or len(effects) > 2:
+    if not isinstance(effects, list) or len(effects) > _MAX_EFFECTS:
         _fail()
     seen = set()
     for entry in effects:

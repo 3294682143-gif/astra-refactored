@@ -26,7 +26,7 @@ function makePrep(goals: readonly P2GoalSpec[]): P4R0Preparation {
   return prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 4,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
 }

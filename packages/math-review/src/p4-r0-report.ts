@@ -15,12 +15,15 @@ import {
   P4_R0_CONCLUSION,
   P4_R0_DIMENSION,
   P4_R0_REVIEW_SCHEMA_VERSION,
+  P4_R0_ROLE,
+  P4_R0_ROLE_DIMENSION,
   P4_R0_VERDICT,
   decodeFrame,
   detectDuplicateKeys,
   detectLoneSurrogates,
   detectNonFiniteTokens,
   detectUnsafeNumbers,
+  isP4R0RequestId,
   p2Snapshot,
   p4JsonEqual,
   type P4R0Check,
@@ -28,6 +31,7 @@ import {
   type P4R0Dimension,
   type P4R0Preparation,
   type P4R0ReviewReport,
+  type P4R0Role,
   type P4R0Verdict,
   type P4StepLocator,
 } from "@astra/protocol";
@@ -42,6 +46,7 @@ const REPORT_FIELDS = [
   "schemaVersion",
   "requestId",
   "stage",
+  "role",
   "target",
   "planHash",
   "conclusion",
@@ -118,15 +123,27 @@ function spanOf(value: unknown, source: string, required: boolean): P4StepLocato
  * Strict parse of one raw model R0 text against a trusted M1 preparation.
  *
  * The preparation must pass `validateP4R0Input` and its action must be
- * `REQUEST_REVIEW`; the report is bound to `model-1`, the R0 stage, the target
- * binding and the plan hash, and `reviewCoverage` must list exactly the
+ * `REQUEST_REVIEW`; the report is bound to one reviewer role, the real root
+ * `requestId` the call was dispatched under, the R0 stage, the target binding
+ * and the plan hash. A role-scoped reply carries exactly one check, for the
+ * single dimension that role owns, and `reviewCoverage` must list exactly the
  * contract's obligation ids in order. A parsed report proves nothing.
  */
 export function parseP4R0Report(
   rawtext: string,
   preparation: P4R0Preparation,
+  role: P4R0Role,
+  requestId: string,
 ): P4R0ReviewReport {
   try {
+    if (!(P4_R0_ROLE as readonly string[]).includes(role)) {
+      fail(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (!isP4R0RequestId(requestId)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const dimension = P4_R0_ROLE_DIMENSION[role];
+
     if (typeof rawtext !== "string" || !detectLoneSurrogates(rawtext).ok) {
       fail(P2_ERROR_CODES.PACKET_SCHEMA);
     }
@@ -172,11 +189,17 @@ export function parseP4R0Report(
     if (report.schemaVersion !== P4_R0_REVIEW_SCHEMA_VERSION) {
       fail(P2_ERROR_CODES.PACKET_SCHEMA);
     }
-    if (report.requestId !== "model-1") {
+    if (report.requestId !== requestId || !isP4R0RequestId(report.requestId)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (report.stage !== "R0") {
       fail(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (!(P4_R0_ROLE as readonly string[]).includes(report.role as string)) {
+      fail(P2_ERROR_CODES.PACKET_SCHEMA);
+    }
+    if (report.role !== role) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const reportBinding = exact(report.target, BINDING_FIELDS);
     if (!p4JsonEqual(reportBinding, binding)) {
@@ -201,7 +224,7 @@ export function parseP4R0Report(
       }
     }
 
-    if (!Array.isArray(report.checks) || report.checks.length !== P4_R0_DIMENSION.length) {
+    if (!Array.isArray(report.checks) || report.checks.length !== 1) {
       fail(P2_ERROR_CODES.PACKET_SCHEMA);
     }
     const problemText = contract.problemFullText;
@@ -213,11 +236,14 @@ export function parseP4R0Report(
       if (!(P4_R0_DIMENSION as readonly string[]).includes(row.dimension as string)) {
         fail(P2_ERROR_CODES.PACKET_SCHEMA);
       }
-      const dimension = row.dimension as P4R0Dimension;
-      if (seenDimensions.has(dimension)) {
+      const rowDimension = row.dimension as P4R0Dimension;
+      if (rowDimension !== dimension) {
+        fail(P2_ERROR_CODES.PACKET_BINDING);
+      }
+      if (seenDimensions.has(rowDimension)) {
         fail(P2_ERROR_CODES.PACKET_SCHEMA);
       }
-      seenDimensions.add(dimension);
+      seenDimensions.add(rowDimension);
       if (!(P4_R0_VERDICT as readonly string[]).includes(row.verdict as string)) {
         fail(P2_ERROR_CODES.PACKET_SCHEMA);
       }
@@ -226,12 +252,10 @@ export function parseP4R0Report(
       const required = verdict !== "UNKNOWN";
       const problemSpan = spanOf(row.problemSpan, problemText, required);
       const planSpan = spanOf(row.planSpan, planText, required);
-      checks.push(Object.freeze({ dimension, verdict, rationale, problemSpan, planSpan }));
+      checks.push(Object.freeze({ dimension: rowDimension, verdict, rationale, problemSpan, planSpan }));
     }
-    for (const dimension of P4_R0_DIMENSION) {
-      if (!seenDimensions.has(dimension)) {
-        fail(P2_ERROR_CODES.PACKET_SCHEMA);
-      }
+    if (!seenDimensions.has(dimension)) {
+      fail(P2_ERROR_CODES.PACKET_SCHEMA);
     }
 
     const anyIssues = checks.some((check) => check.verdict === "ISSUES");
@@ -243,8 +267,9 @@ export function parseP4R0Report(
 
     return p2Snapshot({
       schemaVersion: P4_R0_REVIEW_SCHEMA_VERSION,
-      requestId: "model-1",
+      requestId,
       stage: "R0",
+      role,
       target: binding,
       planHash: binding.planHash,
       conclusion,

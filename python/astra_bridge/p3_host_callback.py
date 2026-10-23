@@ -35,7 +35,7 @@ _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 3600000
 _MAX_MODEL_CALLS = 3
 _MAX_EFFECTS = 2
-_MAX_METHOD_LOADS = 1
+_MAX_METHOD_LOADS = 4
 _MAX_TOKENS = 8192
 _TEMPERATURE = "0.2"
 _BASE_ACTIONS = ("PROPOSE_FINAL", "MARK_UNSOLVED")
@@ -88,7 +88,7 @@ class P3HostCallback(_Host):
         self.catalog_entries = []
         self.catalog_record = None
         self.catalog_required = (
-            max_method_loads == 1 and max_calls > 1 and max_effects > 0
+            max_method_loads > 0 and max_calls > 1 and max_effects > 0
         )
         self.stop_reason = "FIXTURE_EXHAUSTED"
         self.stopped = False
@@ -105,6 +105,14 @@ class P3HostCallback(_Host):
 
     def _common(self):
         return {"protocolVersion": P3_HOST_VERSION, "sessionId": self.session_id}
+
+    def _effect_budget(self):
+        """Total effect-id capacity: tool quota plus the method-load quota."""
+        method_slots = self.max_method_loads if self.max_effects > 0 else 0
+        return min(self.max_effects + method_slots, len(EFFECT_IDS))
+
+    def _tool_effect_count(self):
+        return self.effect_calls - self.method_loads
 
     def _last_model(self):
         if not self.model_records:
@@ -136,21 +144,24 @@ class P3HostCallback(_Host):
     def _allowed(self, ordinal):
         allowed = list(_BASE_ACTIONS)
         if ordinal < self.max_calls:
-            tool_left = self.effect_calls < self.max_effects
+            tool_left = (
+                self._tool_effect_count() < self.max_effects
+                and self.effect_calls < self._effect_budget()
+            )
             tool_cached = any(
                 entry["source"] == "PROGRAM_OBSERVATION" for entry in self.cache.values()
             )
             if tool_left or tool_cached:
                 allowed.append(_TOOL_ACTION)
             method_left = (
-                self.method_loads < _MAX_METHOD_LOADS
-                and self.effect_calls < self.max_effects
+                self.method_loads < self.max_method_loads
+                and self.effect_calls < self._effect_budget()
             )
             method_cached = any(
                 entry["source"] == "METHOD_REFERENCE" for entry in self.cache.values()
             )
             if (
-                self.max_method_loads == 1
+                self.max_method_loads > 0
                 and self.catalog_entries
                 and (method_left or method_cached)
             ):
@@ -212,6 +223,16 @@ class P3HostCallback(_Host):
         except Exception:  # noqa: BLE001 - an unavailable catalog is not a failure
             self.method_catalog = None
             catalog = {"version": "1.1.0", "entries": []}
+        # The P3-host manifest keeps its historical id/title catalog shape.
+        # Validate the full metadata once, then project only that frozen wire
+        # shape for this legacy P3 path; the Agent Host 1.3 path carries it.
+        catalog = {
+            "version": catalog["version"],
+            "entries": [
+                {"id": entry["id"], "title": entry["title"]}
+                for entry in catalog["entries"]
+            ],
+        }
         self.catalog_entries = copy.deepcopy(catalog["entries"])
         self.catalog_calls = 1
         self.catalog_record["result"] = copy.deepcopy(catalog)
@@ -319,7 +340,13 @@ class P3HostCallback(_Host):
             _fail()
         if self.model_calls >= self.max_calls:
             _fail()
-        if self.effect_calls >= min(self.max_effects, _MAX_EFFECTS):
+        expected_kind = "method" if wire_method == "method.load" else "tool"
+        if self.effect_calls >= self._effect_budget():
+            _fail()
+        if expected_kind == "method":
+            if self.max_method_loads < 1 or self.method_loads >= self.max_method_loads:
+                _fail()
+        elif self._tool_effect_count() >= self.max_effects:
             _fail()
         request = validate_request(params["request"])
         if request["effectId"] != EFFECT_IDS[self.effect_calls]:
@@ -327,7 +354,6 @@ class P3HostCallback(_Host):
         if frame_id != "node-effect-" + str(self.effect_calls + 1):
             _fail()
         action = request["action"]
-        expected_kind = "method" if wire_method == "method.load" else "tool"
         if action["action"] != expected_kind:
             _fail()
         binding = self._binding(record["requestId"])
@@ -343,11 +369,7 @@ class P3HostCallback(_Host):
         if key in self.cache:
             _fail()
         if expected_kind == "method":
-            if self.max_method_loads != 1:
-                _fail()
             if self.method_catalog is None or self.catalog_calls != 1:
-                _fail()
-            if self.method_loads >= _MAX_METHOD_LOADS:
                 _fail()
             known = False
             for entry in self.catalog_entries:

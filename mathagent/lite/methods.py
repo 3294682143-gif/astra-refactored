@@ -43,6 +43,11 @@ METHOD_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _REGISTRY_SCHEMA = "general-math-methods-v1"
 _MAX_BODY_CHARS = 24000
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+# Advisory routing metadata is bounded at the catalog boundary. These are the
+# only shapes that may reach the model before an explicit body load.
+_MAX_ROUTING_TOKENS = 6
+_ROUTING_TOKEN_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+_METHOD_ROLES = frozenset({"method", "decision"})
 
 
 class MethodCatalogError(Exception):
@@ -125,6 +130,27 @@ def _decode_utf8(data):
 
 def _load_json(root, rel):
     return json.loads(_decode_utf8(_read_bytes(root, rel)))
+
+
+def _routing_tokens(value):
+    """Return only the card's own bounded ASCII tokens, in data order.
+
+    A missing or malformed list yields ``[]``; an odd item is dropped. Nothing
+    is inferred from a title, path or body.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value:
+        if isinstance(item, str) and _ROUTING_TOKEN_RE.fullmatch(item):
+            out.append(item)
+        if len(out) >= _MAX_ROUTING_TOKENS:
+            break
+    return out
+
+
+def _method_role(value):
+    return value if isinstance(value, str) and value in _METHOD_ROLES else None
 
 
 class MethodCatalog:
@@ -221,7 +247,17 @@ class MethodCatalog:
                 raise MethodCatalogError("registry_invalid")
             if path != f"references/{method_id}.md":
                 raise MethodCatalogError("registry_path_invalid")
-            methods.append({"id": method_id, "title": title, "path": path})
+            methods.append(
+                {
+                    "id": method_id,
+                    "title": title,
+                    "path": path,
+                    "tasks": _routing_tokens(row.get("tasks")),
+                    "objects": _routing_tokens(row.get("objects")),
+                    "structures": _routing_tokens(row.get("structures")),
+                    "role": _method_role(row.get("card_role")),
+                }
+            )
         return methods
 
     # -- public surface ---------------------------------------------------
@@ -234,11 +270,30 @@ class MethodCatalog:
     def diagnostic(self):
         return self._diagnostic
 
-    def catalog(self):
-        """Return ``(entries, diagnostic)``; entries are id/title only."""
+    def catalog(self, include_metadata=False):
+        """Return ``(entries, diagnostic)``.
+
+        The default shape is exactly ``{"id", "title"}`` so the legacy lite
+        runtime keeps its byte-identical contract. ``include_metadata=True`` —
+        used only by the Host bridge that offers advisory routing metadata to
+        the TS loop — additionally returns ``tasks`` / ``objects`` /
+        ``structures`` (bounded token lists) and ``role`` (``method`` or
+        ``decision`` when the card declares it). No body and no path is ever
+        exposed here, on either shape.
+        """
         if self._methods is None:
             return [], self._diagnostic or "catalog_unavailable"
-        return [{"id": row["id"], "title": row["title"]} for row in self._methods], None
+        out = []
+        for row in self._methods:
+            entry = {"id": row["id"], "title": row["title"]}
+            if include_metadata:
+                entry["tasks"] = list(row["tasks"])
+                entry["objects"] = list(row["objects"])
+                entry["structures"] = list(row["structures"])
+                if row["role"] is not None:
+                    entry["role"] = row["role"]
+            out.append(entry)
+        return out, None
 
     def title(self, method_id):
         if self._titles is None:

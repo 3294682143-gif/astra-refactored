@@ -1,0 +1,354 @@
+{
+  "contractVersion": 2,
+  "name": "canonical-answer-key",
+  "note": "Language-neutral parity vectors for canonicalAnswerKey (apps/stdio-runtime/src/agent-answer-key.ts) and canonical_answer_key (python/astra_bridge/answer_semantics.py). Both sides read THIS file: 'same' entries must all collapse to one key, 'different' entries must not. 'pythonKeys' pins the literal Python key strings; the rat:/set:/options:/truth:/text: prefixes are identical on the Node side, while poly: coefficient formatting is side-local by design (only equality crosses the boundary).",
+  "same": [
+    {
+      "group": "label-and-whitespace",
+      "inputs": [
+        "答案： 1 / 2",
+        "1/2",
+        "最终答案：$1/2$",
+        " 1 / 2 ",
+        "$1/2$"
+      ]
+    },
+    {
+      "group": "wrapper-one-layer",
+      "inputs": [
+        "\\(\\frac{1}{2}\\)",
+        "\\[\\frac{1}{2}\\]",
+        "\\boxed{\\frac12}",
+        "1/2"
+      ]
+    },
+    {
+      "group": "rational-forms",
+      "inputs": [
+        "1/2",
+        "\\frac{1}{2}",
+        "\\frac12",
+        "0.5",
+        "0.50",
+        "2/4",
+        " 1 / 2 "
+      ]
+    },
+    {
+      "group": "rational-negative",
+      "inputs": [
+        "-1/2",
+        "-0.5",
+        "\\frac{-1}{2}",
+        "-2/4"
+      ]
+    },
+    {
+      "group": "rational-integer",
+      "inputs": [
+        "3",
+        "3.0",
+        "+3"
+      ]
+    },
+    {
+      "group": "numeric-set",
+      "inputs": [
+        "{1,0}",
+        "{0,1}",
+        "{1.0,0}",
+        "{0, 1.0}",
+        "{1/1,0.0}"
+      ]
+    },
+    {
+      "group": "numeric-set-halves",
+      "inputs": [
+        "{1.0,0.5,0}",
+        "{0,1/2,1}",
+        "{1, 0.5, 0}",
+        "{0,0.5,1,0.5}"
+      ]
+    },
+    {
+      "group": "option-paren",
+      "inputs": [
+        "(A)",
+        "A.",
+        " (A) ",
+        "$(A)$",
+        "A",
+        " A ",
+        "a."
+      ]
+    },
+    {
+      "group": "option-pair",
+      "inputs": [
+        "A、C",
+        "A, C",
+        "A，C",
+        "AC",
+        "C,A",
+        "C、A"
+      ]
+    },
+    {
+      "group": "option-triple",
+      "inputs": [
+        "A、B、C",
+        "ABC",
+        "B,A,C",
+        "A, B, C"
+      ]
+    },
+    {
+      "group": "truth-true",
+      "inputs": [
+        "正确",
+        "真",
+        "TRUE",
+        "true",
+        "yes",
+        "Yes",
+        "True"
+      ]
+    },
+    {
+      "group": "truth-false",
+      "inputs": [
+        "错误",
+        "假",
+        "FALSE",
+        "false",
+        "no",
+        "No"
+      ]
+    },
+    {
+      "group": "poly-expanded",
+      "inputs": [
+        "x^2 - x",
+        "x(x-1)",
+        "x^2-x",
+        "X^2-X",
+        "x**2 - x"
+      ]
+    },
+    {
+      "group": "poly-constant-term",
+      "inputs": [
+        "1 - x + x^2",
+        "x^2-x+1",
+        "x^2 + 1 - x"
+      ]
+    },
+    {
+      "group": "relation-is-text",
+      "inputs": [
+        "x+1=0",
+        "x + 1 = 0",
+        "X+1=0"
+      ]
+    },
+    {
+      "group": "sentence-is-text",
+      "inputs": [
+        "A、B、C 正确，D 错误",
+        "a、b、c正确，d错误"
+      ]
+    }
+  ],
+  "different": [
+    {
+      "group": "rational-value",
+      "left": "1/2",
+      "right": "1/3"
+    },
+    {
+      "group": "rational-scale",
+      "left": "0.5",
+      "right": "0.05"
+    },
+    {
+      "group": "set-size",
+      "left": "{1,0}",
+      "right": "{1}"
+    },
+    {
+      "group": "set-size-2",
+      "left": "{1,0}",
+      "right": "{1,0,2}"
+    },
+    {
+      "group": "option-set-vs-sentence",
+      "left": "A、B、C",
+      "right": "A、B、C 正确，D 错误"
+    },
+    {
+      "group": "truth-verdicts",
+      "left": "正确",
+      "right": "错误"
+    },
+    {
+      "group": "poly-sign",
+      "left": "x^2-x",
+      "right": "x^2+x"
+    },
+    {
+      "group": "relation-vs-expression",
+      "left": "x+1=0",
+      "right": "x+1"
+    },
+    {
+      "group": "number-vs-text",
+      "left": "1/2",
+      "right": "half"
+    },
+    {
+      "group": "lowercase-variable-vs-option",
+      "left": "a",
+      "right": "A"
+    },
+    {
+      "group": "whitespace-adjacent-number",
+      "left": "1 2",
+      "right": "12"
+    },
+    {
+      "group": "whitespace-mixed-number",
+      "left": "1 1/2",
+      "right": "11/2"
+    }
+  ],
+  "pythonKeys": [
+    {
+      "input": "1/2",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "\\frac{1}{2}",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "\\frac12",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "0.5",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "0.50",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "3/6",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "-0.25",
+      "key": "rat:-1/4"
+    },
+    {
+      "input": "2",
+      "key": "rat:2/1"
+    },
+    {
+      "input": "2.0",
+      "key": "rat:2/1"
+    },
+    {
+      "input": "答案：1/2",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "最终答案：$1/2$",
+      "key": "rat:1/2"
+    },
+    {
+      "input": "$\\boxed{\\frac12}$",
+      "key": "text:\\boxed{\\frac12}"
+    },
+    {
+      "input": "{1, 2}",
+      "key": "set:rat:1/1,rat:2/1"
+    },
+    {
+      "input": "{2, 1}",
+      "key": "set:rat:1/1,rat:2/1"
+    },
+    {
+      "input": "{}",
+      "key": "set:"
+    },
+    {
+      "input": "(A)",
+      "key": "options:A"
+    },
+    {
+      "input": "A.",
+      "key": "options:A"
+    },
+    {
+      "input": "A、C",
+      "key": "options:A,C"
+    },
+    {
+      "input": "AC",
+      "key": "options:A,C"
+    },
+    {
+      "input": "A、B、C",
+      "key": "options:A,B,C"
+    },
+    {
+      "input": "A",
+      "key": "options:A"
+    },
+    {
+      "input": "正确",
+      "key": "truth:true"
+    },
+    {
+      "input": "错误",
+      "key": "truth:false"
+    },
+    {
+      "input": "x = 1",
+      "key": "text:x=1"
+    },
+    {
+      "input": "X=1",
+      "key": "text:x=1"
+    },
+    {
+      "input": "x^2 - x",
+      "key": "poly:x=-1;x^2=1"
+    },
+    {
+      "input": "x(x-1)",
+      "key": "poly:x=-1;x^2=1"
+    },
+    {
+      "input": "x+1=0",
+      "key": "text:x+1=0"
+    },
+    {
+      "input": "A、B、C 正确，D 错误",
+      "key": "text:a、b、c正确，d错误"
+    },
+    {
+      "input": "\\text{half}",
+      "key": "text:\\text{half}"
+    },
+    {
+      "input": "",
+      "key": "text:"
+    },
+    {
+      "input": "   ",
+      "key": "text:"
+    }
+  ]
+}

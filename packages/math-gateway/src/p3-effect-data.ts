@@ -28,7 +28,15 @@ const MAX_REMAINING_MS = 3_600_000;
 // the previous three-entry table made every tool call after the third one a
 // fixed PACKET_BINDING once the contract grew past three obligations.
 const REQUEST_ID = /^model-(?:[1-9][0-9]{0,2})$/u;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+// Six ids: up to four method cards and two tool effects coexist in one window.
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const HASH = /^[0-9a-f]{64}$/u;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {

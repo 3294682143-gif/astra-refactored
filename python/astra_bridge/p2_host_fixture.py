@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from .p0_protocol import (
     ProtocolError,
@@ -26,6 +27,10 @@ __all__ = ["strict_context", "OfflineP2Client"]
 _MAX_CONTEXT_BYTES = 65536
 _MAX_REPLY_CHARS = 4096
 _MAX_CATALOG_ITEMS = 20
+_MAX_ROUTING_TOKENS = 6
+_ROUTING_TOKEN_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+_ROUTING_FIELDS = ("tasks", "objects", "structures")
+_ROLES = frozenset({"method", "decision"})
 _DELIVERY_STATUS = ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN")
 _CONTEXT_SCHEMA_VERSION = "p2-fixture-context-v1"
 _PROMPT_VERSION = "p2-workunit-v1"
@@ -225,9 +230,27 @@ def strict_context(messages, params, problem, session_id, problem_hash, allowed_
     if not isinstance(catalog, list) or len(catalog) > _MAX_CATALOG_ITEMS:
         _fail()
     for entry in catalog:
-        _exact_keys(entry, ("id", "title"))
+        if not isinstance(entry, dict):
+            _fail()
+        keys = set(entry.keys())
+        if not {"id", "title"}.issubset(keys) or not keys.issubset(
+            {"id", "title", *_ROUTING_FIELDS, "role"}
+        ):
+            _fail()
         if not isinstance(entry["id"], str) or not isinstance(entry["title"], str):
             _fail()
+        for field in _ROUTING_FIELDS:
+            if field not in entry:
+                continue
+            values = entry[field]
+            if not isinstance(values, list) or len(values) > _MAX_ROUTING_TOKENS:
+                _fail()
+            for value in values:
+                if not isinstance(value, str) or not _ROUTING_TOKEN_RE.fullmatch(value):
+                    _fail()
+        if "role" in entry:
+            if not isinstance(entry["role"], str) or entry["role"] not in _ROLES:
+                _fail()
     assets = inner["methodAssets"]
     if not isinstance(assets, list) or len(assets) > 1:
         _fail()

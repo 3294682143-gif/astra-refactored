@@ -49,6 +49,10 @@ export const ERROR_CODES = {
   UNKNOWN_SCHEMA_KEYWORD: "UNKNOWN_SCHEMA_KEYWORD",
   MANIFEST_INVALID: "MANIFEST_INVALID",
   EOF: "EOF",
+  // A frame arrived in a phase where the contract forbids it, such as a
+  // `session.stop` while `session.solve` is still in flight. The code exists so
+  // that case is named instead of collapsing into a generic field failure.
+  ILLEGAL_TRANSITION: "ILLEGAL_TRANSITION",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

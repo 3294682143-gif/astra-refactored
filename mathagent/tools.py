@@ -65,6 +65,50 @@ def parse_tool_proposal(text: str):
     return ToolProposal(prefix[1], args, match[1], match[2], match[3])
 
 
+_EXPRESSION_ARG_KEYS = frozenset(
+    {
+        "expression",
+        "expressions",
+        "density",
+        "lhs",
+        "rhs",
+        "f",
+        "minimal_polynomials",
+        "invariants",
+        "forward",
+        "target",
+        "matrix",
+    }
+)
+
+
+def _normalize_power_syntax(value):
+    """Normalize TeX ``^`` powers in declared expression arguments only.
+
+    The input contract already accepts both ``^`` and ``**``. The family
+    parsers use Python AST semantics, so the executor seam must not pass a
+    literal BitXor through. Only known expression-bearing fields are touched;
+    scope/identity text and arbitrary prose are untouched.
+    """
+    if isinstance(value, str):
+        return value.replace("^", "**")
+    if isinstance(value, list):
+        return [_normalize_power_syntax(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_power_syntax(item) for key, item in value.items()}
+    return value
+
+
+def _normalized_tool_args(args):
+    if not isinstance(args, dict):
+        return args
+    out = dict(args)
+    for key in _EXPRESSION_ARG_KEYS:
+        if key in out:
+            out[key] = _normalize_power_syntax(out[key])
+    return out
+
+
 def _registered_worker(conn, name, args):
     os.setsid()
     import ctypes
@@ -81,9 +125,14 @@ def _registered_worker(conn, name, args):
         # Bound native math-library worker pools before they are imported.
         os.environ["OPENBLAS_NUM_THREADS"] = "1"
         os.environ["OMP_NUM_THREADS"] = "1"
-        from math_families.bridge.dispatch import call_tool
+        from .exact_data_checks import TOOL_FUNCTIONS, call_tool as call_exact_tool
 
-        value = call_tool(name, args)
+        if name in TOOL_FUNCTIONS:
+            value = call_exact_tool(name, args)
+        else:
+            from math_families.bridge.dispatch import call_tool
+
+            value = call_tool(name, args)
         payload = json.dumps(value, ensure_ascii=False, default=str, allow_nan=False)
         if len(payload.encode()) > 65536:
             conn.send({"status": "resource_limited", "result": None})
@@ -127,6 +176,7 @@ class RegisteredExecutor:
             return ToolResult(
                 "invalid_input", name, None, "NONE", scope, detail="argument contract"
             )
+        args = _normalized_tool_args(args)
         try:
             encoded = json.dumps(args, allow_nan=False)
             args = json.loads(

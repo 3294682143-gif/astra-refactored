@@ -12,6 +12,7 @@ import {
   P2_ERROR_CODES,
   P2Error,
   P3_TOOL_NAMES,
+  checkedP2MethodRoutingMetadata,
   detectLoneSurrogates,
   p2Snapshot,
   type P2Contract,
@@ -48,7 +49,14 @@ export interface P3Context {
 }
 
 const REQUEST_IDS = ["model-1", "model-2", "model-3"] as const;
-const EFFECT_IDS = ["effect-1", "effect-2"] as const;
+const EFFECT_IDS = [
+  "effect-1",
+  "effect-2",
+  "effect-3",
+  "effect-4",
+  "effect-5",
+  "effect-6",
+] as const;
 const HASH = /^[0-9a-f]{64}$/u;
 const SYSTEM_PROMPT = [
   "You may emit exactly one JSON action per turn.",
@@ -121,11 +129,21 @@ function checkMethodCatalog(catalog: readonly P2MethodEntry[]): readonly P2Metho
   }
   const seen = new Set<string>();
   const out: P2MethodEntry[] = [];
+  const allowed = new Set(["id", "title", "tasks", "objects", "structures", "role"]);
   for (const entry of catalog) {
-    if (!isPlainObject(entry) || Object.keys(entry).length !== 2) {
+    if (!isPlainObject(entry)) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (!Object.prototype.hasOwnProperty.call(entry, "id") || !Object.prototype.hasOwnProperty.call(entry, "title")) {
+    const own = Object.keys(entry);
+    if (
+      !own.includes("id") ||
+      !own.includes("title") ||
+      own.some((key) => !allowed.has(key))
+    ) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const metadata = checkedP2MethodRoutingMetadata(entry);
+    if (metadata === null) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const id = entry.id;
@@ -146,7 +164,7 @@ function checkMethodCatalog(catalog: readonly P2MethodEntry[]): readonly P2Metho
     if ([...title].length > MAX_METHOD_TITLE_CHARS) {
       fail(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
-    out.push({ id, title });
+    out.push({ id, title, ...metadata });
   }
   return p2Snapshot(out) as readonly P2MethodEntry[];
 }

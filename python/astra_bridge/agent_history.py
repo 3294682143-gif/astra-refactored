@@ -19,12 +19,18 @@ import hashlib
 
 from .p0_probe import ProbeError
 from .p0_protocol import ProtocolError
+from .answer_semantics import canonical_answer_key
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import parse_action, same_json as _same_json
 from .agent_workflow import _source_record, checked_packet, trusted_packet_binding
 from .text_contract import JS_WHITESPACE, js_nonempty, js_trim
 
-__all__ = ["project_artifacts", "artifact_view", "check_revision_context"]
+__all__ = [
+    "project_artifacts",
+    "artifact_view",
+    "ballot_choice",
+    "check_revision_context",
+]
 
 _ORDINALS = tuple(str(n) for n in range(1, 257))
 _ENVELOPE_FIELDS = (
@@ -248,6 +254,31 @@ def _is_certified_packet(packet):
     return final and checks_rows
 
 
+def ballot_choice(candidate_ids):
+    """The Node majority vote over ``(candidate_id, candidate)`` pairs.
+
+    The count is over CANONICAL answer keys, so ``1/2`` and ``\\frac12`` are one
+    vote instead of two minorities. The winner is the LAST candidate whose key
+    carries the top count (the Node loop scans its attempts backwards), which is
+    also the latest tie-break. The returned id is the raw packet the Node
+    delivers; the key never replaces the delivered candidate.
+    """
+    keys = {
+        candidate_id: canonical_answer_key(candidate)
+        for candidate_id, candidate in candidate_ids
+    }
+    counts = {}
+    for _candidate_id, _candidate in candidate_ids:
+        key = keys[_candidate_id]
+        counts[key] = counts.get(key, 0) + 1
+    best = max(counts.values())
+    return next(
+        candidate_id
+        for candidate_id, _candidate in reversed(candidate_ids)
+        if counts[keys[candidate_id]] == best
+    )
+
+
 def project_artifacts(history, session_id, problem_hash):
     """Project the real artifact ledger of one session from its history.
 
@@ -316,15 +347,7 @@ def project_artifacts(history, session_id, problem_hash):
         if certified_ids:
             chosen = certified_ids[-1]
         elif candidate_ids:
-            counts = {}
-            for _candidate_id, candidate in candidate_ids:
-                counts[candidate] = counts.get(candidate, 0) + 1
-            best = max(counts.values())
-            chosen = next(
-                candidate_id
-                for candidate_id, candidate in reversed(candidate_ids)
-                if counts[candidate] == best
-            )
+            chosen = ballot_choice(candidate_ids)
         for candidate_id in run_ids:
             if candidate_id != chosen:
                 superseded_normal_ids.add(candidate_id)

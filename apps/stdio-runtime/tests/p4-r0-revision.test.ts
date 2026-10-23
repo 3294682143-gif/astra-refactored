@@ -146,10 +146,10 @@ test("group 3: trigger replay rejects non-ISSUES, stale, foreign and altered rec
   assert.equal(createP4R0RevisionTrigger(prep, issues).issueDimensions.length > 0, true);
   for (const verdict of ["NO_ISSUE", "UNKNOWN"] as const) {
     const session = new P4R0ReviewSession(prep);
-    session.admit(1000, 4);
-    session.markDispatched();
-    session.settle("COMPLETE", r0Report(prep, verdict), 900);
-    assert.throws(() => createP4R0RevisionTrigger(prep, session.snapshot()), P2Error);
+    session.admit("MEANING", "model-1", 1000, 5);
+    session.markDispatched("MEANING");
+    session.settle("MEANING", "COMPLETE", r0Report(prep, verdict), 900);
+    assert.throws(() => createP4R0RevisionTrigger(prep, session.snapshot("MEANING")), P2Error);
   }
   const nulled = clone(issues);
   nulled.record = null;
@@ -172,7 +172,9 @@ test("group 3: trigger replay rejects non-ISSUES, stale, foreign and altered rec
   const trigger = createP4R0RevisionTrigger(prep, issues);
   assert.equal(trigger.parent.planHash, prep.target.binding.planHash);
   assert.equal(trigger.reviewHash, p4Hash(JSON.stringify(issues)));
-  assert.deepEqual(trigger.issueDimensions, ["PROBLEM_ALIGNMENT", "SCOPE", "TASK_COVERAGE"]);
+  // One role review records exactly its own dimension, so the trigger carries
+  // only the ISSUES dimension of that role.
+  assert.deepEqual(trigger.issueDimensions, ["PROBLEM_ALIGNMENT"]);
   const badHash = clone(trigger);
   badHash.reviewHash = "0".repeat(64);
   assert.throws(() => validateP4R0RevisionInput(prep, badHash as never), P2Error);
@@ -288,7 +290,7 @@ test("group 5: revision admission budget, single flight and stale", () => {
     [1001, 2, 3],
     [900, 1, 3],
     [900, 2, 2],
-    [900, 2, 4],
+    [900, 2, 5],
     [900, 3, 3],
   ] as const) {
     const session = new P4R0PlanRevisionSession(prep, trigger);
@@ -384,20 +386,21 @@ test("group 7: multipart parent is not a retypeable leaf", () => {
 test("group 8: only the recorded ISSUES dimension is accepted", () => {
   const prep = makeRevisionR0();
   const review = makeIssuesReview(prep);
+  // A role-scoped review reply carries exactly one check: the single dimension
+  // that role owns, here the MEANING role's PROBLEM_ALIGNMENT.
   const report = JSON.parse(review.record!.rawResponseText!) as Record<string, unknown>;
   const checks = report.checks as Record<string, unknown>[];
+  assert.equal(checks.length, 1);
   assert.equal(checks[0]!.verdict, "ISSUES");
-  for (const index of [1, 2]) {
-    checks[index]!.verdict = "NO_ISSUE";
-  }
+  assert.equal(checks[0]!.dimension, "PROBLEM_ALIGNMENT");
   const raw = JSON.stringify(report);
   const session = new P4R0ReviewSession(prep);
-  session.admit(1000, 4);
-  session.markDispatched();
-  const settled = session.settle("COMPLETE", raw, 900);
+  session.admit("MEANING", "model-1", 1000, 5);
+  session.markDispatched("MEANING");
+  const settled = session.settle("MEANING", "COMPLETE", raw, 900);
   assert.equal(settled.code, "OK");
   assert.equal(settled.report!.conclusion, "ISSUES");
-  const trigger = createP4R0RevisionTrigger(prep, session.snapshot());
+  const trigger = createP4R0RevisionTrigger(prep, session.snapshot("MEANING"));
   assert.deepEqual(trigger.issueDimensions, ["PROBLEM_ALIGNMENT"]);
   const good = revisionReport(prep, trigger);
   assert.equal(parseP4R0RevisionReport(good, prep, trigger).changes[0]!.issueDimension, "PROBLEM_ALIGNMENT");

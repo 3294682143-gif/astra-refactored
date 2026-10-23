@@ -4,11 +4,13 @@
  */
 
 import { compileP2Contract, prepareP4R0 } from "@astra/math-contract";
+import { P4_R0_ROLE_DIMENSION } from "@astra/protocol";
 import type {
   P2GoalKind,
   P2GoalSpec,
   P4R0Options,
   P4R0Preparation,
+  P4R0Role,
   P4R0Verdict,
 } from "@astra/protocol";
 
@@ -50,7 +52,9 @@ export function makeR0(
   return prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 3,
+    // The whole R0 stage is a fixed five-call design (three role reviews, one
+    // targeted recheck, at most one revision).
+    remainingRootCalls: 5,
     remainingMs: 1000,
     ...optionsOverride,
   });
@@ -61,7 +65,7 @@ export function makeR0Default(kind: P2GoalKind = "ALL_SOLUTIONS"): P4R0Preparati
   const problem = kind === "VALUE" ? VALUE_PROBLEM : ALL_PROBLEM;
   const base = compileP2Contract(problem, "r0");
   const contract = compileP2Contract(problem, "r0", specsFor(kind, base.goals[0]!));
-  return prepareP4R0(contract, { remainingRootCalls: 3, remainingMs: 1000 });
+  return prepareP4R0(contract, { remainingRootCalls: 5, remainingMs: 1000 });
 }
 
 function span(source: string, start: number, end: number) {
@@ -69,27 +73,37 @@ function span(source: string, start: number, end: number) {
 }
 
 /**
- * Literal synthetic report bound to a real preparation. It is a hand-written
- * fixture, not a model opinion and not a claim about the template.
+ * Literal synthetic role-scoped report bound to a real preparation. It is a
+ * hand-written fixture, not a model opinion and not a claim about the template.
+ * One reply carries exactly the single dimension its role owns.
  */
-export function r0Report(prep: P4R0Preparation, verdict: P4R0Verdict = "NO_ISSUE"): string {
+export function r0Report(
+  prep: P4R0Preparation,
+  verdict: P4R0Verdict = "NO_ISSUE",
+  role: P4R0Role = "MEANING",
+  requestId = "model-1",
+): string {
   const contract = prep.target.contract;
   const problem = contract.problemFullText;
   const plan = prep.target.planText;
   const binding = prep.target.binding;
   const problemSpan = verdict === "UNKNOWN" ? null : span(problem, 0, 1);
   const planSpan = verdict === "UNKNOWN" ? null : span(plan, 0, 2);
-  const checks = ["PROBLEM_ALIGNMENT", "SCOPE", "TASK_COVERAGE"].map((dimension) => ({
-    dimension,
-    verdict,
-    rationale: `fixture ${dimension}`,
-    problemSpan,
-    planSpan,
-  }));
+  const dimension = P4_R0_ROLE_DIMENSION[role];
+  const checks = [
+    {
+      dimension,
+      verdict,
+      rationale: `fixture ${role} ${dimension}`,
+      problemSpan,
+      planSpan,
+    },
+  ];
   return JSON.stringify({
     schemaVersion: "p4-r0-review-v1",
-    requestId: "model-1",
+    requestId,
     stage: "R0",
+    role,
     target: binding,
     planHash: binding.planHash,
     conclusion: verdict,

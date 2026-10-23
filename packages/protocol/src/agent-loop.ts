@@ -29,9 +29,19 @@ import type { P4S1Assessment } from "./p4-repair.js";
  * Fixed phase of one model request. WORK and R2 share one root budget; REPAIR
  * is the single G3/PR4 S2 evidence-triggered revision call that may follow one
  * R2 review of a protected candidate. It is not a new solver: it only re-states
- * the same answer obligation after a challenge.
+ * the same answer obligation after a challenge. R0 is the bounded front-stage
+ * planning review; R0_RECHECK is the single targeted recheck of the revised R0
+ * plan and belongs to the same front stage, never to a second reviewer.
  */
-export const AGENT_MODEL_PHASE = Object.freeze(["WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0"] as const);
+export const AGENT_MODEL_PHASE = Object.freeze([
+  "WORK",
+  "CONSENSUS",
+  "R2",
+  "R4",
+  "REPAIR",
+  "R0",
+  "R0_RECHECK",
+] as const);
 export type AgentModelPhase = (typeof AGENT_MODEL_PHASE)[number];
 
 /** Fixed per-request output ceiling; the host enforces it, not the model. */

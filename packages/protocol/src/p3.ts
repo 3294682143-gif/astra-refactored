@@ -8,12 +8,24 @@
  * check of the exact observation bytes, not a mathematical proof.
  */
 
-/** The two existing registered executors this phase may name. */
+/**
+ * The registered executors this phase may name: a closed whitelist of eleven
+ * data-only operators. Every name here has a Host input contract and a
+ * dispatch entry, so naming anything else is a fixed validation failure rather
+ * than a silent runtime miss.
+ */
 export const P3_TOOL_NAMES = Object.freeze([
   "polynomial_expand_coefficients",
   "linear_system_solution_set",
   "exact_check_expr",
   "bounded_enumeration",
+  "real_root_count_expr",
+  "splitting_field_degree_expr",
+  "circle_laplacian_expr",
+  "planar_laplacian_expr",
+  "interpolation_fit_check",
+  "stats_ols_check",
+  "finite_group_structure",
 ] as const);
 export type P3ToolName = (typeof P3_TOOL_NAMES)[number];
 

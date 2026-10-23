@@ -223,7 +223,7 @@ test("group 4: real child leaf spans use codepoints, not UTF-16 offsets", () => 
   const original: P4R0Preparation = prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 4,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
   const { preparation } = makeRecheck({}, original);

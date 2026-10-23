@@ -227,7 +227,11 @@
                   "required": ["id", "title"],
                   "properties": {
                     "id": { "type": "string", "minLength": 1, "maxLength": 64 },
-                    "title": { "type": "string", "minLength": 1, "maxLength": 256 }
+                    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+                    "tasks": { "type": "array", "maxItems": 6, "items": { "type": "string", "minLength": 1, "maxLength": 24 } },
+                    "objects": { "type": "array", "maxItems": 6, "items": { "type": "string", "minLength": 1, "maxLength": 24 } },
+                    "structures": { "type": "array", "maxItems": 6, "items": { "type": "string", "minLength": 1, "maxLength": 24 } },
+                    "role": { "type": "string", "enum": ["method", "decision"] }
                   }
                 }
               }

@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { problemRelationPolynomial, solutionSetOf, sameRationalSet, type Poly, type Rat } from "../src/agent-semantics.js";
+import {
+  polynomialOf,
+  problemRelationPolynomial,
+  solutionSetOf,
+  sameRationalSet,
+  type Poly,
+  type Rat,
+} from "../src/agent-semantics.js";
 
 function poly(terms: ReadonlyArray<readonly [string, number]>): Poly {
   return new Map(terms);
@@ -70,4 +77,48 @@ test("the six gate cases through problemRelationPolynomial", () => {
   // (x^2-1)/(x-1)=0: the domain exclusion (x≠1) is not representable here, so the
   // relation is undeterminable -> fail closed; the excluded point is never accepted.
   assert.equal(problemRelationPolynomial("(x^2-1)/(x-1)=0"), null);
+});
+
+// The answers models actually write in Chinese use Unicode notation: `²³⁴`
+// superscript exponents, `⁻¹` for an inverse, `−` U+2212 and `·`/`×` for
+// multiplication. The parser must read them as the same polynomial, and it must
+// stay strict about everything else.
+
+test("unicode superscript exponents parse as the same polynomial as ^ and **", () => {
+  const expected = poly([
+    ["t^2", 1],
+    ["t", -1],
+    ["", 1],
+  ]);
+  assert.deepEqual(polynomialOf("t²-t+1"), expected);
+  assert.deepEqual(polynomialOf("t^2-t+1"), expected);
+  assert.deepEqual(polynomialOf("t**2-t+1"), expected);
+  assert.deepEqual(polynomialOf("t¹²"), poly([["t^12", 1]]));
+  assert.deepEqual(polynomialOf("2x²"), poly([["x^2", 2]]));
+  assert.deepEqual(polynomialOf("(x+1)²"), poly([["x^2", 1], ["x", 2], ["", 1]]));
+});
+
+test("unicode minus, middle dot and multiplication sign parse like ASCII", () => {
+  assert.deepEqual(polynomialOf("x−1"), poly([["x", 1], ["", -1]]));
+  assert.deepEqual(polynomialOf("2·x"), poly([["x", 2]]));
+  assert.deepEqual(polynomialOf("3×x"), poly([["x", 3]]));
+  assert.deepEqual(polynomialOf("t² − t + 1"), poly([["t^2", 1], ["t", -1], ["", 1]]));
+});
+
+test("a superscript inverse stays one Laurent monomial or nothing", () => {
+  assert.deepEqual(polynomialOf("x⁻¹"), poly([["x^-1", 1]]));
+  assert.deepEqual(polynomialOf("x⁻¹·x"), poly([["", 1]]));
+  // A non-monomial base cannot be inverted into a polynomial: fail closed.
+  assert.equal(polynomialOf("(x+1)⁻¹"), null);
+});
+
+test("the unicode notation never weakens the existing guards", () => {
+  // Unknown symbols stay unparsable; a lone superscript is not an expression.
+  assert.equal(polynomialOf("x@2"), null);
+  assert.equal(polynomialOf("²"), null);
+  assert.equal(polynomialOf("x⁻"), null);
+  // A lone lowercase letter is still one variable, never a number.
+  assert.deepEqual(polynomialOf("x"), poly([["x", 1]]));
+  // The ASCII `x^-1` form keeps its previous (unparsable) behaviour.
+  assert.equal(polynomialOf("x^-1"), null);
 });

@@ -48,10 +48,20 @@ _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 3600000
 _MAX_MODEL_CALLS = 256
 _MAX_WORK_UNITS = 64
+# The public ``maxEffects`` option caps grantable TOOL effects at two. A loaded
+# method card is a separate slot, so the total effect-id capacity is
+# ``max_effects + max_method_loads`` while methods are enabled.
 _MAX_EFFECTS = 2
 _MAX_REVIEWS = 3
-_MAX_METHOD_LOADS = 1
+_MAX_METHOD_LOADS = 4
+# Front-stage calls one enabled R0 review costs: 3 role reviews + 1 recheck.
+_R0_FRONT_CALLS = 4
 _MAX_TOKENS = 8192
+# Stage quota vocabulary (HANDOFF §5 item 4). Front stages spend the planning /
+# review ceiling; candidate stages only exist after a candidate-bearing turn and
+# therefore arm the finalization reserve.
+_FRONT_PHASES = ("R0", "R2", "R4")
+_CANDIDATE_PHASES = ("R2", "R4", "REPAIR", "CONSENSUS")
 _HOST_SOLVE_ID = "host-2"
 _HOST_STOP_ID = "host-3"
 _PROFILE_ID = "math-agent-preview-v2"
@@ -69,7 +79,9 @@ _STOP_REASONS = (
 _TRACE_KINDS = ("MODEL", "EFFECT", "CONTROL")
 _TRACE_STATES = ("DISPATCHED", "RETURNED", "OUTCOME_UNKNOWN", "RECORDED")
 _MODEL_TRACE_IDS = tuple("model-" + str(n) for n in range(1, 257))
-_EFFECT_TRACE_IDS = ("effect-1", "effect-2")
+# The effect trace namespace is the shared boundary contract, never a second
+# hard-coded list: when ``EFFECT_IDS`` grows, the trace filter follows.
+_EFFECT_TRACE_IDS = tuple(EFFECT_IDS)
 # The root AgentSession emits exactly one control trace id, `control`. The
 # older P0/P1/P2/P3 traces are not touched here; this filter only accepts the
 # real id the unified AgentSession actually records.
@@ -195,6 +207,15 @@ class AgentHost(_Host):
             options.get("resumeContractVersion")
         )
         self.max_model_calls = _bounded_int(options["maxModelCalls"], 0, _MAX_MODEL_CALLS)
+        # HANDOFF §5 item 4 (阶段配额): the flat cap is split deterministically
+        # into a front-stage ceiling and a finalization reserve. ``front_budget``
+        # bounds every R0 planning call plus every review call (R2/R4) to a
+        # quarter of the soft budget; ``tail_reserve`` is how many calls a
+        # candidate-bearing turn must leave untouched for the finalization
+        # stages (R2/R4/REPAIR), so a fresh WORK/CONSENSUS may never eat it.
+        # Integer ceiling only: no float ever enters a comparison.
+        self.front_budget = max(1, -(-self.max_model_calls * 25 // 100))
+        self.tail_reserve = max(1, -(-self.max_model_calls * 10 // 100))
         self.max_work_units = _bounded_int(options["maxWorkUnits"], 1, _MAX_WORK_UNITS)
         self.max_effects = _bounded_int(options["maxEffects"], 0, _MAX_EFFECTS)
         self.max_reviews = _bounded_int(options["maxReviews"], 0, _MAX_REVIEWS)
@@ -202,6 +223,14 @@ class AgentHost(_Host):
         self.max_repairs = _bounded_int(options["maxRepairs"], 0, 3)
         self.max_consensus = _bounded_int(options["maxConsensus"], 0, 8)
         self.max_r0 = _bounded_int(options["maxR0"], 0, 1)
+        # The R0 stage is a fixed, bounded planning shape: three independent
+        # role reviews plus at most one recheck and one revision. When the
+        # profile explicitly enables it, the front allowance must be able to
+        # host that shape, otherwise the third review would be refused by a
+        # quota that was calibrated for a stage that no longer exists. The
+        # 25 % rule still applies to every other front call (R2/R4).
+        if self.max_r0 >= 1 and self.front_budget < _R0_FRONT_CALLS:
+            self.front_budget = _R0_FRONT_CALLS
         if options["policy"] not in _POLICIES:
             _fail()
         self.policy = options["policy"]
@@ -239,6 +268,14 @@ class AgentHost(_Host):
                 self.history[rid] = {"request": copy.deepcopy(req), "receipt": copy.deepcopy(receipt)}
         self.model_requests = 0
         self.effect_calls = 0
+        # Effects are budgeted per kind: ``tool_effect_count`` is spent only by
+        # tool actions, ``method_loads`` only by method-card loads, and
+        # ``effect_calls`` is the total id capacity actually used.
+        self.tool_effect_count = 0
+        # Bounded, deduplicated identity of what was really spent. Names and
+        # card ids only: no raw args, no observation, no model text.
+        self.tool_names = []
+        self.method_ids = []
         self.resume_model_offset = 0
         self.resume_effect_offset = 0
         if self.resume_session_log:
@@ -246,11 +283,39 @@ class AgentHost(_Host):
             self.model_requests = self.resume_model_offset
             self.resume_effect_offset = sum(1 for r in self.resume_session_log if isinstance(r, dict) and r.get("kind") in ("TOOL_OBSERVATION", "METHOD_LOAD"))
             self.effect_calls = self.resume_effect_offset
+            self.tool_effect_count = sum(
+                1 for r in self.resume_session_log
+                if isinstance(r, dict) and r.get("kind") == "TOOL_OBSERVATION"
+            )
         self.review_calls = 0
         self.repair_calls = 0
         self.consensus_calls = 0
+        # Stage-quota spend, both derived from admitted requests only:
+        # ``front_spent`` counts R0/R2/R4 admissions, and
+        # ``candidate_stage_seen`` flips once a post-candidate phase
+        # (R2/R4/REPAIR/CONSENSUS) is admitted -- never from model text.
+        self.front_spent = 0
+        self.candidate_stage_seen = False
         self.catalog_calls = 0
         self.method_loads = 0
+        if self.resume_session_log:
+            self.method_loads = sum(
+                1 for r in self.resume_session_log
+                if isinstance(r, dict) and r.get("kind") == "METHOD_LOAD"
+            )
+            # A resumed prefix keeps its own stage spend: the LOG's phase column
+            # is control data, so the same quotas become neither wider nor
+            # narrower by resuming.
+            if self.resume_model_offset:
+                for row in self.resume_session_log:
+                    if not isinstance(row, dict) or row.get("kind") != "MODEL_REQUEST":
+                        continue
+                    data = row.get("data")
+                    phase = data.get("phase") if isinstance(data, dict) else None
+                    if phase in _FRONT_PHASES:
+                        self.front_spent += 1
+                    if phase in _CANDIDATE_PHASES:
+                        self.candidate_stage_seen = True
         self.asset_calls = 0
         self.catalog = None
         self.method_assets = []
@@ -320,7 +385,39 @@ class AgentHost(_Host):
         }
 
     def _effect_budget(self):
-        return self.max_effects
+        """Total effect-id capacity: the tool quota plus the method slot.
+
+        ``max_effects`` stays the public TOOL quota (0..2) and remains what the
+        Node body advertises for tool actions. Loaded method cards have their
+        own bounded quota, so ``max_method_loads`` cards plus ``max_effects``
+        tools must fit; otherwise a card eats a tool call. The total is
+        additionally bounded by the shared ``EFFECT_IDS`` namespace, so the
+        Host never promises an id the boundary contract cannot bind.
+        """
+        method_slot = self.max_method_loads if self._methods_enabled() else 0
+        return min(self.max_effects + method_slot, len(EFFECT_IDS))
+
+    def _effect_admission(self, kind):
+        """Fixed effect-budget order: total capacity first, then the kind quota."""
+        if self.effect_calls >= self._effect_budget():
+            return False
+        if kind == "method":
+            return self.method_loads < self.max_method_loads
+        return self.tool_effect_count < self.max_effects
+
+    def _advertised_actions(self, reserve_ok, cached_tool, cached_method):
+        """The two action grants the Node body must advertise for this WORK turn.
+
+        Tool and method quotas are split. They share only the total effect-id
+        capacity and the common deadline/review reserve.
+        """
+        catalog_ready = self.catalog is not None and bool(self.catalog["entries"])
+        return (
+            reserve_ok and (self._effect_admission("tool") or cached_tool),
+            reserve_ok
+            and catalog_ready
+            and (self._effect_admission("method") or cached_method),
+        )
 
     # -- inbound ----------------------------------------------------------
 
@@ -352,7 +449,7 @@ class AgentHost(_Host):
 
     def _methods_enabled(self):
         return (
-            self.max_method_loads == 1
+            self.max_method_loads > 0
             and self.max_effects > 0
             and self.max_model_calls >= 2 + self.max_reviews
         )
@@ -365,7 +462,7 @@ class AgentHost(_Host):
         if frame_id != "node-catalog-1":
             _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail()
+            _fail("DEADLINE_EXCEEDED")
         remaining = params["remainingMs"]
         if not _is_int(remaining) or remaining < _MIN_REMAINING_MS + 1 or remaining > _MAX_REMAINING_MS:
             _fail()
@@ -410,7 +507,7 @@ class AgentHost(_Host):
         if params["sessionId"] != self.session_id:
             _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail()
+            _fail("DEADLINE_EXCEEDED")
         try:
             descriptor = scoped_asset_call(
                 params["assetGroup"],
@@ -435,12 +532,12 @@ class AgentHost(_Host):
     def on_model(self, frame_id, params):
         ordinal = self.model_requests + 1
         if ordinal > self.max_model_calls:
-            _fail()
+            _fail("BUDGET")
         if self.model_requests == 0 and self._methods_enabled():
             if self.catalog_calls != 1 or not self.callback_done:
                 _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail()
+            _fail("DEADLINE_EXCEEDED")
         request = params["request"]
         request_id = request["requestId"]
         if request_id != "model-" + str(ordinal):
@@ -453,34 +550,48 @@ class AgentHost(_Host):
             _fail()
         if request["maxTokens"] != _MAX_TOKENS:
             _fail()
+        # Stage quotas, in the fixed order: the total cap (already checked as
+        # ``ordinal``), then the front-stage ceiling for R0/review calls, then
+        # the finalization reserve that only bars fresh WORK/CONSENSUS turns
+        # once a candidate-bearing turn has really happened. Both refusals use
+        # the existing BUDGET vocabulary.
+        if request["phase"] in _FRONT_PHASES:
+            if self.front_spent >= self.front_budget:
+                _fail("BUDGET")
+        elif request["phase"] in ("WORK", "CONSENSUS"):
+            if (
+                self.candidate_stage_seen
+                and self.max_model_calls - self.model_requests <= self.tail_reserve
+            ):
+                _fail("BUDGET")
         if request["phase"] in ("R2", "R4"):
             # Bounded review rounds share one authorized review budget. R4 is
             # only a re-review after at least one evidence-triggered repair.
             if self.review_calls >= self.max_reviews:
-                _fail()
+                _fail("BUDGET")
             if request["phase"] == "R4" and self.repair_calls < 1:
                 _fail()
         elif request["phase"] == "REPAIR":
             # A bounded sequence of evidence-triggered revisions: at most one
             # per review round, never more than the authorized repair budget.
             if self.max_repairs < 1:
-                _fail()
+                _fail("BUDGET")
             if self.review_calls < 1:
                 _fail()
             if self.repair_calls >= self.max_repairs:
-                _fail()
+                _fail("BUDGET")
             # At most one revision per review round: a REPAIR must be preceded
             # by a review that has not already produced a repair.
             if self.repair_calls >= self.review_calls:
                 _fail()
             if self.max_model_calls - self.model_requests < 1:
-                _fail()
+                _fail("BUDGET")
         elif request["phase"] == "CONSENSUS":
             # A bounded blind re-solve / adjudication before candidate delivery.
             # It never follows a review and never produces a Host artifact by
             # itself; only the selected packet is later accepted by Node.
             if self.max_consensus < 1 or self.consensus_calls >= self.max_consensus:
-                _fail()
+                _fail("BUDGET")
             if self.review_calls > 0:
                 _fail()
             if not any(
@@ -584,23 +695,14 @@ class AgentHost(_Host):
                 and entry["request"].get("action", {}).get("action") == "method"
                 for entry in self.effects
             )
-            allow_tools = reserve_ok and (
-                self.effect_calls < self._effect_budget() or cached_tool
+            allow_tools, allow_methods = self._advertised_actions(
+                reserve_ok, cached_tool, cached_method,
             )
-            allow_methods = (
-                reserve_ok
-                and self.catalog is not None
-                and bool(self.catalog["entries"])
-                and (
-                    (self.method_loads < self.max_method_loads
-                     and self.effect_calls < self._effect_budget())
-                    or cached_method
-                )
-            )
-            if not self.derive_budget and body["allowTools"] is not allow_tools:
-                _fail()
-            if not self.derive_budget and body["allowMethods"] is not allow_methods:
-                _fail()
+            if not self.derive_budget:
+                if body["allowTools"] != allow_tools:
+                    _fail()
+                if body["allowMethods"] != allow_methods:
+                    _fail()
             expected_allow_route = (
                 not self.route_admissions
                 and pending_new_provenance is None
@@ -675,7 +777,7 @@ class AgentHost(_Host):
             if pending_new_dependency is not None:
                 self.dependency_admissions[task_id] = pending_new_dependency
         if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail()
+            _fail("DEADLINE_EXCEEDED")
         deadline = min(self.deadline, time.monotonic() + request["remainingMs"] / 1000.0)
         result = self.client.generate(copy.deepcopy(request), deadline)
         if not isinstance(result, dict):
@@ -693,6 +795,10 @@ class AgentHost(_Host):
         }
         self.model_requests += 1
         self.last_model_id = request_id
+        if request["phase"] in _FRONT_PHASES:
+            self.front_spent += 1
+        if request["phase"] in _CANDIDATE_PHASES:
+            self.candidate_stage_seen = True
         if request["phase"] in ("R2", "R4"):
             self.review_calls += 1
         elif request["phase"] == "REPAIR":
@@ -735,12 +841,10 @@ class AgentHost(_Host):
             _fail()
         if record["receipt"]["transportStatus"] != "COMPLETE":
             _fail()
-        if self.effect_calls >= self._effect_budget():
-            _fail()
         if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
-            _fail()
+            _fail("BUDGET")
         if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail()
+            _fail("DEADLINE_EXCEEDED")
         body = _parse_inner(record["request"]["messages"][1]["content"])
         if not isinstance(body, dict):
             _fail()
@@ -749,10 +853,13 @@ class AgentHost(_Host):
         expected_kind = "method" if wire_method == "method.load" else "tool"
         if action["action"] != expected_kind:
             _fail()
+        # One fixed budget order: the total id capacity, then the per-kind
+        # quota (tool actions vs method-card loads), then the action grant the
+        # Node body itself advertised.
+        if not self._effect_admission(expected_kind):
+            _fail("BUDGET")
         if expected_kind == "method":
             if body.get("allowMethods") is not True:
-                _fail()
-            if self.max_method_loads != 1 or self.method_loads >= _MAX_METHOD_LOADS:
                 _fail()
             if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
                 _fail()
@@ -786,6 +893,18 @@ class AgentHost(_Host):
         self.effect_calls += 1
         if expected_kind == "method":
             self.method_loads += 1
+            if (
+                action["id"] not in self.method_ids
+                and len(self.method_ids) < self.max_method_loads
+            ):
+                self.method_ids.append(action["id"])
+        else:
+            self.tool_effect_count += 1
+            if (
+                action["name"] not in self.tool_names
+                and len(self.tool_names) < self.max_effects
+            ):
+                self.tool_names.append(action["name"])
         try:
             if expected_kind == "method":
                 result = perform_effect(
@@ -955,7 +1074,10 @@ class AgentHost(_Host):
             or summary["modelCalls"] > self.max_model_calls
         ):
             _fail()
-        if not _is_int(summary["effectCalls"]) or not self.effect_calls <= summary["effectCalls"] <= self.max_effects:
+        if (
+            not _is_int(summary["effectCalls"])
+            or not self.effect_calls <= summary["effectCalls"] <= self._effect_budget()
+        ):
             _fail()
         if (
             not _is_int(summary["workUnits"])

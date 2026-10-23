@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 
 from .agent_client import _validate_request
 from .p0_probe import ProbeError
@@ -1186,19 +1187,82 @@ def _check_repair(body, request_id, problem, session_id, problem_hash, history):
     return copy.deepcopy(body)
 
 
+# Fixed R0 role -> dimension binding (HANDOFF §5 item 5). The Host only
+# re-checks the declared pairing; it never reviews and never decides.
+_R0_ROLE_DIMENSION = {
+    "MEANING": "PROBLEM_ALIGNMENT",
+    "METHOD": "SCOPE",
+    "TASK_TOOL": "TASK_COVERAGE",
+}
+# The three role reviews and the single bounded revision are stage ``R0``; the
+# single targeted recheck of the revised plan is stage ``R0_RECHECK``. No other
+# R0 stage is accepted.
+_R0_STAGES = ("R0", "R0_RECHECK")
+_R0_REQUEST_ID = re.compile(r"^model-[1-9][0-9]{0,2}$")
+# The revision and recheck reply contracts own frozen stage labels
+# (``model-2`` / ``model-3``) that are part of their own schema, so those bodies
+# are not required to echo the frame ordinal. A role review always does.
+_R0_REVISION_LABEL = "model-2"
+_R0_RECHECK_LABEL = "model-3"
+# Context payload schema per accepted sub-stage. The revision keeps the R0
+# stage label of its own contract; only the recheck moves to ``R0_RECHECK``.
+_R0_CONTEXT_SCHEMA = {
+    "p4-r0-review-context-v1": "REVIEW",
+    "p4-r0-revision-context-v1": "REVISION",
+    "p4-r0-recheck-context-v1": "RECHECK",
+}
+_R0_STAGE_OF_SCHEMA = {
+    "REVIEW": "R0",
+    "REVISION": "R0",
+    "RECHECK": "R0_RECHECK",
+}
+_R0_LABEL_OF_SCHEMA = {
+    "REVIEW": None,
+    "REVISION": _R0_REVISION_LABEL,
+    "RECHECK": _R0_RECHECK_LABEL,
+}
+
+
 def _check_r0(body, request_id, problem, session_id, problem_hash):
     """Validate one bounded R0 planning-review context (identity only).
 
-    The R0 review and its single bounded revision are parsed and settled by the
-    Node ``P4R0ReviewSession``/``P4R0PlanRevisionSession``; the Host only
-    re-checks the identity binding (session/problem/contract version) and never
-    makes a mathematical decision, dispatches a tool or promotes evidence.
+    The three independent role reviews, their aggregate, the single targeted
+    recheck and the single bounded revision are parsed and settled by the Node
+    ``P4R0ReviewSession``/``P4R0Aggregate``/``P4R0RecheckSession``/
+    ``P4R0PlanRevisionSession``; the Host only re-checks the identity binding
+    (session/problem/contract version), the accepted stage and, when present,
+    the declared role/dimension pairing. It never makes a mathematical
+    decision, dispatches a tool or promotes evidence.
     """
     if not isinstance(body, dict):
         _fail()
-    if body.get("stage") != "R0":
+    stage = body.get("stage")
+    if stage not in _R0_STAGES:
         _fail()
-    if body.get("requestId") != request_id:
+    kind = _R0_CONTEXT_SCHEMA.get(body.get("schemaVersion"))
+    if kind is None:
+        _fail()
+    # The declared stage must match the sub-stage the payload belongs to.
+    if stage != _R0_STAGE_OF_SCHEMA[kind]:
+        _fail()
+    labelled_request_id = body.get("requestId")
+    if not isinstance(labelled_request_id, str) or not _R0_REQUEST_ID.match(labelled_request_id):
+        _fail()
+    expected_label = _R0_LABEL_OF_SCHEMA[kind]
+    if expected_label is None:
+        # A role review is bound to the frame ordinal it was dispatched under.
+        if labelled_request_id != request_id:
+            _fail()
+    elif labelled_request_id != expected_label:
+        _fail()
+    role = body.get("role")
+    if kind == "REVIEW":
+        if not isinstance(role, str) or role not in _R0_ROLE_DIMENSION:
+            _fail()
+        dimensions = body.get("dimensions")
+        if not isinstance(dimensions, list) or dimensions != [_R0_ROLE_DIMENSION[role]]:
+            _fail()
+    elif role is not None:
         _fail()
     if body.get("problemFullText") != problem:
         _fail()
@@ -1267,7 +1331,7 @@ def validate_context(request, problem, session_id, problem_hash, history, effect
         if task.get("taskId") != request["taskId"] or task.get("scopeId") != request["scopeId"]:
             _fail()
         _check_repair(body, request_id, problem, session_id, problem_hash, history)
-    elif request["phase"] == "R0":
+    elif request["phase"] in ("R0", "R0_RECHECK"):
         _check_r0(body, request_id, problem, session_id, problem_hash)
     else:
         _fail()

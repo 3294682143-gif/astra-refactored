@@ -17,7 +17,12 @@ import {
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
-import { AgentSession } from "@astra/runtime-core";
+import {
+  AGENT_MAX_EFFECTS,
+  AGENT_MAX_EFFECT_OPTION,
+  AGENT_MAX_METHOD_LOADS,
+  AgentSession,
+} from "@astra/runtime-core";
 import { runAgentLoop } from "../src/agent-loop.js";
 import {
   reactivePorts,
@@ -84,6 +89,22 @@ test("AgentSession shares one root ceiling of 4 model and 2 effect calls with a 
   }, TypeError);
 });
 
+test("AgentSession admits the six-id effect table and refuses the seventh id", () => {
+  assert.equal(AGENT_MAX_EFFECT_OPTION, 2);
+  assert.equal(AGENT_MAX_METHOD_LOADS, 4);
+  assert.equal(AGENT_MAX_EFFECTS, AGENT_MAX_EFFECT_OPTION + AGENT_MAX_METHOD_LOADS);
+  const root = sessionOf(8, AGENT_MAX_EFFECTS);
+  for (let ordinal = 1; ordinal <= AGENT_MAX_EFFECTS; ordinal += 1) {
+    const modelId = `model-${ordinal}`;
+    assert.equal(root.reserveModel("WORK"), modelId);
+    root.settleModel(modelId, "COMPLETE");
+    assert.equal(root.reserveEffect(`effect-${ordinal}`), `effect-${ordinal}`);
+    root.settleEffect(`effect-${ordinal}`, "COMPLETE");
+  }
+  expectCode(() => root.reserveEffect("effect-1"), "BUDGET_EXHAUSTED");
+  assert.equal(root.effectCalls(), 6);
+});
+
 test("AgentSession refuses replays, a pending stop and an illegal cap without mutation", () => {
   const root = sessionOf();
   root.reserveModel("WORK");
@@ -111,7 +132,7 @@ test("AgentSession refuses replays, a pending stop and an illegal cap without mu
       "BOUND_EXCEEDED",
     );
   }
-  for (const bad of [-1, 3, 1.5, Number.NaN]) {
+  for (const bad of [-1, 7, 1.5, Number.NaN]) {
     expectCode(
       () =>
         new AgentSession({

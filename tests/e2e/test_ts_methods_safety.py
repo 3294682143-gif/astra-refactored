@@ -37,7 +37,13 @@ from test_ts_methods import _MethodClient, spy_catalog  # noqa: E402
 
 __all__ = ["no_legacy_solver", "process_tracker"]
 
-LEGACY_SHA = "18a7ef79448396afaac75bbaf65c9ab5d27658cf596d19624b0ac3616ff705ad"
+# The 1.2 manifest is a historical contract and must not drift silently.
+# Two deliberate drifts are pinned here, both widening only what the shared
+# registry already exposes: the P3 tool whitelist (4 -> 8 names) and the
+# summary `effectCalls` bound (2 -> 3, the tool quota plus one method card).
+# The legacy contract keeps its own `effect-1/2` id vocabulary: the six-id
+# table belongs to the live 1.3 agent-host schema only.
+LEGACY_SHA = "d21953e28965de0497f6dd186b716f388256dd4b95500351729a7dd7d9fe80dd"
 LEGACY_PATH = ROOT / "packages" / "protocol" / "schema" / "agent-host.schema.json"
 
 

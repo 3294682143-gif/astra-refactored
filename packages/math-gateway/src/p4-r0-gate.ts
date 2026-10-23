@@ -13,8 +13,13 @@ export const P4_R0_GATE_VERSION = "0.0.0-p4r0" as const;
 /** Below this remaining time a call is refused rather than started. */
 export const P4_R0_MIN_REMAINING_MS = 25 as const;
 
-/** Hard ceiling on the shared root call allowance. */
-export const P4_R0_MAX_MODEL_CALLS = 4 as const;
+/**
+ * Hard ceiling on the shared root call allowance. The R0 stage is a fixed
+ * five-call design (three independent role reviews + one targeted recheck +
+ * at most one plan revision), so the shared root allowance it can be admitted
+ * against is five, never four.
+ */
+export const P4_R0_MAX_MODEL_CALLS = 5 as const;
 
 /** Default share of the root allowance reserved for R0 planning. */
 export const P4_R0_DEFAULT_PLANNING_PERCENT = 25 as const;
@@ -163,9 +168,11 @@ export class P4R0ModelGate {
   }
 
   /**
-   * Admit the single R0 planning call. Requires an exact plan binding, a
+   * Admit the R0 planning calls. Requires an exact plan binding, a
    * REQUEST_REVIEW preparation with UNKNOWN semantics, and a root allowance
-   * that still leaves one call for later work.
+   * that covers at least two calls and still leaves one call for later work.
+   * The per-role review records and the aggregate are owned by M4; this gate
+   * only admits the shared-root phase once, in ordinal order.
    */
   admitR0(prep: P4R0Preparation, remainingMs: number): P4R0ModelRecord {
     if (typeof prep !== "object" || prep === null) {

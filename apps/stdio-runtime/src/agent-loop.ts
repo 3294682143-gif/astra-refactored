@@ -14,6 +14,9 @@ import {
   P2_ERROR_CODES,
   P2Error,
   P3_TOOL_NAMES,
+  P4_R0_MAX_ROOT_CALLS,
+  P4_R0_ROLE,
+  P4_R0_ROLE_DIMENSION,
   p2AnswerObligationForGoal,
   p2IsAnswerObligationKindForGoal,
   p2Snapshot,
@@ -22,6 +25,7 @@ import {
   type AgentLoopOptions,
   type AgentLoopResult,
   type AgentLoopSummary,
+  type AgentModelPhase,
   type AgentPorts,
   type AgentTraceCode,
   type P2Artifact,
@@ -39,13 +43,14 @@ import {
   type P4S1Assessment,
   type P4Target,
 } from "@astra/protocol";
-import type {
-  AgentModelReceipt,
-  AgentModelRequest,
-  P2Contract,
-  P4R0RevisionTrigger,
-} from "@astra/protocol";
-import { ContractLedger, P4R0PlanRevisionSession, compileP2Contract, prepareP4R0 } from "@astra/math-contract";
+import type { AgentModelReceipt, AgentModelRequest, P2Contract } from "@astra/protocol";
+import {
+  ContractLedger,
+  P4R0PlanRevisionSession,
+  compileP2Contract,
+  prepareP4R0,
+  prepareP4R0Recheck,
+} from "@astra/math-contract";
 import {
   P3EffectGate,
   P4RecheckModelGate,
@@ -55,9 +60,26 @@ import {
   p3EffectKey,
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
-import { P4R0ReviewSession, P4ReviewSession } from "@astra/math-review";
+import {
+  P4R0RecheckSession,
+  P4R0ReviewSession,
+  P4ReviewSession,
+  aggregateP4R0Reviews,
+  createP4R0RevisionTrigger,
+  roleVerdictOf,
+} from "@astra/math-review";
 import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCandidate } from "@astra/math-audit";
-import { AgentSession, SessionLog, SESSION_LOG_KIND, SESSION_LOG_SCHEMA_VERSION, ReplayRunner, p3MethodCatalog, readAsset } from "@astra/runtime-core";
+import {
+  AGENT_MAX_EFFECTS,
+  AGENT_MAX_METHOD_ASSETS,
+  AgentSession,
+  SessionLog,
+  SESSION_LOG_KIND,
+  SESSION_LOG_SCHEMA_VERSION,
+  ReplayRunner,
+  p3MethodCatalog,
+  readAsset,
+} from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
 import { buildAgentWorkContext } from "./agent-loop-context.js";
@@ -67,6 +89,15 @@ import {
   isCertifiedPacket,
   summarizeCertificate,
 } from "./agent-answer-certificate.js";
+import {
+  answerClosureDefects,
+  answerClosureNote,
+  problemChoiceLetters,
+  type AnswerClosureDefect,
+  type ExactObservationView,
+  type ToolObservationView,
+} from "./agent-answer-closure.js";
+import { canonicalAnswerKey, sameAnswerKey } from "./agent-answer-key.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import {
@@ -84,7 +115,10 @@ import {
   rationalSetElements,
   samePolynomial,
   sameRationalSet,
+  semanticMethodRoute,
+  semanticToolRoute,
   solutionSetOf,
+  type SemanticToolRoute,
 } from "./agent-semantics.js";
 
 const MIN_MS = 25;
@@ -440,15 +474,23 @@ function buildSchemaRepairMessages(
 }
 
 /**
- * B1 (DECISION-0150): dispatch one R0 planning-review model call through the
+ * B1 (DECISION-0150): dispatch one R0 planning-stage model call through the
  * injected model port using only the shared root budget. R0 has no work task,
  * so it bypasses the P4RecheckModelGate; the root still owns the ordinal and
- * the deadline. Returns an UNKNOWN receipt on any port/validation failure.
+ * the deadline. Every call is one separate `model.generate` under its own root
+ * request id; no call is ever shared by two reviewers or replayed after it has
+ * settled. Returns an UNKNOWN receipt on any port/validation failure.
+ *
+ * `phase` is the request phase ("R0" for the three reviews and the revision,
+ * "R0_RECHECK" for the single recheck). The root trace keeps the fixed `R0`
+ * control code so the public trace vocabulary stays closed.
  */
 async function r0Generate(
   root: AgentSession,
   ports: CapturedAgentPorts,
   sessionLog: SessionLog,
+  requestId: string,
+  phase: AgentModelPhase,
   context: {
     readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
     readonly contextHash: string;
@@ -460,15 +502,11 @@ async function r0Generate(
   if (remaining <= MIN_MS) {
     fail(P2_ERROR_CODES.DEADLINE_EXCEEDED);
   }
-  const requestId = root.nextModelId();
-  if (requestId === null) {
-    fail(P2_ERROR_CODES.BUDGET_EXHAUSTED);
-  }
   const request = p2Snapshot({
     sessionId: root.sessionId,
     problemHash: root.problemHash,
     requestId,
-    phase: "R0" as const,
+    phase,
     taskId: "r0",
     scopeId,
     messages: context.messages,
@@ -478,13 +516,16 @@ async function r0Generate(
     maxTokens: 8192 as const,
   }) as AgentModelRequest;
   sessionLog.append("MODEL_REQUEST", {
-    phase: "R0",
+    phase,
     requestId,
     contextHash: request.contextHash,
     contextBytes: request.contextBytes,
     messages: request.messages,
   });
-  root.reserveModel("R0");
+  const reserved = root.reserveModel("R0");
+  if (reserved !== requestId) {
+    fail(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+  }
   let raw: unknown;
   try {
     raw = await boundedAwait(() => ports.model.generate(request), remaining);
@@ -504,11 +545,22 @@ async function r0Generate(
 }
 
 /**
- * B1: the bounded R0 planning review. Exactly one review; on a recorded ISSUES
- * conclusion exactly one `reviseGoals` revision (contractVersion 1 -> 2). Any
- * inconclusive, unparseable or illegal path falls back to the fixed
- * deterministic template under the same root budget — never a second bump and
- * never extra planning budget.
+ * B1 + HANDOFF §5 item 5: the bounded R0 three-review stage.
+ *
+ * Fixed order, fixed bounds. Three *independent* role reviews (题意 / 方法 /
+ * 任务·工具) are dispatched as three separate model calls under three different
+ * root request ids, then a pure controller aggregates them. Only an aggregate
+ * `ISSUES` continues: one `reviseGoals` revision proposal (contractVersion
+ * 1 -> 2) is recorded and the revised plan is re-examined by exactly one
+ * targeted recheck. The revision is applied only when that recheck is a usable
+ * `NO_ISSUE`; every inconclusive, unparseable or illegal path falls back to the
+ * fixed deterministic template under the same root budget — never a second
+ * bump, never a second recheck and never extra planning budget.
+ *
+ * Every one of the stage's at most five calls is guarded the same way the main
+ * loop guards its own calls: `root.nextModelId()` (the root ordinal peek that
+ * `callsLeft()` mirrors) says whether another call is still affordable, and the
+ * dispatch itself goes through `root.reserveModel` inside `r0Generate`.
  */
 async function runBoundedR0(
   initial: P2Contract,
@@ -524,9 +576,10 @@ async function runBoundedR0(
     if (root.stopped() || root.remainingMs() <= MIN_MS) {
       return initial;
     }
-    // prepareP4R0 caps the frozen planning view at four root calls; the real
-    // root budget is unchanged (R0 only ever spends the calls it actually makes).
-    const r0RootCalls = Math.min(opts.maxModelCalls, 4);
+    // prepareP4R0 caps the frozen planning view at the fixed five-call stage
+    // design (three reviews + one recheck + one revision); the real root budget
+    // is unchanged, so R0 still spends only the calls it actually makes.
+    const r0RootCalls = Math.min(opts.maxModelCalls, P4_R0_MAX_ROOT_CALLS);
     const prep = prepareP4R0(initial, {
       enabled: true,
       planningModelCalls: 1,
@@ -536,50 +589,119 @@ async function runBoundedR0(
     if (prep.action !== "REQUEST_REVIEW") {
       return initial;
     }
-    const review = new P4R0ReviewSession(prep, 1);
-    const admitted = review.admit(root.remainingMs(), r0RootCalls);
-    const receipt = await r0Generate(root, ports, sessionLog, admitted.context, prep.target.binding.planHash);
-    review.markDispatched();
-    const settled = review.settle(receipt.transportStatus, receipt.text, root.remainingMs());
-    if (settled.code !== "OK" || settled.report === null || settled.report.conclusion !== "ISSUES") {
+    const scopeId = prep.target.binding.planHash;
+    const review = new P4R0ReviewSession(prep);
+    for (const role of P4_R0_ROLE) {
+      if (root.stopped() || root.remainingMs() <= MIN_MS) {
+        break;
+      }
+      const requestId = root.nextModelId();
+      if (requestId === null) {
+        break;
+      }
+      const admitted = review.admit(role, requestId, root.remainingMs(), r0RootCalls);
+      const receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
+      review.markDispatched(role);
+      review.settle(role, receipt.transportStatus, receipt.text, root.remainingMs());
+      const verdict = roleVerdictOf(review.snapshot(role));
+      sessionLog.append("R0_REVIEW", {
+        role,
+        requestId,
+        verdict,
+        dimension: P4_R0_ROLE_DIMENSION[role],
+        issueCount: verdict === "ISSUES" ? 1 : 0,
+      });
+    }
+    const snapshots = review.snapshots();
+    const aggregate = aggregateP4R0Reviews(snapshots);
+    sessionLog.append("R0_REVIEW", {
+      role: "AGGREGATE",
+      conclusion: aggregate.conclusion,
+      issueDimensions: aggregate.issueDimensions,
+      dissents: aggregate.dissents.map((row) => ({
+        role: row.role,
+        dimension: row.dimension,
+        verdict: row.verdict,
+      })),
+    });
+    if (aggregate.conclusion !== "ISSUES") {
       return initial;
     }
-    const reviewSnapshot = review.snapshot();
-    const checks = reviewSnapshot.record?.report?.checks ?? [];
-    const issueDimensions = [
-      ...new Set(checks.filter((row) => row.verdict === "ISSUES").map((row) => row.dimension)),
-    ];
-    if (issueDimensions.length === 0) {
+    // The revision proposal is bound to the first ISSUES role in the fixed
+    // order; the aggregate's full ISSUES dimension list is what the aggregate
+    // row above records.
+    const issueSnapshot = snapshots.find((row) => roleVerdictOf(row) === "ISSUES");
+    if (issueSnapshot === undefined) {
       return initial;
     }
-    const trigger = p2Snapshot({
-      parent: prep.target.binding,
-      reviewHash: p4Hash(JSON.stringify(reviewSnapshot)),
-      issueDimensions,
-      review: reviewSnapshot,
-    }) as P4R0RevisionTrigger;
+    const trigger = createP4R0RevisionTrigger(prep, issueSnapshot);
+    const revisionRequestId = root.nextModelId();
+    if (revisionRequestId === null) {
+      return fallback();
+    }
     const revision = new P4R0PlanRevisionSession(prep, trigger, 1);
     const rAdmitted = revision.admit(root.remainingMs(), 2, 3);
-    const rReceipt = await r0Generate(root, ports, sessionLog, rAdmitted.context, prep.target.binding.planHash);
+    const rReceipt = await r0Generate(
+      root,
+      ports,
+      sessionLog,
+      revisionRequestId,
+      "R0",
+      rAdmitted.context,
+      scopeId,
+    );
     revision.markDispatched();
     revision.settle(rReceipt.transportStatus, rReceipt.text, root.remainingMs());
-    const snapshot = revision.snapshot();
-    if (snapshot.revisedContract !== null) {
-      // The revision session records a *proposal* against a private ledger; it
-      // is not itself an activatable contract. Recompile a clean version-2
-      // contract from the revised goal tree so the main ledger sees OPEN
-      // obligations and READY tasks (the single bounded bump is now applied).
-      const revised = compileP2Contract(
-        problemText,
-        session,
-        snapshot.revisedContract.goals,
-        snapshot.revisedContract.envelope.eventSeq,
-        2,
-      );
-      sessionLog.append("CONTRACT_REVISED", { fromVersion: 1, toVersion: revised.contractVersion });
-      return revised;
+    const revisionSnapshot = revision.snapshot();
+    if (revisionSnapshot.revisedContract === null) {
+      return fallback();
     }
-    return fallback();
+    // Exactly one targeted recheck of the revised plan. It is fed by the
+    // already-recorded revision snapshot, so the revision can never take effect
+    // without it: only a usable NO_ISSUE recheck applies the single bump.
+    const recheckRequestId = root.nextModelId();
+    if (recheckRequestId === null) {
+      return fallback();
+    }
+    // The recheck preparation is pinned by its own contract to a two-call
+    // budget view; the real guard on the shared root is `nextModelId` below.
+    const recheckPrep = prepareP4R0Recheck(prep, trigger, revisionSnapshot, {
+      planningModelCalls: 1,
+      remainingRootCalls: 2,
+      remainingMs: root.remainingMs(),
+    });
+    const recheck = new P4R0RecheckSession(recheckPrep, 1);
+    const cAdmitted = recheck.admit(root.remainingMs(), 1, 2);
+    const cReceipt = await r0Generate(
+      root,
+      ports,
+      sessionLog,
+      recheckRequestId,
+      "R0_RECHECK",
+      cAdmitted.context,
+      recheckPrep.target.binding.planHash,
+    );
+    recheck.markDispatched();
+    const cSettled = recheck.settle(cReceipt.transportStatus, cReceipt.text, root.remainingMs());
+    if (cSettled.code !== "OK" || cSettled.report === null) {
+      return fallback();
+    }
+    if (cSettled.report.conclusion !== "NO_ISSUE") {
+      return fallback();
+    }
+    // The revision session records a *proposal* against a private ledger; it is
+    // not itself an activatable contract. Recompile a clean version-2 contract
+    // from the revised goal tree so the main ledger sees OPEN obligations and
+    // READY tasks (the single bounded bump is now applied).
+    const revised = compileP2Contract(
+      problemText,
+      session,
+      revisionSnapshot.revisedContract.goals,
+      revisionSnapshot.revisedContract.envelope.eventSeq,
+      2,
+    );
+    sessionLog.append("CONTRACT_REVISED", { fromVersion: 1, toVersion: revised.contractVersion });
+    return revised;
   } catch (error) {
     if (!(error instanceof P2Error)) {
       throw error;
@@ -589,6 +711,43 @@ async function runBoundedR0(
     } catch {
       return initial;
     }
+  }
+}
+
+/** Semantic operation label carried by the Host-side tool funnel metrics. */
+function toolOperationFor(
+  name: string,
+  args: Readonly<Record<string, unknown>>,
+  route: SemanticToolRoute | null,
+): string | null {
+  if (route !== null && route.toolName === name) return route.operation;
+  const operation = args["operation"];
+  if (typeof operation === "string" && operation.trim().length > 0) {
+    return operation.trim();
+  }
+  switch (name) {
+    case "real_root_count_expr":
+      return "REAL_ROOT_COUNT";
+    case "splitting_field_degree_expr":
+      return "SPLITTING_FIELD_DEGREE";
+    case "circle_laplacian_expr":
+      return "CIRCLE_LAPLACIAN";
+    case "planar_laplacian_expr":
+      return "PLANAR_LAPLACIAN";
+    case "interpolation_fit_check":
+      return "INTERPOLATION_FIT";
+    case "stats_ols_check":
+      return "OLS_CHECK";
+    case "finite_group_structure":
+      return "GROUP_STRUCTURE";
+    case "bounded_enumeration":
+      return "ENUMERATE";
+    case "polynomial_expand_coefficients":
+      return "EXPAND_COEFFICIENTS";
+    case "linear_system_solution_set":
+      return "SOLUTION_SET";
+    default:
+      return null;
   }
 }
 
@@ -632,11 +791,24 @@ export async function runAgentLoop(
           maxWorkUnits: derived.maxWorkUnits,
           maxModelCalls: derived.maxModelCalls,
         });
+  // Public `maxEffects` is the tool quota; method cards have their own quota.
+  // The root owns the shared total effect-id capacity. The hard id-table
+  // ceiling is owned by @astra/runtime-core.
+  const totalEffectCapacity =
+    opts.maxEffects === 0
+      ? 0
+      : Math.min(
+          opts.maxEffects + opts.maxMethodLoads,
+          AGENT_MAX_EFFECTS,
+        );
+  // The Host owns the 0..4 method quota; this loop deliberately spends at most
+  // two distinct bodies per run so a routed second card cannot widen the path.
+  const methodLoadCapacity = Math.min(opts.maxMethodLoads, AGENT_MAX_METHOD_ASSETS);
   const root = new AgentSession({
     sessionId: session,
     problemHash,
     maxModelCalls: opts.maxModelCalls,
-    maxEffects: opts.maxEffects,
+    maxEffects: totalEffectCapacity,
     remainingMs: opts.remainingMs,
     now: opts.now,
   });
@@ -696,7 +868,7 @@ export async function runAgentLoop(
       (row) => row.kind === "TOOL_OBSERVATION" || row.kind === "METHOD_LOAD",
     ).length;
     for (let index = 0; index < carriedEffects; index += 1) {
-      if (root.effectCalls() >= opts.maxEffects) break;
+      if (root.effectCalls() >= totalEffectCapacity) break;
       const settledEffect = root.reserveEffect(`effect-${index + 1}`);
       root.settleEffect(settledEffect, "COMPLETE");
     }
@@ -734,7 +906,9 @@ export async function runAgentLoop(
   let reviewCalls = 0;
   let repairCalls = 0;
   let catalogCalls = 0;
-  let methodLoads = 0;
+  const resumedRows = opts.resumeSessionLog ?? [];
+  let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
+  let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
   let catalog: P2MethodCatalog | null = null;
   let methodAssets: P2MethodAsset[] = [];
   let stop: AgentTraceCode = "NO_CANDIDATE";
@@ -756,7 +930,18 @@ export async function runAgentLoop(
     readonly preservedParentArtifactId: string | null;
   } | null = null;
 
+  // Run-scoped answer-closure evidence. A routed exact tool is usually forced on
+  // an EARLIER task than the task that carries the answer, so completed tool
+  // observations must survive task transitions; the closure itself is still
+  // spent at most once per run. Exact-check results are keyed by operation, so a
+  // later unrelated operation (e.g. LIMIT) can never displace the
+  // MAXIMAL_MINORS/DENSITY_CHECK result a specific diagnostic needs.
+  const toolObservationViews: ToolObservationView[] = [];
+  const exactObservations = new Map<string, ExactObservationView>();
+  let answerClosureAttempted = false;
+
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
+
   const reserve = (): number =>
     target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
 
@@ -786,10 +971,11 @@ export async function runAgentLoop(
   }
 
   const methodsEnabled =
-    opts.maxMethodLoads === 1 &&
+    opts.maxMethodLoads > 0 &&
     captured.effect !== null &&
     captured.catalog !== null &&
     opts.maxEffects > 0 &&
+    totalEffectCapacity > 0 &&
     opts.maxModelCalls >= 2 + opts.maxReviews;
   if (methodsEnabled && root.remainingMs() > MIN_MS) {
     const readRemaining = root.remainingMs();
@@ -877,7 +1063,7 @@ export async function runAgentLoop(
         observations.push(receipt);
       }
       let subGate: P3EffectGate | null = null;
-      const effectRoom = opts.maxEffects - root.effectCalls();
+      const effectRoom = totalEffectCapacity - root.effectCalls();
       if (effectRoom > 0 && captured.effect !== null) {
         subGate = new P3EffectGate(
           {
@@ -895,11 +1081,24 @@ export async function runAgentLoop(
       let yielded = false;
       let methodSelectionAttempted = false;
       let forcedMethodSelection = false;
+      let forcedMethodCandidates: readonly string[] = [];
+      // The routed list is run-task scoped so the optional second-card offer can
+      // refer back to the same METHOD_ROUTE row after the first body is loaded.
+      let routedMethodCandidates: readonly string[] = [];
+      let secondMethodRouteEligible = false;
+      let secondMethodOfferPending = false;
+      let methodLoadRefusalNotice: string | null = null;
+      let methodLoadRefusalUsed = false;
       let enumerationAttempted = false;
       let forcedEnumerationSelection = false;
       let exactCheckAttempted = false;
       let forcedExactCheckSelection = false;
       let forcedExactCheckOperation: string | null = null;
+      let semanticToolAttempted = false;
+      let forcedSemanticToolSelection = false;
+      let forcedSemanticToolRoute: SemanticToolRoute | null = null;
+      let forcedRetryUsed = false;
+      let forcedTurnFailedOpen = false;
       let verdictClosureAttempted = false;
       let forcedVerdictClosure = false;
       let densityClosureAttempted = false;
@@ -910,6 +1109,8 @@ export async function runAgentLoop(
       // as progress or evidence; we may re-ask a bounded number of times.
       let workRetries = 0;
       while (!root.stopped()) {
+        forcedTurnFailedOpen = false;
+        let secondMethodOfferShown = false;
         if (root.remainingMs() <= MIN_MS) {
           stop = "DEADLINE_EXCEEDED";
           break;
@@ -940,12 +1141,13 @@ export async function runAgentLoop(
         const allowTools =
           subGate !== null &&
           callsLeft() >= 2 + opts.maxReviews &&
-          (root.effectCalls() < opts.maxEffects || cachedTool);
+          (toolEffects < opts.maxEffects || cachedTool);
         const allowMethods =
           catalog !== null &&
           subGate !== null &&
           callsLeft() >= 2 + opts.maxReviews &&
-          ((methodLoads < opts.maxMethodLoads && root.effectCalls() < opts.maxEffects) ||
+          ((methodLoads < methodLoadCapacity &&
+            root.effectCalls() < totalEffectCapacity) ||
             cachedMethod);
         const protectedCandidate = projectProtectedFinal(ledger.snapshot(), target);
         const sameScope =
@@ -1178,15 +1380,154 @@ export async function runAgentLoop(
             contextHash: p4Hash(JSON.stringify(messages)),
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
           };
-        } else if (forcedMethodSelection) {
+        } else if (forcedSemanticToolSelection && forcedSemanticToolRoute !== null) {
+          const route = forcedSemanticToolRoute;
           const note =
-            "\n\nMETHOD SELECTION TURN. Before delivering a WorkPacket, choose exactly one method id from methodCatalog. " +
-            "Return exactly one JSON action {\"action\":\"method\",\"id\":\"<one id from methodCatalog>\"} and nothing else. " +
-            "Do not return a WorkPacket in this turn.";
+            "\n\nSEMANTIC TOOL TURN (" + route.operation + "). This problem contains a " +
+            route.operation + " object that must be computed from the problem statement. " +
+            "Before delivering a WorkPacket, return exactly one JSON tool action " +
+            "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
+            ",\"scope\":\"<what is computed from the problem statement>\"} " +
+            "and nothing else. Copy the explicit expression, polynomial or function exactly from the problem statement; " +
+            "never place raw arithmetic outside a quoted JSON string and never substitute a different tool. " +
+            "Do not return a WorkPacket in this turn. The observation is input-relative and is not a proof of the mapping. " +
+            "After the observation, return a COMPLETE WorkPacket with a best-effort candidate.";
           const messages = [
             {
               role: "system" as const,
               content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        } else if (forcedMethodSelection) {
+          const routed = forcedMethodCandidates
+            .map((id) => catalog?.entries.find((entry) => entry.id === id) ?? null)
+            .filter((entry) => entry !== null);
+          const routedIds = new Set(routed.map((entry) => entry.id));
+          const remainingIds =
+            catalog === null
+              ? []
+              : catalog.entries
+                  .map((entry) => entry.id)
+                  .filter((id) => !routedIds.has(id));
+          const routeNote =
+            routed.length === 0
+              ? ""
+              : "\n\nRouted method candidates (metadata only; bodies are not loaded):\n" +
+                routed
+                  .map((entry) => {
+                    const objects = Array.isArray(entry.objects)
+                      ? entry.objects.join(", ")
+                      : "";
+                    return entry.id + " — " + entry.title + " — " + objects;
+                  })
+                  .join("\n") +
+                "\nOther available method ids: " +
+                remainingIds.join(", ") +
+                ".";
+          const note =
+            "\n\nMETHOD SELECTION TURN. Before delivering a WorkPacket, choose exactly one method id from methodCatalog. " +
+            "Return exactly one JSON action {\"action\":\"method\",\"id\":\"<one id from methodCatalog>\"} and nothing else. " +
+            "Do not return a WorkPacket in this turn." +
+            routeNote;
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + note,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+        }
+        // The first load is mandatory once a method-consultation turn is
+        // selected. A second load is only ever an OFFER on the immediately
+        // following turn: the model still sees the first body, the remaining
+        // routed metadata and the ordinary answer path. A second candidate is
+        // offered only when the routed list genuinely has one, the first card
+        // is not that second candidate, the shared call reserve still fits and
+        // the Host advertised method loading through its catalog/effect ports.
+        const loadedMethodIds = methodAssets.map((asset) => asset.id);
+        const firstLoadedMethodId =
+          methodAssets.length === 1 ? methodAssets[0]!.id : null;
+        const secondMethodCandidateId = routedMethodCandidates[1] ?? null;
+        const offerSecondMethod =
+          secondMethodOfferPending &&
+          !forcedTurnFailedOpen &&
+          firstLoadedMethodId !== null &&
+          secondMethodCandidateId !== null &&
+          routedMethodCandidates.length >= 2 &&
+          firstLoadedMethodId !== secondMethodCandidateId &&
+          methodLoads < methodLoadCapacity &&
+          catalog !== null &&
+          subGate !== null &&
+          captured.catalog !== null &&
+          root.effectCalls() < totalEffectCapacity &&
+          callsLeft() >= 2 + opts.maxReviews;
+        secondMethodOfferShown = offerSecondMethod;
+        if (offerSecondMethod) {
+          secondMethodOfferPending = false;
+        }
+        const methodEntryLine = (entry: {
+          readonly id: string;
+          readonly title: string;
+          readonly objects?: readonly string[];
+        }): string =>
+          entry.id + " — " + entry.title + " — " +
+          (Array.isArray(entry.objects) ? entry.objects.join(", ") : "");
+        const remainingRouted = routedMethodCandidates
+          .filter((id) => !loadedMethodIds.includes(id))
+          .map((id) => catalog?.entries.find((entry) => entry.id === id) ?? null)
+          .filter((entry) => entry !== null);
+        const loadedMethodNote =
+          loadedMethodIds.length === 0
+            ? ""
+            : "\n\nLoaded method card ids (bodies are in methodAssets): " +
+              loadedMethodIds.join(", ") +
+              ".";
+        const remainingRoutedNote =
+          remainingRouted.length === 0
+            ? ""
+            : "\nRouted method candidates not yet loaded (metadata only):\n" +
+              remainingRouted.map(methodEntryLine).join("\n");
+        let methodOfferNote = "";
+        if (offerSecondMethod) {
+          methodOfferNote =
+            "\n\nSECOND METHOD SELECTION TURN (optional)." +
+            loadedMethodNote +
+            remainingRoutedNote +
+            "\nYou may return exactly one JSON action " +
+            "{\"action\":\"method\",\"id\":\"<one routed id>\"} to load one more card, " +
+            "or answer now with exactly one complete WorkPacket. The second load is optional " +
+            "and is never required. Do not return a WorkPacket and a method action together.";
+        } else if (methodLoadRefusalNotice !== null) {
+          methodOfferNote =
+            "\n\n" + methodLoadRefusalNotice +
+            loadedMethodNote +
+            remainingRoutedNote;
+          methodLoadRefusalNotice = null;
+        } else if (methodAssets.length >= 2) {
+          methodOfferNote =
+            "\n\nMETHOD CONTEXT." +
+            loadedMethodNote +
+            remainingRoutedNote +
+            "\nNo further method load is available; answer with exactly one complete WorkPacket now.";
+        }
+        if (methodOfferNote !== "") {
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + methodOfferNote,
             },
             context.messages[1]!,
           ];
@@ -1243,9 +1584,95 @@ export async function runAgentLoop(
         } catch {
           action = null;
         }
+        // A forced method/tool turn is a protocol gate, not advice. If the
+        // reply does not name the requested effect, re-send the same bounded
+        // instruction exactly once. After that one retry the turn fails open
+        // to the model's best-effort packet; no observation is ever invented.
+        const forcedRouteAtAction = forcedSemanticToolRoute;
+        const forcedMethodAtAction = forcedMethodSelection;
+        const obeyedRouteAtAction =
+          forcedRouteAtAction !== null &&
+          action?.action === "tool" &&
+          action.name === forcedRouteAtAction.toolName &&
+          (forcedRouteAtAction.toolName !== "exact_check_expr" ||
+            (typeof action.args["operation"] === "string" &&
+              action.args["operation"] === forcedRouteAtAction.operation));
+        if (forcedMethodAtAction || forcedRouteAtAction !== null) {
+          const obeyedMethod = forcedMethodAtAction && action?.action === "method";
+          const obeyedTool = obeyedRouteAtAction;
+          if (!obeyedMethod && !obeyedTool) {
+            if (!forcedRetryUsed) {
+              forcedRetryUsed = true;
+              sessionLog.append("REPAIR", {
+                kind: "FORCED_TURN_RETRY",
+                routeId:
+                  forcedRouteAtAction?.id ??
+                  (forcedMethodAtAction ? "METHOD_SELECTION" : null),
+                expectedTool: forcedRouteAtAction?.toolName ?? null,
+                expectedOperation: forcedRouteAtAction?.operation ?? null,
+                expectedMethod: forcedMethodAtAction,
+                observedKind: action === null ? "PACKET_OR_TEXT" : action.action,
+                attempt: 1,
+                taskId: running.taskId,
+              });
+              continue;
+            }
+            // One retry was already spent. Consume no fabricated evidence and
+            // let the ordinary packet/action path decide from here.
+            forcedTurnFailedOpen = true;
+          }
+          forcedMethodSelection = false;
+          forcedMethodCandidates = [];
+          forcedEnumerationSelection = false;
+          forcedExactCheckSelection = false;
+          forcedSemanticToolSelection = false;
+          forcedExactCheckOperation = null;
+          forcedSemanticToolRoute = null;
+          forcedRetryUsed = false;
+        }
         if (action !== null && (action.action === "tool" || action.action === "method")) {
           const isMethod = action.action === "method";
           const methodId = action.action === "method" ? action.id : null;
+          // A third distinct body is never requested: the loop-side asset cap
+          // turns that demand into one answer-with-what-we-have retry instead
+          // of a quota breach or a failed run. A single-card run keeps the
+          // historical control rejection for an unsolicited second id.
+          const distinctMethodRequested =
+            isMethod &&
+            methodId !== null &&
+            !methodAssets.some((asset) => asset.id === methodId);
+          const secondLoadPermitted =
+            methodLoads === 1 &&
+            secondMethodRouteEligible &&
+            methodId !== null &&
+            routedMethodCandidates.includes(methodId);
+          // A first load is always permitted by the forced selection path. Any
+          // later distinct load must be exactly the routed second-card offer;
+          // this also makes a one-candidate run structurally one-card-only.
+          const methodLoadNotPermitted =
+            distinctMethodRequested &&
+            methodLoads > 0 &&
+            !secondLoadPermitted;
+          const optionalMethodRefusal = isMethod && (secondMethodOfferShown || methodLoadNotPermitted);
+          if (methodLoadNotPermitted) {
+            // A one-card run preserves the historical control rejection for an
+            // unsolicited second id. Once the two-card offer exists, an
+            // over-cap or off-route demand degrades to one
+            // answer-with-what-we-have turn.
+            if (
+              methodLoadCapacity < AGENT_MAX_METHOD_ASSETS ||
+              methodLoadRefusalUsed
+            ) {
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+            methodLoadRefusalUsed = true;
+            secondMethodOfferPending = false;
+            methodLoadRefusalNotice =
+              "METHOD LOAD REFUSED. The bounded two-card method budget is already spent. " +
+              "Use the loaded method bodies already in methodAssets and answer with exactly one complete WorkPacket now.";
+            continue;
+          }
           // DSH monotonic tool-guard pipeline: pre -> guards, irreversible.
           const guard = monotonicToolGuard({
             action,
@@ -1257,18 +1684,45 @@ export async function runAgentLoop(
             maxReviews: opts.maxReviews,
           });
           if (!guard.admitted || subGate === null || (isMethod && catalog === null)) {
+            if (optionalMethodRefusal && !methodLoadRefusalUsed) {
+              methodLoadRefusalUsed = true;
+              secondMethodOfferPending = false;
+              methodLoadRefusalNotice =
+                "METHOD LOAD REFUSED. This optional second card is not admissible in the remaining budget. " +
+                "Use the loaded method bodies already in methodAssets and answer with exactly one complete WorkPacket now.";
+              continue;
+            }
             stop = "CONTROL_REJECTED";
             break;
           }
           const effectsBefore = root.effectCalls();
-          const receipt = await calls.effect(
-            running,
-            outcome.requestId,
-            action,
-            subGate,
-            callsLeft(),
-            catalog ?? undefined,
-          );
+          let receipt: P3EffectReceipt;
+          try {
+            receipt = await calls.effect(
+              running,
+              outcome.requestId,
+              action,
+              subGate,
+              callsLeft(),
+              catalog ?? undefined,
+            );
+          } catch (error) {
+            // A kind-quota/total-capacity refusal is a fail-closed control
+            // rejection, not a transport outcome and not a fabricated receipt.
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            if (optionalMethodRefusal && !methodLoadRefusalUsed) {
+              methodLoadRefusalUsed = true;
+              secondMethodOfferPending = false;
+              methodLoadRefusalNotice =
+                "METHOD LOAD REFUSED by the Host quota. Use the loaded method bodies already in methodAssets " +
+                "and answer with exactly one complete WorkPacket now.";
+              continue;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
           // G7/PR7 Slice 7e: bind the loaded method card to the Host registry with
           // one scoped `methodCards` call within the current scope. The card body
           // still reaches WORK through `method.catalog -> method.load`; a refused
@@ -1292,42 +1746,80 @@ export async function runAgentLoop(
             }
           }
           forcedMethodSelection = false;
+          forcedMethodCandidates = [];
           forcedEnumerationSelection = false;
           forcedExactCheckSelection = false;
+          forcedSemanticToolSelection = false;
+          forcedExactCheckOperation = null;
+          forcedSemanticToolRoute = null;
           forcedVerdictClosure = false;
           forcedDensityClosure = false;
+          const usedEffect = root.effectCalls() > effectsBefore;
+          if (usedEffect && isMethod) {
+            methodLoads += 1;
+          }
+          if (usedEffect && !isMethod) {
+            toolEffects += 1;
+          }
+          // The ordinal is the run-local load number (1 or 2). A cached repeat
+          // of an already loaded id reuses its previous ordinal and does not
+          // spend a new effect id.
+          const methodLoadOrdinal = isMethod ? Math.max(1, methodLoads) : null;
+          const toolOperation =
+            action.action === "tool"
+              ? toolOperationFor(action.name, action.args, forcedRouteAtAction)
+              : null;
           sessionLog.append(isMethod ? "METHOD_LOAD" : "TOOL_OBSERVATION", {
             effectId: receipt.effectId,
             source: receipt.source,
             level: receipt.level,
             checkResult: receipt.checkResult,
-            ...(isMethod ? { methodCardSha } : {}),
+            ...(isMethod
+              ? { methodCardSha, methodId, ordinal: methodLoadOrdinal }
+              : {
+                  toolName: action.action === "tool" ? action.name : "",
+                  operation: toolOperation,
+                  forced: obeyedRouteAtAction,
+                  routeId: obeyedRouteAtAction ? forcedRouteAtAction?.id ?? null : null,
+                }),
           });
-          if (isMethod && root.effectCalls() > effectsBefore) {
-            methodLoads += 1;
-          }
-          if (
-            action.action === "tool" &&
-            action.name === "exact_check_expr" &&
-            receipt.status === "COMPLETE"
-          ) {
+          if (action.action === "tool" && receipt.status === "COMPLETE") {
             try {
               const observation = JSON.parse(receipt.observation) as {
-                result?: { operation?: unknown; normalized?: unknown; numeric_integral?: unknown };
+                result?: unknown;
               };
               const result = observation.result;
-              if (
-                result !== undefined &&
-                result.operation === "DENSITY_CHECK" &&
-                result.normalized === false
-              ) {
-                densityCheckFailure =
-                  typeof result.numeric_integral === "string"
-                    ? result.numeric_integral
-                    : "a value other than 1";
+              if (result !== undefined) {
+                toolObservationViews.push({
+                  name: action.name,
+                  operation: toolOperation,
+                  result,
+                });
+                if (
+                  action.name === "exact_check_expr" &&
+                  typeof result === "object" &&
+                  result !== null &&
+                  !Array.isArray(result)
+                ) {
+                  const exact = result as ExactObservationView;
+                  // Keyed by operation: one slot per exact operation, never
+                  // "latest result wins". A result without a usable operation
+                  // label is not stored (it could satisfy no diagnostic).
+                  if (typeof exact.operation === "string" && exact.operation.length > 0) {
+                    exactObservations.set(exact.operation, exact);
+                  }
+                  if (exact.operation === "DENSITY_CHECK") {
+                    densityCheckFailure =
+                      exact.normalized === false
+                        ? typeof exact.numeric_integral === "string"
+                          ? exact.numeric_integral
+                          : "a value other than 1"
+                        : null;
+                  }
+                }
               }
             } catch {
-              // An unparsable observation is not a density certificate.
+              // An unparsable observation is not an exact certificate.
             }
           }
           if (receipt.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
@@ -1381,6 +1873,26 @@ export async function runAgentLoop(
                 break;
               }
             }
+          }
+          if (
+            isMethod &&
+            methodId !== null &&
+            receipt.status === "COMPLETE" &&
+            receipt.source === "METHOD_REFERENCE"
+          ) {
+            const onlyLoadedMethodId =
+              methodAssets.length === 1 ? methodAssets[0]!.id : null;
+            secondMethodRouteEligible =
+              onlyLoadedMethodId !== null &&
+              routedMethodCandidates.length >= 2 &&
+              onlyLoadedMethodId !== routedMethodCandidates[1];
+            secondMethodOfferPending =
+              secondMethodRouteEligible &&
+              methodLoads < methodLoadCapacity &&
+              subGate !== null &&
+              captured.catalog !== null &&
+              root.effectCalls() < totalEffectCapacity &&
+              callsLeft() >= 2 + opts.maxReviews;
           }
           if (repeated && revision.pendingTaskId() === null) {
             try {
@@ -1684,6 +2196,7 @@ export async function runAgentLoop(
           // delivered. The model must choose a real catalog card; the normal
           // effect path loads it and the next WORK turn sees the card body.
           if (
+            !forcedTurnFailedOpen &&
             opts.maxConsensus >= 1 &&
             opts.maxMethodLoads >= 1 &&
             prepared.packet !== null &&
@@ -1694,72 +2207,85 @@ export async function runAgentLoop(
             catalog.entries.length > 0 &&
             subGate !== null &&
             allowMethods &&
-            root.effectCalls() < opts.maxEffects &&
-            methodLoads < opts.maxMethodLoads &&
+            root.effectCalls() < totalEffectCapacity &&
+            methodLoads < methodLoadCapacity &&
             !observations.some((item) => item.source === "METHOD_REFERENCE") &&
             callsLeft() >= 2 + opts.maxReviews
           ) {
             methodSelectionAttempted = true;
             forcedMethodSelection = true;
+            routedMethodCandidates = semanticMethodRoute(problemText, catalog.entries);
+            forcedMethodCandidates = routedMethodCandidates;
+            if (forcedMethodCandidates.length > 0) {
+              sessionLog.append("REPAIR", {
+                kind: "METHOD_ROUTE",
+                candidates: [...forcedMethodCandidates],
+                taskId: running.taskId,
+              });
+            }
+            forcedSemanticToolRoute = null;
+            forcedRetryUsed = false;
             continue;
           }
           forcedMethodSelection = false;
-          // Generic finite-counting intervention: a finite probability/count
-          // answer is first subjected to an explicit exhaustive enumeration
-          // tool call. The tool result is input-relative, not a proof of the
-          // model's mapping, but it prevents a pattern formula from replacing
-          // the actual sample space. This is bounded by the effect budget.
-          const finiteCountingProblem =
-            /(概率|probability)/iu.test(problemText) &&
-            /(抽取|选取|随机取|从中取|draw|choose|select|hand)/iu.test(problemText);
+          forcedMethodCandidates = [];
+          // Expanded deterministic semantic routing. The first matching family
+          // wins. No item id, reference answer or hidden table is consulted.
+          // A tool route consumes the tool quota only; method cards have their
+          // own quota and share only the total effect-id capacity.
+          const toolRoute = semanticToolRoute(problemText);
+          const routeAlreadyAttempted =
+            toolRoute === null
+              ? false
+              : toolRoute.toolName === "bounded_enumeration"
+                ? enumerationAttempted
+                : toolRoute.toolName === "exact_check_expr"
+                  ? exactCheckAttempted
+                  : semanticToolAttempted;
           if (
+            !forcedTurnFailedOpen &&
             opts.maxConsensus >= 1 &&
-            finiteCountingProblem &&
-            !enumerationAttempted &&
+            toolRoute !== null &&
+            !routeAlreadyAttempted &&
             !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
             allowTools &&
+            toolEffects < opts.maxEffects &&
             subGate !== null &&
-            root.effectCalls() < opts.maxEffects &&
+            root.effectCalls() < totalEffectCapacity &&
             callsLeft() >= 2 + opts.maxReviews
           ) {
-            enumerationAttempted = true;
-            forcedEnumerationSelection = true;
+            if (toolRoute.toolName === "bounded_enumeration") {
+              enumerationAttempted = true;
+            } else if (toolRoute.toolName === "exact_check_expr") {
+              exactCheckAttempted = true;
+            } else {
+              semanticToolAttempted = true;
+            }
+            forcedEnumerationSelection = toolRoute.toolName === "bounded_enumeration";
+            forcedExactCheckSelection = toolRoute.toolName === "exact_check_expr";
+            forcedSemanticToolSelection =
+              toolRoute.toolName !== "bounded_enumeration" &&
+              toolRoute.toolName !== "exact_check_expr";
+            forcedExactCheckOperation =
+              toolRoute.toolName === "exact_check_expr" ? toolRoute.operation : null;
+            forcedSemanticToolRoute = toolRoute;
+            forcedRetryUsed = false;
+            sessionLog.append("REPAIR", {
+              kind: "TOOL_ROUTE",
+              toolName: toolRoute.toolName,
+              operation: toolRoute.operation,
+              forced: true,
+              routeId: toolRoute.id,
+              taskId: running.taskId,
+            });
             continue;
           }
           forcedEnumerationSelection = false;
-          // Generic exact-object intervention: determinant/minor, field
-          // extension, density, trigonometric expansion and limit answers get
-          // one exact_check_expr call before delivery. The operation is chosen
-          // from the mathematical object in the problem, never from its id.
-          const exactOperation =
-            /(行列式|子式|Alexander|determinant|\bminor\b)/iu.test(problemText)
-              ? "MAXIMAL_MINORS"
-              : /(分裂域|Galois|splitting\s+field|不可约|扩域)/iu.test(problemText)
-                ? "FACTOR_OVER_EXTENSION"
-                : /(CDF|累积分布|分布函数|分布|密度|density)/iu.test(problemText)
-                  ? "DENSITY_CHECK"
-                  : /(分离变量|偏微分|PDE|u_t|u_xx|边界条件|初值)/iu.test(problemText)
-                    ? "TRIG_REDUCE"
-                    : /(极限|limit|\\lim|lim\s*_)/iu.test(problemText)
-                      ? "LIMIT"
-                      : null;
-          if (
-            opts.maxConsensus >= 1 &&
-            exactOperation !== null &&
-            !finiteCountingProblem &&
-            !exactCheckAttempted &&
-            !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
-            allowTools &&
-            subGate !== null &&
-            root.effectCalls() < opts.maxEffects &&
-            callsLeft() >= 2 + opts.maxReviews
-          ) {
-            exactCheckAttempted = true;
-            forcedExactCheckSelection = true;
-            forcedExactCheckOperation = exactOperation;
-            continue;
-          }
           forcedExactCheckSelection = false;
+          forcedSemanticToolSelection = false;
+          forcedExactCheckOperation = null;
+          forcedSemanticToolRoute = null;
+          forcedRetryUsed = false;
           if (
             opts.maxConsensus >= 1 &&
             densityCheckFailure !== null &&
@@ -1815,13 +2341,7 @@ export async function runAgentLoop(
             const firstCandidate = firstPacketOverlong
               ? ""
               : prepared.packet.candidateProposal ?? "";
-            const choiceLetters = new Set<string>();
-            for (const match of problemText.matchAll(
-              /(?:^|[\s\n（(\[])([A-E])[\.\)、:：\]]/gu,
-            )) {
-              choiceLetters.add(match[1]!.toUpperCase());
-            }
-            const choiceProblem = choiceLetters.size >= 2;
+            const choiceProblem = problemChoiceLetters(problemText).length >= 2;
             const consensusAttempts: {
               prepared: P2Artifact;
               outcome: typeof outcome;
@@ -2047,7 +2567,13 @@ export async function runAgentLoop(
               const correction = certificateCorrection(
                 latestCertified.prepared.packet ?? {},
               );
-              if (correction !== null && correction !== latestCertified.candidate) {
+              // A presentation-only difference (`1/2` versus `\frac12`) is not a
+              // contradiction: compare canonical answer keys so that a bounded
+              // closure turn is spent only on a genuinely different answer.
+              if (
+                correction !== null &&
+                !sameAnswerKey(correction, latestCertified.candidate)
+              ) {
                 const closureId = root.nextModelId();
                 if (closureId !== null) {
                   const closureNote =
@@ -2101,9 +2627,12 @@ export async function runAgentLoop(
             const certifiedAttempts = candidateAttempts.filter(
               (attempt) => attempt.certified,
             );
+            // Votes are grouped by canonical mathematical key, while every
+            // stored/displayed candidate remains the model's original text.
             const counts = new Map<string, number>();
             for (const attempt of candidateAttempts) {
-              counts.set(attempt.candidate, (counts.get(attempt.candidate) ?? 0) + 1);
+              const key = canonicalAnswerKey(attempt.candidate);
+              counts.set(key, (counts.get(key) ?? 0) + 1);
             }
             let chosen =
               candidateAttempts[candidateAttempts.length - 1] ?? consensusAttempts[0]!;
@@ -2116,7 +2645,7 @@ export async function runAgentLoop(
               }
               for (let index = candidateAttempts.length - 1; index >= 0; index -= 1) {
                 const attempt = candidateAttempts[index]!;
-                if ((counts.get(attempt.candidate) ?? 0) === bestCount) {
+                if ((counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === bestCount) {
                   chosen = attempt;
                   break;
                 }
@@ -2126,6 +2655,119 @@ export async function runAgentLoop(
             outcome = chosen.outcome;
             receiptInput.sourceRequestId = chosen.outcome.requestId;
             receiptInput.text = chosen.outcome.receipt.text;
+
+            // Generic answer closures (degree conservation, density
+            // normalization, option coverage, solution completeness). These
+            // checks use only the problem's stated objects, the packet's own
+            // certificate rows and an input-relative exact observation. They
+            // never turn a model claim into verification and never change the
+            // candidate on their own: one bounded model turn must deliver the
+            // corrected complete packet.
+            if (
+              opts.maxConsensus >= 1 &&
+              answerBearingTask &&
+              prepared.packet !== null &&
+              !answerClosureAttempted &&
+              callsLeft() >= 2 + opts.maxReviews
+            ) {
+              const closureCandidate = prepared.packet.candidateProposal ?? "";
+              const requiresExhaustive =
+                /(所有解|全部解|一切解|解集|所有根|全部根|complete\s+solution\s+set|all\s+solutions)/iu.test(
+                  problemText,
+                );
+              const defects = answerClosureDefects({
+                problemText,
+                candidate: closureCandidate,
+                packet: prepared.packet,
+                exactObservations,
+                toolObservations: toolObservationViews,
+                // Do not infer a complete solution set from an unanchored
+                // `lhs=rhs` regex match in prose. Until a dedicated trusted
+                // solver supplies the set, completeness is closed only by an
+                // explicit CERT1|COMPLETENESS marker.
+                expectedSolutionKeys: null,
+                requiresExhaustive,
+              });
+              // One session-log row per closure EVALUATION, defects or not: an
+              // operator must be able to tell "closure ran and found nothing"
+              // apart from "closure never ran" (the reason the
+              // `observation_used` metric previously read 0 on real runs).
+              let closureRequestId: string | null = null;
+              let closureNextCandidate: string | null = null;
+              let candidateChanged = false;
+              let remaining: readonly AnswerClosureDefect[] = defects;
+              if (defects.length > 0) {
+                const closureId = root.nextModelId();
+                if (closureId !== null) {
+                  answerClosureAttempted = true;
+                  closureRequestId = closureId;
+                  const closureContext = buildConsensusContext(
+                    closureId,
+                    answerClosureNote(defects),
+                  );
+                  const closureOutcome = await calls.model({
+                    task: running,
+                    // WORK is not consensus-budgeted by the Host; this is a
+                    // consistency closure of the same undelivered answer task.
+                    phase: "WORK",
+                    messages: closureContext.messages,
+                    contextHash: closureContext.contextHash,
+                    contextBytes: closureContext.contextBytes,
+                    requestId: closureId,
+                  });
+                  const closure = evaluateConsensus(closureOutcome);
+                  if (closure !== null) {
+                    const nextCandidate =
+                      closure.prepared.packet?.candidateProposal ?? "";
+                    if (nextCandidate.length > 0) {
+                      closureNextCandidate = nextCandidate;
+                      remaining = answerClosureDefects({
+                        problemText,
+                        candidate: nextCandidate,
+                        packet: closure.prepared.packet ?? {},
+                        exactObservations,
+                        toolObservations: toolObservationViews,
+                        expectedSolutionKeys: null,
+                        requiresExhaustive,
+                      });
+                      // Adopt the closure packet only when it strictly reduces
+                      // the machine-visible defect count. A different answer
+                      // with the same unresolved defect is not an improvement.
+                      if (remaining.length < defects.length) {
+                        candidateChanged = nextCandidate !== closureCandidate;
+                        prepared = closure.prepared;
+                        outcome = closure.outcome;
+                        receiptInput.sourceRequestId = closure.outcome.requestId;
+                        receiptInput.text = closure.outcome.receipt.text;
+                      }
+                    }
+                  }
+                }
+              }
+              sessionLog.append("CONSENSUS", {
+                stage: "ANSWER_CLOSURE",
+                requestId: closureRequestId,
+                defects: defects.map((defect) => defect.kind),
+                observationViews: toolObservationViews.length,
+                // Provenance, not a kind allow-list: a defect counts as
+                // observation-grounded only when the closure itself recorded
+                // that a completed tool observation grounded it. With no view
+                // in the run this is always false.
+                observationUsed:
+                  toolObservationViews.length > 0 &&
+                  defects.some((defect) => defect.evidence === "OBSERVATION"),
+                closureRequested: closureRequestId !== null,
+                candidateChanged,
+                remainingDefects: remaining.map((defect) => defect.kind),
+                ...(closureNextCandidate === null
+                  ? {}
+                  : {
+                      previousCandidate: closureCandidate,
+                      nextCandidate: closureNextCandidate,
+                      agreement: closureNextCandidate === closureCandidate,
+                    }),
+              });
+            }
           }
           if (prepared.packet !== null && prepared.packet.schemaVersion === "p2a-work-v5") {
             const proposed = prepared.packet.scopeProposal;

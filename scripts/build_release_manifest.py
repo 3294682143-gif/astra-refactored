@@ -52,7 +52,11 @@ LOCKED_RUN_PROFILE = {
     "maxWorkUnits": 2,
     "maxEffects": 1,
     "maxReviews": 1,
-    "maxMethodLoads": 1,
+    # Handoff §5 item 2: card loads are bounded-multiple now that the effect-id
+    # capacity is six (tools 2 + methods 4). The locked profile ships with two
+    # so the second-card path is reachable in real runs; the code default in
+    # `agent_runtime` stays 1 for callers that want the old single-card shape.
+    "maxMethodLoads": 2,
     "maxRepairs": 1,
     "maxR0": 1,
 }

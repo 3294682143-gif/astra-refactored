@@ -235,7 +235,7 @@
           "maxMethodLoads": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 1
+            "maximum": 4
           },
           "maxRepairs": {
             "type": "integer",
@@ -907,7 +907,7 @@
               "effectCalls": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 2
+                "maximum": 6
               },
               "workUnits": {
                 "type": "integer",
@@ -963,7 +963,7 @@
               "methodLoads": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 1
+                "maximum": 4
               },
               "unresolvedObligations": {
                 "type": "array",
@@ -1343,7 +1343,8 @@
                   "R2",
                   "R4",
                   "REPAIR",
-                  "R0"
+                  "R0",
+                  "R0_RECHECK"
                 ]
               },
               "taskId": {
@@ -1752,7 +1753,11 @@
                 "type": "string",
                 "enum": [
                   "effect-1",
-                  "effect-2"
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
                 ]
               },
               "binding": {
@@ -2077,7 +2082,14 @@
                       "polynomial_expand_coefficients",
                       "linear_system_solution_set",
                       "exact_check_expr",
-                      "bounded_enumeration"
+                      "bounded_enumeration",
+                      "real_root_count_expr",
+                      "splitting_field_degree_expr",
+                      "circle_laplacian_expr",
+                      "planar_laplacian_expr",
+                      "interpolation_fit_check",
+                      "stats_ols_check",
+                      "finite_group_structure"
                     ]
                   },
                   "args": {
@@ -2136,7 +2148,11 @@
                 "type": "string",
                 "enum": [
                   "effect-1",
-                  "effect-2"
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
                 ]
               },
               "binding": {
@@ -2565,6 +2581,40 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 256
+                    },
+                    "tasks": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "objects": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "structures": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "method",
+                        "decision"
+                      ]
                     }
                   }
                 }
@@ -2609,7 +2659,11 @@
                 "type": "string",
                 "enum": [
                   "effect-1",
-                  "effect-2"
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
                 ]
               },
               "binding": {
@@ -2979,7 +3033,11 @@
                 "type": "string",
                 "enum": [
                   "effect-1",
-                  "effect-2"
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
                 ]
               },
               "binding": {

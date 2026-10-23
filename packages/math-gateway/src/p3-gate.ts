@@ -20,8 +20,11 @@ import { parseP3Action } from "./p3-parser.js";
 import { p3Binding, p3EffectKey, p3EffectReceipt, p3EffectRequest } from "./p3-effect-data.js";
 
 export const P3_EFFECT_GATE_VERSION = "0.0.0-p3a" as const;
-export const P3_MAX_EFFECTS = 2 as const;
-export const P3_MAX_METHOD_ATTEMPTS = 1 as const;
+// Effect id capacity of one gate window: six ids so up to four method cards and
+// two tool effects can coexist. The default `maxEffects` argument below is the
+// grantable ceiling of this gate, not the caller-facing tool budget.
+export const P3_MAX_EFFECTS = 6 as const;
+export const P3_MAX_METHOD_ATTEMPTS = 2 as const;
 export const P3_MIN_REMAINING_MS = 26 as const;
 export const P3_MAX_REMAINING_MS = 3_600_000 as const;
 export const P3_MAX_TURNS = 3 as const;

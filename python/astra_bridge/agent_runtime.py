@@ -46,6 +46,93 @@ def _fail(code="FIELD_VALUE"):
     raise ProbeError(code)
 
 
+# Fixed codes the unsolved projection may carry. A code outside this closed
+# vocabulary is replaced by ``FIELD_VALUE`` so a caller can never read a
+# free-form string as if it were a contract code.
+_UNSOLVED_CODES = (
+    "TIMEOUT", "FIELD_VALUE", "ILLEGAL_TRANSITION", "OUTCOME_UNKNOWN",
+    "MANIFEST_INVALID", "VERSION_MISMATCH", "EOF", "FRAME_TOO_LARGE",
+    "FRAME_LIMIT_EXCEEDED", "INVALID_JSON", "INVALID_UTF8",
+    "DUPLICATE_KEY", "DEPTH_EXCEEDED", "UNSAFE_INTEGER",
+    "NON_FINITE_NUMBER", "FLOAT_TOKEN", "EXTRA_FIELD", "MISSING_FIELD",
+    "FIELD_TYPE", "UNKNOWN_METHOD", "REJECTED_METHOD",
+    "SESSION_MISMATCH", "ID_MISMATCH", "UNKNOWN_SCHEMA_KEYWORD",
+    "CHECKPOINT_SHAPE", "CHECKPOINT_DIGEST", "CHECKPOINT_PROBLEM",
+    "CHECKPOINT_VERSION", "CHECKPOINT_MODE", "CHECKPOINT_BUDGET",
+    "CHECKPOINT_CARRIER", "CHECKPOINT_SEQ", "CHECKPOINT_BOUND",
+    "CHECKPOINT_ENCODING", "BUDGET_WIDENED", "BUDGET", "MODE",
+    "PROBLEM_HASH", "SESSION", "PROFILE", "CARRIER",
+    "CROSS_PROBLEM_SESSION", "REQUEST_ID",
+    # A clean child exit that never delivered the `session.solve` result is a
+    # protocol defect of its own; it must not be reported as a field failure.
+    "NO_SOLVE_RESULT",
+    # The Host's own deadline and budget refusals keep their codes here too,
+    # otherwise the projection would downgrade them back to a field failure.
+    "DEADLINE_EXCEEDED",
+    # Budget refusals already arrive as ``BUDGET``; listed for symmetry below.
+)
+
+_EXC_CODE_PREFIX = "EXC_"
+_EXC_NAME_LIMIT = 24
+
+
+def _exception_code(exc):
+    """Fixed code for one unexpected internal exception.
+
+    Only the *type* name is used, never the message, the arguments or a
+    traceback, so no problem text, model text or tool argument can leak into a
+    reported code. The alphabet and length are bounded, and anything unusual
+    collapses to ``EXC_UNKNOWN``.
+    """
+    name = type(exc).__name__
+    if not isinstance(name, str) or not name or len(name) > _EXC_NAME_LIMIT:
+        return _EXC_CODE_PREFIX + "UNKNOWN"
+    if not name.replace("_", "a").isalnum() or not name.isascii():
+        return _EXC_CODE_PREFIX + "UNKNOWN"
+    return _EXC_CODE_PREFIX + name
+
+
+_STAGES = (
+    "spawn", "runtime.initialize", "session.solve", "session.stop",
+    "drain", "wait", "reap",
+)
+
+
+def _fixed_stage(stage):
+    """The Host step a failed run stopped in, or ``None``.
+
+    Fixed vocabulary only: a caller can never read an arbitrary string as a
+    stage, so a diagnostic value cannot become a channel for raw text.
+    """
+    return stage if stage in _STAGES else None
+
+
+def _fixed_child_code(code):
+    """The child's own fixed code when it wrote exactly that, else ``None``."""
+    if not isinstance(code, str):
+        return None
+    if not 0 < len(code) <= 32:
+        return None
+    if not code.isascii() or not code.replace("_", "A").isalnum():
+        return None
+    if not code[0].isupper():
+        return None
+    return code
+
+
+def _fixed_unsolved_code(code):
+    """Return ``code`` when it is inside the closed vocabulary."""
+    if not isinstance(code, str):
+        return "FIELD_VALUE"
+    if code in _DEPLOYMENT_CODES or code in _UNSOLVED_CODES:
+        return code
+    if code.startswith(_EXC_CODE_PREFIX):
+        suffix = code[len(_EXC_CODE_PREFIX):]
+        if suffix and len(suffix) <= _EXC_NAME_LIMIT and suffix.isascii() and suffix.isalnum():
+            return code
+    return "FIELD_VALUE"
+
+
 def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -68,6 +155,164 @@ def _code_points(value):
             index += 1
         count += 1
     return count
+
+
+def _funnel_metrics(host, session_log):
+    """Route/observation funnel counters of one run.
+
+    Every number is derived from the real Node ``SessionLog`` rows and the real
+    Host effect records; nothing here trusts a model claim, and no raw model
+    text, tool argument or observation is ever copied into a metric.
+
+    * ``routed``  -- Node ``REPAIR`` rows with ``data.kind == "TOOL_ROUTE"``;
+    * ``forced``  -- those route rows the Node marked ``data.forced === true``;
+    * ``obeyed``  -- ``TOOL_OBSERVATION`` rows that carry a route identity
+      (``data.forced === true`` or a non-null ``data.routeId``);
+    * ``observation_used`` -- ``CONSENSUS`` rows with
+      ``data.stage == "ANSWER_CLOSURE"``, the closure turns that consume an
+      input-relative observation;
+    * ``closure_evaluations`` -- every ``CONSENSUS`` closure-evaluation row,
+      including the ones that found no defect;
+    * ``closure_defects`` -- those rows whose bounded ``defects`` list is not
+      empty;
+    * ``observation_views`` -- the largest ``observationViews`` count on one
+      closure row;
+    * ``tool_effect_calls`` / ``method_effect_calls`` -- Host effects by action;
+    * ``tool_names`` / ``method_ids`` -- deduplicated identities actually spent,
+      bounded by the declared caps;
+    * ``front_budget`` / ``tail_reserve`` -- the Host's deterministic split of
+      the flat model-call cap into a front-stage ceiling and a finalization
+      reserve (HANDOFF §5 item 4);
+    * ``front_spent`` -- the front-stage calls (R0/R2/R4) actually admitted.
+    """
+    routed = 0
+    forced = 0
+    obeyed = 0
+    observation_used = 0
+    closure_evaluations = 0
+    closure_defects = 0
+    observation_views = 0
+    rows = session_log if isinstance(session_log, list) else ()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        kind = row.get("kind")
+        data = row.get("data")
+        if not isinstance(data, dict):
+            continue
+        if kind == "REPAIR" and data.get("kind") == "TOOL_ROUTE":
+            routed += 1
+            if data.get("forced") is True:
+                forced += 1
+        elif kind == "TOOL_OBSERVATION":
+            route_id = data.get("routeId")
+            if data.get("forced") is True or (
+                isinstance(route_id, str)
+                and route_id not in ("", "MODEL_SELECTED")
+            ):
+                obeyed += 1
+        elif kind == "CONSENSUS" and data.get("stage") == "ANSWER_CLOSURE":
+            closure = _closure_evaluation(data)
+            if closure is None:
+                continue
+            defects, views, used = closure
+            closure_evaluations += 1
+            if defects:
+                closure_defects += 1
+            if views > observation_views:
+                observation_views = views
+            if used:
+                observation_used += 1
+    tool_effect_calls = 0
+    method_effect_calls = 0
+    effects = getattr(host, "effects", None)
+    for entry in effects if isinstance(effects, list) else ():
+        if not isinstance(entry, dict):
+            continue
+        request = entry.get("request")
+        if not isinstance(request, dict):
+            continue
+        action = request.get("action")
+        if not isinstance(action, dict):
+            continue
+        if action.get("action") == "tool":
+            tool_effect_calls += 1
+        elif action.get("action") == "method":
+            method_effect_calls += 1
+    tool_names = getattr(host, "tool_names", None)
+    method_ids = getattr(host, "method_ids", None)
+    tool_cap = getattr(host, "max_effects", 0)
+    method_cap = getattr(host, "max_method_loads", 0)
+    return {
+        "routed": routed,
+        "forced": forced,
+        "obeyed": obeyed,
+        "observation_used": observation_used,
+        "closure_evaluations": closure_evaluations,
+        "closure_defects": closure_defects,
+        "observation_views": observation_views,
+        "tool_effect_calls": tool_effect_calls,
+        "method_effect_calls": method_effect_calls,
+        "tool_names": _bounded_identities(tool_names, tool_cap),
+        "method_ids": _bounded_identities(method_ids, method_cap),
+        # Stage quota audit (HANDOFF §5 item 4): the Host's own deterministic
+        # split of the flat cap plus the front-stage calls it really admitted.
+        # Read defensively so every metrics dict keeps the keys.
+        "front_budget": getattr(host, "front_budget", 0),
+        "tail_reserve": getattr(host, "tail_reserve", 0),
+        "front_spent": getattr(host, "front_spent", 0),
+    }
+
+
+def _closure_evaluation(data):
+    """Validated closure fields of one ``CONSENSUS`` row.
+
+    Missing bounded fields fall back to their empty value for compatibility
+    with older SessionLogs; a field that is present with the wrong type makes
+    the whole row unusable, so the caller skips every closure counter for it.
+    """
+    request_id = data.get("requestId")
+    if (
+        "requestId" in data
+        and request_id is not None
+        and not isinstance(request_id, str)
+    ):
+        return None
+    defects = data.get("defects", [])
+    if not _string_list(defects):
+        return None
+    views = data.get("observationViews", 0)
+    if not _is_int(views) or views < 0:
+        return None
+    used = data.get("observationUsed", False)
+    if not isinstance(used, bool):
+        return None
+    for key in ("closureRequested", "candidateChanged"):
+        if key in data and not isinstance(data[key], bool):
+            return None
+    remaining_defects = data.get("remainingDefects", [])
+    if not _string_list(remaining_defects):
+        return None
+    return defects, views, used
+
+
+def _string_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _bounded_identities(value, cap):
+    """Deduplicated, cap-bounded copy of a recorded identity list."""
+    if not isinstance(value, list) or not _is_int(cap) or cap < 0:
+        return []
+    out = []
+    for item in value:
+        if not isinstance(item, str) or not item or len(item) > 128:
+            continue
+        if item not in out:
+            out.append(item)
+        if len(out) >= cap:
+            break
+    return out
 
 
 def _history_payload(history):
@@ -163,7 +408,7 @@ class AgentRuntime:
             raise ValueError("invalid max_effects")
         if not _is_int(max_reviews) or not 0 <= max_reviews <= 3:
             raise ValueError("invalid max_reviews")
-        if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 1:
+        if not _is_int(max_method_loads) or not 0 <= max_method_loads <= 4:
             raise ValueError("invalid max_method_loads")
         if not _is_int(max_repairs) or not 0 <= max_repairs <= 3:
             raise ValueError("invalid max_repairs")
@@ -333,7 +578,7 @@ class AgentRuntime:
             state = row.get("state")
             if state not in ("REMOTE_TERMINAL_CONFIRMED", "OUTCOME_UNKNOWN"):
                 continue
-            if row.get("phase") not in ("WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0"):
+            if row.get("phase") not in ("WORK", "CONSENSUS", "R2", "R4", "REPAIR", "R0", "R0_RECHECK"):
                 continue
             ledger.append(row)
             if state == "OUTCOME_UNKNOWN":
@@ -418,6 +663,11 @@ class AgentRuntime:
         reaped = False
         result = None
         error_code = None
+        # Bounded audit trail of *where* the run ended and *how* the child
+        # exited. Both values are fixed vocabulary (a step name and an integer),
+        # never model text, problem text or a traceback.
+        stage = "spawn"
+        child_exit = None
         try:
             host.check_deadline()
             common = {"protocolVersion": AGENT_HOST_VERSION, "sessionId": session_id}
@@ -429,7 +679,7 @@ class AgentRuntime:
                     "toolExecute": "AVAILABLE" if options["maxEffects"] > 0 else "UNAVAILABLE",
                     "methodLoad": (
                         "AVAILABLE"
-                        if options["maxMethodLoads"] == 1 and options["maxEffects"] > 0
+                        if options["maxMethodLoads"] > 0 and options["maxEffects"] > 0
                         else "UNAVAILABLE"
                     ),
                     "generatedPython": "UNAVAILABLE",
@@ -492,23 +742,28 @@ class AgentRuntime:
                 ("session.stop", _HOST_IDS[2], stop, lambda: host.stop_acked),
             )
             for method, frame_id, params, until in steps:
+                stage = method
                 host.send(
                     proc,
                     {"jsonrpc": "2.0", "id": frame_id, "method": method, "params": params},
                     method,
                 )
                 host.pump(proc, until)
+            stage = "drain"
             host.drain_tail(proc)
             host.check_deadline()
+            stage = "wait"
             try:
-                code = proc.wait(timeout=max(0.0, min(host.remaining(), _REAP_SECONDS)))
+                child_exit = proc.wait(timeout=max(0.0, min(host.remaining(), _REAP_SECONDS)))
             except subprocess.TimeoutExpired:
                 error_code = "TIMEOUT"
             else:
-                if code != 0 or host.stderr_seen:
+                if child_exit != 0 or host.stderr_seen:
                     error_code = "CHILD_FAILED"
                 elif host.solve_result is None:
-                    error_code = "FIELD_VALUE"
+                    # A clean exit without a solve result is its own defect and
+                    # is reported as such instead of as a field failure.
+                    error_code = "NO_SOLVE_RESULT"
                 else:
                     result = host.solve_result
         except ProtocolError as exc:
@@ -517,8 +772,8 @@ class AgentRuntime:
             error_code = exc.code
         except OSError:
             error_code = "CHILD_FAILED"
-        except Exception:  # noqa: BLE001 - fixed code only, never a traceback
-            error_code = "FIELD_VALUE"
+        except Exception as exc:  # noqa: BLE001 - fixed code only, no traceback
+            error_code = _exception_code(exc)
         finally:
             try:
                 host.selector.close()
@@ -532,10 +787,11 @@ class AgentRuntime:
                     result = None
         return self._finish(
             started, host, result, error_code, reaped, before_calls, before_records,
+            stage, child_exit,
         )
 
     def _finish(self, started, host, result, error_code, reaped, before_calls,
-                before_records):
+                before_records, stage=None, child_exit=None):
         """One unified return after the child has been reaped and closed.
 
         Every metric is taken from the real Host counters and the current
@@ -597,16 +853,26 @@ class AgentRuntime:
             "reported_tokens": reported_tokens if known_usage_requests > 0 else None,
             "unknown_usage_requests": unknown_usage,
         }
+        metrics.update(
+            _funnel_metrics(
+                host,
+                result.get("sessionLog") if isinstance(result, dict) else None,
+            )
+        )
         if result is None or error_code is not None:
             if host.model_requests > 0:
                 metrics["logical_model_calls"] = host.model_requests
             return self._unsolved(
                 started, error_code or "FIELD_VALUE", reaped, metrics, finish,
+                stage, child_exit, getattr(host, "stderr_code", None),
             )
         summary = result["summary"]
         final_response = summary["finalResponse"]
         if not isinstance(final_response, str) or not final_response:
-            return self._unsolved(started, "FIELD_VALUE", reaped, metrics, finish)
+            return self._unsolved(
+                started, "FIELD_VALUE", reaped, metrics, finish,
+                stage, child_exit, getattr(host, "stderr_code", None),
+            )
         trace = []
         for row in result["trace"]:
             trace.append(
@@ -651,23 +917,9 @@ class AgentRuntime:
             "elapsedMs": max(0, int((time.monotonic() - started) * 1000)),
         }
 
-    def _unsolved(self, started, code, reaped, metrics=None, finish=None):
-        if code not in _DEPLOYMENT_CODES and code not in (
-            "TIMEOUT", "FIELD_VALUE", "ILLEGAL_TRANSITION", "OUTCOME_UNKNOWN",
-            "MANIFEST_INVALID", "VERSION_MISMATCH", "EOF", "FRAME_TOO_LARGE",
-            "FRAME_LIMIT_EXCEEDED", "INVALID_JSON", "INVALID_UTF8",
-            "DUPLICATE_KEY", "DEPTH_EXCEEDED", "UNSAFE_INTEGER",
-            "NON_FINITE_NUMBER", "FLOAT_TOKEN", "EXTRA_FIELD", "MISSING_FIELD",
-            "FIELD_TYPE", "UNKNOWN_METHOD", "REJECTED_METHOD",
-            "SESSION_MISMATCH", "ID_MISMATCH", "UNKNOWN_SCHEMA_KEYWORD",
-            "CHECKPOINT_SHAPE", "CHECKPOINT_DIGEST", "CHECKPOINT_PROBLEM",
-            "CHECKPOINT_VERSION", "CHECKPOINT_MODE", "CHECKPOINT_BUDGET",
-            "CHECKPOINT_CARRIER", "CHECKPOINT_SEQ", "CHECKPOINT_BOUND",
-            "CHECKPOINT_ENCODING", "BUDGET_WIDENED", "BUDGET", "MODE",
-            "PROBLEM_HASH", "SESSION", "PROFILE", "CARRIER",
-            "CROSS_PROBLEM_SESSION", "REQUEST_ID",
-        ):
-            code = "FIELD_VALUE"
+    def _unsolved(self, started, code, reaped, metrics=None, finish=None,
+                  stage=None, child_exit=None, child_code=None):
+        code = _fixed_unsolved_code(code)
         if metrics is None:
             metrics = {
                 "client_method_calls": 0,
@@ -682,6 +934,20 @@ class AgentRuntime:
                 "known_http_attempts": None,
                 "reported_tokens": None,
                 "unknown_usage_requests": 0,
+                "routed": 0,
+                "forced": 0,
+                "obeyed": 0,
+                "observation_used": 0,
+                "closure_evaluations": 0,
+                "closure_defects": 0,
+                "observation_views": 0,
+                "tool_effect_calls": 0,
+                "method_effect_calls": 0,
+                "tool_names": [],
+                "method_ids": [],
+                "front_budget": 0,
+                "tail_reserve": 0,
+                "front_spent": 0,
             }
         return {
             "engine": "ts",
@@ -695,6 +961,12 @@ class AgentRuntime:
             "reason": "NO_CANDIDATE",
             "unresolvedObligations": [],
             "code": code,
+            # Bounded, fixed-vocabulary audit trail: which Host step was running,
+            # how the child exited, and the child's own fixed code when it wrote
+            # one. No model text, no problem text, no traceback.
+            "stage": _fixed_stage(stage),
+            "childExit": child_exit if _is_int(child_exit) else None,
+            "childCode": _fixed_child_code(child_code),
             "trace": [],
             "metrics": metrics,
             "finishReason": finish,

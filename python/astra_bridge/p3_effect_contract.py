@@ -45,13 +45,23 @@ TOOL_NAMES = (
     "linear_system_solution_set",
     "exact_check_expr",
     "bounded_enumeration",
+    "real_root_count_expr",
+    "splitting_field_degree_expr",
+    "circle_laplacian_expr",
+    "planar_laplacian_expr",
+    "interpolation_fit_check",
+    "stats_ols_check",
+    "finite_group_structure",
 )
 MAX_REQUEST_BYTES = 65536
 MAX_ARGS_BYTES = 10000
 MAX_OBSERVATION_BYTES = 16000
 MIN_REMAINING_MS = 26
 MAX_REMAINING_MS = 3600000
-EFFECT_IDS = ("effect-1", "effect-2")
+# Effect id capacity is six: up to four method cards and two tool effects can
+# coexist in one window. The public `maxEffects` option still caps grantable
+# tool effects at two; the remaining slots are the bounded method-load quota.
+EFFECT_IDS = ("effect-1", "effect-2", "effect-3", "effect-4", "effect-5", "effect-6")
 # Root model request ids the session can produce. The previous three-entry
 # tuple made every tool call on the fourth or later model request a fixed
 # validation failure once the M1 contract grew past three obligations.

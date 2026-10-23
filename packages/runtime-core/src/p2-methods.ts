@@ -1,10 +1,12 @@
 import {
   P2_ERROR_CODES,
   P2Error,
+  checkedP2MethodRoutingMetadata,
   detectLoneSurrogates,
   p2Snapshot,
   type P2MethodAsset,
   type P2MethodCatalog,
+  type P2MethodEntry,
   type P2MethodLoad,
   type P2MethodPort,
   type P2MethodUse,
@@ -76,16 +78,32 @@ export function readCatalog(raw: unknown): P2MethodCatalog {
     throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
   }
   const seen = new Set<string>();
-  const entries: { id: string; title: string }[] = [];
+  const entries: P2MethodEntry[] = [];
+  const allowed = new Set(["id", "title", "tasks", "objects", "structures", "role"]);
   for (const row of node.entries) {
-    const item = keys(row, ["id", "title"]);
+    if (typeof row !== "object" || row === null || Array.isArray(row)) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const own = Object.keys(row);
+    if (
+      !own.includes("id") ||
+      !own.includes("title") ||
+      own.some((key) => !allowed.has(key))
+    ) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const item = row as Record<string, unknown>;
     const id = methodId(item.id);
     const title = text(item.title, 1, MAX_TITLE);
+    const metadata = checkedP2MethodRoutingMetadata(item);
+    if (metadata === null) {
+      throw new P2Error(P2_ERROR_CODES.PACKET_BINDING);
+    }
     if (seen.has(id)) {
       throw new P2Error(P2_ERROR_CODES.DUPLICATE_ID);
     }
     seen.add(id);
-    entries.push({ id, title });
+    entries.push({ id, title, ...metadata });
   }
   return p2Snapshot({ version: VERSION, entries }) as P2MethodCatalog;
 }

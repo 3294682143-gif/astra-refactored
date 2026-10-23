@@ -29,7 +29,7 @@ export function makeRevisionR0(): P4R0Preparation {
   return prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 4,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
 }
@@ -51,7 +51,7 @@ export function makeRevisionMultipartR0(): P4R0Preparation {
   return prepareP4R0(contract, {
     enabled: true,
     planningModelCalls: 1,
-    remainingRootCalls: 4,
+    remainingRootCalls: 5,
     remainingMs: 1000,
   });
 }
@@ -59,10 +59,10 @@ export function makeRevisionMultipartR0(): P4R0Preparation {
 /** Real R0 review snapshot with an ISSUES report, produced by a real session. */
 export function makeIssuesReview(prep: P4R0Preparation): P4R0ReviewSnapshot {
   const session = new P4R0ReviewSession(prep);
-  session.admit(1000, 4);
-  session.markDispatched();
-  session.settle("COMPLETE", r0Report(prep, "ISSUES"), 900);
-  return session.snapshot();
+  session.admit("MEANING", "model-1", 1000, 5);
+  session.markDispatched("MEANING");
+  session.settle("MEANING", "COMPLETE", r0Report(prep, "ISSUES"), 900);
+  return session.snapshot("MEANING");
 }
 
 /** Real M4 revision trigger built from a real preparation and review snapshot. */

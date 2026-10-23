@@ -154,7 +154,9 @@ test("group 3: options view bounds and forged action are rejected", () => {
   assert.equal(prepareP4R0Recheck(original, trigger, revision, { ...base, remainingMs: 26 }).action, "REQUEST_REVIEW");
   for (const bad of [
     { ...base, planningModelCalls: 2 },
-    { ...base, remainingRootCalls: 3 },
+    // The frozen recheck view may not exceed the parent stage minus the two
+    // calls already reserved for the reviews.
+    { ...base, remainingRootCalls: 4 },
     { ...base, remainingMs: 1001 },
     { ...base, extra: 1 },
     { planningModelCalls: 1, remainingRootCalls: 2 },

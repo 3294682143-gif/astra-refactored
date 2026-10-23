@@ -87,7 +87,7 @@ def run_p3_host(
         raise ProbeError("FIELD_VALUE")
     if isinstance(max_effects, bool) or not isinstance(max_effects, int) or not 0 <= max_effects <= 2:
         raise ProbeError("FIELD_VALUE")
-    if isinstance(max_method_loads, bool) or not isinstance(max_method_loads, int) or not 0 <= max_method_loads <= 1:
+    if isinstance(max_method_loads, bool) or not isinstance(max_method_loads, int) or not 0 <= max_method_loads <= 4:
         raise ProbeError("FIELD_VALUE")
     checked_receipts = validate_receipts(receipts)
     if script is None:

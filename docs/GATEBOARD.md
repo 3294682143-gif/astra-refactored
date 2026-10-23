@@ -2,6 +2,14 @@
 
 Current gate: **G5 / PR6 (local-ready) + G7 / PR7 in progress** — the official 书生 S2 API + L1 comparison remain `BLOCKED_EXTERNAL`, so G5/G6 are delivered as **locally-verifiable packages** (Slices 5a/5b) and work continues on **G7 / PR7** (Slices 7a-7f). **G4 / PR5 CLOSED** (Slices 4a `63dbeca`, 4b `9d18ef4`, 4c this commit: immutable SessionLog + ContextProjector replay, Pi truncated-tool-barrier E08/E09, DSH monotonic tool guards + request-responsibility journal + E17 exact IPC); **G3 / PR4 CLOSED at `651cb04`**; G2 closed at `899c7fc`.
 G4/PR5 is closed; **CURRENT_GATE points to G5 / PR6 (real 书生 S2 API + budget modes + L1 math comparison)**, which stays BLOCKED_EXTERNAL until the official environment/authorization is supplied.
+Session update (2026-10-22): §10.3 is complete: the fresh item audit is
+**73 correct / 19 wrong / 5 disputed / 3 unsolved** (batch B; batch A is
+77/20/3), the four generic answer closures are covered by 7 Node and 4 public
+entry e2e cases, and the two-arm rerun gives retry-default **99/100 candidates,
+strict 27/100** vs no-retry **88/100, strict 22/100**. Gates: Node 341/341,
+Python 722 passed / 24 skipped, manifest `VERIFY_OK`. See the 2026-10-22
+section at the end of this file.
+
 Session update (2026-10-21): **A full 100-item rerun** on frozen `36e056f`
 (10000-call arm, 4/4 concurrency) produced **68 correct / 12 incorrect /
 12 unsolved / 8 ambiguous; strict 18/100; 88/100 candidates; 12 unsolved all
@@ -177,3 +185,152 @@ expanded permissions and default-engine switching retain their separate gates.
   `tests/e2e/test_ts_binding_parity.py`.
 - Gates: Node 334/334, Python 716 passed / 24 skipped, manifest `VERIFY_OK`.
 - 12-item A-group failure subset: 11/12 candidates, 0 `FIELD_VALUE`.
+
+### Session update — 2026-10-22 (§10.3 item audit, closures, two-arm rerun)
+
+- Independent full audit batch B of the c9 100-item outputs: **73 correct / 19
+  wrong / 5 disputed / 3 unsolved**; the concurrent batch-A review is
+  77/20/3. Both are kept as independent methods (HANDOFF §10.3).
+- Generic answer closures added for option coverage, exact maximal-minor degree
+  conservation, density normalization and exact-set solution completeness, with
+  7 pure Node cases and 4 real public-entry e2e cases.
+- Two-arm full rerun: retry-default **99/100 candidates, strict 27/100** (1551
+  calls / 10,426,268 tokens); no-retry **88/100 candidates, strict 22/100**
+  (1501 calls / 10,014,540 tokens). The retry arm's one loss (#15) is malformed
+  model JSON, not transport; the no-retry arm has 9 remote-unknown losses and 3
+  malformed-content `FIELD_VALUE` losses.
+- Gates: `tsc -b` 0; Node **341/341**; Python **722 passed / 24 skipped**;
+  manifest `VERIFY_OK`; release bundle rebuilt. All scores are local
+  `ReferenceJudge`, not platform results.
+
+### Session update — 2026-10-22 (§12.5 tool/reliability implementation)
+
+- Funnel telemetry, forced-turn protocol gate (one bounded retry, then fail-open
+  with no fabricated receipt), 4 → 8 tool whitelist, method cards out of the
+  effect budget (public `maxEffects <= 2`, internal capacity 3), canonical
+  consensus ballot parity, and the semantic routing table expansion are all in
+  the tree and covered by focused tests.
+- The stale `summary.effectCalls.maximum = 2` binding in all schema copies was
+  the real cause of the earlier 9-item pilot `FIELD_VALUE`; it is 3 everywhere
+  now, including `release/schema`.
+- Failure coding on the Host seam is no longer a single `FIELD_VALUE` bucket:
+  `NO_SOLVE_RESULT`, `ILLEGAL_TRANSITION` and bounded `EXC_<Type>` codes, plus
+  the child's fixed stderr code and a fixed `stage` value in the unsolved
+  projection.
+- 9-item real-API pilot (`/tmp/astra-tools9-103c`): 9/9 returned without a runner
+  exception, 8 candidates + 1 honest `unsolved`; every item stayed inside the
+  tool/method quotas, and every routed item reported
+  `routed == forced == obeyed`.
+- Gates: `tsc -b` 0; Node **370/370**; full pytest **869 passed / 24 skipped**;
+  focused bridge **458 passed**; agent e2e **20 passed**; manifest
+  `VERIFY_OK` after a bundle rebuild. No commit, no push.
+
+### Session update — 2026-10-23 (closure now consumes observations; vote keys canonical)
+
+- The answer closure stopped being blind: tool observations are hoisted to run
+  scope, indexed by operation, and each defect now carries its provenance
+  (`OBSERVATION` / `CERTIFICATE` / `TEXT`). `observationUsed` is derived from
+  that provenance instead of a hard-coded kind list.
+- Every closure evaluation now writes an `ANSWER_CLOSURE` row
+  (`defects`, `observationViews`, `observationUsed`, `closureRequested`,
+  `candidateChanged`, `remainingDefects`); Python exposes
+  `closure_evaluations` / `closure_defects` / `observation_views` next to
+  `observation_used`, so "closure ran and found nothing" is distinguishable
+  from "closure never ran".
+- Candidate polynomial parsing now accepts unicode superscripts (`t²-t+1`),
+  `−`, `·`, `×`; before this, real Chinese answers could never ground a
+  degree-conservation defect.
+- Real-API evidence (`/tmp/astra-observe6-107`, 5/6 items completed): item #35
+  produced `closure_evaluations=1 / closure_defects=1 / observation_views=1 /
+  observation_used=1`; item #2 produced `views=1 / def=0 / USED=0`. The metric
+  now moves and discriminates.
+- Consensus vote keys were already canonical (`canonicalAnswerKey`, mirrored by
+  Python `ballot_choice`); the certificate-closure comparison was switched from
+  verbatim `!==` to `sameAnswerKey` so `1/2` vs `\frac12` no longer burns a
+  bounded closure turn.
+- Gates: `tsc -b` 0; Node **385/385**; full pytest **875 passed / 24 skipped**;
+  focused bridge **464 passed**; manifest `VERIFY_OK` after a bundle rebuild.
+  No commit, no push.
+
+### Session update — 2026-10-23 (HANDOFF §5 method layer)
+
+- Method catalog now carries bounded routing metadata; the reader's default shape is still
+  `{id, title}`, so the legacy path is unchanged and its test was not relaxed.
+- Card loads are bounded-multiple: effect ids `effect-1..6`, `maxMethodLoads ≤ 4`,
+  capacity = tools (≤2) + methods (≤4); the 1.2 contract stays narrow and is pinned.
+- Soft routing preselects ≤3 cards from metadata before any body, deterministically, and records
+  `METHOD_ROUTE`; the body still only arrives through `method.load`.
+- Host stage quotas: front ≤25 %, tail reserve 10 %, both refused with `BUDGET`; audit keys
+  `front_budget` / `tail_reserve` / `front_spent`.
+- R0 is now three independent reviews (MEANING / METHOD / TASK_TOOL) + a pure aggregator + exactly
+  one targeted recheck on ISSUES; root bound 4 → 5, `maxR0` remains a 0/1 switch.
+- Gates: `tsc -b` 0; Node **407/407**; full pytest **909 passed / 24 skipped**; manifest
+  `VERIFY_OK`. No commit, no push.
+
+### Session update — 2026-10-23 (routing expansion, second card, 20-item pilot)
+
+- Routing gained two families (`polynomial_expand_coefficients`, `linear_system_solution_set`)
+  and widened finite-counting and series-limit wording; still wording-only, existing families keep
+  priority. Static scan over the 100-item input: 13 → 14 items matched — the rest are conceptual
+  multiple-choice/proof items that no whitelisted tool can serve, so the tool-appropriate ceiling on
+  this input is ~14–17 %, not 100 %.
+- A bounded second method-card load is now available (`AGENT_MAX_METHOD_ASSETS = 2`), offered only
+  when routing produced ≥2 candidates, optional for the model, fail-closed on the quota, and inert
+  when `maxMethodLoads = 1`. The locked run profile ships `maxMethodLoads = 2`.
+- 20-item real pilot (`/tmp/astra-pilot20b-109`): 19/20 candidates, `routed == obeyed == 2` on 8
+  items, 17 tool effects, 20/20 items loaded exactly one card, closure evaluated on 19, 2 defects
+  (both certificate-based), `observation_used = 0`, `front_spent/front_budget = 1/64`.
+- Two extra real runs (12 items, candidates ≥2, `max_method_loads=2`) still loaded one card each:
+  the second-card offer is reachable but the model answers after the first body.
+- Gates: `tsc -b` 0; Node **417/417**; full pytest **910 passed / 24 skipped**; manifest
+  `VERIFY_OK` with `lockedRunProfile.maxMethodLoads = 2`. No commit, no push.
+
+### Session update — 2026-10-23 (three new exact tools + closure wiring)
+
+- New deterministic tools, implemented under `mathagent/` (the frozen `math_families/**` tree is
+  untouched): `interpolation_fit_check` (exact per-point residuals against a claimed expression),
+  `stats_ols_check` (exact OLS coefficients/R²/residuals and claim comparison),
+  `finite_group_structure` (closure of explicit permutation generators: order, element orders,
+  conjugacy classes, centre, exponent). All bounded, exact-rational/integer, no floats, fixed
+  refusal codes.
+- P3 whitelist 8 → 11 in `p3.ts`, `p3_effect_contract.py`, both v13 schemas and `p3-host.schema.json`;
+  the frozen 1.2 `agent-host.schema.json` stays at 8 names and its SHA is unchanged.
+- New routes `INTERPOLATION_FIT`, `OLS_CHECK`, `GROUP_STRUCTURE` (the last one requires explicit
+  cycle notation). Static routing coverage over the 100-item input: **14 → 22 items**.
+- Answer closure gained three observation-grounded defects (`INTERPOLATION_RESIDUAL`,
+  `OLS_MISMATCH`, `GROUP_STRUCTURE_MISMATCH`) with fixed ordering and fail-closed guards, so these
+  observations can now actually change a candidate.
+- Gates: `tsc -b` 0; Node **426/426**; full pytest **935 passed / 24 skipped**; manifest `VERIFY_OK`.
+  No commit, no push.
+
+### Session update — 2026-10-23 (named groups + 12-item tool verification)
+
+- `finite_group_structure` accepts a bounded `named_group` vocabulary (S3/S4/A4/A5/D8/D10/Z2..Z12,
+  `C_n` aliases) expanded internally to generators, with `input_mode` / `group_name` in the payload
+  and field-identical results to the equivalent explicit generators. Routing now fires on
+  "supported group name + structure wording" as well as explicit cycle notation.
+- Static routing coverage over the 100-item input: **23 items** (was 13 three rounds ago).
+- 12-item real run over every item that routes to the new families: **12/12 candidates**,
+  the new tools really executed on 10 items, `routed == obeyed` on all 12, observations reached the
+  closure on 8, but `closure_defects = 0` and `observation_used = 0` — because those answers are
+  verdicts/option letters, not quantities a diagnostic can compare.
+- Next step recorded: an option-level diagnostic that compares numbers inside the chosen option
+  text against the observation is the only way to bring conceptual items into the closure.
+- Gates: `tsc -b` 0; Node **426/426**; full pytest **941 passed / 24 skipped**; manifest
+  `VERIFY_OK`. No commit, no push.
+
+### Session update — 2026-10-23 (option-level closure diagnostics)
+
+- Answer closure gained two observation-grounded option diagnostics:
+  `OPTION_NUMERIC_CONTRADICTION` (group order, conjugacy-class count, real-root count,
+  splitting-field degree, OLS slope/intercept asserted inside a **chosen** option) and
+  `OPTION_VERDICT_CONTRADICTION` (abelian/cyclic assertions vs the enumerated property, suppressed
+  by any negation or hedge).
+- Option parsing is strict: markers must start a clause, `[` is never a marker prefix, only text
+  between markers is read, and an option whose clause carries an unattributed number yields no
+  defect. Ambiguous or missing observations never produce a defect.
+- Coverage: 13 new Node tests (11 unit + 2 loop-level proving `observationUsed: true` when an option
+  contradicts the enumeration). Node total 426 → **439**.
+- A 4-item real-API sample produced **no false positives** and no positive case yet — the model's
+  chosen options happened to agree with the observations.
+- Gates: `tsc -b` 0; Node **439/439**; full pytest **941 passed / 24 skipped**; manifest `VERIFY_OK`.

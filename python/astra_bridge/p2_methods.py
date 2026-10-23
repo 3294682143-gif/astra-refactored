@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 
 from mathagent.lite.methods import (
@@ -27,6 +28,10 @@ from mathagent.lite.methods import (
 __all__ = ["fixture_catalog", "fixture_load", "main"]
 
 _MAX_BODY_CHARS = 24000
+_MAX_ROUTING_TOKENS = 6
+_ROUTING_TOKEN_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+_METHOD_ROLES = frozenset({"method", "decision"})
+_ROUTING_FIELDS = ("tasks", "objects", "structures")
 
 
 def _catalog_or_new(catalog):
@@ -35,21 +40,51 @@ def _catalog_or_new(catalog):
     return catalog
 
 
-def fixture_catalog(catalog=None):
-    """Return ``{"version", "entries"}``; entries are id/title only.
+def _valid_routing_tokens(value):
+    """True only for one bounded list of canonical routing tokens."""
+    if not isinstance(value, list) or len(value) > _MAX_ROUTING_TOKENS:
+        return False
+    for item in value:
+        if not isinstance(item, str) or not _ROUTING_TOKEN_RE.fullmatch(item):
+            return False
+    return True
 
-    An unavailable catalog yields an empty entry list rather than an error, so
+
+def fixture_catalog(catalog=None):
+    """Return ``{"version", "entries"}`` with bounded advisory metadata.
+
+    Every entry keeps ``id``/``title`` and carries the optional ``tasks``,
+    ``objects``, ``structures`` and ``role`` fields when they are in shape.
+    An out-of-shape metadata field is dropped, never passed through. An
+    unavailable catalog yields an empty entry list rather than an error, so
     the TS side can disable the port and continue direct reasoning.
     """
     try:
         active = _catalog_or_new(catalog)
-        entries, _diagnostic = active.catalog()
+        # The reader keeps its narrow id/title default for the legacy lite
+        # runtime; the Host bridge is the only caller that asks for the
+        # advisory routing metadata. A reader that does not accept the flag
+        # (an injected stub, or an older reader) still works: it simply yields
+        # the narrow rows and the prompt stays unchanged.
+        try:
+            entries, _diagnostic = active.catalog(include_metadata=True)
+        except TypeError:
+            entries, _diagnostic = active.catalog()
         rows = []
         for row in entries:
             method_id = row.get("id")
             title = row.get("title")
-            if isinstance(method_id, str) and isinstance(title, str):
-                rows.append({"id": method_id, "title": title})
+            if not isinstance(method_id, str) or not isinstance(title, str):
+                continue
+            entry = {"id": method_id, "title": title}
+            for field in _ROUTING_FIELDS:
+                value = row.get(field)
+                if _valid_routing_tokens(value):
+                    entry[field] = list(value)
+            role = row.get("role")
+            if isinstance(role, str) and role in _METHOD_ROLES:
+                entry["role"] = role
+            rows.append(entry)
         return {"version": EXPECTED_VERSION, "entries": rows}
     except Exception:
         return {"version": EXPECTED_VERSION, "entries": []}

@@ -27,7 +27,7 @@ import {
   type P4R0Preparation,
 } from "@astra/protocol";
 import { ContractLedger, compileP2Contract } from "@astra/math-contract";
-import { P4R0ModelGate, chooseP2ReadyTask } from "@astra/math-gateway";
+import { P4R0ModelGate, P4_R0_MAX_MODEL_CALLS, chooseP2ReadyTask } from "@astra/math-gateway";
 import { P2WorkunitStore, prepareP2Context } from "@astra/math-workunit";
 import { P4R0ReviewSession } from "@astra/math-review";
 import { P4CandidateGate } from "@astra/math-audit";
@@ -166,7 +166,8 @@ export function runP4R0Fixture(
   const requestedClock = optionSource.now;
   const requestedMs = optionSource.remainingMs;
   const requestedPolicy = optionSource.policy;
-  const maxModelCalls = requestedCalls === undefined ? 1 : safeInt(requestedCalls, 0, 4);
+  const maxModelCalls =
+    requestedCalls === undefined ? 1 : safeInt(requestedCalls, 0, P4_R0_MAX_MODEL_CALLS);
   const r0Enabled = requestedEnabled === undefined ? false : requestedEnabled;
   if (typeof r0Enabled !== "boolean") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
@@ -308,7 +309,7 @@ export function runP4R0Fixture(
       initialContract,
       contract: ledger.snapshot(),
       preparation,
-      r0: r0 === null ? null : r0.snapshot(),
+      r0: r0 === null ? null : r0.snapshot("MEANING"),
       requests,
       events: ledger.eventsSnapshot(),
       artifacts: store.snapshot(),
@@ -338,9 +339,12 @@ export function runP4R0Fixture(
         stop = "FIXTURE_EXHAUSTED";
         return finish();
       }
+      // This offline composition fixture exercises one role (MEANING) of the
+      // three-review stage; the real three-role orchestrator and its aggregate
+      // live in `runBoundedR0` of the unified AgentLoop.
       const review = new P4R0ReviewSession(prep, 1);
       r0 = review;
-      const admitted = review.admit(remaining(), maxModelCalls);
+      const admitted = review.admit("MEANING", "model-1", remaining(), maxModelCalls);
       requests.push(
         p2Snapshot({
           requestId: "model-1",
@@ -358,7 +362,7 @@ export function runP4R0Fixture(
       }
       gate.admitR0(prep, remaining());
       gate.markDispatched("model-1");
-      review.markDispatched();
+      review.markDispatched("MEANING");
       requests[requests.length - 1] = p2Snapshot({
         requestId: "model-1",
         phase: "R0",
@@ -371,7 +375,12 @@ export function runP4R0Fixture(
       modelCalls += 1;
       r0Calls += 1;
       gate.settle("model-1", r0Receipt.transportStatus);
-      const settled = review.settle(r0Receipt.transportStatus, r0Receipt.text, remaining());
+      const settled = review.settle(
+        "MEANING",
+        r0Receipt.transportStatus,
+        r0Receipt.text,
+        remaining(),
+      );
       r0Conclusion = settled.report === null ? "NONE" : settled.report.conclusion;
       if (
         settled.code !== "OK" ||

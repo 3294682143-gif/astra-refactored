@@ -17,7 +17,8 @@
         "lz78_bit_string",
         "lz78_decode",
         "lz78_encode",
-        "verify_phrases"
+        "verify_phrases",
+        "bounded_enumeration"
       ],
       "tests": [
         "math_families/tests/property/test_algorithm_simulation.py"
@@ -352,7 +353,8 @@
       "tools": [
         "cover_time_complete_graph",
         "markov_expected_steps",
-        "normal_overflow_seats"
+        "normal_overflow_seats",
+        "stats_ols_check"
       ],
       "tests": [
         "math_families/tests/property/test_probabilistic_model.py"
@@ -374,9 +376,12 @@
         "linear_system_solution_set",
         "solve_system_guarded_expr",
         "splitting_field_degree_expr",
+        "exact_check_expr",
         "polynomial_invariant_check",
         "algebraic_polynomial_check",
-        "wronskian_root_identity_expr"
+        "wronskian_root_identity_expr",
+        "interpolation_fit_check",
+        "finite_group_structure"
       ],
       "tests": [
         "math_families/tests/property/test_symbolic_algebra.py"
