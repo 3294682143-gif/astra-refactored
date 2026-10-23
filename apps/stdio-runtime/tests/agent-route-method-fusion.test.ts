@@ -168,6 +168,12 @@ test("preferredMethodForToolRoute maps every registered route to its owning card
     ["INTERPOLATION_FIT", "numerical-approximation"],
     ["OLS_CHECK", "regression-diagnostics"],
     ["EXACT_SIMPLIFY", "domain-equivalence"],
+    ["SOLVE_QUADRATIC_DIOPHANTINE", "modular-crt"],
+    ["SYMBOLIC_DIOPHANTINE", "modular-crt"],
+    ["SYSTEM_OF_EXPRESSIONS", "domain-equivalence"],
+    ["POLYNOMIAL_FUNCTION_CHECK", "domain-equivalence"],
+    ["GF2_RANK", "linearization-spectral"],
+    ["GF2_NULLSPACE", "linearization-spectral"],
   ];
   const ids = new Set(CATALOG.map((item) => item.id));
   for (const [routeId, methodId] of expected) {
@@ -216,6 +222,46 @@ test("a GROUP_STRUCTURE route puts algebraic-structures first", () => {
 });
 
 test("a problem with no tool route keeps the unchanged baseline order", () => {
+  assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
+  assert.deepEqual(
+    [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)],
+    ["inequalities-optimization", "convergence-limits", "integral-symmetry"],
+  );
+});
+
+test("the six Phase-2 routes pull their owner card first without changing the baseline", () => {
+  const cases: ReadonlyArray<readonly [string, string, string]> = [
+    [
+      "求二次丢番图方程 x^2+y^2=25 的整数解。",
+      "SOLVE_QUADRATIC_DIOPHANTINE",
+      "modular-crt",
+    ],
+    [
+      "用符号方法求解丢番图方程 x^2+y^2=25 的整数解集。",
+      "SYMBOLIC_DIOPHANTINE",
+      "modular-crt",
+    ],
+    [
+      "解下列非线性方程组 x^2+y^2=1, x-y=0。",
+      "SYSTEM_OF_EXPRESSIONS",
+      "domain-equivalence",
+    ],
+    [
+      "验证多项式恒等式 f(x+y)=f(x)+f(y) 对 f(x)=x 是否成立。",
+      "POLYNOMIAL_FUNCTION_CHECK",
+      "domain-equivalence",
+    ],
+    ["求 GF(2) 上矩阵的秩。", "GF2_RANK", "linearization-spectral"],
+    [
+      "求 GF(2) 上矩阵的零空间（核空间）。",
+      "GF2_NULLSPACE",
+      "linearization-spectral",
+    ],
+  ];
+  for (const [problem, routeId, methodId] of cases) {
+    assert.equal(semanticToolRoute(problem)?.id, routeId);
+    assert.equal(semanticMethodRoute(problem, CATALOG)[0], methodId);
+  }
   assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
   assert.deepEqual(
     [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)],

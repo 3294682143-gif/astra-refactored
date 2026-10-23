@@ -1550,3 +1550,73 @@ OPTION_VERDICT_CONTRADICTION → SOLUTION_COMPLETENESS`；同一轮内按选项�
 2. **归属纠偏是"标注"而非"搬移"**：`tool_inventory` 的一致性检查锁死了 `families[].tools` 与 registry 的 family 字段，所以纠偏以 `general_method_ids` + `tool_ownership` + `relocations` 的形式记录，registry 里的 `family` 字段本身没变。
 3. **协同提示是"建议"不是门禁**：模型仍可能先交 packet，此时由既有的强制工具轮兜底；本轮没有把第二张卡做成强制（见 §13.7）。
 4. **没有跑真实 API**：本轮全部是本地门禁 + 假 client e2e，正确率口径仍是 §12.6 的旧数字。
+
+---
+
+## 15. 2026-10-24 Phase 2 第一批：6 个沉睡算子开进白名单（11 → 17）
+
+按方案 §第四部分 Phase 2 的"第一批优先开放"，把已经写好独立输出审计、但被协议硬编码挡在门外的
+六个算子开放出来。三个 agent 按文件归属并行，各自带门禁。
+
+### 15.1 白名单 11 → 17
+
+追加顺序（方案指定）：`solve_quadratic_diophantine`、`symbolic_diophantine_with_timeout`、
+`solve_system_guarded_expr`、`polynomial_function_check`、`gf2_rank`、`gf2_nullspace`。
+
+同步五份 live 副本：`packages/protocol/src/p3.ts`、`python/astra_bridge/p3_effect_contract.py`、
+两份 v13 schema（逐字节一致，sha `85cdadb2…`）、`p3-host.schema.json`。
+**冻结的 1.2 `agent-host.schema.json` 仍是 8 个名字、SHA `d21953e2…` 未变**，并新增两个测试：
+一个是"1.2 里绝不能出现 Phase 2 名字"，一个是把 1.2 的字节钉死。
+
+### 15.2 六个算子真的能跑（不是只加名字）
+
+每个都在真实 `RegisteredExecutor` 里跑通并断言 `status == "ok"`、审计 `VERIFIED_FOR_INPUT`、无浮点：
+
+| 工具 | 已验证 payload | 结果 |
+| --- | --- | --- |
+| `gf2_rank` | `{"rows":[1,2,4]}` | 3 |
+| `gf2_nullspace` | `{"rows":[1,2],"width":3}` | `[4]` |
+| `solve_system_guarded_expr` | `{"expressions":["x+y-3","x-y-1"],"variables":["x","y"]}` | 1 |
+| `polynomial_function_check` | `{"equation":"f(x+y)=f(x)+f(y)","function":"f","argument":"x","variables":["x","y"],"expression":"x"}` | `identity_holds: true` |
+| `solve_quadratic_diophantine` | `{"a":1,"b":0,"c":1,"d":0,"e":0,"f":-25}` | 12 组整数对 |
+| `symbolic_diophantine_with_timeout` | `{"lhs":"x**2+y**2-25"}` | 12 组字符串解对 |
+
+关键约束（写进了卡片与测试）：`solve_quadratic_diophantine` 要求 `a≠0`、`|系数|≤32`、且必须是
+**定形（椭圆型）**，否则需要 `y_bound≤32`、再否则 `resource_limited`；`gf2_rank` 不接受多余
+`width` 字段，`gf2_nullspace` 拒绝超宽行；`polynomial_function_check` 恰好 5 个字段且
+`expression` 必须是 `argument` 的一元式。
+
+### 15.3 路由与卡片
+
+- 六个新语义路由（纯措辞匹配）：`SOLVE_QUADRATIC_DIOPHANTINE`、`SYMBOLIC_DIOPHANTINE`、
+  `SYSTEM_OF_EXPRESSIONS`、`POLYNOMIAL_FUNCTION_CHECK`、`GF2_RANK`、`GF2_NULLSPACE`，
+  显式互斥：线性方程组仍归 `LINEAR_SYSTEM_SOLUTION_SET`，单方程不会变成丢番图族，
+  GF(2) 核空间优先于 GF(2) 秩。
+- `preferredMethodForToolRoute` 增加 6 行：两个丢番图 → `modular-crt`、
+  `solve_system_guarded_expr`/`polynomial_function_check` → `domain-equivalence`、
+  `gf2_rank`/`gf2_nullspace` → `linearization-spectral`，于是"有卡无枪"的三张卡真正配上了枪。
+- 三张卡片补上精确契约（每个模板都从成品卡片里反抽出来再跑一遍，0 失败）：
+  `modular-crt` 3410 B、`domain-equivalence` 5226 B、`linearization-spectral` 4488 B
+  （上限 10000 B / 4000 字），`modular-crt` 原先那句"本 profile 无注册算子"已被真实契约替换。
+
+### 15.4 完整性与门禁
+
+- `general_v11/SOURCE.json`（3 张卡 SHA）、`asset_baseline.json`、`a2-source-lock.json`
+  （`general_v11/SOURCE.json` 单行 pin `e443a58b…`→`e95a362d…`）已重算；
+  `verify_integrity` → **ok=True, errors=[]**，未触碰的资产组零漂移。
+- `tsc -b`：0
+- Node：**464/464**（基线 455，+9 路由/融合用例）
+- 全量 pytest：**998 passed, 24 skipped**（基线 941，+57 白名单/Host/执行器用例）
+- 聚焦 bridge：**582 passed**
+- bundle 已重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**
+- `git diff --check`：clean
+
+### 15.5 已知限制
+
+1. **只开了 Phase 2 第一批 6 个**：第二/三批（`transition_count`、`independence_polynomial_chain`、
+   `count_by_digit_property`、`rook_numbers`、`count_avoiding_permutations`、
+   `markov_expected_steps`、`cover_time_complete_graph`、`finite_difference_derivative`、
+   `richardson_extrapolate`）仍在门外。
+2. **新算子没有接进 answer closure**：它们目前只产生观测（`tool_names`/`observation_views`）、
+   不会生成缺陷。要像 `finite_group_structure` 那样参与改答案，还需各自的诊断（下一轮）。
+3. **没有真实 API 实证**：本轮全是本地门禁 + 假 client；这 6 个算子在真实题上的命中率与收益未测。

@@ -359,3 +359,153 @@ test("the integral and simplification routes are deterministic", () => {
     null,
   ]);
 });
+
+test("quadratic Diophantine wording routes finite two-variable integer equations only", () => {
+  const route = semanticToolRoute("求二次丢番图方程 x^2+y^2=25 的整数解。");
+  assert.equal(route?.id, "SOLVE_QUADRATIC_DIOPHANTINE");
+  assert.equal(route?.toolName, "solve_quadratic_diophantine");
+  assert.equal(route?.operation, "SOLVE_QUADRATIC_DIOPHANTINE");
+  for (const field of ["a", "b", "c", "d", "e", "f", "y_bound"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(
+    routeId("求丢番图方程 x^2-2y^2=1 的整数解。"),
+    "SOLVE_QUADRATIC_DIOPHANTINE",
+  );
+  assert.equal(routeId("求方程 x^2-2=0 的整数解。"), null);
+  assert.equal(routeId("求解 x^2+y^2 的最小值。"), null);
+});
+
+test("symbolic Diophantine wording requires an explicit symbolic search", () => {
+  const route = semanticToolRoute(
+    "用符号方法求解丢番图方程 x^2+y^2=25 的整数解集。",
+  );
+  assert.equal(route?.id, "SYMBOLIC_DIOPHANTINE");
+  assert.equal(route?.toolName, "symbolic_diophantine_with_timeout");
+  assert.equal(route?.operation, "SYMBOLIC_DIOPHANTINE");
+  for (const field of ["lhs", "rhs", "variables", "timeout_ms"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(
+    routeId("求解下列多项式方程组的全部整数解集。"),
+    "SYMBOLIC_DIOPHANTINE",
+  );
+  assert.equal(routeId("解方程 x^2-4=0。"), null);
+  assert.notEqual(routeId("求二次丢番图方程 x^2+y^2=25 的整数解。"), "SYMBOLIC_DIOPHANTINE");
+});
+
+test("system-of-expressions wording routes nonlinear polynomial systems only", () => {
+  const route = semanticToolRoute("解下列非线性方程组 x^2+y^2=1, x-y=0。");
+  assert.equal(route?.id, "SYSTEM_OF_EXPRESSIONS");
+  assert.equal(route?.toolName, "solve_system_guarded_expr");
+  assert.equal(route?.operation, "SYSTEM_OF_EXPRESSIONS");
+  for (const field of ["expressions", "variables", "timeout_ms", "n_starts", "seed"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(
+    routeId("求联立多项式方程 x^2+y^2=1 与 x-y=0 的实解。"),
+    "SYSTEM_OF_EXPRESSIONS",
+  );
+  assert.notEqual(
+    semanticToolRoute("解线性方程组 x+y=3, x-y=1。")?.id,
+    "SYSTEM_OF_EXPRESSIONS",
+  );
+  assert.notEqual(routeId("解非线性方程 x^2=2。"), "SYSTEM_OF_EXPRESSIONS");
+});
+
+test("polynomial identity wording routes claimed functional equality checks only", () => {
+  const route = semanticToolRoute(
+    "验证多项式恒等式 f(x+y)=f(x)+f(y) 对 f(x)=x 是否成立。",
+  );
+  assert.equal(route?.id, "POLYNOMIAL_FUNCTION_CHECK");
+  assert.equal(route?.toolName, "polynomial_function_check");
+  assert.equal(route?.operation, "POLYNOMIAL_FUNCTION_CHECK");
+  for (const field of ["equation", "function", "argument", "variables", "expression"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(
+    routeId("将 f(x)=x^2 代入核验恒等式 f(x+y)=f(x)+f(y) 是否成立。"),
+    "POLYNOMIAL_FUNCTION_CHECK",
+  );
+  assert.notEqual(
+    semanticToolRoute("将 (x+1)(x-2) 展开，求展开式中 x^2 的系数。")?.id,
+    "POLYNOMIAL_FUNCTION_CHECK",
+  );
+  assert.notEqual(routeId("化简 (x^2-1)/(x-1)。"), "POLYNOMIAL_FUNCTION_CHECK");
+});
+
+test("GF(2) rank wording requires binary linear-space context and rank wording", () => {
+  const route = semanticToolRoute("求 GF(2) 上矩阵的秩。");
+  assert.equal(route?.id, "GF2_RANK");
+  assert.equal(route?.toolName, "gf2_rank");
+  assert.equal(route?.operation, "GF2_RANK");
+  assert.match(route?.argsTemplate ?? "", /"rows"/u);
+
+  assert.equal(routeId("求二元矩阵的秩。"), "GF2_RANK");
+  assert.equal(routeId("Compute the rank of the binary matrix over GF(2)."), "GF2_RANK");
+  assert.equal(routeId("求实数矩阵的秩。"), null);
+});
+
+test("GF(2) nullspace wording requires binary linear-space context and kernel wording", () => {
+  const route = semanticToolRoute("求 GF(2) 上矩阵的零空间（核空间）。");
+  assert.equal(route?.id, "GF2_NULLSPACE");
+  assert.equal(route?.toolName, "gf2_nullspace");
+  assert.equal(route?.operation, "GF2_NULLSPACE");
+  for (const field of ["rows", "width"]) {
+    assert.match(route?.argsTemplate ?? "", new RegExp(`"${field}"`, "u"));
+  }
+
+  assert.equal(routeId("求模 2 下的线性相关关系。"), "GF2_NULLSPACE");
+  assert.notEqual(routeId("求 GF(2) 上矩阵的秩。"), "GF2_NULLSPACE");
+  assert.equal(routeId("求实数矩阵的零空间。"), null);
+});
+
+test("the Phase-2 semantic families keep their mutual exclusions", () => {
+  // A linear system stays with its own family, while a non-linear system does not.
+  assert.equal(routeId("解线性方程组 x+y=3, x-y=1。"), "LINEAR_SYSTEM_SOLUTION_SET");
+  assert.equal(routeId("解下列非线性方程组 x^2+y^2=1, x-y=0。"), "SYSTEM_OF_EXPRESSIONS");
+  assert.notEqual(routeId("解下列非线性方程组 x^2+y^2=1, x-y=0。"), "LINEAR_SYSTEM_SOLUTION_SET");
+  // A plain single equation is not a Diophantine route.
+  assert.equal(routeId("解方程 x^2-4=0。"), null);
+  assert.equal(routeId("求方程 x^2=25 的整数解。"), null);
+  assert.notEqual(routeId("求方程 x^2=25 的整数解。"), "SOLVE_QUADRATIC_DIOPHANTINE");
+  // Integer-solution system wording stays symbolic rather than generic system.
+  assert.equal(routeId("求解下列多项式方程组的全部整数解集。"), "SYMBOLIC_DIOPHANTINE");
+  assert.notEqual(routeId("求解下列多项式方程组的全部整数解集。"), "SYSTEM_OF_EXPRESSIONS");
+  // A GF(2) kernel question is never the rank family, even through linear-system prose.
+  assert.equal(routeId("求 GF(2) 上矩阵的零空间（核空间）。"), "GF2_NULLSPACE");
+  assert.notEqual(routeId("求 GF(2) 上矩阵的零空间（核空间）。"), "GF2_RANK");
+  assert.equal(routeId("求 GF(2) 上齐次线性方程组的零空间。"), "GF2_NULLSPACE");
+  assert.notEqual(routeId("求 GF(2) 上齐次线性方程组的零空间。"), "LINEAR_SYSTEM_SOLUTION_SET");
+});
+
+test("the Phase-2 semantic routes are deterministic and call-order independent", () => {
+  const samples = [
+    "求二次丢番图方程 x^2+y^2=25 的整数解。",
+    "用符号方法求解丢番图方程 x^2+y^2=25 的整数解集。",
+    "解下列非线性方程组 x^2+y^2=1, x-y=0。",
+    "验证多项式恒等式 f(x+y)=f(x)+f(y) 对 f(x)=x 是否成立。",
+    "求 GF(2) 上矩阵的秩。",
+    "求 GF(2) 上矩阵的零空间（核空间）。",
+    "解方程 x^2-4=0。",
+  ];
+  const forward = samples.map((problem) => semanticToolRoute(problem));
+  const reverse = [...samples].reverse().map((problem) => semanticToolRoute(problem)).reverse();
+  assert.deepEqual(forward, reverse);
+  for (const problem of samples) {
+    assert.deepEqual(semanticToolRoute(problem), semanticToolRoute(problem));
+  }
+  assert.deepEqual(forward.map((route) => route?.id ?? null), [
+    "SOLVE_QUADRATIC_DIOPHANTINE",
+    "SYMBOLIC_DIOPHANTINE",
+    "SYSTEM_OF_EXPRESSIONS",
+    "POLYNOMIAL_FUNCTION_CHECK",
+    "GF2_RANK",
+    "GF2_NULLSPACE",
+    null,
+  ]);
+});

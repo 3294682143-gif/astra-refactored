@@ -355,3 +355,21 @@ expanded permissions and default-engine switching retain their separate gates.
   `verify_integrity` → ok, `validate_inventory()` → 22 families / 76 tools.
 - Gates: `tsc -b` 0; Node **455/455**; full pytest **941 passed / 24 skipped**; bridge **525 passed**;
   manifest `VERIFY_OK` after a bundle rebuild.
+
+### Session update — 2026-10-24 (Phase 2 batch 1: six sleeping operators opened)
+
+- P3 whitelist 11 → 17: `solve_quadratic_diophantine`, `symbolic_diophantine_with_timeout`,
+  `solve_system_guarded_expr`, `polynomial_function_check`, `gf2_rank`, `gf2_nullspace`, in
+  `p3.ts`, `p3_effect_contract.py`, both v13 schemas (byte-identical) and `p3-host.schema.json`.
+  The frozen 1.2 manifest keeps exactly its 8 names and its pinned SHA.
+- Every operator was proven to execute through the real `RegisteredExecutor` with `status == "ok"`
+  and a certified result; each also has a real-Host admission test (receipt + `host.tool_names`),
+  a second-tool-in-one-run test, and refusal tests for out-of-contract payloads.
+- Six deterministic wording-only routes with explicit mutual exclusions, plus six
+  `preferredMethodForToolRoute` rows so `modular-crt`, `domain-equivalence` and
+  `linearization-spectral` now really own tools; their cards document the verified contracts
+  (3410 / 5226 / 4488 bytes).
+- Integrity baselines recomputed (`general_v11/SOURCE.json`, `asset_baseline.json`, a2 pin);
+  `verify_integrity` ok with zero drift in untouched asset groups.
+- Gates: `tsc -b` 0; Node **464/464**; full pytest **998 passed / 24 skipped**; bridge **582 passed**;
+  manifest `VERIFY_OK` after a bundle rebuild.

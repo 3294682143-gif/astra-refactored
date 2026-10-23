@@ -1,21 +1,25 @@
-"""Focused data-only tests: P3 tool whitelist (11 names) and effect-id capacity.
+"""Focused data-only tests: P3 tool whitelist (17 names) and effect-id capacity.
 
 Nothing here executes a model, spawns a process or opens a socket. The checks
 are:
 
 * the TS whitelist (`packages/protocol/src/p3.ts`), the compiled copy, the live
-  JSON schema copies and the Python contract all name the same eleven tools;
+  JSON schema copies and the Python contract all name the same seventeen tools
+  in the same order — the Phase 1 eleven followed by the Phase 2 batch-1 six;
 * every schema `effectId` enum carries exactly six ids;
 * every whitelisted name passes the real Host-side validators (effect contract,
   Host context action parser, P3 host manifest payload, 1.3 and 1.2 manifests);
 * `effect-6` is admitted and `effect-7` is refused, while `effect-1`/`effect-2`
   keep their identity and ordering;
 * the TS capacity constants say six ids with the public `maxEffects` option
-  still bounded at two and the method-load quota bounded at four.
+  still bounded at two and the method-load quota bounded at four;
+* the frozen 1.2 manifest (`agent-host.schema.json`) keeps its exact bytes and
+  its historical tool vocabulary, so no Phase 2 name leaks into it.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -34,7 +38,8 @@ from python.astra_bridge.p3_effect_contract import (
 
 ROOT = Path(__file__).resolve().parents[2]
 
-EXPECTED_TOOLS = (
+# The Phase 1 surface: unchanged, and still the prefix of every live table.
+PHASE1_TOOLS = (
     "polynomial_expand_coefficients",
     "linear_system_solution_set",
     "exact_check_expr",
@@ -47,9 +52,19 @@ EXPECTED_TOOLS = (
     "stats_ols_check",
     "finite_group_structure",
 )
-NEW_TOOLS = EXPECTED_TOOLS[4:8]
-EXACT_DATA_TOOLS = EXPECTED_TOOLS[8:10]
-GROUP_TOOLS = EXPECTED_TOOLS[10:]
+# The Phase 2 batch-1 additions, appended in the refactor plan's fixed order.
+PHASE2_TOOLS = (
+    "solve_quadratic_diophantine",
+    "symbolic_diophantine_with_timeout",
+    "solve_system_guarded_expr",
+    "polynomial_function_check",
+    "gf2_rank",
+    "gf2_nullspace",
+)
+EXPECTED_TOOLS = PHASE1_TOOLS + PHASE2_TOOLS
+NEW_TOOLS = PHASE1_TOOLS[4:8]
+EXACT_DATA_TOOLS = PHASE1_TOOLS[8:10]
+GROUP_TOOLS = PHASE1_TOOLS[10:]
 EXPECTED_EFFECTS = tuple("effect-" + str(n) for n in range(1, 7))
 
 SCHEMA_DIR = ROOT / "packages" / "protocol" / "schema"
@@ -140,11 +155,25 @@ def _collect_enum_values(node, key):
 # --------------------------------------------------------------------- #
 # 1. One whitelist on every side
 # --------------------------------------------------------------------- #
-def test_python_contract_names_exactly_eleven_tools():
+def test_python_contract_names_exactly_seventeen_tools():
     assert isinstance(TOOL_NAMES, tuple)
-    assert len(TOOL_NAMES) == 11
+    assert len(TOOL_NAMES) == 17
     assert TOOL_NAMES == EXPECTED_TOOLS
-    assert len(set(TOOL_NAMES)) == 11
+    assert len(set(TOOL_NAMES)) == 17
+
+
+def test_phase2_names_are_appended_after_an_unchanged_phase1_prefix():
+    """Order stability: the six new names extend the table, they never reorder it."""
+    assert TOOL_NAMES[:11] == PHASE1_TOOLS
+    assert TOOL_NAMES[11:] == PHASE2_TOOLS
+    assert PHASE2_TOOLS == (
+        "solve_quadratic_diophantine",
+        "symbolic_diophantine_with_timeout",
+        "solve_system_guarded_expr",
+        "polynomial_function_check",
+        "gf2_rank",
+        "gf2_nullspace",
+    )
 
 
 def test_typescript_whitelist_equals_the_python_one():
@@ -257,7 +286,7 @@ def test_each_whitelisted_tool_name_validates_at_host_boundary(name, manifests):
 
 @pytest.mark.parametrize(
     "name",
-    ["shell_exec", "solve_system_guarded_expr", "real_root_count", "polynomial_expand_coefficients "],
+    ["shell_exec", "gf2_kernel", "real_root_count", "solve_system_guarded_expr "],
 )
 def test_unlisted_tool_name_is_refused_at_host_boundary(name, manifests):
     with pytest.raises(ProtocolError):
@@ -266,6 +295,18 @@ def test_unlisted_tool_name_is_refused_at_host_boundary(name, manifests):
         p3_host_context.parse_action(json.dumps(tool_action(name)), dict(BINDING))
     with pytest.raises(ProtocolError):
         p3_host_protocol.payload(manifests["p3"], "tool.execute", "params", tool_frame(name))
+
+
+def test_phase2_names_are_refused_by_the_frozen_1_2_manifest(manifests):
+    """The 1.2 contract keeps its eight-name vocabulary: Phase 2 must not leak."""
+    for name in PHASE2_TOOLS:
+        with pytest.raises(ProtocolError):
+            agent_protocol.payload(
+                manifests["legacy"],
+                "tool.execute",
+                "params",
+                tool_frame(name, version=agent_protocol.AGENT_HOST_LEGACY_VERSION),
+            )
 
 
 # --------------------------------------------------------------------- #
@@ -382,6 +423,70 @@ def test_finite_group_tool_has_dispatch_entry_and_input_contract():
         validate_inputs(name, {"generators": ["(12)", "(123)"], "degree": 3})
 
 
+def test_phase2_tools_have_registry_contract_dispatch_and_input_contract():
+    """Each new name is a real registered executor, not a decorative string."""
+    from importlib.resources import files
+
+    from math_families.bridge.dispatch import tool_names
+    from mathagent.input_contracts import validate_inputs
+    from mathagent.tool_contracts import CONTRACTS
+
+    registry = json.loads(
+        files("mathagent").joinpath("resources/tool-registry.json").read_text(encoding="utf-8")
+    )["tools"]
+    registered = set(tool_names())
+    cases = {
+        "solve_quadratic_diophantine": {"a": 1, "b": 0, "c": 1, "d": 0, "e": 0, "f": -5},
+        "symbolic_diophantine_with_timeout": {
+            "lhs": "x**2+y**2",
+            "rhs": "5",
+            "variables": ["x", "y"],
+            "timeout_ms": 2000,
+        },
+        "solve_system_guarded_expr": {
+            "expressions": ["x+y-3", "x-y-1"],
+            "variables": ["x", "y"],
+        },
+        "polynomial_function_check": {
+            "equation": "f(x+1)-f(x)=2*x+1",
+            "function": "f",
+            "argument": "x",
+            "variables": ["x"],
+            "expression": "x**2",
+        },
+        "gf2_rank": {"rows": [1, 2, 4]},
+        "gf2_nullspace": {"rows": [1, 2], "width": 3},
+    }
+    assert tuple(cases) == PHASE2_TOOLS
+    for name, args in cases.items():
+        assert name in registered, name
+        assert name in CONTRACTS, name
+        spec = registry[name]
+        required = set(spec.get("required_params", []))
+        allowed = required | set(spec.get("optional_params", []))
+        assert set(args) <= allowed and required <= set(args), name
+        validate_inputs(name, args)
+
+
+def test_every_live_copy_carries_the_seventeen_names_in_one_order():
+    """One order everywhere: source, compiled copy, schemas and Python contract."""
+    copies = {
+        "python": TOOL_NAMES,
+        "ts:src": _list_after(TOOL_SOURCE.read_text(encoding="utf-8"), "P3_TOOL_NAMES"),
+    }
+    if TOOL_BUILD.is_file():
+        copies["ts:dist"] = _list_after(
+            TOOL_BUILD.read_text(encoding="utf-8"), "P3_TOOL_NAMES"
+        )
+    for path in SCHEMAS:
+        for index, enum in enumerate(_collect_enum_values(_load(path), "name")):
+            copies[f"{path.name}:{index}"] = enum
+    assert len(copies) >= 5
+    for label, names in copies.items():
+        assert names == EXPECTED_TOOLS, label
+        assert names[11:] == PHASE2_TOOLS, label
+
+
 def test_new_expression_tools_accept_python_power_syntax_directly():
     from math_families.bridge.dispatch import call_tool
 
@@ -435,7 +540,23 @@ def test_legacy_manifest_keeps_its_eight_tool_enum():
     enums = _collect_enum_values(_load(LEGACY_SCHEMA), "name")
     assert enums, "legacy manifest has no tool-name enum"
     for enum in enums:
-        assert enum == EXPECTED_TOOLS[:8], enum
+        assert enum == PHASE1_TOOLS[:8], enum
+
+
+FROZEN_LEGACY_SHA256 = "d21953e28965de0497f6dd186b716f388256dd4b95500351729a7dd7d9fe80dd"
+
+
+def test_frozen_1_2_manifest_bytes_are_pinned():
+    """`agent-host.schema.json` is a historical contract: its bytes never move.
+
+    The Phase 2 whitelist growth happens in the live contracts only, so the
+    frozen 1.2 manifest must keep this exact digest and its eight names.
+    """
+    raw = LEGACY_SCHEMA.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FROZEN_LEGACY_SHA256
+    text = raw.decode("utf-8")
+    for name in PHASE2_TOOLS:
+        assert f'"{name}"' not in text, name
 
 
 def test_legacy_manifest_keeps_its_narrow_effect_table():

@@ -939,6 +939,53 @@ const GROUP_STRUCTURE_ROUTE: SemanticToolRoute = Object.freeze({
     '{"generators":["(12)","(123)"],"degree":3} OR {"named_group":"A4"}',
 });
 
+const SOLVE_QUADRATIC_DIOPHANTINE_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "SOLVE_QUADRATIC_DIOPHANTINE",
+  toolName: "solve_quadratic_diophantine",
+  operation: "SOLVE_QUADRATIC_DIOPHANTINE",
+  argsTemplate:
+    '{"a":<integer>,"b":<integer>,"c":<integer>,"d":<integer>,"e":<integer>,"f":<integer>,"y_bound":<positive integer>}',
+});
+
+const SYMBOLIC_DIOPHANTINE_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "SYMBOLIC_DIOPHANTINE",
+  toolName: "symbolic_diophantine_with_timeout",
+  operation: "SYMBOLIC_DIOPHANTINE",
+  argsTemplate:
+    '{"lhs":"<quadratic polynomial>","rhs":"<quadratic polynomial>","variables":["x","y"],"timeout_ms":<positive integer>}',
+});
+
+const SYSTEM_OF_EXPRESSIONS_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "SYSTEM_OF_EXPRESSIONS",
+  toolName: "solve_system_guarded_expr",
+  operation: "SYSTEM_OF_EXPRESSIONS",
+  argsTemplate:
+    '{"expressions":["<polynomial expression>"],"variables":["x","y"],"timeout_ms":<positive integer>,"n_starts":<positive integer>,"seed":<integer>}',
+});
+
+const POLYNOMIAL_FUNCTION_CHECK_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "POLYNOMIAL_FUNCTION_CHECK",
+  toolName: "polynomial_function_check",
+  operation: "POLYNOMIAL_FUNCTION_CHECK",
+  argsTemplate:
+    '{"equation":"<functional equality>","function":"<unary function name>","argument":"<variable name>","variables":["<variable name>"],"expression":"<candidate rational polynomial>"}',
+});
+
+const GF2_RANK_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "GF2_RANK",
+  toolName: "gf2_rank",
+  operation: "GF2_RANK",
+  argsTemplate: '{"rows":[<nonnegative integer bit rows>]}',
+});
+
+const GF2_NULLSPACE_ROUTE: SemanticToolRoute = Object.freeze({
+  id: "GF2_NULLSPACE",
+  toolName: "gf2_nullspace",
+  operation: "GF2_NULLSPACE",
+  argsTemplate:
+    '{"rows":[<nonnegative integer bit rows>],"width":<integer 1..8>}',
+});
+
 function exactRoute(operation: string, argsTemplate: string): SemanticToolRoute {
   return Object.freeze({
     id: `EXACT_${operation}`,
@@ -1099,12 +1146,187 @@ function finiteGroupStructureWording(problemText: string): boolean {
   );
 }
 
+function integerSolutionWording(problemText: string): boolean {
+  return /(整数解|整数点|整数对|integer\s+solutions?|integer\s+pairs?|integer\s+points?)/iu.test(
+    problemText,
+  );
+}
+
+/**
+ * A finite two-variable quadratic Diophantine observation. The route needs an
+ * explicitly integral/Diophantine request and a quadratic form; a generic
+ * "solve for x" equation, a one-variable integer root, or continuous
+ * optimisation is not this family. Symbolic/system wording is left to the
+ * higher symbolic-search family.
+ */
+function quadraticDiophantineWording(problemText: string): boolean {
+  const diophantineContext =
+    /(丢番图|\bdiophantine\b|pell\s*(?:型|type|equation)|佩尔(?:型|方程)?)/iu.test(
+      problemText,
+    );
+  if (!diophantineContext && !integerSolutionWording(problemText)) {
+    return false;
+  }
+  if (
+    /(符号|symbolic|不定方程|indeterminate\s+equations?|整数解集|integer\s+solution\s+set|方程组|system\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?|polynomial\s+(?:equation\s+)?system|polynomial\s+equations?|非线性|nonlinear)/iu.test(
+      problemText,
+    )
+  ) {
+    return false;
+  }
+  const squaredVariables = new Set(
+    [...problemText.matchAll(/(?<![a-zA-Z])([a-zA-Z])\s*(?:\^\s*\{?\s*2\b|²)/giu)].map((match) =>
+      (match[1] as string).toLocaleLowerCase("en-US"),
+    ),
+  );
+  const twoVariableQuadratic =
+    squaredVariables.size >= 2 ||
+    /(?:二次型|二元二次|two[- ]variable\s+quadratic)/iu.test(problemText) ||
+    /\b[a-zA-Z]\s*[a-zA-Z]\b/u.test(problemText);
+  if (!twoVariableQuadratic) {
+    return false;
+  }
+  return /(?:二次|quadratic|二次型|\b[a-zA-Z]\s*(?:\^\s*\{?\s*2\b|²))/iu.test(problemText);
+}
+
+/**
+ * A symbolic Diophantine search is explicitly named (symbolic/indefinite
+ * equation/integer solution set, or a polynomial system with integer output).
+ * An ordinary quadratic equation with integer solutions is not enough.
+ */
+function symbolicDiophantineWording(problemText: string): boolean {
+  const symbolicContext =
+    /(?:(?:符号|symbolic)[^\n。；;]{0,32}(?:丢番图|diophantine|整数解|integer\s+solutions?|多项式方程组|polynomial\s+(?:equation\s+)?system|方程组|system\s+of\s+equations?)|不定方程|indeterminate\s+equations?|symbolic\s+(?:diophantine|search|solver))/iu.test(
+      problemText,
+    );
+  const integerSolutionSet =
+    /(?:整数解集|integer\s+solution\s+set)/iu.test(problemText) &&
+    /(?:丢番图|diophantine|多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?|不定方程|indeterminate|符号|symbolic)/iu.test(
+      problemText,
+    );
+  const polynomialSystemWithIntegers =
+    /(?:多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?)[^\n。；;]{0,40}(?:整数解|符号|symbolic|integer\s+solutions?)/iu.test(
+      problemText,
+    );
+  if (symbolicContext) {
+    return true;
+  }
+  if (!integerSolutionSet && !polynomialSystemWithIntegers) {
+    return false;
+  }
+  return /(求解|求|解出|找出|搜索|\bsolve\b|\bfind\b|\bcompute\b|\bsearch\b)/iu.test(
+    problemText,
+  );
+}
+
+/**
+ * A non-linear or polynomial system of equations. A purely linear system stays
+ * with `LINEAR_SYSTEM_SOLUTION_SET`, while integer/symbolic search wording
+ * stays with the symbolic Diophantine family.
+ */
+function systemOfExpressionsWording(problemText: string): boolean {
+  const systemContext =
+    /(方程组|联立[^\n。；;]{0,24}方程|(?:非线性|多项式|混合(?:的)?)[^\n。；;]{0,8}系统|\bsystem\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?\b|\b(?:nonlinear|polynomial)\s+systems?\s+of\s+equations?\b|\bpolynomial\s+system\b|\bsimultaneous\s+(?:nonlinear\s+|polynomial\s+)?equations?\b)/iu.test(
+      problemText,
+    );
+  if (!systemContext) {
+    return false;
+  }
+  const nonLinearOrPolynomial =
+    /(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|\bpolynomial\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|quadratic\s+equations?|混合(?:的)?多项式|mixed\s+polynomial)/iu.test(
+      problemText,
+    );
+  if (!nonLinearOrPolynomial) {
+    return false;
+  }
+  return !/(整数解|整数解集|integer\s+solutions?|integer\s+solution\s+set|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:求解|搜索|丢番图)|symbolic\s+(?:solve|search|diophantine))/iu.test(
+    problemText,
+  );
+}
+
+/**
+ * Verify one claimed polynomial/functional identity. A plain simplification,
+ * expansion or equation-solving request is not an identity check.
+ */
+function polynomialFunctionCheckWording(problemText: string): boolean {
+  const verify =
+    /(验证|检验|检查|核验|判断|\bverify\b|\bcheck\b|\bvalidate\b|\bconfirm\b|\bdetermine\s+whether\b)/iu.test(
+      problemText,
+    );
+  const identity =
+    /(恒等式|恒等|函数方程|functional\s+equality|functional\s+equation|\bidentity\b|\bequality\s+holds?\b|\bholds?\s+for\s+all\b|\bfor\s+all\b[^\n。；;]{0,40}\bholds?\b)/iu.test(
+      problemText,
+    );
+  const polynomialFunction =
+    /(多项式|函数|\bpolynomial\b|\bfunctional\b|\bf\s*\([^)]{0,24}\))/iu.test(
+      problemText,
+    );
+  if (!polynomialFunction) {
+    return false;
+  }
+  if (verify && identity) {
+    return true;
+  }
+  return /(代入[^\n。；;]{0,24}(?:核验|验证|检验)|\bsubstitut(?:e|ion)[^\n。；;]{0,24}\b(?:check|verify|validate))/iu.test(
+    problemText,
+  );
+}
+
+/** GF(2), binary-matrix or mod-2 linear-space wording. */
+function gf2LinearSpaceContext(problemText: string): boolean {
+  const explicitGF2 =
+    /(?:GF\s*[\(\[]?\s*2\s*[\)\]]?|\bF\s*_?\s*2\b|二元\s*(?:矩阵|向量|线性空间)|二进制\s*(?:矩阵|向量|表示)|binary\s+(?:matrix|matrices|vectors?))/iu.test(
+      problemText,
+    );
+  if (explicitGF2) {
+    return true;
+  }
+  return (
+    /(?:模|mod(?:ulo)?)\s*2\b/iu.test(problemText) &&
+    /(矩阵|向量|线性|空间|秩|零空间|核|null|rank|matrix|vector|kernel)/iu.test(
+      problemText,
+    )
+  );
+}
+
+function gf2RankWording(problemText: string): boolean {
+  return (
+    gf2LinearSpaceContext(problemText) &&
+    /(秩|\brank\b|主元|\bpivot\b|极大线性无关组)/iu.test(problemText)
+  );
+}
+
+function gf2NullspaceWording(problemText: string): boolean {
+  return (
+    gf2LinearSpaceContext(problemText) &&
+    /(零空间|核空间|\bkernel\b|null\s*space|nullspace|解空间|齐次线性方程组|线性相关|linearly\s+dependent)/iu.test(
+      problemText,
+    )
+  );
+}
+
 function linearSystemWording(problemText: string): boolean {
   const explicitSystem =
     /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(
       problemText,
     );
   if (!explicitSystem) {
+    return false;
+  }
+  // Nonlinear/polynomial/symbolic systems and GF(2) linear-space questions
+  // have their own families; they must not inherit this rational solution-set
+  // route merely because their prose contains "方程组".
+  if (
+    /(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:丢番图|求解|搜索)|symbolic\s+(?:diophantine|search|solver))/iu.test(
+      problemText,
+    )
+  ) {
+    return false;
+  }
+  if (
+    gf2LinearSpaceContext(problemText) &&
+    (gf2RankWording(problemText) || gf2NullspaceWording(problemText))
+  ) {
     return false;
   }
   // A differential system is not a finite rational linear system.
@@ -1275,6 +1497,27 @@ export function semanticToolRoute(problemText: string): SemanticToolRoute | null
   if (linearSystemWording(problemText)) {
     return LINEAR_SYSTEM_SOLUTION_SET_ROUTE;
   }
+  // Phase-2 families are appended after every existing route, so an existing
+  // family never loses priority. Within this block, the more specific
+  // Diophantine and GF(2) kernel questions precede their broader neighbours.
+  if (quadraticDiophantineWording(problemText)) {
+    return SOLVE_QUADRATIC_DIOPHANTINE_ROUTE;
+  }
+  if (symbolicDiophantineWording(problemText)) {
+    return SYMBOLIC_DIOPHANTINE_ROUTE;
+  }
+  if (systemOfExpressionsWording(problemText)) {
+    return SYSTEM_OF_EXPRESSIONS_ROUTE;
+  }
+  if (polynomialFunctionCheckWording(problemText)) {
+    return POLYNOMIAL_FUNCTION_CHECK_ROUTE;
+  }
+  if (gf2NullspaceWording(problemText)) {
+    return GF2_NULLSPACE_ROUTE;
+  }
+  if (gf2RankWording(problemText)) {
+    return GF2_RANK_ROUTE;
+  }
   return null;
 }
 /**
@@ -1442,6 +1685,12 @@ const TOOL_ROUTE_PREFERRED_METHOD: Readonly<Record<string, string>> = Object.fre
   INTERPOLATION_FIT: "numerical-approximation",
   OLS_CHECK: "regression-diagnostics",
   EXACT_SIMPLIFY: "domain-equivalence",
+  SOLVE_QUADRATIC_DIOPHANTINE: "modular-crt",
+  SYMBOLIC_DIOPHANTINE: "modular-crt",
+  SYSTEM_OF_EXPRESSIONS: "domain-equivalence",
+  POLYNOMIAL_FUNCTION_CHECK: "domain-equivalence",
+  GF2_RANK: "linearization-spectral",
+  GF2_NULLSPACE: "linearization-spectral",
 });
 
 /**

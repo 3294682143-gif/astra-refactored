@@ -40,6 +40,9 @@ __all__ = [
     "failure_receipt",
 ]
 
+# The first eleven names are the Phase 1 surface. The last six are the Phase 2
+# batch-1 additions (exact algebra, number theory and linear spaces), appended
+# in the refactor plan's order so the TS, JSON and Python tables agree verbatim.
 TOOL_NAMES = (
     "polynomial_expand_coefficients",
     "linear_system_solution_set",
@@ -52,6 +55,12 @@ TOOL_NAMES = (
     "interpolation_fit_check",
     "stats_ols_check",
     "finite_group_structure",
+    "solve_quadratic_diophantine",
+    "symbolic_diophantine_with_timeout",
+    "solve_system_guarded_expr",
+    "polynomial_function_check",
+    "gf2_rank",
+    "gf2_nullspace",
 )
 MAX_REQUEST_BYTES = 65536
 MAX_ARGS_BYTES = 10000

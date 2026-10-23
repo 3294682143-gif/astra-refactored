@@ -2089,7 +2089,13 @@
                       "planar_laplacian_expr",
                       "interpolation_fit_check",
                       "stats_ols_check",
-                      "finite_group_structure"
+                      "finite_group_structure",
+                      "solve_quadratic_diophantine",
+                      "symbolic_diophantine_with_timeout",
+                      "solve_system_guarded_expr",
+                      "polynomial_function_check",
+                      "gf2_rank",
+                      "gf2_nullspace"
                     ]
                   },
                   "args": {

@@ -9,10 +9,12 @@
  */
 
 /**
- * The registered executors this phase may name: a closed whitelist of eleven
- * data-only operators. Every name here has a Host input contract and a
- * dispatch entry, so naming anything else is a fixed validation failure rather
- * than a silent runtime miss.
+ * The registered executors this phase may name: a closed whitelist of
+ * seventeen data-only operators. Every name here has a Host input contract and
+ * a dispatch entry, so naming anything else is a fixed validation failure
+ * rather than a silent runtime miss. The first eleven are the Phase 1 surface;
+ * the last six are the Phase 2 batch-1 additions, appended in the plan's order
+ * so every live table stays order-stable.
  */
 export const P3_TOOL_NAMES = Object.freeze([
   "polynomial_expand_coefficients",
@@ -26,6 +28,12 @@ export const P3_TOOL_NAMES = Object.freeze([
   "interpolation_fit_check",
   "stats_ols_check",
   "finite_group_structure",
+  "solve_quadratic_diophantine",
+  "symbolic_diophantine_with_timeout",
+  "solve_system_guarded_expr",
+  "polynomial_function_check",
+  "gf2_rank",
+  "gf2_nullspace",
 ] as const);
 export type P3ToolName = (typeof P3_TOOL_NAMES)[number];
 

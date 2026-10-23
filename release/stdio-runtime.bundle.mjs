@@ -844,7 +844,13 @@ var init_p3 = __esm({
       "planar_laplacian_expr",
       "interpolation_fit_check",
       "stats_ols_check",
-      "finite_group_structure"
+      "finite_group_structure",
+      "solve_quadratic_diophantine",
+      "symbolic_diophantine_with_timeout",
+      "solve_system_guarded_expr",
+      "polynomial_function_check",
+      "gf2_rank",
+      "gf2_nullspace"
     ]);
   }
 });
@@ -15662,9 +15668,81 @@ function finiteGroupStructureWording(problemText) {
   }
   return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|abelian|commutative|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|阶)/iu.test(problemText);
 }
+function integerSolutionWording(problemText) {
+  return /(整数解|整数点|整数对|integer\s+solutions?|integer\s+pairs?|integer\s+points?)/iu.test(problemText);
+}
+function quadraticDiophantineWording(problemText) {
+  const diophantineContext = /(丢番图|\bdiophantine\b|pell\s*(?:型|type|equation)|佩尔(?:型|方程)?)/iu.test(problemText);
+  if (!diophantineContext && !integerSolutionWording(problemText)) {
+    return false;
+  }
+  if (/(符号|symbolic|不定方程|indeterminate\s+equations?|整数解集|integer\s+solution\s+set|方程组|system\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?|polynomial\s+(?:equation\s+)?system|polynomial\s+equations?|非线性|nonlinear)/iu.test(problemText)) {
+    return false;
+  }
+  const squaredVariables = new Set([...problemText.matchAll(/(?<![a-zA-Z])([a-zA-Z])\s*(?:\^\s*\{?\s*2\b|²)/giu)].map((match) => match[1].toLocaleLowerCase("en-US")));
+  const twoVariableQuadratic = squaredVariables.size >= 2 || /(?:二次型|二元二次|two[- ]variable\s+quadratic)/iu.test(problemText) || /\b[a-zA-Z]\s*[a-zA-Z]\b/u.test(problemText);
+  if (!twoVariableQuadratic) {
+    return false;
+  }
+  return /(?:二次|quadratic|二次型|\b[a-zA-Z]\s*(?:\^\s*\{?\s*2\b|²))/iu.test(problemText);
+}
+function symbolicDiophantineWording(problemText) {
+  const symbolicContext = /(?:(?:符号|symbolic)[^\n。；;]{0,32}(?:丢番图|diophantine|整数解|integer\s+solutions?|多项式方程组|polynomial\s+(?:equation\s+)?system|方程组|system\s+of\s+equations?)|不定方程|indeterminate\s+equations?|symbolic\s+(?:diophantine|search|solver))/iu.test(problemText);
+  const integerSolutionSet = /(?:整数解集|integer\s+solution\s+set)/iu.test(problemText) && /(?:丢番图|diophantine|多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?|不定方程|indeterminate|符号|symbolic)/iu.test(problemText);
+  const polynomialSystemWithIntegers = /(?:多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?)[^\n。；;]{0,40}(?:整数解|符号|symbolic|integer\s+solutions?)/iu.test(problemText);
+  if (symbolicContext) {
+    return true;
+  }
+  if (!integerSolutionSet && !polynomialSystemWithIntegers) {
+    return false;
+  }
+  return /(求解|求|解出|找出|搜索|\bsolve\b|\bfind\b|\bcompute\b|\bsearch\b)/iu.test(problemText);
+}
+function systemOfExpressionsWording(problemText) {
+  const systemContext = /(方程组|联立[^\n。；;]{0,24}方程|(?:非线性|多项式|混合(?:的)?)[^\n。；;]{0,8}系统|\bsystem\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?\b|\b(?:nonlinear|polynomial)\s+systems?\s+of\s+equations?\b|\bpolynomial\s+system\b|\bsimultaneous\s+(?:nonlinear\s+|polynomial\s+)?equations?\b)/iu.test(problemText);
+  if (!systemContext) {
+    return false;
+  }
+  const nonLinearOrPolynomial = /(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|\bpolynomial\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|quadratic\s+equations?|混合(?:的)?多项式|mixed\s+polynomial)/iu.test(problemText);
+  if (!nonLinearOrPolynomial) {
+    return false;
+  }
+  return !/(整数解|整数解集|integer\s+solutions?|integer\s+solution\s+set|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:求解|搜索|丢番图)|symbolic\s+(?:solve|search|diophantine))/iu.test(problemText);
+}
+function polynomialFunctionCheckWording(problemText) {
+  const verify = /(验证|检验|检查|核验|判断|\bverify\b|\bcheck\b|\bvalidate\b|\bconfirm\b|\bdetermine\s+whether\b)/iu.test(problemText);
+  const identity = /(恒等式|恒等|函数方程|functional\s+equality|functional\s+equation|\bidentity\b|\bequality\s+holds?\b|\bholds?\s+for\s+all\b|\bfor\s+all\b[^\n。；;]{0,40}\bholds?\b)/iu.test(problemText);
+  const polynomialFunction = /(多项式|函数|\bpolynomial\b|\bfunctional\b|\bf\s*\([^)]{0,24}\))/iu.test(problemText);
+  if (!polynomialFunction) {
+    return false;
+  }
+  if (verify && identity) {
+    return true;
+  }
+  return /(代入[^\n。；;]{0,24}(?:核验|验证|检验)|\bsubstitut(?:e|ion)[^\n。；;]{0,24}\b(?:check|verify|validate))/iu.test(problemText);
+}
+function gf2LinearSpaceContext(problemText) {
+  const explicitGF2 = /(?:GF\s*[\(\[]?\s*2\s*[\)\]]?|\bF\s*_?\s*2\b|二元\s*(?:矩阵|向量|线性空间)|二进制\s*(?:矩阵|向量|表示)|binary\s+(?:matrix|matrices|vectors?))/iu.test(problemText);
+  if (explicitGF2) {
+    return true;
+  }
+  return /(?:模|mod(?:ulo)?)\s*2\b/iu.test(problemText) && /(矩阵|向量|线性|空间|秩|零空间|核|null|rank|matrix|vector|kernel)/iu.test(problemText);
+}
+function gf2RankWording(problemText) {
+  return gf2LinearSpaceContext(problemText) && /(秩|\brank\b|主元|\bpivot\b|极大线性无关组)/iu.test(problemText);
+}
+function gf2NullspaceWording(problemText) {
+  return gf2LinearSpaceContext(problemText) && /(零空间|核空间|\bkernel\b|null\s*space|nullspace|解空间|齐次线性方程组|线性相关|linearly\s+dependent)/iu.test(problemText);
+}
 function linearSystemWording(problemText) {
   const explicitSystem = /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(problemText);
   if (!explicitSystem) {
+    return false;
+  }
+  if (/(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:丢番图|求解|搜索)|symbolic\s+(?:diophantine|search|solver))/iu.test(problemText)) {
+    return false;
+  }
+  if (gf2LinearSpaceContext(problemText) && (gf2RankWording(problemText) || gf2NullspaceWording(problemText))) {
     return false;
   }
   return !(/(微分方程组|常微分方程组|differential\s+(?:equation\s+)?system)/iu.test(problemText) && !/(线性方程组|linear\s+system)/iu.test(problemText));
@@ -15762,6 +15840,24 @@ function semanticToolRoute(problemText) {
   if (linearSystemWording(problemText)) {
     return LINEAR_SYSTEM_SOLUTION_SET_ROUTE;
   }
+  if (quadraticDiophantineWording(problemText)) {
+    return SOLVE_QUADRATIC_DIOPHANTINE_ROUTE;
+  }
+  if (symbolicDiophantineWording(problemText)) {
+    return SYMBOLIC_DIOPHANTINE_ROUTE;
+  }
+  if (systemOfExpressionsWording(problemText)) {
+    return SYSTEM_OF_EXPRESSIONS_ROUTE;
+  }
+  if (polynomialFunctionCheckWording(problemText)) {
+    return POLYNOMIAL_FUNCTION_CHECK_ROUTE;
+  }
+  if (gf2NullspaceWording(problemText)) {
+    return GF2_NULLSPACE_ROUTE;
+  }
+  if (gf2RankWording(problemText)) {
+    return GF2_RANK_ROUTE;
+  }
   return null;
 }
 function preferredMethodForToolRoute(route) {
@@ -15839,7 +15935,7 @@ function semanticMethodRoute(problemText, entries) {
   }
   return Object.freeze([...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4));
 }
-var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER;
+var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, SOLVE_QUADRATIC_DIOPHANTINE_ROUTE, SYMBOLIC_DIOPHANTINE_ROUTE, SYSTEM_OF_EXPRESSIONS_ROUTE, POLYNOMIAL_FUNCTION_CHECK_ROUTE, GF2_RANK_ROUTE, GF2_NULLSPACE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER;
 var init_agent_semantics = __esm({
   "apps/stdio-runtime/dist/src/agent-semantics.js"() {
     "use strict";
@@ -16025,6 +16121,42 @@ var init_agent_semantics = __esm({
       operation: "GROUP_STRUCTURE",
       argsTemplate: '{"generators":["(12)","(123)"],"degree":3} OR {"named_group":"A4"}'
     });
+    SOLVE_QUADRATIC_DIOPHANTINE_ROUTE = Object.freeze({
+      id: "SOLVE_QUADRATIC_DIOPHANTINE",
+      toolName: "solve_quadratic_diophantine",
+      operation: "SOLVE_QUADRATIC_DIOPHANTINE",
+      argsTemplate: '{"a":<integer>,"b":<integer>,"c":<integer>,"d":<integer>,"e":<integer>,"f":<integer>,"y_bound":<positive integer>}'
+    });
+    SYMBOLIC_DIOPHANTINE_ROUTE = Object.freeze({
+      id: "SYMBOLIC_DIOPHANTINE",
+      toolName: "symbolic_diophantine_with_timeout",
+      operation: "SYMBOLIC_DIOPHANTINE",
+      argsTemplate: '{"lhs":"<quadratic polynomial>","rhs":"<quadratic polynomial>","variables":["x","y"],"timeout_ms":<positive integer>}'
+    });
+    SYSTEM_OF_EXPRESSIONS_ROUTE = Object.freeze({
+      id: "SYSTEM_OF_EXPRESSIONS",
+      toolName: "solve_system_guarded_expr",
+      operation: "SYSTEM_OF_EXPRESSIONS",
+      argsTemplate: '{"expressions":["<polynomial expression>"],"variables":["x","y"],"timeout_ms":<positive integer>,"n_starts":<positive integer>,"seed":<integer>}'
+    });
+    POLYNOMIAL_FUNCTION_CHECK_ROUTE = Object.freeze({
+      id: "POLYNOMIAL_FUNCTION_CHECK",
+      toolName: "polynomial_function_check",
+      operation: "POLYNOMIAL_FUNCTION_CHECK",
+      argsTemplate: '{"equation":"<functional equality>","function":"<unary function name>","argument":"<variable name>","variables":["<variable name>"],"expression":"<candidate rational polynomial>"}'
+    });
+    GF2_RANK_ROUTE = Object.freeze({
+      id: "GF2_RANK",
+      toolName: "gf2_rank",
+      operation: "GF2_RANK",
+      argsTemplate: '{"rows":[<nonnegative integer bit rows>]}'
+    });
+    GF2_NULLSPACE_ROUTE = Object.freeze({
+      id: "GF2_NULLSPACE",
+      toolName: "gf2_nullspace",
+      operation: "GF2_NULLSPACE",
+      argsTemplate: '{"rows":[<nonnegative integer bit rows>],"width":<integer 1..8>}'
+    });
     EXACT_MAXIMAL_MINORS_ROUTE = exactRoute("MAXIMAL_MINORS", '{"operation":"MAXIMAL_MINORS","matrix":<explicit matrix>,"variable":"t"}');
     EXACT_FACTOR_OVER_EXTENSION_ROUTE = exactRoute("FACTOR_OVER_EXTENSION", '{"operation":"FACTOR_OVER_EXTENSION","expression":"<polynomial>","variable":"x","minimal_polynomials":[<minimal polynomials>]}');
     EXACT_DENSITY_CHECK_ROUTE = exactRoute("DENSITY_CHECK", '{"operation":"DENSITY_CHECK","density":"<density valid on its support>","variable":"x","lower":"0","upper":"oo"}');
@@ -16183,7 +16315,13 @@ var init_agent_semantics = __esm({
       FINITE_ENUMERATION: "counting-bijections",
       INTERPOLATION_FIT: "numerical-approximation",
       OLS_CHECK: "regression-diagnostics",
-      EXACT_SIMPLIFY: "domain-equivalence"
+      EXACT_SIMPLIFY: "domain-equivalence",
+      SOLVE_QUADRATIC_DIOPHANTINE: "modular-crt",
+      SYMBOLIC_DIOPHANTINE: "modular-crt",
+      SYSTEM_OF_EXPRESSIONS: "domain-equivalence",
+      POLYNOMIAL_FUNCTION_CHECK: "domain-equivalence",
+      GF2_RANK: "linearization-spectral",
+      GF2_NULLSPACE: "linearization-spectral"
     });
     MAX_METHOD_ROUTE_CANDIDATES = 3;
     TOOL_ROUTE_METHOD_BOOST = 1024;
