@@ -249,3 +249,113 @@ test("finite-group wording requires cycles or a supported group name plus struct
     "finite_group_structure",
   );
 });
+
+test("definite-integral wording routes explicit bounded integral values only", () => {
+  const chinese = semanticToolRoute("计算定积分 ∫_0^1 x^2 dx。");
+  assert.equal(chinese?.toolName, "exact_check_expr");
+  assert.equal(chinese?.operation, "DEFINITE_INTEGRAL");
+  assert.match(chinese?.argsTemplate ?? "", /expression/u);
+  assert.match(chinese?.argsTemplate ?? "", /variable/u);
+  assert.match(chinese?.argsTemplate ?? "", /lower/u);
+  assert.match(chinese?.argsTemplate ?? "", /upper/u);
+
+  assert.equal(
+    semanticToolRoute("求 \\int_{0}^{1} x^2 dx 的值。")?.operation,
+    "DEFINITE_INTEGRAL",
+  );
+  assert.equal(
+    semanticToolRoute("Evaluate the definite integral \\int_1^2 (x+1) dx.")?.operation,
+    "DEFINITE_INTEGRAL",
+  );
+  assert.equal(routeId("求 ∫_0^{\\pi} sin x dx 的值。"), "EXACT_DEFINITE_INTEGRAL");
+
+  // A purely qualitative discussion asks for no value, so it never routes.
+  assert.notEqual(
+    semanticToolRoute("判断反常积分 ∫_1^{\\infty} 1/x^{p} dx 的收敛性。")?.operation,
+    "DEFINITE_INTEGRAL",
+  );
+  assert.notEqual(
+    semanticToolRoute("讨论 ∫_0^1 1/x dx 的可积性。")?.operation,
+    "DEFINITE_INTEGRAL",
+  );
+  // A bare integral sign without limits and without a compute verb is not enough.
+  assert.notEqual(routeId("设 f 连续，讨论 ∫ f 的几何意义。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.notEqual(routeId("积分在物理中的应用。"), "EXACT_DEFINITE_INTEGRAL");
+});
+
+test("simplification wording routes explicit expression reductions only", () => {
+  const fraction = semanticToolRoute("化简 (x^2-1)/(x-1)。");
+  assert.equal(fraction?.toolName, "exact_check_expr");
+  assert.equal(fraction?.operation, "SIMPLIFY");
+  assert.match(fraction?.argsTemplate ?? "", /expression/u);
+  assert.match(fraction?.argsTemplate ?? "", /variable/u);
+
+  assert.equal(
+    semanticToolRoute("先通分再化简：1/(x-1) - 1/(x+1)。")?.operation,
+    "SIMPLIFY",
+  );
+  assert.equal(semanticToolRoute("约分 \\frac{6x}{8x^2}。")?.operation, "SIMPLIFY");
+  assert.equal(
+    semanticToolRoute("Simplify the expression (x^2-4)/(x-2).")?.operation,
+    "SIMPLIFY",
+  );
+  assert.equal(
+    semanticToolRoute("Reduce the fraction 6/8 to lowest terms.")?.operation,
+    "SIMPLIFY",
+  );
+
+  // An explicit expansion or coefficient request keeps the expansion route.
+  assert.equal(
+    semanticToolRoute("将 (x+1)^5 展开，求 x^3 的系数。")?.operation,
+    "EXPAND_COEFFICIENTS",
+  );
+  assert.equal(
+    semanticToolRoute("将 (x+1)(x-2) 展开，求展开式中 x^2 的系数。")?.operation,
+    "EXPAND_COEFFICIENTS",
+  );
+  // Solving an equation is not a simplification of an expression.
+  assert.notEqual(semanticToolRoute("解方程 x^2-1=0 并化简。")?.operation, "SIMPLIFY");
+  assert.notEqual(routeId("设 X 服从正态分布，求其概率密度。"), "EXACT_SIMPLIFY");
+});
+
+test("the limit, integral and simplification routes are mutually exclusive", () => {
+  // A `\\lim` item stays LIMIT even when an integral appears inside it.
+  assert.equal(
+    routeId("求 \\lim_{x\\to 0} \\frac{\\int_0^x \\sin t dt}{x}。"),
+    "EXACT_LIMIT",
+  );
+  assert.equal(routeId("求极限 lim_{x->0} sin(x)/x。"), "EXACT_LIMIT");
+  assert.equal(routeId("求级数 \\sum_{n=1}^{\\infty} 1/n^2 的和。"), "EXACT_LIMIT");
+  // An `\\int` item is never the LIMIT family.
+  assert.equal(routeId("计算定积分 \\int_0^1 x^2 dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.equal(routeId("求 ∫_0^{\\pi} sin x dx 的值。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.notEqual(routeId("计算定积分 \\int_0^1 x^2 dx。"), "EXACT_LIMIT");
+  // A simplification item is neither a limit nor an integral.
+  assert.equal(routeId("化简 (x^2-1)/(x-1)。"), "EXACT_SIMPLIFY");
+  assert.notEqual(routeId("化简 (x^2-1)/(x-1)。"), "EXACT_LIMIT");
+});
+
+test("the integral and simplification routes are deterministic", () => {
+  const samples = [
+    "计算定积分 \\int_0^1 x^2 dx。",
+    "求 ∫_0^{\\pi} sin x dx 的值。",
+    "化简 (x^2-1)/(x-1)。",
+    "先通分再化简：1/(x-1) - 1/(x+1)。",
+    "求极限 lim_{x->0} sin(x)/x。",
+    "判断反常积分 ∫_1^{\\infty} 1/x^{p} dx 的收敛性。",
+  ];
+  const forward = samples.map((problem) => semanticToolRoute(problem));
+  const reverse = [...samples].reverse().map((problem) => semanticToolRoute(problem)).reverse();
+  assert.deepEqual(forward, reverse);
+  for (const problem of samples) {
+    assert.deepEqual(semanticToolRoute(problem), semanticToolRoute(problem));
+  }
+  assert.deepEqual(forward.map((route) => route?.id ?? null), [
+    "EXACT_DEFINITE_INTEGRAL",
+    "EXACT_DEFINITE_INTEGRAL",
+    "EXACT_SIMPLIFY",
+    "EXACT_SIMPLIFY",
+    "EXACT_LIMIT",
+    null,
+  ]);
+});

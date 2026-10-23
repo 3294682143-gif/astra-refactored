@@ -24,3 +24,25 @@
 ## 正例与误用负例
 正例：多个事件的发生总数写成指标和，再求期望。
 负例：X正态、独立对称符号ε使Y=εX；边缘都正态且协方差可为零，仍不能据此宣称独立。
+
+## 绑定计算工具与精确调用契约 (Bound Registered Tools)
+
+本节只列当前 P3 协议白名单（11 个注册算子）里本卡真正可调用的注册工具。工具只对显式输入重算一次精确结果并给独立校验，不判定“题目→输入”的映射是否正确，也不替代原题的证明义务。
+
+### `exact_check_expr（`operation` = `DENSITY_CHECK`）`
+- 何时用：核对所设密度在给定支撑上归一化到 1，且采样点上非负。
+- `args` 模板：
+```json
+{"operation":"DENSITY_CHECK","density":"2*x","variable":"x","lower":"0","upper":"1"}
+```
+- 输入约束：`density` 走白名单 AST（支持 `Phi(x)`／`phi(x)` 等标准正态记号）；`lower`/`upper` 为字符串，可含 `oo`；返回精确积分、数值积分、`normalized` 与 5 个采样点。
+- 输出边界：`normalized` 用 1e-9 容差比较数值积分，是数值判据；不能当作符号证明，也不判断依赖/耦合结构。
+
+### `bounded_enumeration`
+- 何时用：离散有限样本空间的古典概型：精确数出分子／分母（等可能前提仍需你声明）。
+- `args` 模板：
+```json
+{"ranges":[6,6],"choose":2,"predicate":"sum(0)==7 and distinct(0)"}
+```
+- 输入约束：`objects` 与 `ranges` 只能给一个；`choose` 取 1..6；对象 ≤ 60 行、每行 1..4 个 int/str 属性（同元数），`ranges` 为 1..4 个 1..60 的维度；组合总数 ≤ 5,000,000；`predicate` ≤ 400 字符，只能使用 distinct(i)/count(i,v)/size()/sum(i)/min(i)/max(i)/contains(i,v) 加算术比较与 and/or/not（索引从 0 开始）。
+- 输出边界：枚举给的是这个属性表上的组合计数，不替你证明等可能性或事件建模。

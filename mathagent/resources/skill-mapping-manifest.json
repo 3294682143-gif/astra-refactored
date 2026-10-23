@@ -1,9 +1,94 @@
 {
   "schema_version": "1.0",
   "description": "Skill Mapping Manifest: 22 math families → Claude Skills → tools → runtime → Evidence → tests",
+  "tool_ownership": {
+    "description": "P3-whitelisted tool -> owning math family (unchanged, still pinned by mathagent/resources/tool-registry.json) -> authoritative general_v11 method card. families[].tools is preserved verbatim for mathagent.tool_inventory.validate_inventory() and the frozen registry; corrected card-level attribution lives in general_method_id.",
+    "registry_grouping_preserved": true,
+    "tools": {
+      "polynomial_expand_coefficients": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "generating-functions"
+      },
+      "linear_system_solution_set": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "linearization-spectral"
+      },
+      "exact_check_expr": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": {
+          "SIMPLIFY": "domain-equivalence",
+          "FACTOR_OVER_EXTENSION": "algebraic-structures",
+          "MAXIMAL_MINORS": "linearization-spectral",
+          "DEFINITE_INTEGRAL": "integral-symmetry",
+          "TRIG_REDUCE": "differential-equations",
+          "LIMIT": "convergence-limits",
+          "DENSITY_CHECK": "conditioning-indicators"
+        }
+      },
+      "bounded_enumeration": {
+        "family_id": "algorithm_simulation",
+        "general_method_id": "counting-bijections"
+      },
+      "real_root_count_expr": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "domain-equivalence"
+      },
+      "splitting_field_degree_expr": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "algebraic-structures"
+      },
+      "circle_laplacian_expr": {
+        "family_id": "symbolic_calculus",
+        "general_method_id": "differential-equations"
+      },
+      "planar_laplacian_expr": {
+        "family_id": "symbolic_calculus",
+        "general_method_id": "differential-equations"
+      },
+      "interpolation_fit_check": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "numerical-approximation"
+      },
+      "stats_ols_check": {
+        "family_id": "probabilistic_model",
+        "general_method_id": "regression-diagnostics"
+      },
+      "finite_group_structure": {
+        "family_id": "symbolic_algebra",
+        "general_method_id": "algebraic-structures"
+      }
+    },
+    "relocations": [
+      {
+        "tool": "stats_ols_check",
+        "registry_family_id": "probabilistic_model",
+        "general_method_id": "regression-diagnostics",
+        "reason": "OLS bookkeeping is a regression diagnostic, not a probabilistic model; the registry family is kept so validate_inventory() stays exact."
+      },
+      {
+        "tool": "interpolation_fit_check",
+        "registry_family_id": "symbolic_algebra",
+        "general_method_id": "numerical-approximation",
+        "reason": "Interpolation/fitting belongs to numerical_methods, not symbolic_algebra."
+      },
+      {
+        "tool": "finite_group_structure",
+        "registry_family_id": "symbolic_algebra",
+        "general_method_id": "algebraic-structures",
+        "reason": "Finite group bookkeeping belongs to the algebraic-structures card."
+      },
+      {
+        "tool": "bounded_enumeration",
+        "registry_family_id": "algorithm_simulation",
+        "general_method_id": "counting-bijections",
+        "reason": "The generic enumerator belongs with counting, not LZ78 algorithm simulation."
+      }
+    ]
+  },
   "families": [
     {
       "family_id": "algorithm_simulation",
+      "general_method_ids": ["counting-bijections"],
       "skill_name": "math-algorithm-simulation",
       "skill_path": "skills/math-algorithm-simulation/SKILL.md",
       "source_skill": "math_families/skills/algorithm_simulation.md",
@@ -26,6 +111,7 @@
     },
     {
       "family_id": "classical_geometry_compute",
+      "general_method_ids": ["coordinates-geometry"],
       "skill_name": "math-classical-geometry-compute",
       "skill_path": "skills/math-classical-geometry-compute/SKILL.md",
       "source_skill": "math_families/skills/classical_geometry_compute.md",
@@ -46,6 +132,7 @@
     },
     {
       "family_id": "combinatorial_geometry",
+      "general_method_ids": ["coordinates-geometry"],
       "skill_name": "math-combinatorial-geometry",
       "skill_path": "skills/math-combinatorial-geometry/SKILL.md",
       "source_skill": "math_families/skills/combinatorial_geometry.md",
@@ -66,6 +153,7 @@
     },
     {
       "family_id": "concept_recall",
+      "general_method_ids": ["proof-counterexamples", "topology-local-global"],
       "skill_name": "math-concept-recall",
       "skill_path": "skills/math-concept-recall/SKILL.md",
       "source_skill": "math_families/skills/concept_recall.md",
@@ -79,6 +167,7 @@
     },
     {
       "family_id": "constrained_tiling",
+      "general_method_ids": ["invariants-extremal"],
       "skill_name": "math-constrained-tiling",
       "skill_path": "skills/math-constrained-tiling/SKILL.md",
       "source_skill": "math_families/skills/constrained_tiling.md",
@@ -100,6 +189,7 @@
     },
     {
       "family_id": "digit_dp",
+      "general_method_ids": ["finite-state-dp"],
       "skill_name": "math-digit-dp",
       "skill_path": "skills/math-digit-dp/SKILL.md",
       "source_skill": "math_families/skills/digit_dp.md",
@@ -119,6 +209,7 @@
     },
     {
       "family_id": "diophantine",
+      "general_method_ids": ["modular-crt"],
       "skill_name": "math-diophantine",
       "skill_path": "skills/math-diophantine/SKILL.md",
       "source_skill": "math_families/skills/diophantine.md",
@@ -138,6 +229,7 @@
     },
     {
       "family_id": "extremal_construction",
+      "general_method_ids": ["invariants-extremal"],
       "skill_name": "math-extremal-construction",
       "skill_path": "skills/math-extremal-construction/SKILL.md",
       "source_skill": "math_families/skills/extremal_construction.md",
@@ -155,6 +247,7 @@
     },
     {
       "family_id": "functional_equation",
+      "general_method_ids": ["domain-equivalence"],
       "skill_name": "math-functional-equation",
       "skill_path": "skills/math-functional-equation/SKILL.md",
       "source_skill": "math_families/skills/functional_equation.md",
@@ -170,6 +263,7 @@
     },
     {
       "family_id": "game_strategy_proof",
+      "general_method_ids": ["invariants-extremal"],
       "skill_name": "math-game-strategy-proof",
       "skill_path": "skills/math-game-strategy-proof/SKILL.md",
       "source_skill": "math_families/skills/game_strategy_proof.md",
@@ -188,6 +282,7 @@
     },
     {
       "family_id": "graph_extremal",
+      "general_method_ids": ["invariants-extremal"],
       "skill_name": "math-graph-extremal",
       "skill_path": "skills/math-graph-extremal/SKILL.md",
       "source_skill": "math_families/skills/graph_extremal.md",
@@ -209,6 +304,7 @@
     },
     {
       "family_id": "inclusion_exclusion_counting",
+      "general_method_ids": ["counting-bijections"],
       "skill_name": "math-inclusion-exclusion-counting",
       "skill_path": "skills/math-inclusion-exclusion-counting/SKILL.md",
       "source_skill": "math_families/skills/inclusion_exclusion_counting.md",
@@ -227,6 +323,7 @@
     },
     {
       "family_id": "inequality_extremum",
+      "general_method_ids": ["inequalities-optimization"],
       "skill_name": "math-inequality-extremum",
       "skill_path": "skills/math-inequality-extremum/SKILL.md",
       "source_skill": "math_families/skills/inequality_extremum.md",
@@ -247,6 +344,7 @@
     },
     {
       "family_id": "lattice_counting",
+      "general_method_ids": ["coordinates-geometry"],
       "skill_name": "math-lattice-counting",
       "skill_path": "skills/math-lattice-counting/SKILL.md",
       "source_skill": "math_families/skills/lattice_counting.md",
@@ -266,6 +364,7 @@
     },
     {
       "family_id": "linear_algebra_game",
+      "general_method_ids": ["linearization-spectral"],
       "skill_name": "math-linear-algebra-game",
       "skill_path": "skills/math-linear-algebra-game/SKILL.md",
       "source_skill": "math_families/skills/linear_algebra_game.md",
@@ -285,6 +384,7 @@
     },
     {
       "family_id": "minimax_dp",
+      "general_method_ids": ["finite-state-dp"],
       "skill_name": "math-minimax-dp",
       "skill_path": "skills/math-minimax-dp/SKILL.md",
       "source_skill": "math_families/skills/minimax_dp.md",
@@ -304,6 +404,7 @@
     },
     {
       "family_id": "number_theory_structure",
+      "general_method_ids": ["modular-crt", "induction-recurrence"],
       "skill_name": "math-number-theory-structure",
       "skill_path": "skills/math-number-theory-structure/SKILL.md",
       "source_skill": "math_families/skills/number_theory_structure.md",
@@ -323,6 +424,7 @@
     },
     {
       "family_id": "numerical_methods",
+      "general_method_ids": ["numerical-approximation"],
       "skill_name": "math-numerical-methods",
       "skill_path": "skills/math-numerical-methods/SKILL.md",
       "source_skill": "math_families/skills/numerical_methods.md",
@@ -342,6 +444,7 @@
     },
     {
       "family_id": "probabilistic_model",
+      "general_method_ids": ["conditioning-indicators", "statistical-inference", "regression-diagnostics"],
       "skill_name": "math-probabilistic-model",
       "skill_path": "skills/math-probabilistic-model/SKILL.md",
       "source_skill": "math_families/skills/probabilistic_model.md",
@@ -362,6 +465,7 @@
     },
     {
       "family_id": "symbolic_algebra",
+      "general_method_ids": ["domain-equivalence", "algebraic-structures", "linearization-spectral", "generating-functions"],
       "skill_name": "math-symbolic-algebra",
       "skill_path": "skills/math-symbolic-algebra/SKILL.md",
       "source_skill": "math_families/skills/symbolic_algebra.md",
@@ -389,6 +493,7 @@
     },
     {
       "family_id": "symbolic_calculus",
+      "general_method_ids": ["integral-symmetry", "convergence-limits", "differential-equations"],
       "skill_name": "math-symbolic-calculus",
       "skill_path": "skills/math-symbolic-calculus/SKILL.md",
       "source_skill": "math_families/skills/symbolic_calculus.md",
@@ -407,6 +512,7 @@
     },
     {
       "family_id": "transfer_matrix",
+      "general_method_ids": ["finite-state-dp", "induction-recurrence"],
       "skill_name": "math-transfer-matrix",
       "skill_path": "skills/math-transfer-matrix/SKILL.md",
       "source_skill": "math_families/skills/transfer_matrix.md",

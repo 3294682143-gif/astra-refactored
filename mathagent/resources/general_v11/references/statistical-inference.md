@@ -24,3 +24,25 @@
 ## 正例与误用负例
 正例：对数变换得到指数样本后，可由似然与Delta方法分别核对参数估计和渐近方差。
 负例：因两种合法置信区间端点不同，就把其中一种直接判为数学错误。
+
+## 绑定计算工具与精确调用契约 (Bound Registered Tools)
+
+本节只列当前 P3 协议白名单（11 个注册算子）里本卡真正可调用的注册工具。工具只对显式输入重算一次精确结果并给独立校验，不判定“题目→输入”的映射是否正确，也不替代原题的证明义务。
+
+### `exact_check_expr（`operation` = `DENSITY_CHECK`）`
+- 何时用：核对似然／后验所依赖的密度是否在支撑上归一化、是否非负。
+- `args` 模板：
+```json
+{"operation":"DENSITY_CHECK","density":"exp(-x)","variable":"x","lower":"0","upper":"oo"}
+```
+- 输入约束：同 `DENSITY_CHECK` 通用契约；`Phi(x)`／`phi(x)` 可用。
+- 输出边界：归一化是数值判断；模型选择、可识别性与渐近尺度仍需你论证。
+
+### `bounded_enumeration`
+- 何时用：把有限离散样本空间上的事件计数精确化（如小样本精确分布的分子）。
+- `args` 模板：
+```json
+{"ranges":[2,2,2],"choose":3,"predicate":"sum(0)>=2"}
+```
+- 输入约束：`objects` 与 `ranges` 只能给一个；`choose` 取 1..6；对象 ≤ 60 行、每行 1..4 个 int/str 属性（同元数），`ranges` 为 1..4 个 1..60 的维度；组合总数 ≤ 5,000,000；`predicate` ≤ 400 字符，只能使用 distinct(i)/count(i,v)/size()/sum(i)/min(i)/max(i)/contains(i,v) 加算术比较与 and/or/not（索引从 0 开始）。
+- 输出边界：只认证显式离散宇宙上的计数；不构成对参数推断的证书。

@@ -124,6 +124,71 @@ import {
 const MIN_MS = 25;
 
 /**
+ * The post-card method/tool co-prompt is advisory prompt text only: it names
+ * the card that was just loaded, the deterministic route and the safe argument
+ * skeleton. It changes no control flow, spends no model call and never counts
+ * as evidence. The cap keeps the appended block well inside the ordinary WORK
+ * message budget.
+ */
+const MAX_METHOD_TOOL_COPROMPT_CHARS = 600;
+
+/**
+ * One truthful line of the routed tool's input constraints. It is derived from
+ * the route identity and template shape only; it adds no numeric limit that the
+ * registered tool does not itself enforce.
+ */
+function methodToolInputConstraint(route: SemanticToolRoute): string {
+  switch (route.toolName) {
+    case "bounded_enumeration":
+      return "Use positive integer range sizes and an integer choose; the predicate is a string.";
+    case "linear_system_solution_set":
+      return "Every matrix and rhs entry must be a quoted exact rational string; domain is RATIONAL or REAL.";
+    case "interpolation_fit_check":
+    case "stats_ols_check":
+      return "All point, data and claimed values must be quoted exact rational strings.";
+    case "finite_group_structure":
+      return "Use cycle-notation generator strings plus an integer degree, or one closed named group string.";
+    case "real_root_count_expr":
+    case "splitting_field_degree_expr":
+    case "polynomial_expand_coefficients":
+    case "circle_laplacian_expr":
+    case "planar_laplacian_expr":
+      return "Expression and variable names must be quoted JSON strings; copy the input exactly.";
+    default:
+      if (route.operation === "MAXIMAL_MINORS") {
+        return "Every matrix entry must be a quoted JSON string; copy the exact entries from the statement.";
+      }
+      if (route.operation === "DENSITY_CHECK") {
+        return "Density, variable and bounds must be quoted strings; give the density only on its support.";
+      }
+      if (route.operation === "LIMIT") {
+        return "Expression, variable and limit point must be quoted JSON strings.";
+      }
+      return "Every expression and matrix entry must be a quoted JSON string; copy it exactly.";
+  }
+}
+
+/**
+ * Bounded advisory text appended to the user message of the first WORK turn
+ * after a method card load. A routed tool is named with its exact safe args
+ * skeleton so the model can act on the card instead of writing a final packet
+ * from memory and being forced to discard it.
+ */
+function methodToolCoPrompt(methodId: string, route: SemanticToolRoute): string {
+  const block =
+    "\n\nMETHOD+TOOL ADVISORY (card " + methodId + ", routed tool " + route.toolName + "). " +
+    "Prefer one tool turn over writing the final WorkPacket from memory: " +
+    "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
+    ",\"scope\":\"<what is computed from the problem statement>\"}. " +
+    methodToolInputConstraint(route) + " " +
+    "After the PROGRAM_OBSERVATION arrives, submit the complete WorkPacket as usual.";
+  const chars = [...block];
+  return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS
+    ? block
+    : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
+}
+
+/**
  * B2 (DECISION-0150): auxiliary (non-answer) obligations whose open state must
  * be reported honestly. A proof's `PREMISES` (E05) and an optimization's
  * `ATTAINMENT` (E06) never carry the whole-problem candidate, but while they
@@ -1080,6 +1145,9 @@ export async function runAgentLoop(
       let advanced = false;
       let yielded = false;
       let methodSelectionAttempted = false;
+      // Set only when a new card body was just loaded. The next WORK turn
+      // consumes it once to append the bounded method/tool advisory.
+      let methodToolCoPromptCardId: string | null = null;
       let forcedMethodSelection = false;
       let forcedMethodCandidates: readonly string[] = [];
       // The routed list is run-task scoped so the optional second-card offer can
@@ -1333,7 +1401,11 @@ export async function runAgentLoop(
                     ? "density: <the claimed density valid on its support only; do not include text such as 'for x>=0'>, variable: \"x\", lower: \"0\", upper: \"oo\"; Phi(x) and phi(x) are accepted standard normal notation"
                     : operation === "LIMIT"
                       ? "expression: <the expression>, variable: \"x\", point: <the limit point>"
-                      : "expression: <the expression>, variable: \"x\"";
+                      : operation === "DEFINITE_INTEGRAL"
+                        ? "expression: <the integrand as a JSON string>, variable: \"x\", lower: <the lower bound as a JSON string>, upper: <the upper bound as a JSON string>"
+                        : operation === "SIMPLIFY"
+                          ? "expression: <the expression>, variable: \"x\""
+                          : "expression: <the expression>, variable: \"x\"";
           const note =
             "\n\nEXACT CHECK TURN. This answer involves a " + operation + " obligation. " +
             "Before delivering a WorkPacket, return exactly one JSON tool action " +
@@ -1537,6 +1609,39 @@ export async function runAgentLoop(
             contextHash: p4Hash(JSON.stringify(messages)),
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
           };
+        }
+        // The immediate post-card WORK turn sees the routed tool's exact safe
+        // args skeleton. This is prompt text only and is a byte-identical
+        // no-op whenever any guard fails; a packet submitted anyway still goes
+        // through the existing forced-tool fallback below.
+        if (methodToolCoPromptCardId !== null && methodAssets.length >= 1) {
+          const methodToolRoute = semanticToolRoute(problemText);
+          if (
+            methodToolRoute !== null &&
+            !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
+            allowTools &&
+            toolEffects < opts.maxEffects &&
+            root.effectCalls() < totalEffectCapacity &&
+            callsLeft() >= 2 + opts.maxReviews
+          ) {
+            const messages = [
+              context.messages[0]!,
+              {
+                role: "user" as const,
+                content:
+                  context.messages[1]!.content +
+                  methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute),
+              },
+            ];
+            context = {
+              ...context,
+              messages,
+              contextHash: p4Hash(JSON.stringify(messages)),
+              contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+            };
+          }
+          // "Just loaded" is consumed by exactly this next WORK turn.
+          methodToolCoPromptCardId = null;
         }
         let outcome = await calls.model({
           task: running,
@@ -1868,6 +1973,7 @@ export async function runAgentLoop(
                   title,
                 );
                 methodAssets = [...methodAssets, asset];
+                methodToolCoPromptCardId = asset.id;
               } catch {
                 stop = "CONTROL_REJECTED";
                 break;

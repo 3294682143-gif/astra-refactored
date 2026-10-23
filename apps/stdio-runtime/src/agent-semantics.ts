@@ -968,6 +968,14 @@ const EXACT_LIMIT_ROUTE = exactRoute(
   "LIMIT",
   '{"operation":"LIMIT","expression":"<expression>","variable":"x","point":<limit point>}',
 );
+const EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute(
+  "DEFINITE_INTEGRAL",
+  '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}',
+);
+const EXACT_SIMPLIFY_ROUTE = exactRoute(
+  "SIMPLIFY",
+  '{"operation":"SIMPLIFY","expression":"<expression>","variable":"x"}',
+);
 
 function continuousProbabilityWording(problemText: string): boolean {
   return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(
@@ -1121,6 +1129,65 @@ function exactLimitWording(problemText: string): boolean {
   return !/(?:求|计算|evaluate|compute)[^\n。；;]{0,20}(?:积分|integral)/iu.test(problemText);
 }
 
+/**
+ * A definite-integral request asks for the value of one bounded integral: the
+ * wording names a definite integral or carries an integral sign with explicit
+ * limits. A limit question keeps the limit family, and a purely qualitative
+ * existence/integrability/convergence discussion asks for no value at all, so
+ * neither of those is routed here.
+ */
+function exactDefiniteIntegralWording(problemText: string): boolean {
+  // `\lim` items stay LIMIT even when an integral appears inside them.
+  if (/(极限|limit|\\lim|lim\s*_|渐近)/iu.test(problemText)) {
+    return false;
+  }
+  const definiteMark = /(定积分|definite\s+integral)/iu.test(problemText);
+  const integralSign = /(?:∫|\\int)/u.test(problemText);
+  const integralLimits =
+    /(?:∫|\\int)\s*(?:_\s*\{?[^}\s]{1,16}\}?\s*\^\s*\{?[^}\s]{1,16}\}?|\^\s*\{?[^}\s]{1,16}\}?\s*_\s*\{?[^}\s]{1,16}\}?)/u.test(
+      problemText,
+    );
+  if (!definiteMark && !(integralSign && integralLimits)) {
+    return false;
+  }
+  // A question about convergence, integrability or existence asks no value.
+  if (
+    /(收敛性|敛散性|是否收敛|是否发散|收敛还是发散|可积性|是否可积|不可积|存在性|是否存在|判断|讨论|证明|convergence|converges?|divergence|diverges?|integrab|exist)/iu.test(
+      problemText,
+    ) &&
+    !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * An explicit simplification request reduces one written algebraic expression
+ * (a fraction, a radical or an algebraic identity). An explicit expansion or
+ * coefficient request keeps the separate expansion route, and solving an
+ * equation or counting roots is not a simplification of an expression.
+ */
+function exactSimplifyWording(problemText: string): boolean {
+  if (
+    !/(化简|约分|通分|等价化简|\bsimplif(?:y|ies|ied|ying)\b|\breduc(?:e|es|ed|ing)\s+the\s+fraction\b)/iu.test(
+      problemText,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /(展开|展开式|乘开|合并同类项|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|系数|\bcoefficients?\b)/iu.test(
+      problemText,
+    )
+  ) {
+    return false;
+  }
+  return !/(?:求|解\s*|solve\s)[^\n。；;]{0,20}(?:方程|等式|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(
+    problemText,
+  );
+}
+
 function realRootCountWording(problemText: string): boolean {
   return (
     /(?:实根|实数根|real\s+roots?)[^\n。；;]{0,24}(?:个数|数量|数目|多少|number|count)/iu.test(
@@ -1195,6 +1262,12 @@ export function semanticToolRoute(problemText: string): SemanticToolRoute | null
   }
   if (exactLimitWording(problemText)) {
     return EXACT_LIMIT_ROUTE;
+  }
+  if (exactDefiniteIntegralWording(problemText)) {
+    return EXACT_DEFINITE_INTEGRAL_ROUTE;
+  }
+  if (exactSimplifyWording(problemText)) {
+    return EXACT_SIMPLIFY_ROUTE;
   }
   if (polynomialExpandWording(problemText)) {
     return POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE;
@@ -1346,7 +1419,53 @@ const METHOD_ROUTING_TRIGGERS: Readonly<Record<string, readonly string[]>> = Obj
   interpolation: ["插值", "interpolation"],
 });
 
+/**
+ * Tool route -> the `general_v11` method card that owns that family. The two
+ * routers are fused through this table only: a card id here is a catalog id,
+ * never an item index, answer or hidden table.
+ */
+const TOOL_ROUTE_PREFERRED_METHOD: Readonly<Record<string, string>> = Object.freeze({
+  GROUP_STRUCTURE: "algebraic-structures",
+  SPLITTING_FIELD_DEGREE: "algebraic-structures",
+  EXACT_FACTOR_OVER_EXTENSION: "algebraic-structures",
+  REAL_ROOT_COUNT: "domain-equivalence",
+  LINEAR_SYSTEM_SOLUTION_SET: "linearization-spectral",
+  EXACT_MAXIMAL_MINORS: "linearization-spectral",
+  POLYNOMIAL_EXPAND_COEFFICIENTS: "generating-functions",
+  CIRCLE_LAPLACIAN: "differential-equations",
+  PLANAR_LAPLACIAN: "differential-equations",
+  EXACT_TRIG_REDUCE: "differential-equations",
+  EXACT_DEFINITE_INTEGRAL: "integral-symmetry",
+  EXACT_LIMIT: "convergence-limits",
+  EXACT_DENSITY_CHECK: "conditioning-indicators",
+  FINITE_ENUMERATION: "counting-bijections",
+  INTERPOLATION_FIT: "numerical-approximation",
+  OLS_CHECK: "regression-diagnostics",
+  EXACT_SIMPLIFY: "domain-equivalence",
+});
+
+/**
+ * The method card that owns a hit tool route, or null when the route is null or
+ * has no registered owner. Pure: it reads the route identity only.
+ */
+export function preferredMethodForToolRoute(route: SemanticToolRoute | null): string | null {
+  if (route === null || typeof route !== "object") {
+    return null;
+  }
+  const id = route.id;
+  if (typeof id !== "string") {
+    return null;
+  }
+  return Object.prototype.hasOwnProperty.call(TOOL_ROUTE_PREFERRED_METHOD, id)
+    ? TOOL_ROUTE_PREFERRED_METHOD[id]!
+    : null;
+}
+
 const MAX_METHOD_ROUTE_CANDIDATES = 3;
+// Any token score is at most the cardinality of one card's own object/structure
+// sets, so a four-digit boost is decisive while the boosted card is still ranked
+// by card id against another boosted candidate.
+const TOOL_ROUTE_METHOD_BOOST = 1024;
 const ASCII_TRIGGER = /^[\x00-\x7f]+$/u;
 
 function escapeRegExp(value: string): string {
@@ -1399,9 +1518,12 @@ function routingScore(problemText: string, entry: P2MethodEntry): number {
 /**
  * Deterministic soft method routing over catalog metadata only. Each card is
  * scored by how many of its own `objects`/`structures` tokens overlap the
- * static semantic trigger table. Ties break on the card id (ascending), so the
- * result is independent of entry order. At most three ids are returned; a card
- * id absent from `entries` can never be returned.
+ * static semantic trigger table. A hit tool route then gives its owning card a
+ * decisive boost, so the card that matches the tool family is ranked first;
+ * every other score and the card-id tie-break stay exactly as before. Ties
+ * break on the card id (ascending), so the result is independent of entry
+ * order. At most three ids are returned; a card id absent from `entries` can
+ * never be returned.
  */
 export function semanticMethodRoute(
   problemText: string,
@@ -1412,15 +1534,26 @@ export function semanticMethodRoute(
   }
   const lowered = problemText.toLocaleLowerCase("en-US");
   const scores = new Map<string, number>();
+  const knownIds = new Set<string>();
   for (const entry of entries) {
     if (typeof entry !== "object" || entry === null || typeof entry.id !== "string") {
       continue;
     }
+    knownIds.add(entry.id);
     const score = routingScore(lowered, entry);
     if (score <= 0) {
       continue;
     }
     scores.set(entry.id, Math.max(scores.get(entry.id) ?? 0, score));
+  }
+  // Method/tool fusion: when the deterministic tool router hits a family whose
+  // owning card is loaded, that card is decisive, so the tool observation and
+  // the loaded method text always point at the same mathematical family. When
+  // no tool route hits (or its owner is not in this catalog) the scoring and
+  // ordering below are exactly the tool-free ones.
+  const preferredId = preferredMethodForToolRoute(semanticToolRoute(problemText));
+  if (preferredId !== null && knownIds.has(preferredId)) {
+    scores.set(preferredId, (scores.get(preferredId) ?? 0) + TOOL_ROUTE_METHOD_BOOST);
   }
   return Object.freeze(
     [...scores.entries()]

@@ -125,6 +125,39 @@ test("forced exact-check: first refusal -> one retry -> valid tool action", asyn
   assert.equal(observations[0]?.["routeId"], "EXACT_MAXIMAL_MINORS");
 });
 
+test("forced definite-integral check names the lower and upper JSON-string arguments", async () => {
+  const run = await runForced({
+    problem: "计算定积分 ∫_0^1 x^2 dx。",
+    prompt: "EXACT CHECK TURN",
+    reply: (_turn, request) => reactiveWork(request),
+  });
+  const forcedRequest = run.requests.find((request) =>
+    request.messages[0]!.content.includes("EXACT CHECK TURN"),
+  );
+  assert.ok(forcedRequest !== undefined);
+  const prompt = forcedRequest.messages[0]!.content;
+  assert.match(prompt, /DEFINITE_INTEGRAL/u);
+  assert.match(prompt, /expression: <the integrand as a JSON string>/u);
+  assert.match(prompt, /lower: <the lower bound as a JSON string>/u);
+  assert.match(prompt, /upper: <the upper bound as a JSON string>/u);
+});
+
+test("forced exact-check keeps the LIMIT point argument", async () => {
+  const run = await runForced({
+    problem: "求极限 lim_{x->0} sin(x)/x。",
+    prompt: "EXACT CHECK TURN",
+    reply: (_turn, request) => reactiveWork(request),
+  });
+  const forcedRequest = run.requests.find((request) =>
+    request.messages[0]!.content.includes("EXACT CHECK TURN"),
+  );
+  assert.ok(forcedRequest !== undefined);
+  const prompt = forcedRequest.messages[0]!.content;
+  assert.match(prompt, /operation":"LIMIT/u);
+  assert.match(prompt, /point: <the limit point>/u);
+  assert.doesNotMatch(prompt, /lower: <the lower bound/u);
+});
+
 test("forced exact-check: persistent refusal stops after exactly one retry and invents no receipt", async () => {
   const run = await runForced({
     problem: "计算给定矩阵的亚历山大多项式 P(t)。",

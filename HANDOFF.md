@@ -1502,3 +1502,51 @@ OPTION_VERDICT_CONTRADICTION → SOLUTION_COMPLETENESS`；同一轮内按选项�
 - bundle 已重建；manifest `VERIFY_OK`（`lockedRunProfile.maxMethodLoads = 2`）
 - 冻结基线未动：1.2 schema SHA 不变、`math_families/**` clean、两份 v13 逐字节一致
 - 本轮结束按用户要求**提交并推送**
+
+---
+
+## 14. 2026-10-23 方法卡 × 数学族 × 工具整合重构（Phase 1，按 `Astra_数学族方法卡与数学工具整合重构方案_及DeepSeek修改提示词.md`）
+
+三个 agent 并行、按文件归属分工，各自带门禁；最后一次改动之后重跑了全量门禁。
+
+### 14.1 任务 1：卡片契约融合 + 归属纠偏 + 提示词补签
+
+| 子任务 | 落点 | 结果 |
+| --- | --- | --- |
+| 20 张 `general_v11` 卡片追加 `## 绑定计算工具与精确调用契约 (Bound Registered Tools)` | `mathagent/resources/general_v11/references/*.md` | 20/20 已追加；每张 1878–4324 UTF-8 字节（上限 10000/12000），正文远低于 `p3-methods` 的 16000 字节观测上限 |
+| 只写**当前可调用**的 11 个白名单工具 | 同上 | `modular-crt`、`coordinates-geometry`、`inequalities-optimization`、`topology-local-global` 4 张卡片明确写"本 profile 无注册算子，纯推理" |
+| 模板可执行性 | `mathagent/tool_contracts.py` + `mathagent/tools.py` | 卡片里出现的 **31 个 JSON 模板全部实跑校验：31/31 status=ok**；并纠正了方案里的一个真实偏差——`real_root_count_expr`/`splitting_field_degree_expr`/`circle_laplacian_expr`/`planar_laplacian_expr` **不接受 `^`**，模板统一用 `**` 并注明 |
+| 工具归属纠偏 | `mathagent/resources/skill-mapping-manifest.json` | `tool_inventory.validate_inventory()` 硬性要求 `families[].tools` 与 registry 完全一致，**不能搬移**；改为每个族新增 `general_method_ids`，并新增顶层 `tool_ownership`（11 个工具 → 保留的 `family_id` + 权威 `general_method_id`）与 `relocations`，记录四处错挂（`stats_ols_check`→`regression-diagnostics`、`interpolation_fit_check`→`numerical-approximation`、`finite_group_structure`→`algebraic-structures`、`bounded_enumeration`→`counting-bijections`） |
+| `SYSTEM_PROMPT` 补 5 个工具签名 | `apps/stdio-runtime/src/agent-loop-context.ts` | 补齐 `polynomial_expand_coefficients` / `linear_system_solution_set` / `interpolation_fit_check` / `stats_ols_check` / `finite_group_structure` 一行式参数说明（+524 字节，总量 ≈11.3 KB，远低于 `MAX_CONTEXT_BYTES=65536`） |
+
+### 14.2 任务 2：路由统一
+
+- 新增 `EXACT_DEFINITE_INTEGRAL_ROUTE`（定积分/`\int` 带上下限；排除极限题与"收敛性/可积性/存在性"等定性判断）与 `EXACT_SIMPLIFY_ROUTE`（化简/约分/通分；排除展开/系数题）。分支顺序：… trig → LIMIT → DEFINITE_INTEGRAL → SIMPLIFY → EXPAND → LINEAR_SYSTEM，并有用例证明三者互斥。
+- 新增纯函数 `preferredMethodForToolRoute(route)`：工具路由 → `general_v11` 卡片 id 的 17 行冻结映射。
+- `semanticMethodRoute` 融合该信号：命中路由的归属卡获得决定性命中加分（+1024，远大于 ≤12 的 token 分），保证排第一；**无工具路由时返回结果与改动前逐字节一致**（有基线断言）。
+
+### 14.3 任务 3：卡片加载后的协同提示（不改变控制流）
+
+- 卡片刚加载、且命中工具路由、且尚无 `PROGRAM_OBSERVATION`、且工具可调用/预算允许时，在**同一轮** WORK 用户消息里追加一段 ≤600 字符的提示：卡片 id + 路由工具 + 精确 `argsTemplate` + 一行真实输入约束 + "拿到观测后再交完整 packet"。
+- 任一守卫不满足时提示**逐字节不变**（有测试）。
+- 控制流零改动：请求序号 `model-1..4`（提示路径）/`model-1..5`（强制兜底路径）与事件顺序 `METHOD_ROUTE → METHOD_LOAD → (TOOL_ROUTE) → TOOL_OBSERVATION` 全部保持；强制工具兜底仍然生效。
+- 顺带补了 `operationArgs` 的 `DEFINITE_INTEGRAL`（`expression/variable/lower/upper`）与 `SIMPLIFY` 两个分支——此前 EXACT CHECK TURN 的提示会漏掉上下限。
+
+### 14.4 任务 4：完整性基线 + 门禁
+
+- 重算 `mathagent/resources/general_v11/SOURCE.json`（20 张卡片 SHA）与 `python/astra_bridge/asset_baseline.json`（`registry_snapshot` 重建，其他资产组零漂移），`verify_integrity(Path("."))` → **ok=True、errors=[]**；`packages/protocol/schema/a2-source-lock.json` 的 `SOURCE.json` 单行 pin 同步刷新（`224de088…`→`e443a58b…`）。
+- `mathagent/tool_inventory.validate_inventory()` → `{'families': 22, 'tools': 76}`。
+
+- `tsc -b`：0
+- Node（protocol + stdio-runtime）：**455/455**（基线 439，+11 路由/融合、+5 协同提示与 operationArgs 用例）
+- 全量 pytest：**941 passed, 24 skipped**
+- 聚焦 bridge：**525 passed**
+- bundle 已重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**（此前因 `skillSkillMapping` 资产哈希变化会 `VERIFY_FAILED`，重建后恢复）
+- `git diff --check`：clean
+
+### 14.5 已知限制
+
+1. **卡片只写白名单工具**：方案 §第二部分 表格里点名的 65 个未暴露算子（`gf2_rank`、`rook_numbers`、`markov_expected_steps`、`line_through` 等）**没有写进卡片**——写进去只会让模型调用一个 Host 会拒的工具。它们属于方案 §第四部分 Phase 2。
+2. **归属纠偏是"标注"而非"搬移"**：`tool_inventory` 的一致性检查锁死了 `families[].tools` 与 registry 的 family 字段，所以纠偏以 `general_method_ids` + `tool_ownership` + `relocations` 的形式记录，registry 里的 `family` 字段本身没变。
+3. **协同提示是"建议"不是门禁**：模型仍可能先交 packet，此时由既有的强制工具轮兜底；本轮没有把第二张卡做成强制（见 §13.7）。
+4. **没有跑真实 API**：本轮全部是本地门禁 + 假 client e2e，正确率口径仍是 §12.6 的旧数字。

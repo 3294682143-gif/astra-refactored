@@ -334,3 +334,24 @@ expanded permissions and default-engine switching retain their separate gates.
 - A 4-item real-API sample produced **no false positives** and no positive case yet — the model's
   chosen options happened to agree with the observations.
 - Gates: `tsc -b` 0; Node **439/439**; full pytest **941 passed / 24 skipped**; manifest `VERIFY_OK`.
+
+### Session update — 2026-10-23 (method-card × math-family × tool integration, Phase 1)
+
+- All 20 `general_v11` cards now end with a `## 绑定计算工具与精确调用契约` section that documents
+  **only the 11 P3-whitelisted** operators with executable JSON arg templates (31/31 templates were
+  run through `validate_inputs`/`call_tool`, and the four cards with no whitelisted operator say so
+  explicitly). Card sizes 1878–4324 bytes, far under the 16000-byte observation cap.
+- Tool ownership misfiles are now recorded (`general_method_ids`, a top-level `tool_ownership` block
+  and `relocations`) instead of moving registry entries, because `tool_inventory.validate_inventory()`
+  requires `families[].tools` to match the registry exactly.
+- Routing is unified: new `DEFINITE_INTEGRAL` and `SIMPLIFY` tool routes (mutually exclusive with
+  `LIMIT`), plus `preferredMethodForToolRoute` fusing the tool route into `semanticMethodRoute` so the
+  bound card ranks first; a problem with no tool route returns the previous list unchanged.
+- After a card loads, the same WORK turn now carries a ≤600-character advisory naming the routed tool
+  and its exact args skeleton (byte-identical prompt when no route/observation/budget applies), and
+  the forced-tool fallback is untouched — request ordinals and the
+  `METHOD_ROUTE → METHOD_LOAD → TOOL_ROUTE → TOOL_OBSERVATION` order are proven unchanged.
+- `general_v11/SOURCE.json`, `asset_baseline.json` and the a2 source lock were recomputed;
+  `verify_integrity` → ok, `validate_inventory()` → 22 families / 76 tools.
+- Gates: `tsc -b` 0; Node **455/455**; full pytest **941 passed / 24 skipped**; bridge **525 passed**;
+  manifest `VERIFY_OK` after a bundle rebuild.

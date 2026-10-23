@@ -24,3 +24,34 @@
 ## 正例与误用负例
 正例：u_t=κu_xx 的Neumann问题用余弦模态，并单独保留常数模态。
 负例：将 L=(a u′)′ 的形式伴随写成 (a v)″；变量系数下多出导数项。
+
+## 绑定计算工具与精确调用契约 (Bound Registered Tools)
+
+本节只列当前 P3 协议白名单（11 个注册算子）里本卡真正可调用的注册工具。工具只对显式输入重算一次精确结果并给独立校验，不判定“题目→输入”的映射是否正确，也不替代原题的证明义务。
+
+### `circle_laplacian_expr`
+- 何时用：圆周问题里对角度 `theta` 的二阶导（核对常值模态、cos/sin 模态是否真的是特征模态）。
+- `args` 模板：
+```json
+{"expression":"cos(2*theta)"}
+```
+- 输入约束：只接受一个 `expression`，角度变量名固定为 `theta`；乘幂写 `**`（拒绝 `^`）；多项式次数 ≤ 8，或 sin/cos 仿射线性组合且系数 ≤ 8。
+- 输出边界：只认证所给表达式这一步求导，不判断它是否满足边界条件。
+
+### `planar_laplacian_expr`
+- 何时用：核对平面 Laplacian（二阶偏导之和），如分离变量后的空间模态。
+- `args` 模板：
+```json
+{"expression":"x**2+y**2","variables":["x","y"]}
+```
+- 输入约束：`variables` 1..3 个；乘幂写 `**`（拒绝 `^`）；总次数 ≤ 8 的有理系数多项式；不做含变量分母的约分。
+- 输出边界：与上同一契约；认证的是所给表达式，不是建模本身。
+
+### `exact_check_expr（`operation` = `TRIG_REDUCE`）`
+- 何时用：核对分离变量后三角模态的化简（如 cos²−sin² 型恒等）。
+- `args` 模板：
+```json
+{"operation":"TRIG_REDUCE","expression":"cos(x)**2-sin(x)**2","variable":"x"}
+```
+- 输入约束：同 `TRIG_REDUCE` 通用契约：`variable` 为短标识符，表达式须落在白名单 AST 内。
+- 输出边界：只认证这条化简恒等式。

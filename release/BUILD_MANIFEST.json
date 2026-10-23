@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.3-agent-loop-preview",
   "source": {
-    "commit": "59e8aca8aa8606e6ed74981f13cc88a33be3d1e3",
-    "tree": "283eb5532efe8ea10c5fbbcc22bd942d7f8e82d5"
+    "commit": "8867be6f7d3e749861e368d9b96e9756e4b8310d",
+    "tree": "449be934aba1dbd0c851b9a9276a9142e9adf4d9"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "8b987c7aa8ece7b89c732f2ed504885d93fd6ec1b8912c06a61ba643ca141764",
-      "bytes": 174468
+      "sha256": "718cf139d76228c5638a3eb80f5579ee7ebd9702c525d0e1e0ff3f6e9e318c78",
+      "bytes": 180209
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -35,7 +35,7 @@
     },
     "methodSkillMapping": {
       "path": "mathagent/resources/skill-mapping-manifest.json",
-      "sha256": "8f7a5221cf2cc9cdaf8205b714b258c9615a008053c8b1d5ed2d2df0d6b5098a"
+      "sha256": "2332e68cafc9d870323ec80d4b270de708974fee29e80d5a8dd9816ebd1c46e4"
     },
     "mathFamiliesCatalog": {
       "path": "math_families/catalog.json",
@@ -45,7 +45,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "0ee6b27d2eb0b6f57fcf3bb5f0abcec05d3e426a79468455ecd6b64c38f7ea5f"
+      "sha256": "10708319b363ba50a19d7c57aca8f807187449655139356a1bedadcd1acc9ca2"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",

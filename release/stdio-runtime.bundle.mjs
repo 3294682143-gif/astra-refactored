@@ -14405,6 +14405,12 @@ var init_agent_loop_context = __esm({
       "Four additional bounded tools are available: real_root_count_expr (expression, variable),",
       "splitting_field_degree_expr (expression, variable), circle_laplacian_expr (expression in theta),",
       "and planar_laplacian_expr (expression, variables). They return input-relative observations only.",
+      "Five more bounded tools are available: polynomial_expand_coefficients (expression, variables,",
+      "parameters), linear_system_solution_set (matrix, rhs, variables, domain, where domain is",
+      "RATIONAL or REAL), interpolation_fit_check (points of 2..8 exact rational {x,y}, expression,",
+      "variable), stats_ols_check (data of 3..12 exact rational {x,y}, optional claimed",
+      "{slope,intercept}), and finite_group_structure (generators plus degree, or named_group from",
+      "S3/S4/A4/A5/D8/D10/Z2..Z12). They return input-relative observations only.",
       "Use them when the answer involves a determinant or maximal minor, a trigonometric or polynomial",
       "expansion, factorization over an explicit algebraic extension, a definite integral or limit, a",
       "density normalization, or a finite combinatorial count. exact_check_expr takes operation plus",
@@ -15673,6 +15679,30 @@ function exactLimitWording(problemText) {
   }
   return !/(?:求|计算|evaluate|compute)[^\n。；;]{0,20}(?:积分|integral)/iu.test(problemText);
 }
+function exactDefiniteIntegralWording(problemText) {
+  if (/(极限|limit|\\lim|lim\s*_|渐近)/iu.test(problemText)) {
+    return false;
+  }
+  const definiteMark = /(定积分|definite\s+integral)/iu.test(problemText);
+  const integralSign = /(?:∫|\\int)/u.test(problemText);
+  const integralLimits = /(?:∫|\\int)\s*(?:_\s*\{?[^}\s]{1,16}\}?\s*\^\s*\{?[^}\s]{1,16}\}?|\^\s*\{?[^}\s]{1,16}\}?\s*_\s*\{?[^}\s]{1,16}\}?)/u.test(problemText);
+  if (!definiteMark && !(integralSign && integralLimits)) {
+    return false;
+  }
+  if (/(收敛性|敛散性|是否收敛|是否发散|收敛还是发散|可积性|是否可积|不可积|存在性|是否存在|判断|讨论|证明|convergence|converges?|divergence|diverges?|integrab|exist)/iu.test(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
+    return false;
+  }
+  return true;
+}
+function exactSimplifyWording(problemText) {
+  if (!/(化简|约分|通分|等价化简|\bsimplif(?:y|ies|ied|ying)\b|\breduc(?:e|es|ed|ing)\s+the\s+fraction\b)/iu.test(problemText)) {
+    return false;
+  }
+  if (/(展开|展开式|乘开|合并同类项|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|系数|\bcoefficients?\b)/iu.test(problemText)) {
+    return false;
+  }
+  return !/(?:求|解\s*|solve\s)[^\n。；;]{0,20}(?:方程|等式|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(problemText);
+}
 function realRootCountWording(problemText) {
   return /(?:实根|实数根|real\s+roots?)[^\n。；;]{0,24}(?:个数|数量|数目|多少|number|count)/iu.test(problemText) || /(?:个数|数量|数目|number\s+of|count\s+of)[^\n。；;]{0,24}(?:实根|实数根|real\s+roots?)/iu.test(problemText) || /(?:有几个|多少个|几条|how\s+many)[^\n。；;]{0,16}(?:实根|实数根|real\s+roots?)/iu.test(problemText);
 }
@@ -15720,6 +15750,12 @@ function semanticToolRoute(problemText) {
   if (exactLimitWording(problemText)) {
     return EXACT_LIMIT_ROUTE;
   }
+  if (exactDefiniteIntegralWording(problemText)) {
+    return EXACT_DEFINITE_INTEGRAL_ROUTE;
+  }
+  if (exactSimplifyWording(problemText)) {
+    return EXACT_SIMPLIFY_ROUTE;
+  }
   if (polynomialExpandWording(problemText)) {
     return POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE;
   }
@@ -15727,6 +15763,16 @@ function semanticToolRoute(problemText) {
     return LINEAR_SYSTEM_SOLUTION_SET_ROUTE;
   }
   return null;
+}
+function preferredMethodForToolRoute(route) {
+  if (route === null || typeof route !== "object") {
+    return null;
+  }
+  const id4 = route.id;
+  if (typeof id4 !== "string") {
+    return null;
+  }
+  return Object.prototype.hasOwnProperty.call(TOOL_ROUTE_PREFERRED_METHOD, id4) ? TOOL_ROUTE_PREFERRED_METHOD[id4] : null;
 }
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -15775,19 +15821,25 @@ function semanticMethodRoute(problemText, entries) {
   }
   const lowered = problemText.toLocaleLowerCase("en-US");
   const scores = /* @__PURE__ */ new Map();
+  const knownIds = /* @__PURE__ */ new Set();
   for (const entry of entries) {
     if (typeof entry !== "object" || entry === null || typeof entry.id !== "string") {
       continue;
     }
+    knownIds.add(entry.id);
     const score = routingScore(lowered, entry);
     if (score <= 0) {
       continue;
     }
     scores.set(entry.id, Math.max(scores.get(entry.id) ?? 0, score));
   }
+  const preferredId = preferredMethodForToolRoute(semanticToolRoute(problemText));
+  if (preferredId !== null && knownIds.has(preferredId)) {
+    scores.set(preferredId, (scores.get(preferredId) ?? 0) + TOOL_ROUTE_METHOD_BOOST);
+  }
   return Object.freeze([...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4));
 }
-var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, METHOD_ROUTING_TRIGGERS, MAX_METHOD_ROUTE_CANDIDATES, ASCII_TRIGGER;
+var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER;
 var init_agent_semantics = __esm({
   "apps/stdio-runtime/dist/src/agent-semantics.js"() {
     "use strict";
@@ -15978,6 +16030,8 @@ var init_agent_semantics = __esm({
     EXACT_DENSITY_CHECK_ROUTE = exactRoute("DENSITY_CHECK", '{"operation":"DENSITY_CHECK","density":"<density valid on its support>","variable":"x","lower":"0","upper":"oo"}');
     EXACT_TRIG_REDUCE_ROUTE = exactRoute("TRIG_REDUCE", '{"operation":"TRIG_REDUCE","expression":"<trigonometric/polynomial expression>","variable":"x"}');
     EXACT_LIMIT_ROUTE = exactRoute("LIMIT", '{"operation":"LIMIT","expression":"<expression>","variable":"x","point":<limit point>}');
+    EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute("DEFINITE_INTEGRAL", '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}');
+    EXACT_SIMPLIFY_ROUTE = exactRoute("SIMPLIFY", '{"operation":"SIMPLIFY","expression":"<expression>","variable":"x"}');
     METHOD_ROUTING_TRIGGERS = Object.freeze({
       // objects
       equation: ["\u65B9\u7A0B", "\u7B49\u5F0F", "equation"],
@@ -16112,7 +16166,27 @@ var init_agent_semantics = __esm({
       discretization: ["\u79BB\u6563\u5316", "discretization"],
       interpolation: ["\u63D2\u503C", "interpolation"]
     });
+    TOOL_ROUTE_PREFERRED_METHOD = Object.freeze({
+      GROUP_STRUCTURE: "algebraic-structures",
+      SPLITTING_FIELD_DEGREE: "algebraic-structures",
+      EXACT_FACTOR_OVER_EXTENSION: "algebraic-structures",
+      REAL_ROOT_COUNT: "domain-equivalence",
+      LINEAR_SYSTEM_SOLUTION_SET: "linearization-spectral",
+      EXACT_MAXIMAL_MINORS: "linearization-spectral",
+      POLYNOMIAL_EXPAND_COEFFICIENTS: "generating-functions",
+      CIRCLE_LAPLACIAN: "differential-equations",
+      PLANAR_LAPLACIAN: "differential-equations",
+      EXACT_TRIG_REDUCE: "differential-equations",
+      EXACT_DEFINITE_INTEGRAL: "integral-symmetry",
+      EXACT_LIMIT: "convergence-limits",
+      EXACT_DENSITY_CHECK: "conditioning-indicators",
+      FINITE_ENUMERATION: "counting-bijections",
+      INTERPOLATION_FIT: "numerical-approximation",
+      OLS_CHECK: "regression-diagnostics",
+      EXACT_SIMPLIFY: "domain-equivalence"
+    });
     MAX_METHOD_ROUTE_CANDIDATES = 3;
+    TOOL_ROUTE_METHOD_BOOST = 1024;
     ASCII_TRIGGER = /^[\x00-\x7f]+$/u;
   }
 });
@@ -17646,6 +17720,41 @@ var init_agent_revision = __esm({
 });
 
 // apps/stdio-runtime/dist/src/agent-loop.js
+function methodToolInputConstraint(route) {
+  switch (route.toolName) {
+    case "bounded_enumeration":
+      return "Use positive integer range sizes and an integer choose; the predicate is a string.";
+    case "linear_system_solution_set":
+      return "Every matrix and rhs entry must be a quoted exact rational string; domain is RATIONAL or REAL.";
+    case "interpolation_fit_check":
+    case "stats_ols_check":
+      return "All point, data and claimed values must be quoted exact rational strings.";
+    case "finite_group_structure":
+      return "Use cycle-notation generator strings plus an integer degree, or one closed named group string.";
+    case "real_root_count_expr":
+    case "splitting_field_degree_expr":
+    case "polynomial_expand_coefficients":
+    case "circle_laplacian_expr":
+    case "planar_laplacian_expr":
+      return "Expression and variable names must be quoted JSON strings; copy the input exactly.";
+    default:
+      if (route.operation === "MAXIMAL_MINORS") {
+        return "Every matrix entry must be a quoted JSON string; copy the exact entries from the statement.";
+      }
+      if (route.operation === "DENSITY_CHECK") {
+        return "Density, variable and bounds must be quoted strings; give the density only on its support.";
+      }
+      if (route.operation === "LIMIT") {
+        return "Expression, variable and limit point must be quoted JSON strings.";
+      }
+      return "Every expression and matrix entry must be a quoted JSON string; copy it exactly.";
+  }
+}
+function methodToolCoPrompt(methodId2, route) {
+  const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId2 + ", routed tool " + route.toolName + '). Prefer one tool turn over writing the final WorkPacket from memory: {"action":"tool","name":"' + route.toolName + '","args":' + route.argsTemplate + ',"scope":"<what is computed from the problem statement>"}. ' + methodToolInputConstraint(route) + " After the PROGRAM_OBSERVATION arrives, submit the complete WorkPacket as usual.";
+  const chars = [...block];
+  return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS ? block : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
+}
 function goalKindOf(goals, goalId) {
   for (const goal of goals) {
     if (goal.goalId === goalId) {
@@ -18271,6 +18380,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       let advanced = false;
       let yielded = false;
       let methodSelectionAttempted = false;
+      let methodToolCoPromptCardId = null;
       let forcedMethodSelection = false;
       let forcedMethodCandidates = [];
       let routedMethodCandidates = [];
@@ -18416,7 +18526,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           };
         } else if (forcedExactCheckSelection) {
           const operation = forcedExactCheckOperation ?? "SIMPLIFY";
-          const operationArgs = operation === "MAXIMAL_MINORS" ? 'matrix: <the explicit matrix>, variable: "t"' : operation === "TRIG_REDUCE" ? 'expression: <the trigonometric/polynomial expression>, variable: "x"' : operation === "FACTOR_OVER_EXTENSION" ? 'expression: <the polynomial>, variable: "x", minimal_polynomials: [<minimal polynomials of the actual claimed generators>]; test both the claimed field and the field generated by all roots, and require splits_completely=true for a splitting field' : operation === "DENSITY_CHECK" ? `density: <the claimed density valid on its support only; do not include text such as 'for x>=0'>, variable: "x", lower: "0", upper: "oo"; Phi(x) and phi(x) are accepted standard normal notation` : operation === "LIMIT" ? 'expression: <the expression>, variable: "x", point: <the limit point>' : 'expression: <the expression>, variable: "x"';
+          const operationArgs = operation === "MAXIMAL_MINORS" ? 'matrix: <the explicit matrix>, variable: "t"' : operation === "TRIG_REDUCE" ? 'expression: <the trigonometric/polynomial expression>, variable: "x"' : operation === "FACTOR_OVER_EXTENSION" ? 'expression: <the polynomial>, variable: "x", minimal_polynomials: [<minimal polynomials of the actual claimed generators>]; test both the claimed field and the field generated by all roots, and require splits_completely=true for a splitting field' : operation === "DENSITY_CHECK" ? `density: <the claimed density valid on its support only; do not include text such as 'for x>=0'>, variable: "x", lower: "0", upper: "oo"; Phi(x) and phi(x) are accepted standard normal notation` : operation === "LIMIT" ? 'expression: <the expression>, variable: "x", point: <the limit point>' : operation === "DEFINITE_INTEGRAL" ? 'expression: <the integrand as a JSON string>, variable: "x", lower: <the lower bound as a JSON string>, upper: <the upper bound as a JSON string>' : operation === "SIMPLIFY" ? 'expression: <the expression>, variable: "x"' : 'expression: <the expression>, variable: "x"';
           const note = "\n\nEXACT CHECK TURN. This answer involves a " + operation + ' obligation. Before delivering a WorkPacket, return exactly one JSON tool action {"action":"tool","name":"exact_check_expr","args":{"operation":"' + operation + '",' + operationArgs + '},"scope":"<what is being checked>"} and nothing else. Every expression and every matrix entry must be a quoted JSON string; never place raw arithmetic in JSON. Copy the explicit matrix/expression exactly from the problem statement; do not retype or simplify its entries. Use ** or ^ for powers; every matrix entry is still a quoted JSON string. do not return a WorkPacket in this turn. The observation is an input-relative exact computation, not a proof of the mapping. After the observation, return a COMPLETE WorkPacket with a best-effort candidate; do not use INCOMPLETE merely because a check is inconclusive.';
           const messages = [
             {
@@ -18520,6 +18630,25 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             contextHash: p4Hash(JSON.stringify(messages)),
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
           };
+        }
+        if (methodToolCoPromptCardId !== null && methodAssets.length >= 1) {
+          const methodToolRoute = semanticToolRoute(problemText);
+          if (methodToolRoute !== null && !observations.some((item) => item.source === "PROGRAM_OBSERVATION") && allowTools && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews) {
+            const messages = [
+              context.messages[0],
+              {
+                role: "user",
+                content: context.messages[1].content + methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute)
+              }
+            ];
+            context = {
+              ...context,
+              messages,
+              contextHash: p4Hash(JSON.stringify(messages)),
+              contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+            };
+          }
+          methodToolCoPromptCardId = null;
         }
         let outcome = await calls.model({
           task: running,
@@ -18735,6 +18864,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               try {
                 const asset = readAsset(parsed["asset"], methodId2, title);
                 methodAssets = [...methodAssets, asset];
+                methodToolCoPromptCardId = asset.id;
               } catch {
                 stop = "CONTROL_REJECTED";
                 break;
@@ -19904,7 +20034,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   });
   return p2Snapshot({ summary, privateState });
 }
-var MIN_MS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
+var MIN_MS, MAX_METHOD_TOOL_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
   "apps/stdio-runtime/dist/src/agent-loop.js"() {
     "use strict";
@@ -19927,6 +20057,7 @@ var init_agent_loop2 = __esm({
     init_agent_loop_io();
     init_agent_semantics();
     MIN_MS = 25;
+    MAX_METHOD_TOOL_COPROMPT_CHARS = 600;
     AUX_OBLIGATION_KINDS = ["PREMISES", "ATTAINMENT"];
     SCHEMA_REPAIR_CODES = /* @__PURE__ */ new Set([
       "PACKET_SCHEMA",
