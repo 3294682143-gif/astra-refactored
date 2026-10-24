@@ -10,12 +10,12 @@
  * execution on the host. The model port returns fixed scripted receipts.
  *
  * Usage (from anywhere):
- *   node apps/demo-web/tools/make-snapshot.mjs
+ *   node apps/web-demo/tools/make-snapshot.mjs
  *
- * Outputs (both under apps/demo-web/data/):
- *   session-sample.json     the real snapshot (demo data source)
- *   session-tampered.json   the same snapshot with TWO fields altered, used by
- *                           the audit demo to show ReplayRunner detects it
+ * Outputs (all under apps/web-demo/fixtures/):
+ *   session-sample.json       the real snapshot (demo data source)
+ *   session-tampered.json     the same snapshot with TWO fields altered, used by
+ *                             the audit demo to show ReplayRunner detects it
  *   session-sample.meta.json  census + replay verdict (reproducibility evidence)
  */
 
@@ -28,15 +28,15 @@ import { runAgentLoop } from "../../stdio-runtime/dist/src/agent-loop.js";
 import { reactivePorts } from "../../stdio-runtime/dist/tests/agent-loop-test-support.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(HERE, "..", "data");
+const FIXTURE_DIR = resolve(HERE, "..", "fixtures");
 
 /** The problem text is a generic arithmetic prompt; no question card, no answer table. */
 const PROBLEM = "Compute 2+2";
 
 /**
  * Budgets are deliberately modest and fully offline. maxReviews/maxR0 are raised
- * above the zero defaults so the log also covers review/repair-class events
- * rather than only the happy path.
+ * above the zero defaults so the log also covers review-class events rather than
+ * only the happy path.
  */
 const OPTIONS = Object.freeze({
   remainingMs: 20000,
@@ -99,7 +99,7 @@ async function main() {
   const replayTampered = runner.replay(tampered);
 
   const meta = Object.freeze({
-    generatedBy: "apps/demo-web/tools/make-snapshot.mjs",
+    generatedBy: "apps/web-demo/tools/make-snapshot.mjs",
     producedByRepoCode: true,
     problemText: PROBLEM,
     options: OPTIONS,
@@ -126,10 +126,10 @@ async function main() {
     },
   });
 
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(resolve(DATA_DIR, "session-sample.json"), JSON.stringify(sample, null, 2) + "\n", "utf8");
-  writeFileSync(resolve(DATA_DIR, "session-tampered.json"), JSON.stringify(tampered, null, 2) + "\n", "utf8");
-  writeFileSync(resolve(DATA_DIR, "session-sample.meta.json"), JSON.stringify(meta, null, 2) + "\n", "utf8");
+  mkdirSync(FIXTURE_DIR, { recursive: true });
+  writeFileSync(resolve(FIXTURE_DIR, "session-sample.json"), JSON.stringify(sample, null, 2) + "\n", "utf8");
+  writeFileSync(resolve(FIXTURE_DIR, "session-tampered.json"), JSON.stringify(tampered, null, 2) + "\n", "utf8");
+  writeFileSync(resolve(FIXTURE_DIR, "session-sample.meta.json"), JSON.stringify(meta, null, 2) + "\n", "utf8");
 
   console.log(JSON.stringify({ eventCount: meta.eventCount, census: meta.census, replay: meta.replay, tamperCheck: meta.tamperCheck }, null, 2));
 }

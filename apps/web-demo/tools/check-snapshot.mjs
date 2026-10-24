@@ -5,7 +5,7 @@
  * loudly rather than pass on a fabricated or truncated snapshot.
  *
  * Usage:
- *   node apps/demo-web/tools/check-snapshot.mjs apps/demo-web/data/session-sample.json
+ *   node apps/web-demo/tools/check-snapshot.mjs apps/web-demo/fixtures/session-sample.json
  *
  * Exit 0 = PASS, exit 1 = FAIL. No network, no writes.
  */

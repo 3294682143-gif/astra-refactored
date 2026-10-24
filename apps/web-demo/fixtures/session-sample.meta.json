@@ -1,5 +1,5 @@
 {
-  "generatedBy": "apps/demo-web/tools/make-snapshot.mjs",
+  "generatedBy": "apps/web-demo/tools/make-snapshot.mjs",
   "producedByRepoCode": true,
   "problemText": "Compute 2+2",
   "options": {
