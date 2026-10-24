@@ -216,6 +216,73 @@ async function requestJson<T>(url: string, init?: JsonRequestInit): Promise<ApiR
   }
 }
 
+export interface SolverEndpointOption {
+  readonly key: string;
+  readonly label: string;
+  readonly url: string;
+  readonly models: readonly string[];
+}
+
+/** Non-secret view of the host-side model-access configuration. */
+export interface SolverConfigView {
+  readonly configured: boolean;
+  readonly wired: boolean;
+  readonly endpoint: string | null;
+  readonly model: string | null;
+  readonly credential_fingerprint: string | null;
+  readonly source?: string;
+  readonly endpoints?: readonly SolverEndpointOption[];
+  readonly key_management_url?: string;
+  readonly balance_ledger_url?: string;
+}
+
+/** Observed usage only. A token figure is `null` when the provider did not report it. */
+export interface SolverUsageView {
+  readonly usage: {
+    readonly calls: number;
+    readonly failures: number;
+    readonly prompt_tokens: number | null;
+    readonly completion_tokens: number | null;
+    readonly total_tokens: number | null;
+    readonly cached_tokens: number | null;
+    readonly unknown_usage_responses: number;
+    readonly last_endpoint: string | null;
+  };
+  readonly balance: {
+    readonly available: boolean;
+    readonly reason: string;
+    readonly ledger_url: string;
+  };
+}
+
+export function fetchSolverConfig(): Promise<ApiResult<SolverConfigView>> {
+  return requestJson<SolverConfigView>("/api/config/solver");
+}
+
+/**
+ * Submit model-access settings. The credential travels one way only: the
+ * response carries a fingerprint, never the value.
+ */
+export function saveSolverConfig(input: {
+  endpoint: string;
+  model: string;
+  credential: string;
+}): Promise<ApiResult<SolverConfigView>> {
+  return requestJson<SolverConfigView>("/api/config/solver", {
+    method: "PUT",
+    body: JSON.stringify(input),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function clearSolverConfig(): Promise<ApiResult<SolverConfigView>> {
+  return requestJson<SolverConfigView>("/api/config/solver", { method: "DELETE" });
+}
+
+export function fetchSolverUsage(): Promise<ApiResult<SolverUsageView>> {
+  return requestJson<SolverUsageView>("/api/config/usage");
+}
+
 export function fetchHealth(): Promise<ApiResult<HealthResponse>> {
   return requestJson<HealthResponse>("/api/health");
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Key, RefreshCw, Server } from "lucide-react";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { ModelAccessCard } from "./ModelAccessCard";
 import {
   fetchCapabilities,
   fetchHealth,
@@ -176,6 +177,8 @@ export function SettingsPage() {
           )}
         </div>
 
+        <ModelAccessCard />
+
         <div style={{ borderRadius: "var(--radius-card)", border: "1px solid var(--color-brand-ring)", backgroundColor: "var(--color-brand-tint)", padding: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
             <Key size={18} color="var(--color-brand-deep)" />
@@ -184,9 +187,9 @@ export function SettingsPage() {
             </h3>
           </div>
           <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--color-ink)", lineHeight: 1.6 }}>
-            根据项目安全纪律：<strong>前端浏览器绝对不接触任何 API Key</strong>。
-            模型调用仅由后端宿主（Python Host）通过官方注入的 public client 代理，
-            前端不输入、不回显、也无法查询任何凭据。
+            根据项目安全纪律：<strong>凭据只在后端宿主落地，前端只提交、不回显</strong>。
+            上方「模型接入配置」写入的是宿主端配置文件（随 BFF 进程生效），模型调用仍由后端经官方
+            public client 通道发起；本页可提交凭据，但从不读回、不显示明文，仅显示 sha256 指纹。
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <div
@@ -209,7 +212,7 @@ export function SettingsPage() {
               </span>
             </div>
             <div style={{ fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.6 }}>
-              模型凭据是否已配置：{UNKNOWN} —— 前端不可见（后端宿主持有），本台不做任何「已配置 / 已就绪」断言。
+              模型凭据是否已配置：以上方「模型接入配置」的实时响应为准（后端回报 configured / wired，凭据本身永不回显）。
               健康检查响应中的 <code>model_invoked</code> 仅表示本次检查未触发模型调用。
             </div>
           </div>
