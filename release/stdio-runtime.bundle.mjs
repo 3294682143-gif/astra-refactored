@@ -14063,7 +14063,9 @@ function guardedObservations(contract, task, requestId, observations, catalog, a
       source: receipt.source,
       observation,
       observationHash: receipt.observationHash,
-      level: "PROVISIONAL",
+      // A generated observation keeps its own OBSERVED level; tool and method
+      // receipts stay PROVISIONAL. Both remain untrusted data only.
+      level: receipt.source === "GENERATED_OBSERVATION" ? "OBSERVED" : "PROVISIONAL",
       checkResult: "UNKNOWN"
     }));
   }
@@ -19416,11 +19418,11 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           const methodToolRoute = semanticToolRoute(problemText);
           if (methodToolRoute !== null && !observations.some((item) => item.source === "PROGRAM_OBSERVATION") && allowTools && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews) {
             const messages = [
-              context.messages[0],
               {
-                role: "user",
-                content: context.messages[1].content + methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute)
-              }
+                role: "system",
+                content: context.messages[0].content + methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute)
+              },
+              context.messages[1]
             ];
             context = {
               ...context,

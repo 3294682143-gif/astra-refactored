@@ -413,3 +413,28 @@ expanded permissions and default-engine switching retain their separate gates.
   INTERPOLATION 3, GROUP 2, ENUMERATION 2, five singles). The nine Stage-B operators match **zero**
   items of this input — they target competition/discrete problem mixes, so they cannot move this
   suite's accuracy.
+
+### Session update — 2026-10-24 (real-API rerun: a genuine regression, its fix, and new pilot evidence)
+
+- **Regression found, not a model problem**: the first rerun (`/tmp/astra-stage16-116`) came back with
+  11/12 `unsolved`, two model calls per item, `code FIELD_VALUE`, `stage session.solve`. The Host's
+  `validate_context` parses `messages[1].content` as exactly one JSON object, and `methodToolCoPrompt`
+  was appending its advisory prose to that user body, so every post-card WORK packet was a fixed
+  rejection. The blanket `FIELD_VALUE` code hid the cause.
+- **Fix**: the advisory now rides on `messages[0]` (system) and the user body stays pure JSON. The
+  co-prompt test was updated to read the system message and to assert `JSON.parse(messages[1].content)`
+  succeeds and that the body never carries the marker — that assertion pair is the guard against a
+  repeat.
+- **Rerun** (`/tmp/astra-stage16-118`, same 12 items, same input hash, `real_client_factory_retry2`):
+  **12/12 candidates** (was 1/12), 235 model calls, `routed == forced == obeyed == 19`,
+  24 tool-kind effects (12 method loads + 12 tool calls), `closure_evaluations 12`,
+  `closure_defects 2`, `observation_views 9`, `observation_used 2`, `exploration_calls 0`.
+  Tools executed: `interpolation_fit_check` 3, `stats_ols_check` 3, `exact_check_expr` 3,
+  `finite_group_structure` 2, `splitting_field_degree_expr` 1 — all `status=ok`.
+- **Scoring must stay split**: the strict `ReferenceJudge` (string/numeric equality) gives 3/12 = 25 %,
+  while a manual semantic audit gives **9/12 matching** the reference, one incomplete answer (#4
+  missing option B), one genuinely wrong (#35 Alexander polynomial), and one item where the *reference*
+  is wrong (#2: the splitting field of `x^4+5` has degree 8, verified with sympy by showing `x^2+1`
+  stays irreducible over `Q(alpha)`, `alpha^4 = -5`; the reference says 16).
+- Gates before the rerun: `tsc -b` 0, Node **519/519**, full pytest **1117 passed / 24 skipped**,
+  bundle rebuilt with esbuild, manifest `VERIFY_OK`, `git diff --check` clean.

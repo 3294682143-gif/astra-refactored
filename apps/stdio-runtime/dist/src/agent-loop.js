@@ -1421,13 +1421,17 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         toolEffects < opts.maxEffects &&
                         root.effectCalls() < totalEffectCapacity &&
                         callsLeft() >= 2 + opts.maxReviews) {
+                        // The advisory belongs on the SYSTEM message: the Host parses the
+                        // user message as exactly one JSON object (`validate_context`), so
+                        // appending prose there made every post-card WORK turn a fixed
+                        // FIELD_VALUE rejection. The trusted body is left byte-identical.
                         const messages = [
-                            context.messages[0],
                             {
-                                role: "user",
-                                content: context.messages[1].content +
+                                role: "system",
+                                content: context.messages[0].content +
                                     methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute),
                             },
+                            context.messages[1],
                         ];
                         context = {
                             ...context,

@@ -51,16 +51,20 @@ function routedToolReply(): string {
   });
 }
 
-/** The protocol JSON prefix of a user message, with the advisory removed. */
+/**
+ * The advisory now rides on the SYSTEM message, so the user body is already the
+ * pure protocol JSON. This helper strips the advisory from the system message
+ * so a scripted client sees the same context shape it saw before the note.
+ */
 function withoutAdvisory(request: AgentModelRequest): AgentModelRequest {
-  const content = request.messages[1]!.content;
-  const cut = content.indexOf(ADVISORY_MARKER);
+  const system = request.messages[0]!.content;
+  const cut = system.indexOf(ADVISORY_MARKER);
   if (cut < 0) {
     return request;
   }
   return {
     ...request,
-    messages: [request.messages[0]!, { role: "user", content: content.slice(0, cut) }],
+    messages: [{ role: "system", content: system.slice(0, cut) }, request.messages[1]!],
   };
 }
 
@@ -137,7 +141,7 @@ test("the post-card WORK turn names the routed tool and its exact args skeleton"
       if (system.includes("METHOD SELECTION TURN")) {
         return methodReply();
       }
-      if (!toolSubmitted && request.messages[1]!.content.includes(ADVISORY_MARKER)) {
+      if (!toolSubmitted && request.messages[0]!.content.includes(ADVISORY_MARKER)) {
         toolSubmitted = true;
         return routedToolReply();
       }
@@ -150,10 +154,16 @@ test("the post-card WORK turn names the routed tool and its exact args skeleton"
     ["model-1", "model-2", "model-3", "model-4"],
   );
   const postCard = runResult.requests[2]!;
-  const content = postCard.messages[1]!.content;
-  const markerAt = content.indexOf(ADVISORY_MARKER);
+  // The advisory rides on the SYSTEM message: the Host parses the user message
+  // as exactly one JSON object, so prose appended there was a fixed rejection.
+  const system = postCard.messages[0]!.content;
+  const markerAt = system.indexOf(ADVISORY_MARKER);
   assert.ok(markerAt > 0);
-  const block = content.slice(markerAt);
+  const block = system.slice(markerAt);
+  // The trusted user body must stay pure JSON with an unchanged key set.
+  const body = JSON.parse(postCard.messages[1]!.content) as Record<string, unknown>;
+  assert.equal(typeof body["schemaVersion"], "string");
+  assert.ok(!postCard.messages[1]!.content.includes(ADVISORY_MARKER));
   assert.match(block, /method-0/u);
   assert.match(block, /real_root_count_expr/u);
   assert.ok(block.includes(route.argsTemplate));
@@ -198,7 +208,10 @@ test("a routed problem with a card loaded still falls back to the forced tool tu
     runResult.requests.map((request) => request.requestId),
     ["model-1", "model-2", "model-3", "model-4", "model-5"],
   );
-  assert.ok(runResult.requests[2]!.messages[1]!.content.includes(ADVISORY_MARKER));
+  const postCard = runResult.requests[2]!;
+  assert.ok(postCard.messages[0]!.content.includes(ADVISORY_MARKER));
+  assert.ok(!postCard.messages[1]!.content.includes(ADVISORY_MARKER));
+  assert.doesNotThrow(() => JSON.parse(postCard.messages[1]!.content) as unknown);
   assert.deepEqual(eventOrder(runResult.result), [
     "METHOD_ROUTE",
     "METHOD_LOAD",

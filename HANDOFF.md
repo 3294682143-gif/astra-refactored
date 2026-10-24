@@ -1769,4 +1769,61 @@ cover-time 不进 `TRANSITION_COUNT`、Richardson 不被普通差分路由吃掉
    永远不上报，探索动作在真实运行里仍是关闭状态（代码路径已就绪、有 stub 测试覆盖）。
 2. **探索观测不进闭环**：它被明确标记为不可作证，因此不会产生任何 `AnswerClosureDefect`。
 3. **数值型算子（差分/外推/Markov）**只做"显式断言且不等"的比对，不参与精确有理数闭环。
-4. **真实 API 证据缺失一轮**：见 §17.4，上游 400/重试耗尽，等恢复后重跑。
+4. ~~**真实 API 证据缺失一轮**~~：已补，见 §17.7（上游恢复后 12/12 候选）。
+
+### 17.7 真实 API 复跑：一个真回归、一处修复、一组新证据
+
+#### 17.7.1 回归（不是模型问题，是协议不匹配）
+
+第一次复跑（`/tmp/astra-stage16-116`）12 题里 **11 题 `unsolved`**，每项只有 2 次模型调用，
+`code=FIELD_VALUE`、`stage=session.solve`、`childCode=None`。定位结果：Host 的 `validate_context`
+把 `messages[1].content` 当作**恰好一个 JSON 对象**解析（`_parse_inner`），而本轮新加的
+`methodToolCoPrompt` 把提示散文**追加在 user JSON 之后** → 每个 post-card WORK 包都在会话层被固定拒收。
+这类失败此前被压成 `FIELD_VALUE`，看不出根因（第 3 条待办：失败码细化）。
+
+#### 17.7.2 修复
+
+- advisory 改挂到 `messages[0]`（system），**user 消息保持纯 JSON**；advisory 内容、字数上限
+  （≤600 码点）和出现时机不变。
+- `apps/stdio-runtime/tests/agent-method-tool-coprompt.test.ts` 同步更新：三处断言改为读 system，
+  新增 `JSON.parse(messages[1].content)` 断言 + "user 消息不含 marker" 断言，正是这次的回归护栏。
+
+#### 17.7.3 复跑（`/tmp/astra-stage16-118`，同一 12 题、同一输入、新 key）
+
+输入 `/tmp/test0-stage16.txt`，`sha256 6217523d5ffebbe4171c65bc3bef91df3ca3966cea1f4c9dee822354b07f9854`，
+factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_model_calls=800`、
+`api_concurrency=4`、`default_max_tokens=8192`、`model_max_attempts=1`。
+
+| 指标 | 值 |
+| --- | --- |
+| 候选 | **12/12**（修复前同一套输入 1/12） |
+| 模型调用合计 | 235（19–21/项） |
+| 路由 / 强制 / 遵守 | **19 / 19 / 19**（`routed == forced == obeyed`，无一例外） |
+| 工具类 effect | 24（method load 12 + tool 12） |
+| 方法卡命中 | 24 次读卡（`algebraic-structures` 等），每项 1–2 张 |
+| 复核闭环 | `closure_evaluations 12`、`closure_defects 2`、`observation_views 9`、`observation_used 2` |
+| 探索动作 | `exploration_calls 0`（无 WASI profile，按设计关闭） |
+| 严格参考判分 | **3/12 = 25%**（`ReferenceJudge` 只做字符串/数值精确比对，自由文本必然判错） |
+
+工具分布：`interpolation_fit_check 3`、`stats_ols_check 3`、`exact_check_expr 3`、
+`finite_group_structure 2`、`splitting_field_degree_expr 1`，全部 `status=ok`。
+
+#### 17.7.4 人工语义审计（12 题逐条看过，供后续对标，不是平台成绩）
+
+- **9/12 与参考一致**（多数只是 LaTeX 写法差异）：#5、#16、#21、#56、#57、#59、#88、#89、#97。
+- **#4 少选**：模型只给 `D`，参考 `B, D`（`D_8` 的四阶子群也全是 Abel 的，漏了 B）。
+- **#35 实质错误**：亚历山大多项式给 `t²-3t+1`，参考是 6 次多项式；工具虽被路由并执行，
+  但模型没把自己的结论跟观测对齐。
+- **#2 争议**：模型给 `E=Q(⁴√5,i)`、`[E:Q]=8`、"是"；参考给 `Q(⁴√5,ζ₈)`、`16`。
+  已用 sympy 验证 $x^2+1$ 在 $\mathbb{Q}(\alpha)$（$\alpha^4=-5$）上不可约，故分裂域次数确为 **8**，
+  **参考里的 16 是错的**；模型把域写成 $x^4-5$ 的答案，属于"次数对、域描述不严谨"。
+- 结论：这一轮的价值在**管道**（12/12 候选、路由全遵守、工具全执行、闭环无假阳性），
+  不在准确率；严格判分 25% 与语义 9/12 必须分开报，不能混为一谈。
+
+#### 17.7.5 本轮门禁（复跑前）
+
+- `tsc -b`：0
+- Node（protocol + stdio-runtime）：**519/519**
+- 全量 pytest：**1117 passed, 24 skipped**
+- bundle 已用 esbuild 重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**（commit `71cbd4e`）
+- `git diff --check`：clean
