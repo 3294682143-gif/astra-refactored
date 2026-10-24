@@ -21,13 +21,16 @@ from .p0_protocol import (
 
 __all__ = [
     "AGENT_HOST_VERSION",
+    "AGENT_HOST_V14_VERSION",
     "AGENT_HOST_LEGACY_VERSION",
     "AGENT_HOST_MANIFEST_FORMAT",
     "AGENT_HOST_SCHEMA_DIALECT",
     "AGENT_HOST_METHODS",
+    "AGENT_HOST_V14_METHODS",
     "AGENT_HOST_LEGACY_METHODS",
     "AGENT_HOST_METHOD_DIRECTION",
     "load_manifest",
+    "load_v14_manifest",
     "load_legacy_manifest",
     "validate_manifest",
     "validate_legacy_manifest",
@@ -36,7 +39,9 @@ __all__ = [
     "classify_method",
 ]
 
-AGENT_HOST_VERSION = "1.3-agent-loop-preview"
+AGENT_HOST_VERSION = "1.4-unified-math-assets"
+AGENT_HOST_V14_VERSION = "1.4-unified-math-assets"
+AGENT_HOST_V13_VERSION = "1.3-agent-loop-preview"
 AGENT_HOST_LEGACY_VERSION = "1.2-agent-loop-preview"
 AGENT_HOST_MANIFEST_FORMAT = "astra-agent-host-manifest-v1"
 AGENT_HOST_SCHEMA_DIALECT = "astra-p0-schema-subset-v1"
@@ -51,6 +56,8 @@ AGENT_HOST_METHODS = (
     "method.load",
     "asset.scoped",
 )
+
+AGENT_HOST_V14_METHODS = AGENT_HOST_METHODS + ("math_asset.execute",)
 
 AGENT_HOST_LEGACY_METHODS = (
     "runtime.initialize",
@@ -69,6 +76,7 @@ AGENT_HOST_METHOD_DIRECTION = {
     "method.catalog": "node-to-host",
     "method.load": "node-to-host",
     "asset.scoped": "node-to-host",
+    "math_asset.execute": "node-to-host",
 }
 
 
@@ -85,11 +93,15 @@ def _source_path(name):
     return Path(__file__).resolve().parents[2] / "packages" / "protocol" / "schema" / name
 
 
-def _default_path():
-    packaged = _packaged_path("agent-host-v13.schema.json")
+def _v14_path():
+    packaged = _packaged_path("agent-host-v14.schema.json")
     if packaged.is_file():
         return packaged
-    return _source_path("agent-host-v13.schema.json")
+    return _source_path("agent-host-v14.schema.json")
+
+
+def _default_path():
+    return _v14_path()
 
 
 def _legacy_path():
@@ -118,8 +130,13 @@ def _read_manifest(path):
 
 
 def load_manifest(path=None):
-    """Load and cross-check the active 1.3 Agent Host manifest."""
+    """Load and cross-check the active Agent Host manifest."""
     return validate_manifest(_read_manifest(path if path is not None else _default_path()))
+
+
+def load_v14_manifest(path=None):
+    """Load and cross-check the active 1.4 Agent Host manifest with math_asset."""
+    return validate_manifest(_read_manifest(path if path is not None else _v14_path()))
 
 
 def load_legacy_manifest(path=None):
@@ -189,8 +206,11 @@ def _validate(raw, version, methods):
 
 
 def validate_manifest(raw):
-    """Validate the active 1.3 manifest; a 1.2 document is refused."""
-    return _validate(raw, AGENT_HOST_VERSION, AGENT_HOST_METHODS)
+    """Validate active manifest (1.4 unified math assets or 1.3 loop preview)."""
+    version = raw.get("protocolVersion") if isinstance(raw, dict) else None
+    if version == AGENT_HOST_V13_VERSION:
+        return _validate(raw, AGENT_HOST_V13_VERSION, AGENT_HOST_METHODS)
+    return _validate(raw, AGENT_HOST_VERSION, AGENT_HOST_V14_METHODS)
 
 
 def validate_legacy_manifest(raw):
@@ -199,7 +219,7 @@ def validate_legacy_manifest(raw):
 
 
 def classify_method(method):
-    if method in AGENT_HOST_METHODS:
+    if method in AGENT_HOST_V14_METHODS:
         return method
     _fail("UNKNOWN_METHOD")
 

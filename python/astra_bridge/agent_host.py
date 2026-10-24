@@ -567,7 +567,7 @@ class AgentHost(_Host):
 
     def on_request(self, message):
         method = message["method"]
-        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load", "asset.scoped"):
+        if method not in ("model.generate", "tool.execute", "method.catalog", "method.load", "asset.scoped", "math_asset.execute"):
             _fail()
         if self.expected is None or self.expected != (_HOST_SOLVE_ID, "session.solve"):
             _fail()
@@ -588,6 +588,9 @@ class AgentHost(_Host):
             return
         if method == "asset.scoped":
             self.on_asset(message["id"], params)
+            return
+        if method == "math_asset.execute":
+            self.on_math_asset(message["id"], params)
             return
         self.on_tool(message["id"], params)
 
@@ -671,6 +674,48 @@ class AgentHost(_Host):
                 "result": {**self._common(), "descriptor": descriptor},
             },
             "asset.scoped",
+        )
+
+    def on_math_asset(self, frame_id, params):
+        if params["sessionId"] != self.session_id:
+            _fail()
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            _fail("DEADLINE_EXCEEDED")
+        if self.effect_calls >= self.max_effects:
+            _fail("BUDGET")
+        request = params["request"]
+        binding = request.get("binding", {})
+        context = {
+            "sessionId": self.session_id,
+            "problemHash": self.problem_hash,
+            "contractVersion": binding.get("contractVersion", 1),
+            "taskId": binding.get("taskId", ""),
+            "goalId": binding.get("goalId", ""),
+            "scopeId": binding.get("scopeId", ""),
+            "sourceRequestId": binding.get("sourceRequestId", frame_id),
+        }
+        deadline = time.monotonic() + (self.remaining_ms() / 1000.0)
+        from .math_assets_runtime import use_math_asset
+        result = use_math_asset(
+            request,
+            context=context,
+            deadline=deadline,
+        )
+        self.effect_calls += 1
+        self.math_asset_calls = getattr(self, "math_asset_calls", 0) + 1
+        self.send(
+            self.proc,
+            {
+                "jsonrpc": "2.0",
+                "id": frame_id,
+                "result": {
+                    "protocolVersion": self.protocol_version,
+                    "sessionId": self.session_id,
+                    "remainingMs": self.remaining_ms(),
+                    "result": result,
+                },
+            },
+            "math_asset.execute",
         )
 
     def on_model(self, frame_id, params):

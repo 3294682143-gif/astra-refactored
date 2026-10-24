@@ -41,7 +41,7 @@ function realPyPort(): P3EffectPort {
           input: JSON.stringify(request),
           timeout: Math.min(request.remainingMs, 5000),
           maxBuffer: 65536,
-          env: { PATH: process.env.PATH, PYTHONDONTWRITEBYTECODE: "1" },
+          env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" },
         },
       );
       assert.equal(proc.status, 0, String(proc.stderr));

@@ -19,11 +19,28 @@ import {
   type ManifestMethod,
 } from "./index.js";
 
+export const AGENT_HOST_V14_VERSION = "1.4-unified-math-assets" as const;
+export type AgentHostV14Version = typeof AGENT_HOST_V14_VERSION;
+
 export const AGENT_HOST_VERSION = "1.3-agent-loop-preview";
 export type AgentHostVersion = typeof AGENT_HOST_VERSION;
 
 /** The frozen 1.2 preview version, kept for read-only legacy replay only. */
 export const AGENT_HOST_LEGACY_VERSION = "1.2-agent-loop-preview" as const;
+
+/** The nine methods of the 1.4 unified math assets Host slice, in fixed order. */
+export const AGENT_HOST_V14_METHODS = Object.freeze([
+  "runtime.initialize",
+  "session.solve",
+  "session.stop",
+  "model.generate",
+  "tool.execute",
+  "method.catalog",
+  "method.load",
+  "asset.scoped",
+  "math_asset.execute",
+] as const);
+export type AgentHostV14Method = (typeof AGENT_HOST_V14_METHODS)[number];
 
 /** The eight methods of this local Host slice, in fixed order. */
 export const AGENT_HOST_METHODS = Object.freeze([
@@ -47,6 +64,15 @@ export const AGENT_HOST_LEGACY_METHODS = Object.freeze([
   "tool.execute",
 ] as const);
 export type AgentHostLegacyMethod = (typeof AGENT_HOST_LEGACY_METHODS)[number];
+
+export interface AgentHostV14Manifest {
+  readonly format: "astra-agent-host-manifest-v1";
+  readonly schemaDialect: "astra-p0-schema-subset-v1";
+  readonly protocolVersion: typeof AGENT_HOST_V14_VERSION;
+  readonly limits: typeof LIMITS;
+  readonly envelopes: ManifestEnvelopes;
+  readonly methods: Readonly<Record<AgentHostV14Method, ManifestMethod>>;
+}
 
 export interface AgentHostManifest {
   readonly format: "astra-agent-host-manifest-v1";
@@ -72,7 +98,7 @@ export interface AgentHostLegacyManifest {
 }
 
 /** Either manifest profile; the shared validator returns this union. */
-export type AgentHostAnyManifest = AgentHostManifest | AgentHostLegacyManifest;
+export type AgentHostAnyManifest = AgentHostV14Manifest | AgentHostManifest | AgentHostLegacyManifest;
 
 const HOST_FORMAT = "astra-agent-host-manifest-v1";
 const HOST_DIRECTION: Readonly<Record<string, "host-to-node" | "node-to-host">> = {
@@ -84,6 +110,7 @@ const HOST_DIRECTION: Readonly<Record<string, "host-to-node" | "node-to-host">> 
   "method.catalog": "node-to-host",
   "method.load": "node-to-host",
   "asset.scoped": "node-to-host",
+  "math_asset.execute": "node-to-host",
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -147,8 +174,15 @@ function validateManifest(
 }
 
 /**
- * Validate a loaded active Agent Host manifest (1.3). This is the default
- * entry point; a 1.2 document is refused here with `VERSION_MISMATCH`.
+ * Validate a loaded unified Agent Host manifest (1.4). This is the new unified entry point.
+ */
+export function validateAgentHostV14Manifest(raw: unknown): AgentHostV14Manifest {
+  return validateManifest(raw, AGENT_HOST_V14_VERSION, AGENT_HOST_V14_METHODS) as AgentHostV14Manifest;
+}
+
+/**
+ * Validate a loaded active Agent Host manifest (1.3).
+ * A 1.2 or 1.4 document is refused here with `VERSION_MISMATCH`.
  */
 export function validateAgentHostManifest(raw: unknown): AgentHostManifest {
   return validateManifest(raw, AGENT_HOST_VERSION, AGENT_HOST_METHODS) as AgentHostManifest;
@@ -176,7 +210,7 @@ export function validateLegacyAgentHostManifest(raw: unknown): AgentHostLegacyMa
  */
 export function agentHostPayload(
   manifest: AgentHostAnyManifest,
-  method: AgentHostMethod,
+  method: AgentHostMethod | AgentHostV14Method,
   side: "params" | "result",
   value: unknown,
   sessionId?: string,

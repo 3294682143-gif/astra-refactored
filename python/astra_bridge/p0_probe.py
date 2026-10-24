@@ -136,20 +136,22 @@ class _Host:
     # -- registration -----------------------------------------------------
 
     def register(self, name, stream, events):
-        os.set_blocking(stream.fileno(), False)
-        if self.registered[name]:
-            self.selector.modify(stream, events, data=name)
-        else:
-            self.selector.register(stream, events, data=name)
-            self.registered[name] = True
+        if sys.platform != "win32":
+            os.set_blocking(stream.fileno(), False)
+            if self.registered[name]:
+                self.selector.modify(stream, events, data=name)
+            else:
+                self.selector.register(stream, events, data=name)
+        self.registered[name] = True
 
     def unregister(self, name, stream):
         if not self.registered[name]:
             return
-        try:
-            self.selector.unregister(stream)
-        except (KeyError, ValueError):
-            pass
+        if sys.platform != "win32":
+            try:
+                self.selector.unregister(stream)
+            except (KeyError, ValueError):
+                pass
         self.registered[name] = False
 
     def sync_stdin(self, proc):
@@ -326,6 +328,64 @@ class _Host:
     # -- pump -------------------------------------------------------------
 
     def pump(self, proc, until):
+        if sys.platform == "win32":
+            import msvcrt
+            import ctypes
+            import time
+
+            def _peek(s):
+                try:
+                    h = msvcrt.get_osfhandle(s.fileno())
+                    avail = ctypes.c_ulong()
+                    res = ctypes.windll.kernel32.PeekNamedPipe(h, None, 0, None, ctypes.byref(avail), None)
+                    if not res:
+                        return -1
+                    return avail.value
+                except (OSError, ValueError):
+                    return -1
+
+            while not until():
+                self.check_deadline()
+                had_activity = False
+                if self.pending is not None and self.registered.get("stdin"):
+                    self.flush_pending(proc)
+                    had_activity = True
+                for name, stream in [("stdout", proc.stdout), ("stderr", proc.stderr)]:
+                    if not self.registered.get(name):
+                        continue
+                    avail = _peek(stream)
+                    if avail < 0:
+                        self.eof[name] = True
+                        self.unregister(name, stream)
+                        if name == "stdout":
+                            if self.buffers["stdout"]:
+                                raise ProbeError("INVALID_JSON")
+                            if not self.stop_acked:
+                                raise ProbeError("EOF")
+                        had_activity = True
+                        continue
+                    if avail > 0:
+                        try:
+                            chunk = os.read(stream.fileno(), min(_READ_CHUNK, avail))
+                        except (BlockingIOError, InterruptedError):
+                            continue
+                        except OSError:
+                            chunk = b""
+                        if not chunk:
+                            self.eof[name] = True
+                            self.unregister(name, stream)
+                            if name == "stdout":
+                                if self.buffers["stdout"]:
+                                    raise ProbeError("INVALID_JSON")
+                                if not self.stop_acked:
+                                    raise ProbeError("EOF")
+                        else:
+                            self.feed(name, chunk)
+                        had_activity = True
+                if not had_activity:
+                    time.sleep(0.005)
+            return
+
         while not until():
             self.check_deadline()
             events = self.selector.select(min(self.remaining(), 0.05))
@@ -357,6 +417,57 @@ class _Host:
 
     def drain_tail(self, proc):
         """After the stop ack, only EOF or a clean exit is acceptable."""
+        if sys.platform == "win32":
+            import msvcrt
+            import ctypes
+            import time
+
+            def _peek(s):
+                try:
+                    h = msvcrt.get_osfhandle(s.fileno())
+                    avail = ctypes.c_ulong()
+                    res = ctypes.windll.kernel32.PeekNamedPipe(h, None, 0, None, ctypes.byref(avail), None)
+                    if not res:
+                        return -1
+                    return avail.value
+                except (OSError, ValueError):
+                    return -1
+
+            while not (self.eof["stdout"] and self.eof["stderr"]):
+                self.check_deadline()
+                had_activity = False
+                if self.pending is not None and self.registered.get("stdin"):
+                    self.flush_pending(proc)
+                    had_activity = True
+                for name, stream in [("stdout", proc.stdout), ("stderr", proc.stderr)]:
+                    if not self.registered.get(name):
+                        continue
+                    avail = _peek(stream)
+                    if avail <= 0:
+                        self.eof[name] = True
+                        self.unregister(name, stream)
+                        had_activity = True
+                        continue
+                    try:
+                        chunk = os.read(stream.fileno(), min(_READ_CHUNK, avail))
+                    except (BlockingIOError, InterruptedError):
+                        continue
+                    except OSError:
+                        chunk = b""
+                    if not chunk:
+                        self.eof[name] = True
+                        self.unregister(name, stream)
+                    else:
+                        self.feed(name, chunk)
+                    had_activity = True
+                if not had_activity:
+                    time.sleep(0.005)
+            if self.buffers["stdout"]:
+                raise ProbeError("INVALID_JSON")
+            if self.pending is not None:
+                raise ProbeError("EOF")
+            return
+
         while not (self.eof["stdout"] and self.eof["stderr"]):
             self.check_deadline()
             events = self.selector.select(min(self.remaining(), 0.05))

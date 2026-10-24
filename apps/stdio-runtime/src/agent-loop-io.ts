@@ -46,7 +46,7 @@ const OPTION_FIELDS = [
   "resumeContractVersion",
   "allowExploration",
 ] as const;
-const PORT_FIELDS = ["model", "effect", "catalog", "asset"] as const;
+const PORT_FIELDS = ["model", "effect", "catalog", "asset", "mathAsset"] as const;
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
@@ -369,6 +369,7 @@ export interface CapturedAgentPorts {
   readonly effect: { execute: (request: unknown) => Promise<unknown> } | null;
   readonly catalog: { read: (remainingMs: number) => Promise<unknown> } | null;
   readonly asset: { call: (request: unknown) => Promise<unknown> } | null;
+  readonly mathAsset?: { execute: (request: unknown) => Promise<unknown> } | null;
 }
 
 /**
@@ -390,6 +391,7 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
   const rawEffect = source.effect;
   const rawCatalog = source.catalog;
   const rawAsset = source.asset;
+  const rawMathAsset = source.mathAsset;
   if (!isPlainObject(rawModel)) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -422,21 +424,34 @@ export function captureAgentPorts(ports: AgentPorts): CapturedAgentPorts {
     const call = rawCall.bind(rawAsset) as (request: unknown) => Promise<unknown>;
     asset = Object.freeze({ call });
   }
-  if (rawEffect === null || rawEffect === undefined) {
-    return Object.freeze({ model: Object.freeze({ generate }), effect: null, catalog, asset });
+  let mathAsset: { execute: (request: unknown) => Promise<unknown> } | null = null;
+  if (rawMathAsset !== null && rawMathAsset !== undefined) {
+    if (!isPlainObject(rawMathAsset)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const rawExec = (rawMathAsset as Record<string, unknown>).execute;
+    if (typeof rawExec !== "function") {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const executeMath = rawExec.bind(rawMathAsset) as (request: unknown) => Promise<unknown>;
+    mathAsset = Object.freeze({ execute: executeMath });
   }
-  if (!isPlainObject(rawEffect)) {
-    fail(P2_ERROR_CODES.PACKET_BINDING);
+  let effect: { execute: (request: unknown) => Promise<unknown> } | null = null;
+  if (rawEffect !== null && rawEffect !== undefined) {
+    if (!isPlainObject(rawEffect)) {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    const rawExecute = (rawEffect as Record<string, unknown>).execute;
+    if (typeof rawExecute !== "function") {
+      fail(P2_ERROR_CODES.PACKET_BINDING);
+    }
+    effect = Object.freeze({ execute: rawExecute.bind(rawEffect) as (request: unknown) => Promise<unknown> });
   }
-  const rawExecute = (rawEffect as Record<string, unknown>).execute;
-  if (typeof rawExecute !== "function") {
-    fail(P2_ERROR_CODES.PACKET_BINDING);
-  }
-  const execute = rawExecute.bind(rawEffect) as (request: unknown) => Promise<unknown>;
   return Object.freeze({
     model: Object.freeze({ generate }),
-    effect: Object.freeze({ execute }),
+    effect,
     catalog,
     asset,
+    mathAsset,
   });
 }

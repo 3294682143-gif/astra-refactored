@@ -11,7 +11,7 @@
  * its ports are the only model/effect entry points. No second parser, no
  * stdout logging, no private state on the wire.
  */
-import { AGENT_HOST_VERSION, ERROR_CODES, agentHostPayload, p2Snapshot, p4Hash, } from "@astra/protocol";
+import { AGENT_HOST_VERSION, AGENT_HOST_V14_VERSION, ERROR_CODES, agentHostPayload, p2Snapshot, p4Hash, } from "@astra/protocol";
 import { p3EffectReceipt } from "@astra/math-gateway";
 import { AGENT_MAX_METHOD_LOADS, p3MethodCatalog } from "@astra/runtime-core";
 import { runAgentLoop } from "./agent-loop.js";
@@ -110,6 +110,8 @@ export class AgentHostFlow {
     methodAvailable = false;
     /** Stage D+: the Host advertised `AVAILABLE_BOUNDED` generated Python. */
     exploreAvailable = false;
+    mathAssetAvailable = false;
+    mathAssetCalls = 0;
     solveStarted = false;
     stopSent = false;
     catalogRead = false;
@@ -118,7 +120,7 @@ export class AgentHostFlow {
     resumeSessionLog = null;
     resumeContractVersion = null;
     constructor(manifest, io) {
-        if (manifest.protocolVersion !== AGENT_HOST_VERSION) {
+        if (manifest.protocolVersion !== AGENT_HOST_VERSION && manifest.protocolVersion !== AGENT_HOST_V14_VERSION) {
             fail(ERROR_CODES.FIELD_VALUE);
         }
         this.manifest = manifest;
@@ -205,6 +207,10 @@ export class AgentHostFlow {
             this.settleAsset(pending, result);
             return;
         }
+        if (pending.method === "math_asset.execute") {
+            this.settleMathAsset(pending, result);
+            return;
+        }
         this.settleEffect(pending, result);
     }
     handleInitialize(id, params) {
@@ -283,7 +289,7 @@ export class AgentHostFlow {
             jsonrpc: "2.0",
             id,
             result: {
-                protocolVersion: AGENT_HOST_VERSION,
+                protocolVersion: this.manifest.protocolVersion,
                 sessionId,
                 engine: "ts",
                 mode: "TS_PREVIEW",
@@ -335,6 +341,7 @@ export class AgentHostFlow {
                 : null,
             catalog: this.methodAvailable ? { read: (remainingMs) => this.callCatalog(remainingMs) } : null,
             asset: { call: (request) => this.callAsset(request) },
+            mathAsset: { execute: (request) => this.callMathAsset(request) },
         };
         let result;
         try {
@@ -415,7 +422,7 @@ export class AgentHostFlow {
             jsonrpc: "2.0",
             id,
             result: {
-                protocolVersion: AGENT_HOST_VERSION,
+                protocolVersion: this.manifest.protocolVersion,
                 sessionId: this.sessionId,
                 stopped: true,
             },
@@ -437,7 +444,7 @@ export class AgentHostFlow {
                     id,
                     method: "asset.scoped",
                     params: {
-                        protocolVersion: AGENT_HOST_VERSION,
+                        protocolVersion: this.manifest.protocolVersion,
                         sessionId: this.sessionId,
                         assetGroup: request.group,
                         assetId: request.assetId,
@@ -463,6 +470,58 @@ export class AgentHostFlow {
         this.pending = null;
         pending.resolve(p2Snapshot(descriptor));
     }
+    callMathAsset(request) {
+        if (this.pending !== null) {
+            return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+        }
+        if (this.io.remainingMs() <= MIN_REMAINING_MS) {
+            return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+        }
+        const id = `node-math-asset-${this.mathAssetCalls + 1}`;
+        this.mathAssetCalls += 1;
+        return new Promise((resolve, reject) => {
+            this.pending = {
+                id,
+                method: "math_asset.execute",
+                resolve: resolve,
+                reject,
+            };
+            try {
+                this.io.send({
+                    jsonrpc: "2.0",
+                    id,
+                    method: "math_asset.execute",
+                    params: {
+                        protocolVersion: this.manifest.protocolVersion,
+                        sessionId: this.sessionId,
+                        request: {
+                            action: "math_asset",
+                            assetId: request.assetId,
+                            input: request.input,
+                            binding: request.binding,
+                        },
+                    },
+                }, "math_asset.execute");
+            }
+            catch (error) {
+                this.pending = null;
+                reject(error);
+            }
+        });
+    }
+    settleMathAsset(pending, result) {
+        agentHostPayload(this.manifest, "math_asset.execute", "result", result, this.sessionId ?? undefined);
+        const mathResult = result["result"];
+        if (!isPlainObject(mathResult)) {
+            this.pending = null;
+            pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
+            return;
+        }
+        const remainingMs = safeInt(result["remainingMs"], 0, MAX_REMAINING_MS);
+        this.pending = null;
+        this.io.tighten(remainingMs);
+        pending.resolve(p2Snapshot(mathResult));
+    }
     callModel(request) {
         if (this.pending !== null) {
             return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
@@ -484,7 +543,7 @@ export class AgentHostFlow {
                     id,
                     method: "model.generate",
                     params: {
-                        protocolVersion: AGENT_HOST_VERSION,
+                        protocolVersion: this.manifest.protocolVersion,
                         sessionId: this.sessionId,
                         request: p2Snapshot({ ...request, remainingMs }),
                     },
@@ -525,7 +584,7 @@ export class AgentHostFlow {
                     id,
                     method,
                     params: {
-                        protocolVersion: AGENT_HOST_VERSION,
+                        protocolVersion: this.manifest.protocolVersion,
                         sessionId: this.sessionId,
                         request: sent,
                     },
@@ -565,7 +624,7 @@ export class AgentHostFlow {
                     id: CATALOG_FRAME_ID,
                     method: "method.catalog",
                     params: {
-                        protocolVersion: AGENT_HOST_VERSION,
+                        protocolVersion: this.manifest.protocolVersion,
                         sessionId: this.sessionId,
                         remainingMs: window,
                     },

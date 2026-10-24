@@ -54,7 +54,7 @@ function captured(scenario: string): A2Bundle {
       encoding: "utf8",
       timeout: 5000,
       maxBuffer: 262145,
-      env: { PATH: process.env.PATH ?? "", PYTHONDONTWRITEBYTECODE: "1" },
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" },
     },
   );
   assert.equal(run.status, 0);
@@ -187,7 +187,7 @@ test("canonical hash matches Python canonical_hash", () => {
       timeout: 5000,
       maxBuffer: 4096,
       input: JSON.stringify(value),
-      env: { PATH: process.env.PATH ?? "", PYTHONDONTWRITEBYTECODE: "1" },
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" },
     },
   );
   assert.equal(run.status, 0);

@@ -17,3 +17,4 @@ wasi-assets/
 mathagent/resources/platform-python.json
 *.sqlite3
 *.sqlite3-*
+.pytest_tmp/

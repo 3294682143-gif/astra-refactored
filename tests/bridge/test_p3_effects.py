@@ -188,7 +188,7 @@ def test_perform_effect_non_json_and_oversize_output_are_error():
 
 
 def test_cli_rejects_invalid_input_and_accepts_valid_request():
-    env = {"PATH": os.environ.get("PATH", ""), "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {**os.environ, "PATH": os.environ.get("PATH", ""), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
     bad = subprocess.run(
         [sys.executable, "-m", "python.astra_bridge.p3_effects"],
         input=b"{not json",

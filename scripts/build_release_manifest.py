@@ -23,7 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_VERSION = "build-manifest-v1"
 PROFILE_ID = "math-agent-preview-v2"
-SCHEMA_VERSION = "1.3-agent-loop-preview"
+SCHEMA_VERSION = "1.4-unified-math-assets"
+SUPPORTED_SCHEMA_VERSIONS = {"1.3-agent-loop-preview", "1.4-unified-math-assets"}
 
 # Precompiled JS entry points (already built by `tsc -b`; never rebuilt at run
 # time). The stdio runtime main is what the Python Host launches.
@@ -37,9 +38,16 @@ JS_ARTIFACTS = (
 BUNDLE_ARTIFACTS = {
     "bundle": "release/stdio-runtime.bundle.mjs",
     "bundleSchema": "release/schema/agent-host-v13.schema.json",
+    "bundleSchemaV14": "release/schema/agent-host-v14.schema.json",
+    "bundleMathAssetsSchema": "release/schema/math-assets.schema.json",
 }
 ASSET_ARTIFACTS = {
     "protocolSchema": "packages/protocol/schema/agent-host-v13.schema.json",
+    "protocolSchemaV14": "packages/protocol/schema/agent-host-v14.schema.json",
+    "mathAssetsSchema": "packages/protocol/schema/math-assets.schema.json",
+    "canonicalMathAssets": "mathagent/resources/math-assets.json",
+    "mathAssetsTSView": "packages/protocol/src/generated/math-assets.ts",
+    "mathAssetsPyView": "python/astra_bridge/generated/math_assets.py",
     "methodRegistry": "mathagent/resources/tool-registry.json",
     "methodSkillMapping": "mathagent/resources/skill-mapping-manifest.json",
     "mathFamiliesCatalog": "math_families/catalog.json",
@@ -117,7 +125,7 @@ def verify(manifest_path: Path) -> int:
     errors = []
     if manifest.get("manifestVersion") != MANIFEST_VERSION:
         errors.append("manifestVersion")
-    if manifest.get("schemaVersion") != SCHEMA_VERSION:
+    if manifest.get("schemaVersion") not in SUPPORTED_SCHEMA_VERSIONS:
         errors.append("schemaVersion")
     if manifest.get("precompiled") is not True or manifest.get("requiresRuntimeTsc") is not False:
         errors.append("precompiled flags")
@@ -162,7 +170,9 @@ def main(argv=None):
         return verify(args.verify)
     manifest = build()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    manifest_text = json.dumps(manifest, indent=2, ensure_ascii=False)
+    manifest_lines = [line.rstrip() for line in manifest_text.splitlines()]
+    args.out.write_bytes(("\n".join(manifest_lines) + "\n").encode("utf-8"))
     print("BUILT", json.dumps({"out": str(args.out), "commit": manifest["source"]["commit"]}))
     return 0
 

@@ -91,6 +91,29 @@ function parseTool(value: Record<string, unknown>): P3Action {
   }) as P3Action;
 }
 
+function parseMathAsset(value: Record<string, unknown>): P3Action {
+  if (!exactKeys(value, ["action", "assetId", "input"]) && !exactKeys(value, ["action", "assetId", "input", "scope"])) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (typeof value.assetId !== "string" || value.assetId.trim().length === 0 || value.assetId.length > 64) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (!isPlainObject(value.input)) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const inputBytes = Buffer.byteLength(JSON.stringify(value.input), "utf8");
+  if (inputBytes > MAX_ARGS_BYTES) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  const scope = typeof value.scope === "string" ? boundedString(value.scope, MAX_SCOPE_CHARS) : undefined;
+  return p2Snapshot({
+    action: "math_asset",
+    assetId: value.assetId,
+    input: value.input,
+    ...(scope !== undefined ? { scope } : {}),
+  }) as P3Action;
+}
+
 function parseMethod(value: Record<string, unknown>): P3Action {
   if (!exactKeys(value, ["action", "id"])) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
@@ -200,6 +223,9 @@ export function parseP3Action(text: string): P3Action {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const action = parsed.action;
+  if (action === "math_asset") {
+    return parseMathAsset(parsed);
+  }
   if (action === "tool") {
     return parseTool(parsed);
   }

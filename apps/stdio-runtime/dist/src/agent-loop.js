@@ -26,7 +26,7 @@ import { canonicalAnswerKey, sameAnswerKey } from "./agent-answer-key.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import { boundedAwait, captureAgentOptions, captureAgentPorts, checkedAgentReceipt, deriveRootBudget, } from "./agent-loop-io.js";
-import { polynomialOf, problemRelationPolynomial, rationalSetElements, samePolynomial, sameRationalSet, semanticMethodRoute, semanticToolRoute, solutionSetOf, } from "./agent-semantics.js";
+import { polynomialOf, problemRelationPolynomial, rationalSetElements, samePolynomial, sameRationalSet, semanticMethodRoute, semanticToolRoute, semanticMathAssetRoute, solutionSetOf, } from "./agent-semantics.js";
 const MIN_MS = 25;
 /**
  * Stage D+: the single recorded identity of one admitted bounded exploration
@@ -136,6 +136,16 @@ function methodToolCoPrompt(methodId, route) {
         "{\"action\":\"tool\",\"name\":\"" + route.toolName + "\",\"args\":" + route.argsTemplate +
         ",\"scope\":\"<what is computed from the problem statement>\"}. " +
         methodToolInputConstraint(route) + " " +
+        "After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
+    const chars = [...block];
+    return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS
+        ? block
+        : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
+}
+function mathAssetCoPrompt(route) {
+    const block = "\n\nMATH ASSET ADVISORY (" + route.assetId + ", target " + route.target + "). " +
+        "Prefer one math_asset action over a final WorkPacket: " +
+        "{\"action\":\"math_asset\",\"assetId\":\"" + route.assetId + "\",\"target\":\"" + route.target + "\",\"input\":" + route.argsTemplate + "}. " +
         "After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
     const chars = [...block];
     return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS
@@ -833,6 +843,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
     let catalog = null;
     let methodAssets = [];
+    const mathAssetObservations = [];
     let stop = "NO_CANDIDATE";
     let target = null;
     let protectedOrigin = null;
@@ -855,7 +866,8 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     // MAXIMAL_MINORS/DENSITY_CHECK result a specific diagnostic needs.
     const toolObservationViews = [];
     const exactObservations = new Map();
-    let answerClosureAttempted = false;
+    let answerClosureTurns = 0;
+    const consumedObservationHashes = new Set();
     const callsLeft = () => opts.maxModelCalls - root.modelCalls();
     // Stage D+: the single controlled exploration action is offered only when the
     // Host advertised the bounded generated-Python capability. With the default
@@ -1021,6 +1033,9 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             let semanticToolAttempted = false;
             let forcedSemanticToolSelection = false;
             let forcedSemanticToolRoute = null;
+            let mathAssetAttempted = false;
+            let forcedMathAssetSelection = false;
+            let forcedMathAssetRoute = null;
             let forcedRetryUsed = false;
             let forcedTurnFailedOpen = false;
             let verdictClosureAttempted = false;
@@ -1182,6 +1197,47 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     stop = "CONTEXT_REJECTED";
                     break;
                 }
+                const buildConsensusContext = (nextId, note) => {
+                    const upstreamTaskIds = new Set(running.dependencyTaskIds);
+                    const declaredCoverage = store
+                        .scopeCoverageSnapshot()
+                        .filter((row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId));
+                    const built = buildAgentWorkContext({
+                        contract: ledger.snapshot(),
+                        task: running,
+                        route,
+                        requestId: nextId,
+                        inputs,
+                        toolObservations: observations,
+                        allowTools,
+                        allowMethods,
+                        allowFinal: false,
+                        protectedCandidate: exposedCandidate,
+                        catalog,
+                        methodAssets,
+                        allowRouteProposal,
+                        allowTaskContinuation,
+                        allowArtifactRedo,
+                        routeProvenance: null,
+                        dependencyProvenance: null,
+                        revisionProvenance: null,
+                        revisionTarget: null,
+                        scopeCoverage: declaredCoverage,
+                        refutationRequired: false,
+                    });
+                    const messages = [
+                        {
+                            role: "system",
+                            content: built.messages[0].content + "\n\n" + note,
+                        },
+                        built.messages[1],
+                    ];
+                    return {
+                        messages,
+                        contextHash: p4Hash(JSON.stringify(messages)),
+                        contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                    };
+                };
                 if (forcedDensityClosure) {
                     const note = "\n\nDENSITY NORMALIZATION FAILURE. exact_check_expr reports that the claimed density integrates to " +
                         JSON.stringify(densityCheckFailure ?? "a value other than 1") +
@@ -1272,6 +1328,26 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         "contains(i,v); distinct(i) is computed across the selected subset. Choose attributes that make " +
                         "the target event expressible, and do not substitute a closed-form pattern formula for the enumeration. " +
                         "Do not return a WorkPacket in this turn.";
+                    const messages = [
+                        {
+                            role: "system",
+                            content: context.messages[0].content + note,
+                        },
+                        context.messages[1],
+                    ];
+                    context = {
+                        ...context,
+                        messages,
+                        contextHash: p4Hash(JSON.stringify(messages)),
+                        contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                    };
+                }
+                else if (forcedMathAssetSelection && forcedMathAssetRoute !== null) {
+                    const route = forcedMathAssetRoute;
+                    const note = "\n\nMATH ASSET TURN. This problem involves a mathematical computation (" + route.assetId + ":" + route.target + "). " +
+                        "Before delivering a WorkPacket, return exactly one JSON math_asset action: " +
+                        "{\"action\":\"math_asset\",\"assetId\":\"" + route.assetId + "\",\"target\":\"" + route.target + "\",\"input\":" + route.argsTemplate + "} " +
+                        "and nothing else. Do not return a WorkPacket in this turn.";
                     const messages = [
                         {
                             role: "system",
@@ -1437,7 +1513,31 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 // args skeleton. This is prompt text only and is a byte-identical
                 // no-op whenever any guard fails; a packet submitted anyway still goes
                 // through the existing forced-tool fallback below.
-                if (methodToolCoPromptCardId !== null && methodAssets.length >= 1) {
+                if (captured.mathAsset !== null && captured.mathAsset !== undefined) {
+                    const mathRoute = semanticMathAssetRoute(problemText);
+                    if (mathRoute !== null &&
+                        !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
+                        allowTools &&
+                        toolEffects < opts.maxEffects &&
+                        root.effectCalls() < totalEffectCapacity &&
+                        callsLeft() >= 2 + opts.maxReviews) {
+                        const messages = [
+                            {
+                                role: "system",
+                                content: context.messages[0].content +
+                                    mathAssetCoPrompt(mathRoute),
+                            },
+                            context.messages[1],
+                        ];
+                        context = {
+                            ...context,
+                            messages,
+                            contextHash: p4Hash(JSON.stringify(messages)),
+                            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                        };
+                    }
+                }
+                else if (methodToolCoPromptCardId !== null && methodAssets.length >= 1) {
                     const methodToolRoute = semanticToolRoute(problemText);
                     if (methodToolRoute !== null &&
                         !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
@@ -1572,9 +1672,199 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     forcedEnumerationSelection = false;
                     forcedExactCheckSelection = false;
                     forcedSemanticToolSelection = false;
+                    forcedMathAssetSelection = false;
                     forcedExactCheckOperation = null;
                     forcedSemanticToolRoute = null;
+                    forcedMathAssetRoute = null;
                     forcedRetryUsed = false;
+                }
+                if (action !== null && action.action === "math_asset") {
+                    if (captured.mathAsset === null || captured.mathAsset === undefined) {
+                        stop = "CONTROL_REJECTED";
+                        break;
+                    }
+                    let mathAssetResult;
+                    try {
+                        mathAssetResult = (await captured.mathAsset.execute({
+                            action: "math_asset",
+                            assetId: action.assetId,
+                            input: action.input,
+                            binding: {
+                                taskId: running.taskId,
+                                goalId: running.goalId,
+                                scopeId: running.scopeId,
+                                contractVersion: contract.contractVersion,
+                                sourceRequestId: outcome.requestId,
+                            },
+                        }));
+                    }
+                    catch {
+                        stop = "CONTROL_REJECTED";
+                        break;
+                    }
+                    toolEffects += 1;
+                    sessionLog.append("TOOL_OBSERVATION", {
+                        toolName: `math_asset:${mathAssetResult.assetId}`,
+                        assetId: mathAssetResult.assetId,
+                        status: mathAssetResult.status,
+                        resultHash: mathAssetResult.resultHash,
+                        observationsCount: mathAssetResult.observations.length,
+                    });
+                    for (const obs of mathAssetResult.observations) {
+                        mathAssetObservations.push(obs);
+                        const obsStr = JSON.stringify({ result: obs.value, operation: obs.quantity, target: obs.quantity });
+                        const effectId = `effect-${observations.length + 1}`;
+                        observations.push({
+                            effectId,
+                            binding: {
+                                sessionId: session,
+                                problemHash,
+                                contractVersion: contract.contractVersion,
+                                taskId: running.taskId,
+                                scopeId: running.scopeId,
+                                sourceRequestId: outcome.requestId,
+                            },
+                            source: "PROGRAM_OBSERVATION",
+                            level: "PROVISIONAL",
+                            status: "COMPLETE",
+                            observation: obsStr,
+                            observationHash: p4Hash(obsStr),
+                            checkResult: "UNKNOWN",
+                        });
+                        toolObservationViews.push({
+                            name: action.assetId,
+                            operation: obs.quantity,
+                            result: obs.value,
+                        });
+                        if (typeof obs.quantity === "string" && obs.quantity.length > 0) {
+                            const exactView = {
+                                operation: obs.quantity,
+                                value: obs.value,
+                                result: obs.value,
+                                ...((typeof obs.value === "object" && obs.value !== null) ? obs.value : {}),
+                            };
+                            exactObservations.set(obs.quantity, exactView);
+                            if (obs.quantity === "DENSITY_CHECK" && typeof obs.value === "object" && obs.value !== null) {
+                                const rec = obs.value;
+                                if (rec["integrates_to_one"] === false) {
+                                    densityCheckFailure = typeof rec["integral"] === "string" ? rec["integral"] : "a value other than 1";
+                                }
+                            }
+                        }
+                    }
+                    // Late observation check (§5.5): if a candidate is already protected, check whether
+                    // newly arrived observations contradict it and initiate a bounded revision turn.
+                    const unconsumed = observations.filter((o) => !consumedObservationHashes.has(o.observationHash));
+                    if (protectedOrigin !== null && unconsumed.length > 0) {
+                        const protectedCandidate = projectProtectedFinal(ledger.snapshot(), target);
+                        if (protectedCandidate !== null) {
+                            const defects = answerClosureDefects({
+                                problemText,
+                                candidate: protectedCandidate.answer,
+                                packet: { candidateProposal: protectedCandidate.answer },
+                                exactObservations,
+                                toolObservations: toolObservationViews,
+                                expectedSolutionKeys: null,
+                                requiresExhaustive: false,
+                            });
+                            if (defects.length > 0) {
+                                if (opts.maxConsensus >= 1 &&
+                                    answerClosureTurns < 2 &&
+                                    callsLeft() >= 2 + opts.maxReviews) {
+                                    answerClosureTurns += 1;
+                                    const closureId = root.nextModelId();
+                                    if (closureId !== null) {
+                                        const closureContext = buildConsensusContext(closureId, answerClosureNote(defects));
+                                        const closureOutcome = await calls.model({
+                                            task: running,
+                                            phase: "WORK",
+                                            messages: closureContext.messages,
+                                            contextHash: closureContext.contextHash,
+                                            contextBytes: closureContext.contextBytes,
+                                            requestId: closureId,
+                                        });
+                                        let nextCandidate = "";
+                                        let packetObj = {};
+                                        try {
+                                            packetObj = JSON.parse(closureOutcome.receipt.text);
+                                            if (typeof packetObj["candidateProposal"] === "string") {
+                                                nextCandidate = packetObj["candidateProposal"];
+                                            }
+                                        }
+                                        catch {
+                                            // unparseable text cannot revise candidate
+                                        }
+                                        if (nextCandidate.length > 0) {
+                                            const remaining = answerClosureDefects({
+                                                problemText,
+                                                candidate: nextCandidate,
+                                                packet: packetObj,
+                                                exactObservations,
+                                                toolObservations: toolObservationViews,
+                                                expectedSolutionKeys: null,
+                                                requiresExhaustive: false,
+                                            });
+                                            if (remaining.length < defects.length) {
+                                                const revisedTarget = p2Snapshot({
+                                                    ...protectedOrigin,
+                                                    answer: nextCandidate,
+                                                });
+                                                target = revisedTarget;
+                                                protectedOrigin = revisedTarget;
+                                                const decisionCoverage = Object.freeze(contract.obligations.map((obligation) => Object.freeze({
+                                                    obligationId: obligation.obligationId,
+                                                    kind: obligation.kind,
+                                                    deliveryCovered: true,
+                                                    reviewMentioned: false,
+                                                    checkResult: "UNKNOWN",
+                                                })));
+                                                revisedDecision = p2Snapshot({
+                                                    mode: "MOCK_ONLY",
+                                                    targetEnvironment: "TARGET_UNVERIFIED",
+                                                    stage: "S3",
+                                                    policy: "BEST_EFFORT",
+                                                    status: "candidate",
+                                                    finalResponse: nextCandidate,
+                                                    candidateVerified: false,
+                                                    strictAcceptance: "NOT_PERFORMED",
+                                                    submissionEligibility: "BEST_EFFORT",
+                                                    protectedCandidate: protectedOrigin.binding,
+                                                    targetHash: protectedOrigin.targetHash,
+                                                    unresolvedChallenges: 0,
+                                                    openObligations: contract.obligations.length,
+                                                    coverage: decisionCoverage,
+                                                    reason: "REVISED_CANDIDATE",
+                                                });
+                                                sessionLog.append("CONSENSUS", {
+                                                    stage: "LATE_OBSERVATION_DEFECT",
+                                                    requestId: closureId,
+                                                    defects: defects.map((d) => d.kind),
+                                                    revised: true,
+                                                    nextCandidate,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                else {
+                                    sessionLog.append("CONSENSUS", {
+                                        stage: "LATE_OBSERVATION_DEFECT",
+                                        requestId: null,
+                                        defects: defects.map((d) => d.kind),
+                                        unresolvedContradiction: true,
+                                    });
+                                }
+                            }
+                        }
+                        for (const o of unconsumed) {
+                            consumedObservationHashes.add(o.observationHash);
+                        }
+                    }
+                    if (mathAssetResult.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
+                        stop = mathAssetResult.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
+                        break;
+                    }
+                    continue;
                 }
                 if (action !== null && (action.action === "tool" || action.action === "method")) {
                     const isMethod = action.action === "method";
@@ -1686,8 +1976,10 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     forcedEnumerationSelection = false;
                     forcedExactCheckSelection = false;
                     forcedSemanticToolSelection = false;
+                    forcedMathAssetSelection = false;
                     forcedExactCheckOperation = null;
                     forcedSemanticToolRoute = null;
+                    forcedMathAssetRoute = null;
                     forcedVerdictClosure = false;
                     forcedDensityClosure = false;
                     const usedEffect = root.effectCalls() > effectsBefore;
@@ -2235,6 +2527,32 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     }
                     forcedMethodSelection = false;
                     forcedMethodCandidates = [];
+                    if (captured.mathAsset !== null && captured.mathAsset !== undefined) {
+                        const mathRoute = semanticMathAssetRoute(problemText);
+                        if (!forcedTurnFailedOpen &&
+                            opts.maxConsensus >= 1 &&
+                            mathRoute !== null &&
+                            !mathAssetAttempted &&
+                            !observations.some((item) => item.source === "PROGRAM_OBSERVATION") &&
+                            allowTools &&
+                            toolEffects < opts.maxEffects &&
+                            root.effectCalls() < totalEffectCapacity &&
+                            callsLeft() >= 2 + opts.maxReviews) {
+                            mathAssetAttempted = true;
+                            forcedMathAssetSelection = true;
+                            forcedMathAssetRoute = mathRoute;
+                            forcedRetryUsed = false;
+                            sessionLog.append("REPAIR", {
+                                kind: "MATH_ASSET_ROUTE",
+                                assetId: mathRoute.assetId,
+                                target: mathRoute.target,
+                                forced: true,
+                                routeId: mathRoute.id,
+                                taskId: running.taskId,
+                            });
+                            continue;
+                        }
+                    }
                     // Expanded deterministic semantic routing. The first matching family
                     // wins. No item id, reference answer or hidden table is consulted.
                     // A tool route consumes the tool quota only; method cards have their
@@ -2288,8 +2606,10 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     forcedEnumerationSelection = false;
                     forcedExactCheckSelection = false;
                     forcedSemanticToolSelection = false;
+                    forcedMathAssetSelection = false;
                     forcedExactCheckOperation = null;
                     forcedSemanticToolRoute = null;
+                    forcedMathAssetRoute = null;
                     forcedRetryUsed = false;
                     if (opts.maxConsensus >= 1 &&
                         densityCheckFailure !== null &&
@@ -2636,8 +2956,11 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         if (opts.maxConsensus >= 1 &&
                             answerBearingTask &&
                             prepared.packet !== null &&
-                            !answerClosureAttempted &&
+                            (answerClosureTurns < 2 || observations.some((o) => !consumedObservationHashes.has(o.observationHash))) &&
                             callsLeft() >= 2 + opts.maxReviews) {
+                            for (const o of observations) {
+                                consumedObservationHashes.add(o.observationHash);
+                            }
                             const closureCandidate = prepared.packet.candidateProposal ?? "";
                             const requiresExhaustive = /(所有解|全部解|一切解|解集|所有根|全部根|complete\s+solution\s+set|all\s+solutions)/iu.test(problemText);
                             const defects = answerClosureDefects({
@@ -2664,7 +2987,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             if (defects.length > 0) {
                                 const closureId = root.nextModelId();
                                 if (closureId !== null) {
-                                    answerClosureAttempted = true;
+                                    answerClosureTurns += 1;
                                     closureRequestId = closureId;
                                     const closureContext = buildConsensusContext(closureId, answerClosureNote(defects));
                                     const closureOutcome = await calls.model({

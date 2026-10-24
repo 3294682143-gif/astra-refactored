@@ -27,7 +27,7 @@ function pythonPort(): { port: P2MethodPort; calls: () => number; loads: () => n
       encoding: "utf8",
       timeout: 2000,
       maxBuffer: 65536,
-      env: { PATH: process.env.PATH ?? "", PYTHONDONTWRITEBYTECODE: "1" },
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" },
     });
     assert.equal(result.status, 0);
     return JSON.parse(result.stdout) as unknown;

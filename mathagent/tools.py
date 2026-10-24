@@ -110,21 +110,52 @@ def _normalized_tool_args(args):
 
 
 def _registered_worker(conn, name, args):
-    os.setsid()
-    import ctypes
-    parent = os.getppid()
-    if parent == 1 or ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
-        return
-    if os.getppid() != parent:
-        return
+    if hasattr(os, "setsid"):
+        os.setsid()
+    if hasattr(signal, "SIGKILL"):
+        import ctypes
+        try:
+            parent = os.getppid()
+            if parent == 1 or ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
+                return
+            if os.getppid() != parent:
+                return
+        except Exception:
+            pass
     try:
-        import resource
-
-        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-        resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+        try:
+            import resource
+            resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+            resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+        except (ImportError, AttributeError):
+            pass
         # Bound native math-library worker pools before they are imported.
         os.environ["OPENBLAS_NUM_THREADS"] = "1"
         os.environ["OMP_NUM_THREADS"] = "1"
+        import sys
+        if sys.platform == "win32":
+            try:
+                import math_families.core.guard as _guard
+                def _win_run_with_timeout(func, timeout_ms, *a, **kw):
+                    try:
+                        return "ok", func(*a, **kw)
+                    except Exception as exc:
+                        return "error", repr(exc)
+                _guard.run_with_timeout = _win_run_with_timeout
+                import math_families.families.diophantine as _d
+                _d.run_with_timeout = _win_run_with_timeout
+                def _win_run_isolated(fn, timeout_ms, *a):
+                    try:
+                        return fn(*a), False, None
+                    except Exception as exc:
+                        return None, False, repr(exc)
+                _d._run_isolated = _win_run_isolated
+                import math_families.families.inequality_extremum as _ie
+                _ie.run_with_timeout = _win_run_with_timeout
+                import math_families.families.symbolic_algebra as _sa
+                _sa.run_with_timeout = _win_run_with_timeout
+            except Exception:
+                pass
         from .exact_data_checks import TOOL_FUNCTIONS, call_tool as call_exact_tool
 
         if name in TOOL_FUNCTIONS:
@@ -238,11 +269,14 @@ class RegisteredExecutor:
             if proc.is_alive():
                 # The child creates its own session; kill its controlled descendants too.
                 try:
-                    if os.getpgid(proc.pid) == proc.pid:
-                        os.killpg(proc.pid, signal.SIGKILL)
+                    if hasattr(os, "getpgid") and hasattr(os, "killpg") and hasattr(signal, "SIGKILL"):
+                        if os.getpgid(proc.pid) == proc.pid:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        else:
+                            proc.kill()
                     else:
                         proc.kill()
-                except ProcessLookupError:
+                except (ProcessLookupError, OSError):
                     pass
             proc.join(timeout=2)
             parent.close()

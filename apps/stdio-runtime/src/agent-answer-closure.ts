@@ -612,14 +612,34 @@ function explicitDegree(candidate: string): number | null {
   return match === null ? null : Number(match[1] as string);
 }
 
+const TOOL_NAME_ALIASES: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  real_root_count_expr: ["real_root_count"],
+  splitting_field_degree_expr: ["splitting_field_degree"],
+  linear_system_solution_set: ["solution_set"],
+  independence_polynomial_chain: ["independence_polynomial"],
+  count_by_digit_property: ["digit_property_count"],
+  count_avoiding_permutations: ["avoiding_permutations"],
+  cover_time_complete_graph: ["cover_time"],
+  finite_difference_derivative: ["finite_difference"],
+  richardson_extrapolate: ["richardson_extrapolate"],
+});
+
 function lastObservation(
   observations: readonly ToolObservationView[] | null | undefined,
   name: string,
 ): ToolObservationView | null {
   if (!Array.isArray(observations)) return null;
+  const aliases = TOOL_NAME_ALIASES[name] ?? [];
   for (let index = observations.length - 1; index >= 0; index -= 1) {
     const observation = observations[index];
-    if (observation?.name === name) return observation;
+    if (observation === undefined || observation === null) continue;
+    if (observation.name === name) return observation;
+    if (typeof observation.operation === "string" && (observation.operation === name || aliases.includes(observation.operation))) {
+      return observation;
+    }
+    if (typeof observation.name === "string" && (aliases.includes(observation.name) || (observation.name.startsWith("math.") && aliases.some(a => observation.operation === a)))) {
+      return observation;
+    }
   }
   return null;
 }

@@ -1940,3 +1940,38 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 可核对对象”。继续堆关键词只会把概念题强制送进空参数工具，违反零空参铁律。
 要再提高必须**新增可核对的数据型工具**（如 ODE 通解、置信区间、线性变换矩阵），
 不能继续在 `semanticToolRoute` 里加宽泛措辞。
+
+---
+
+## 19. 数学资产统一终局重构 (Stage U0–U9, 2026-10-25 完成)
+
+依据 `Astra_数学资产统一_完整执行文档.md`，完成全生命周期重构与全量验收。
+
+### 19.1 交付指标与架构收敛
+1. **单一事实源 (Canonical Source)**:
+   - 全局唯一权威文件: `mathagent/resources/math-assets.json`
+   - 收敛规模: 26 个正式数学资产，82 个计算行为（彻底整合 20 个方法卡、22 个数学族、76 项注册表工具）。
+   - 双端确定性编译视图: `packages/protocol/src/generated/math-assets.ts` 与 `python/astra_bridge/generated/math_assets.py`，受 `build_math_assets.py --check` 门禁防护。
+2. **单一交互动作与 Host 入口**:
+   - 模型端统一且唯一动作: `{"action": "math_asset", "assetId": ..., "input": {...}}`
+   - Python Host 统一且唯一入口: `use_math_asset(request, *, context, catalog, executor, deadline)`
+   - 76 项历史实现按 W0–W5 六个批次全部迁入，全部具备正例、反例与独立期望结果。
+3. **§5.5 晚到观察缺陷复核与闭合修复**:
+   - 针对 §18.6 发现的“候选保护后到达的精确观测未能驱动闭合替换”缺陷，彻底移除 `answerClosureAttempted` 全局布尔开关，实现 `consumedObservationHashes` 增量消费与有界缺陷重检流程。
+   - 回归测试 `apps/stdio-runtime/tests/agent-late-observation.test.ts` 验证通过：在首个候选被保护后，新到达的 `gf2_rank = 2` 成功触发 `LATE_OBSERVATION_DEFECT` 诊断并完成受保护答案修订。
+4. **发布包与默认启动**:
+   - Protocol v1.4 正式生效（`1.4-unified-math-assets`）。
+   - `user_agent.py` 默认启动即走 TS 引擎与 `release/stdio-runtime.bundle.mjs`，旧引擎延迟加载，不在顶层读取旧卡与旧注册表。
+   - `release/BUILD_MANIFEST.json` 自校验 `VERIFY_OK`。
+5. **机器判定 24 项指标全绿 (§16.3)**:
+   - `python scripts/report_math_assets_acceptance.py --strict` 输出全量报告于 `docs/MATH_ASSETS_ACCEPTANCE.md`，24 项指标 100% 达成。
+
+### 19.2 门禁与验证汇总
+- `tsc -b`: 0 errors
+- Node tests: **537/537 passed** (`node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js`)
+- Python math_assets: **170/170 passed** (`python -m pytest tests/math_assets`)
+- Python release tests: **5/5 passed** (`python -m pytest tests/release`)
+- Frozen integrity: **100% VERIFIED** (`python scripts/check_math_assets_frozen.py`)
+- View synchronization: **100% BYTE-IDENTICAL** (`python scripts/build_math_assets.py --check`)
+- Migration completeness: **100% COMPLETE** (`python scripts/check_math_assets_migration.py --strict`)
+- Release manifest: **100% VALID** (`python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json`)

@@ -140,9 +140,14 @@ def _run_cli(*args):
         [sys.executable, "-m", "python.astra_bridge.a2_capture", *args],
         cwd=_REPO_ROOT,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=5,
-        env={"PATH": "", "PYTHONDONTWRITEBYTECODE": "1"},
+        env={
+            **dict(sys.modules["os"].environ),
+            "PATH": "",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONIOENCODING": "utf-8",
+        },
     )
 
 

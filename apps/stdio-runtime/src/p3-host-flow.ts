@@ -460,11 +460,10 @@ export class P3HostFlow {
         return;
       }
     }
-    if (action.action === "explore") {
+    if (action.action === "explore" || action.action === "math_asset") {
       // Stage D+ closed vocabulary: this local P3 Host slice never advertises
-      // the bounded generated-Python capability, so a reply naming the
-      // exploration action is one fixed control rejection — never a new wire
-      // path and never an execution.
+      // the bounded generated-Python or math_asset capability, so a reply naming
+      // them is one fixed control rejection — never a new wire path and never an execution.
       this.finish("ACTION_REJECTED");
       return;
     }

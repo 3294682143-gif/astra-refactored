@@ -1122,3 +1122,4 @@ export * from "./p4-r0-revision.js";
 export * from "./p4-r0-recheck.js";
 export * from "./agent-loop.js";
 export * from "./agent-host.js";
+export * from "./math-assets.js";

@@ -16,9 +16,6 @@ if Path(_package.__file__).resolve().parent != (_ROOT / "mathagent").resolve():
         "foreign mathagent module cached; load the submission in its own process"
     )
 
-from mathagent.entrypoint import ReasoningAgent as _LegacyReasoningAgent
-from mathagent.lite.runtime import LiteRuntime
-
 _ENGINES = {"lite", "legacy", "ts"}
 
 
@@ -47,11 +44,15 @@ class ReasoningAgent:
             self._impl = AgentRuntime(client, **kwargs)
             return
         if engine == "legacy":
+            from mathagent.entrypoint import ReasoningAgent as _LegacyReasoningAgent
+
             kwargs.setdefault("_entry_load_started", _LOAD_STARTED)
             self._impl = _LegacyReasoningAgent(client, *args, **kwargs)
             return
         if args:
             raise TypeError("lite engine accepts keyword arguments only")
+        from mathagent.lite.runtime import LiteRuntime
+
         allowed = {
             "policy",
             "load_started",

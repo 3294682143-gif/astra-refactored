@@ -153,7 +153,7 @@ function realReceipt(request: P3EffectRequest): P3EffectReceipt {
     cwd: REPO_ROOT,
     timeout: 5000,
     maxBuffer: 65536,
-    env: { PATH: process.env.PATH ?? "", PYTHONDONTWRITEBYTECODE: "1" },
+    env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
   });
   assert.equal(result.status, 0);
   const receipt = JSON.parse(result.stdout.toString("utf8")) as P3EffectReceipt;

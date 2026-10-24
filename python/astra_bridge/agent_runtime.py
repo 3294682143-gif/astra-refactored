@@ -712,7 +712,7 @@ class AgentRuntime:
         child_exit = None
         try:
             host.check_deadline()
-            common = {"protocolVersion": AGENT_HOST_VERSION, "sessionId": session_id}
+            common = {"protocolVersion": manifest["protocolVersion"], "sessionId": session_id}
             init = {
                 **common,
                 "profileId": _PROFILE_ID,

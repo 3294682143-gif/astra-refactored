@@ -76,6 +76,12 @@ export type P3Action =
       readonly scope: string;
     }
   | { readonly action: "method"; readonly id: string }
+  | {
+      readonly action: "math_asset";
+      readonly assetId: string;
+      readonly input: Readonly<Record<string, unknown>>;
+      readonly scope?: string;
+    }
   | P3ExploreAction
   | {
       readonly action: "final";
@@ -91,7 +97,7 @@ export type P3Action =
  * counted against the same tool-kind effect quota, so `maxEffects` and the
  * effect-id capacity math never widen.
  */
-export type P3EffectAction = Extract<P3Action, { action: "tool" | "method" | "explore" }>;
+export type P3EffectAction = Extract<P3Action, { action: "tool" | "method" | "explore" | "math_asset" }>;
 
 /** Trusted control-side identity of one effect. Never model-supplied. */
 export interface P3Binding {

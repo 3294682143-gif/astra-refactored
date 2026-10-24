@@ -107,6 +107,8 @@ export interface AgentCatalogPort {
   read(remainingMs: number): Promise<P2MethodCatalog>;
 }
 
+import type { MathAssetPort } from "./math-assets.js";
+
 /** The two injected ports of one AgentLoop run. */
 /** G7/PR7 Slice 7e: one scoped math-asset reference from the TS M2/M3/M5 side. */
 export interface AgentAssetRequest {
@@ -135,6 +137,7 @@ export interface AgentPorts {
   readonly effect: AgentEffectPort | null;
   readonly catalog?: AgentCatalogPort | null;
   readonly asset?: AgentAssetPort | null;
+  readonly mathAsset?: MathAssetPort | null;
 }
 
 /**
