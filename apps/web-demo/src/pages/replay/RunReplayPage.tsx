@@ -15,31 +15,53 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { PlaybackController, type PlaybackSpeed } from "@/domain/playback.ts";
-import { fetchReplay } from "@/api/client.ts";
+import {
+  fetchReplay,
+  fetchRun,
+  readTerminalFacts,
+  resolveTraceLevel,
+  type ApiResult,
+  type ReplayPayload,
+  type RunSummaryItem,
+  type TraceLevel,
+} from "@/api/client.ts";
+import { describeStopReason } from "@/domain/stopReasonView.ts";
 import { getEventKind, getEventPayload } from "@/domain/reduceRun.ts";
 
 export function RunReplayPage() {
   const { runId } = useParams();
-  const activeRunId = runId || "demo-session";
+  const activeRunId = runId ?? "";
 
   const controllerRef = useRef<PlaybackController | null>(null);
   const [, setTick] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [replay, setReplay] = useState<ApiResult<ReplayPayload> | null>(null);
+  const [runRecord, setRunRecord] = useState<ApiResult<RunSummaryItem> | null>(null);
 
   // 初始化 PlaybackController
   useEffect(() => {
-    const ctrl = new PlaybackController({ initialRunId: activeRunId, snapshotInterval: 10 });
+    const ctrl = new PlaybackController({
+      initialRunId: activeRunId || "unknown-run",
+      snapshotInterval: 10,
+    });
     controllerRef.current = ctrl;
+    setReplay(null);
+    setRunRecord(null);
 
     const unsubscribe = ctrl.subscribe(() => {
       setTick((t) => t + 1);
     });
 
-    fetchReplay(activeRunId).then((events) => {
-      ctrl.loadEvents(events, true);
-      setLoading(false);
-    });
+    if (activeRunId) {
+      fetchReplay(activeRunId).then((res) => {
+        setReplay(res);
+        ctrl.loadEvents(res.ok ? res.data.events : [], true);
+      });
+      fetchRun(activeRunId).then((res) => {
+        setRunRecord(res);
+      });
+    }
 
     return () => {
       ctrl.destroy();
@@ -49,6 +71,12 @@ export function RunReplayPage() {
 
   const ctrl = controllerRef.current;
   const state = ctrl ? ctrl.state : null;
+  const runMeta = runRecord && runRecord.ok ? runRecord.data : null;
+  const facts = readTerminalFacts(runMeta);
+  const notExecuted = facts.executed === false;
+  // 与 RunDetailPage 共用 resolveTraceLevel：优先后端权威 detail_level，取不到才回退 l2_path/l3_path。
+  const traceLevel: TraceLevel = runMeta ? resolveTraceLevel(runMeta) : "L2";
+  const stopInfo = describeStopReason(state?.stopReason);
   const currentEvent = ctrl && ctrl.currentIndex >= 0 && ctrl.currentIndex < ctrl.events.length
     ? ctrl.events[ctrl.currentIndex]
     : null;
@@ -58,10 +86,66 @@ export function RunReplayPage() {
     return JSON.stringify(getEventPayload(currentEvent), null, 2);
   }, [currentEvent]);
 
-  if (loading || !ctrl || !state) {
+  if (replay === null || !ctrl || !state) {
     return (
       <div style={{ padding: "40px", textAlign: "center", color: "var(--color-ink-soft)" }}>
         正在载入运行回放数据流与状态快照...
+      </div>
+    );
+  }
+
+  if (!replay.ok) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {runMeta ? (
+          <div
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #fde68a",
+              backgroundColor: "#fffbeb",
+              color: "#92400e",
+              padding: "12px 16px",
+              fontSize: "12px",
+              lineHeight: 1.8,
+            }}
+          >
+            该运行真实存在，但无 L2 回放存档。其真实终态：status <code>{facts.status ?? "未知"}</code> ·
+            stopReason <code>{facts.stopReason ?? "未知"}</code> · terminalKind <code>{facts.terminalKind ?? "未知"}</code> ·
+            executed <code>{facts.executed === null ? "未知" : String(facts.executed)}</code> · code <code>{facts.code ?? "未知"}</code> ·
+            final_response <code>{facts.finalResponse ?? "未提供"}</code>
+            {notExecuted ? "（官方契约的未执行占位文本，不是候选答案）" : ""} · 数据级别 <strong>{traceLevel}</strong>
+          </div>
+        ) : null}
+        <PanelEmptyState
+          variant="missing"
+          title={runId ? "回放存档不存在或不可读（真实错误态）" : "URL 缺少 run_id 参数"}
+          description={
+            runId
+              ? `${replay.error.message}（接口：${replay.error.url}）`
+              : "请从「求解运行历史」列表进入回放控制台。"
+          }
+          hint={`未回落演示数据；数据可观测级别记为 ${runMeta ? traceLevel : "UNKNOWN"}，不标注 L3。`}
+          action={
+            <Link
+              to="/runs"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                borderRadius: "8px",
+                border: "1px solid var(--color-brand)",
+                backgroundColor: "var(--color-brand-tint)",
+                color: "var(--color-brand-deep)",
+                padding: "8px 16px",
+                fontSize: "13px",
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              <span>返回运行历史</span>
+            </Link>
+          }
+        />
       </div>
     );
   }
@@ -94,7 +178,7 @@ export function RunReplayPage() {
           <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
             答辩回放控制台 · 确定性时间胶囊
           </h2>
-          <DataSourceBadge level="L3" size="sm" />
+          <DataSourceBadge level={traceLevel} size="sm" />
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -281,7 +365,7 @@ export function RunReplayPage() {
             <div style={{ backgroundColor: "var(--color-surface-muted)", borderRadius: "8px", padding: "14px", border: "1px solid var(--color-line)" }}>
               <div style={{ fontSize: "11px", color: "var(--color-ink-mute)", marginBottom: "4px" }}>当前暂定候选提案 (Candidate Proposal)</div>
               <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}>
-                {state.candidateProposal || "推导进行中，尚未沉淀有效候选..."}
+                {state.candidateProposal ?? (state.resultSeen ? "（无候选产物 / final_response 缺失）" : "未到达终态，尚无候选产物")}
               </div>
             </div>
 
@@ -298,7 +382,9 @@ export function RunReplayPage() {
                 lineHeight: 1.5,
               }}
             >
-              ● <strong>红线免责声明</strong>: <code>candidate_verified: false</code>。所有结论仅为模型自主推导产出的待审候选，绝非形式化数学证明完成或正确性保证。
+              ● <strong>红线免责声明</strong>: <code>candidate_verified: false</code>。所有结论仅为模型自主推导产出的待审候选，未经形式化确认，也不构成数学结论可靠性的保证。
+              <br />
+              真实终态: <code>{state.status}</code> · 终止原因: <code>{stopInfo.code}</code>（{stopInfo.title} / {stopInfo.categoryTitle}）· final_response: {state.resultSeen ? (state.finalResponseMissing ? "缺失（未伪造）" : "已收到") : "未到达终态"}
             </div>
           </div>
 

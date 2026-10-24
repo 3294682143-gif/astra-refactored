@@ -1,0 +1,134 @@
+{
+  "manifestVersion": "build-manifest-v1",
+  "profileId": "math-agent-preview-v2",
+  "engine": "ts",
+  "schemaVersion": "1.3-agent-loop-preview",
+  "source": {
+    "commit": "0a88eca2948e2853c5a6ed5218668259a03c285f",
+    "tree": "bce7dc47de9978cadedb3091e59cb81285682f0a"
+  },
+  "js": [
+    {
+      "path": "apps/stdio-runtime/dist/src/main.js",
+      "sha256": "506ad8eb38fb4c5b43b785be0f876d7ac357d133c2821958c2c0a757cb77d12b",
+      "bytes": 13125
+    },
+    {
+      "path": "apps/stdio-runtime/dist/src/agent-loop.js",
+      "sha256": "33c6fd4e32e5afafb42aee8e58980653aabcd895280b1d47d8334879714de441",
+      "bytes": 140274
+    },
+    {
+      "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
+      "sha256": "6a102f72a1da5dd325bd7dcc1f7a8c66a0ad3b8d1c2e55eb859c0cf802de4ecb",
+      "bytes": 23799
+    }
+  ],
+  "assets": {
+    "protocolSchema": {
+      "path": "packages/protocol/schema/agent-host-v13.schema.json",
+      "sha256": "b5f8a7cbf46a8680667d6d31917107c2357db4a4aaca5f611fc148faf129f46c"
+    },
+    "methodRegistry": {
+      "path": "mathagent/resources/tool-registry.json",
+      "sha256": "b4435be34e73bb01a77ee4816592f070452b37700ca86947631e44e9ac0d55ad"
+    },
+    "methodSkillMapping": {
+      "path": "mathagent/resources/skill-mapping-manifest.json",
+      "sha256": "5431345fc5bba5fdd4452d227920497be20f548b60287d0623d54f971576c299"
+    },
+    "mathFamiliesCatalog": {
+      "path": "math_families/catalog.json",
+      "sha256": "eb97e20d7e6421a10f3a3c66e42b24c9a65c283882134d3127111c0a0dde2874"
+    }
+  },
+  "bundle": {
+    "bundle": {
+      "path": "release/stdio-runtime.bundle.mjs",
+      "sha256": "f667d344665430ef92d214fd9c9047b736b9c01d71ef8dcf1a421ba7800326b6"
+    },
+    "bundleSchema": {
+      "path": "release/schema/agent-host-v13.schema.json",
+      "sha256": "b5f8a7cbf46a8680667d6d31917107c2357db4a4aaca5f611fc148faf129f46c"
+    }
+  },
+  "mathFamilyFiles": {
+    "math_families/README.md": "f844ff638fd0bfd68e4550b041e2481bb7d3b9e037095f433c7cef6c1a53de90",
+    "math_families/__init__.py": "ad595bb25250cc402c3580d1b1c715c38ab5db03564be44e1a535f92dd9c6d98",
+    "math_families/bridge/__init__.py": "b4607d526883e233bd019c0b7958c918331aa789fbd3df567c1d36cb8955e444",
+    "math_families/bridge/computation.py": "6f20940c7ebb606ad9f8b1568238f9f74b3c3de340013daedf07fd13ddff040b",
+    "math_families/bridge/descriptors.py": "c25b783d49dcb1b6eee313cbe34c6e45b03cbb4805944b62930b3efef2422c2e",
+    "math_families/bridge/dispatch.py": "86ac6f04e0c00b86975dca00836fe208a88d5ba3d6696f428014ad959a66bc64",
+    "math_families/bridge/evidence_bridge.py": "21b6c0cbddbb49fd83d6ee64f76201ad689b37c1ee94b80c9fa28ba3e449a987",
+    "math_families/bridge/exact_check.py": "b57c937bd48ab969c60bed478763f96bf690beac38e4738e30c59d7ff5cc37b1",
+    "math_families/bridge/exact_math.py": "6fc74a62a2e2a686b1748ed32bd5fefa8626995eace2daaab6421c011cbba7af",
+    "math_families/bridge/finite_enumeration.py": "223507c21350856b4fad7bb058a60b5c50addd70766f0a0d9f61829fc2e8e996",
+    "math_families/bridge/safe_expr.py": "35f1ba6551b679a3bbe562cd94a63fd1027d9f76aaae2945bd6368c75c7e7c4b",
+    "math_families/bridge/spec_adapters.py": "7f4bc017207c7f0948165ab1371826b0f4c2f5946288e4203da38c05e529544e",
+    "math_families/catalog.json": "eb97e20d7e6421a10f3a3c66e42b24c9a65c283882134d3127111c0a0dde2874",
+    "math_families/core/__init__.py": "bdb6ca12014f070c6f28c0b6a2a899b77aea999e27a992a5c032f6ebc74d7194",
+    "math_families/core/evidence.py": "ece37afe7b470a74144eabefbc90cf16568b0342aa30f1200f03f145e9c28948",
+    "math_families/core/feasibility.py": "65d2b6eb9867344f6fdc34d379a23fcb30c31ab82145493351dd40423c0c6807",
+    "math_families/core/guard.py": "3efd4d4ce09faae083950c10e0640ab9642ccb84967c23b76e3aace5e965a79f",
+    "math_families/families/__init__.py": "01e3d584637796a105b92713e19a658de208b571bded949165d168186cc7eeb3",
+    "math_families/families/algorithm_simulation.py": "326069185c992b3613d3028eb56ff443128977bc917faa289d18e5b3ff8f27ce",
+    "math_families/families/classical_geometry_compute.py": "c5ea60905cdfeba8cce6cf4f4fa6e6d2b2cb78538d052e4bfb9e208b5eed048b",
+    "math_families/families/combinatorial_geometry.py": "bbf86b8d037998f90c21fb20739170d302993561cdaeaab80539696ea2ab481d",
+    "math_families/families/concept_recall.py": "d4085c79e75df30a83d7a485066536cb4aac77f8367cdd849dc2841b836f556a",
+    "math_families/families/constrained_tiling.py": "0f3440c653ac158a339ca307f26512eb399f87e91caf98cbb80ceb7ca0e03746",
+    "math_families/families/digit_dp.py": "546179d896c2065d6ddfc219bd584f64daf14f89d3ff4ea630570f8d731e036b",
+    "math_families/families/diophantine.py": "d002b000b6a4e34a1ccc69135e65b377a90bd6b7257af8183152d3ba425d8d07",
+    "math_families/families/extremal_construction.py": "7c046ff612df677b2b55016949a91e3221dbed5b5504ab0334fea4b48ae40815",
+    "math_families/families/functional_equation.py": "c90db8d71ddef934c92369e8e0cc25ef88069269b55771bcc38e4c032ac2f2d6",
+    "math_families/families/game_strategy_proof.py": "9e97ec62019e29cb5f136f75cba6f1243cfc8ebe26831d398a62334f64098a91",
+    "math_families/families/graph_extremal.py": "9a8b8e882e2646c390c08e359018f7dccee54b87580f21dba15084965e97a96d",
+    "math_families/families/inclusion_exclusion_counting.py": "5987920a6cde1e5719862f995836a3b7270b9027eac1a8b53ffff1546ae832da",
+    "math_families/families/inequality_extremum.py": "b66f98e8d2a5e3cb47726a141f7cc977a5823d8bc6f3b9e283b59a8757a5fbe3",
+    "math_families/families/lattice_counting.py": "6fd64e4ecd3d49110e67ae4128b4419137012a8f18cc4b9e10ecc0dba8fddbd4",
+    "math_families/families/linear_algebra_game.py": "7d3649e393292b993d316aaacaa76319f02b14d2bc7ecf92e75b6504f3b83b4c",
+    "math_families/families/minimax_dp.py": "b25bdd8657eb06d9e91227dd71e8ddd97cb34de4f03313319ce20c27dd7b688d",
+    "math_families/families/number_theory_structure.py": "8b2b4abee3f79af4bd8876092795f6cc9064110dcb2fd42e2501954813b9400a",
+    "math_families/families/numerical_methods.py": "e7c8420e5b597524115e58aa67a9e0e0ed9cc5879cf579dd8b53aa216b082d44",
+    "math_families/families/probabilistic_model.py": "5f34c1059935cad3f169b5e1f126381bdd4d19d92f3cbeabc8ea2ecdd9d80edc",
+    "math_families/families/symbolic_algebra.py": "b1d9b994332c5af84e35ed385fb28320490de9cc981d530b1847ac8444de3727",
+    "math_families/families/symbolic_calculus.py": "7269ecbf2dbfddc6ac05601aafc9924ab4df6a48785898795d038d62d77bcc69",
+    "math_families/families/transfer_matrix.py": "6443652b5c28a7ce33e4340247046a94456fc18937596663633030ccb64cc6e9",
+    "math_families/skills/algorithm_simulation.md": "106b9ed06498ee110030f0542178e7f2eed61e702aaf41ba9d019b0130948180",
+    "math_families/skills/classical_geometry_compute.md": "bdeeee550be751a3dc494ac19dd8115a1309e25e2358b5305bdec2b0c3631420",
+    "math_families/skills/combinatorial_geometry.md": "e02b8e3fedb4a133dc4a443ca735cf326f9c7cfb9abbc7d79188681b2338f39d",
+    "math_families/skills/concept_recall.md": "29fbb270f10fd7c3b050af72da33224a981ece81f5269dc6726ca275e24cb7f9",
+    "math_families/skills/constrained_tiling.md": "bc1e3cef20b59c9c49e212ed456af64ff496bd285cc8c24480070cd68da7a7fc",
+    "math_families/skills/digit_dp.md": "0fcf4acfd22bcddf0637e71f064446959dfda685c06e5a2f025b1d8a31327dff",
+    "math_families/skills/diophantine.md": "03a5aa3f4ee9547bc19d5a95770825a7d91af0b06add4eec1d3026b33161a92f",
+    "math_families/skills/extremal_construction.md": "f84f1091fecc0f687685355d12071e465f762b0784e5a1b85068d8519895138a",
+    "math_families/skills/functional_equation.md": "6e8a3b78812d93c7da207c398b4b149ec1dd5d36f4dae97ad0c91904dea5ebdf",
+    "math_families/skills/game_strategy_proof.md": "f416628300bc2e170c51d1db70f7e3eebddda6b0cfd370a3d321e8334d998f56",
+    "math_families/skills/graph_extremal.md": "e1c70a86852f267e13eda2f39733f3f1d94be03ed79b6f8229f0cadd87ace58d",
+    "math_families/skills/inclusion_exclusion_counting.md": "9b23609561c79793e0f2a945df5164a4b8499d1550ea1f27263ae0c421566796",
+    "math_families/skills/inequality_extremum.md": "124578a1f230251f263a61ac2926c4fb18fe34f0b8c2d4017e7ad40aa01243ca",
+    "math_families/skills/lattice_counting.md": "7070886a008131df810bf0b0ae24c29bf72ca4c67b9983b3993f49f0e8579da5",
+    "math_families/skills/linear_algebra_game.md": "396747015bb368226fff31978428452dd559db5bf7cc0f9fb0a61211db211e22",
+    "math_families/skills/minimax_dp.md": "2c6aa37a610dc32e2c31d829591bffe66c7dfabc556773d7f453f1fe32638e3a",
+    "math_families/skills/number_theory_structure.md": "acb4b50d050bf4539ce5a07cac087ea91003b99b5d72d12f6aff2f1f756b19ba",
+    "math_families/skills/numerical_methods.md": "5c077cae129b22983e9211eb2edd12dd999cb140051a930342f0c1c3d5cece16",
+    "math_families/skills/probabilistic_model.md": "e22ed9344f81c9199c2437d2aa9173fa5c79e4c999b5230054c30942eb42ed9c",
+    "math_families/skills/symbolic_algebra.md": "53ed2c62017c9cade4ad59f1a915cb5cfc7755bba6517fed7f91cd10f7751cc1",
+    "math_families/skills/symbolic_calculus.md": "615a4ea563887371e689efd16da489b91166f08e1b7e6a71178db93b030d0e6d",
+    "math_families/skills/transfer_matrix.md": "876e74b2e4a449d0cb028794500c8ffd819d2342c9e8115ebaf3b974c396c0d1"
+  },
+  "lockedRunProfile": {
+    "profileId": "math-agent-preview-v2",
+    "engine": "ts",
+    "policy": "BEST_EFFORT",
+    "maxModelCalls": 4,
+    "maxWorkUnits": 2,
+    "maxEffects": 1,
+    "maxReviews": 1,
+    "maxMethodLoads": 1,
+    "maxRepairs": 1,
+    "maxR0": 1
+  },
+  "precompiled": true,
+  "requiresNpmInstall": false,
+  "requiresRuntimeTsc": false
+}

@@ -9,11 +9,23 @@ import {
   FileSearch,
   BarChart2,
   Code2,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, normalizeStatusKind, type StatusKind } from "@/components/StatusBadge";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
-import { fetchReplay } from "@/api/client.ts";
+import {
+  fetchReplay,
+  fetchRun,
+  readTerminalFacts,
+  resolveTraceLevel,
+  type ApiResult,
+  type ReplayPayload,
+  type RunSummaryItem,
+  type TraceLevel,
+} from "@/api/client.ts";
+import { describeStopReason } from "@/domain/stopReasonView.ts";
 import {
   createInitialRunViewState,
   reduceRunAll,
@@ -26,21 +38,60 @@ type TabKey = "contract" | "graph" | "timeline" | "tools" | "review" | "metrics"
 
 export function RunDetailPage() {
   const { runId } = useParams();
-  const activeRunId = runId || "demo-session";
+  const activeRunId = runId ?? "";
   const [activeTab, setActiveTab] = useState<TabKey>("contract");
   const [events, setEvents] = useState<RunEventEnvelope[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [replay, setReplay] = useState<ApiResult<ReplayPayload> | null>(null);
+  const [runRecord, setRunRecord] = useState<ApiResult<RunSummaryItem> | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    fetchReplay(activeRunId).then((evs) => {
-      setEvents(evs);
-      setLoading(false);
+    let alive = true;
+    setReplay(null);
+    setRunRecord(null);
+    if (!activeRunId) {
+      return () => {
+        alive = false;
+      };
+    }
+    fetchReplay(activeRunId).then((res) => {
+      if (!alive) return;
+      setReplay(res);
+      setEvents(res.ok ? res.data.events : []);
     });
-  }, [activeRunId]);
+    fetchRun(activeRunId).then((res) => {
+      if (alive) setRunRecord(res);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [activeRunId, reloadKey]);
 
   const state = useMemo(() => {
-    return reduceRunAll(createInitialRunViewState(activeRunId), events);
+    return reduceRunAll(createInitialRunViewState(activeRunId || "unknown-run"), events);
   }, [activeRunId, events]);
+
+  const runMeta = runRecord && runRecord.ok ? runRecord.data : null;
+
+  // 数据级别：优先后端权威 detail_level（取不到才回退 l2_path/l3_path），与 RunReplayPage 共用同一函数。
+  // 不能因「无 L2 回放」就把级别判成 UNKNOWN —— 运行存在时它有自身真实级别（通常 L1）。
+  const traceLevel: TraceLevel = runMeta
+    ? resolveTraceLevel(runMeta)
+    : replay?.ok
+      ? "L2"
+      : "UNKNOWN";
+  const replayAvailable = replay?.ok === true;
+
+  // 保真终态字段（来自 GET /api/runs/{id} 的 summary）；缺失保持 null，不推测。
+  const facts = readTerminalFacts(runMeta);
+  const notExecuted = facts.executed === false;
+
+  const recordedStop =
+    typeof runMeta?.summary?.["stopReason"] === "string"
+      ? (runMeta.summary["stopReason"] as string)
+      : null;
+  const stopInfo = describeStopReason(state.stopReason ?? recordedStop);
+  const displayStatus: StatusKind = runMeta ? normalizeStatusKind(runMeta.status) : state.status;
 
   const tabs: { key: TabKey; label: string; icon: typeof ShieldCheck }[] = [
     { key: "contract", label: "2.1 目标契约 (M1)", icon: ShieldCheck },
@@ -52,10 +103,64 @@ export function RunDetailPage() {
     { key: "raw", label: "2.7 原始数据", icon: Code2 },
   ];
 
-  if (loading) {
+  if (!activeRunId) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <PanelEmptyState
+          variant="missing"
+          title="URL 缺少 run_id 参数"
+          description="请从「求解运行历史」列表进入详情页。"
+          hint="未回落演示数据。"
+        />
+      </div>
+    );
+  }
+
+  if (runRecord === null || replay === null) {
     return (
       <div style={{ padding: "40px", textAlign: "center", color: "var(--color-ink-soft)" }}>
         正在载入运行详情与审计链条...
+      </div>
+    );
+  }
+
+  // 存在性判据是「运行记录是否存在」，而不是「回放是否存在」：
+  // 运行真实存在但没有 L2 存档时 /api/replays 返回 404，此时仍必须展示真实终态与级别。
+  if (!runMeta && !replay.ok) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <PanelEmptyState
+          variant="missing"
+          title={runId ? "运行记录不存在或详情存档不可读（真实错误态）" : "URL 缺少 run_id 参数"}
+          description={
+            runId
+              ? `${replay.error.message}（接口：${replay.error.url}）`
+              : "请从「求解运行历史」列表进入详情页。"
+          }
+          hint="未回落演示数据；缺失记录的数据级别记为 UNKNOWN，不标注 L3。"
+          action={
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                borderRadius: "8px",
+                border: "1px solid var(--color-brand)",
+                backgroundColor: "var(--color-brand-tint)",
+                color: "var(--color-brand-deep)",
+                padding: "8px 16px",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <RefreshCw size={14} />
+              <span>重新加载</span>
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -83,11 +188,11 @@ export function RunDetailPage() {
               <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-brand-deep)", fontFamily: "var(--font-mono)" }}>
                 {state.runId}
               </span>
-              <StatusBadge status={state.status} size="sm" />
-              <DataSourceBadge level="L3" size="sm" />
+              <StatusBadge status={displayStatus} size="sm" />
+              <DataSourceBadge level={traceLevel} size="sm" />
             </div>
             <div style={{ fontSize: "12px", color: "var(--color-ink-mute)" }}>
-              事件总数: <strong>{state.events.length}</strong> 帧 · 终止原因: <code>{state.stopReason || "RUNNING"}</code>
+事件总数: <strong>{state.events.length}</strong> 帧（存档 events：{replay.ok ? (replay.data.hasEventsField ? "存在" : "缺失，未伪造") : "回放存档不可用"}）· 终止原因: <code>{stopInfo.code}</code>（{stopInfo.title}）
             </div>
           </div>
         </div>
@@ -95,7 +200,7 @@ export function RunDetailPage() {
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div style={{ textAlign: "right", fontSize: "12px", color: "var(--color-ink-soft)", lineHeight: 1.5 }}>
             <div>工作单元: <strong>{taskList.length}</strong> 个 · 工具调用: <strong>{state.toolCalls.length}</strong> 次</div>
-            <div style={{ color: "#16a34a", fontSize: "11px" }}>● 形式化验证状态: candidate_verified = false (合规待审)</div>
+            <div style={{ color: "#16a34a", fontSize: "11px" }}>● 候选确认状态: candidate_verified = false（候选恒未经形式化确认，需人工复核）</div>
           </div>
 
           <Link
@@ -118,6 +223,55 @@ export function RunDetailPage() {
           </Link>
         </div>
       </div>
+
+      {!replayAvailable ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "8px",
+            borderRadius: "8px",
+            border: "1px solid #fde68a",
+            backgroundColor: "#fffbeb",
+            color: "#92400e",
+            padding: "12px 16px",
+            fontSize: "12px",
+            lineHeight: 1.7,
+          }}
+        >
+          <AlertTriangle size={16} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <span>
+            回放存档不可用（该运行没有 L2 存档）：{replay.ok ? "未知原因" : replay.error.message}。
+            运行记录本身存在，下方展示其真实终态与级别 <strong>{traceLevel}</strong>；
+            事件派生视图为空，不做任何推测，也不回落演示数据。
+          </span>
+        </div>
+      ) : null}
+
+      {notExecuted ? (
+        <div
+          style={{
+            borderRadius: "var(--radius-card)",
+            border: "1px solid #fecaca",
+            backgroundColor: "#fef2f2",
+            padding: "16px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+          }}
+        >
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#b91c1c" }}>
+            本运行未执行（executed = false）
+          </div>
+          <div style={{ fontSize: "12px", color: "#7f1d1d", lineHeight: 1.8 }}>
+            status: <code>{facts.status ?? "未知"}</code> · stopReason: <code>{facts.stopReason ?? "未知"}</code> ·
+            terminalKind: <code>{facts.terminalKind ?? "未知"}</code> · code: <code>{facts.code ?? "未知"}</code>
+            <br />
+            final_response: <code>{facts.finalResponse ?? "未提供"}</code>
+            （官方契约的未执行占位文本，不是候选答案）· 数据级别: <strong>{traceLevel}</strong>
+          </div>
+        </div>
+      ) : null}
 
       {/* 7 标签页切换栏 */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--color-line)", gap: "4px" }}>
@@ -165,14 +319,23 @@ export function RunDetailPage() {
               <div style={{ border: "1px solid var(--color-line)", borderRadius: "8px", padding: "16px", backgroundColor: "var(--color-surface-muted)" }}>
                 <div style={{ fontSize: "12px", color: "var(--color-ink-mute)", marginBottom: "4px" }}>候选提案 (Candidate Proposal)</div>
                 <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}>
-                  {state.candidateProposal || "推导中..."}
+                  {notExecuted
+                    ? "（未执行：无候选产物）"
+                    : state.candidateProposal ?? "（无候选产物 / final_response 缺失）"}
                 </div>
               </div>
               <div style={{ border: "1px solid var(--color-line)", borderRadius: "8px", padding: "16px", backgroundColor: "var(--color-surface-muted)" }}>
                 <div style={{ fontSize: "12px", color: "var(--color-ink-mute)", marginBottom: "4px" }}>安全红线免责声明</div>
                 <div style={{ fontSize: "13px", color: "#92400e", fontWeight: 500 }}>
-                  candidate_verified: false · 未经形式化数学内核证明，仅为候选
+                  candidate_verified: false · 未经形式化数学内核确认，仅为待审候选
                 </div>
+                {facts.finalResponse !== null || facts.executed !== null ? (
+                  <div style={{ fontSize: "12px", color: "var(--color-ink-soft)", marginTop: "6px", lineHeight: 1.7 }}>
+                    final_response: <code>{facts.finalResponse ?? "未提供"}</code> · executed:{" "}
+                    <code>{facts.executed === null ? "未知" : String(facts.executed)}</code>
+                    {notExecuted ? "（官方契约的未执行占位文本，不是候选答案）" : ""}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -211,7 +374,7 @@ export function RunDetailPage() {
                 M3 调度拓扑图（DAG 节点链）
               </h4>
               <span style={{ fontSize: "12px", color: "var(--color-ink-mute)" }}>
-                数据深度: L3 完整拓扑
+                数据深度: {traceLevel === "UNKNOWN" ? "未知（接口未确证，不冒充 L3）" : `${traceLevel}（由运行记录 l2_path / l3_path 确证）`}
               </span>
             </div>
             <div
@@ -241,8 +404,8 @@ export function RunDetailPage() {
                   </div>
                 ))}
                 <div style={{ padding: "12px 18px", borderRadius: "8px", border: "1px solid #bbf7d0", backgroundColor: "#f0fdf4", textAlign: "center" }}>
-                  <div style={{ fontSize: "11px", color: "#15803d", fontWeight: 600 }}>终态候选</div>
-                  <div style={{ fontSize: "13px", fontWeight: 500 }}>{state.candidateProposal || "候选生成"}</div>
+                  <div style={{ fontSize: "11px", color: "#15803d", fontWeight: 600 }}>终态产物（待审候选）</div>
+                  <div style={{ fontSize: "13px", fontWeight: 500 }}>{state.candidateProposal ?? "无候选产物"}</div>
                 </div>
               </div>
             </div>
@@ -315,8 +478,15 @@ export function RunDetailPage() {
                 CERT1 门控审计记录（模型结构化自检，非形式化数学认证）
               </div>
               <div style={{ fontSize: "12px", color: "#1e40af", lineHeight: 1.6 }}>
-                <div>终止状态码: <code>{state.stopReason || "REVIEWS_COMPLETE"}</code></div>
-                <div>门禁裁决: 允许作为候选交付，candidate_verified 严格保留为 false。</div>
+                <div>终止状态码: <code>{stopInfo.code}</code>（{stopInfo.title} / {stopInfo.categoryTitle}）</div>
+                <div>
+                  真实终态: <code>{facts.status ?? displayStatus}</code> · terminalKind: <code>{facts.terminalKind ?? "未知"}</code> · executed: <code>{facts.executed === null ? "未知" : String(facts.executed)}</code> · final_response: <code>{facts.finalResponse ?? (state.finalResponseMissing ? "缺失（未伪造）" : "未提供")}</code>
+                </div>
+                <div>
+                  {facts.status === "candidate" || state.status === "candidate"
+                    ? "终态为候选交付；candidate_verified 严格保留为 false，仍需人工复核。"
+                    : `非候选终态（${stopInfo.categoryTitle}），未产出可交付候选，页面不显示为 candidate。`}
+                </div>
               </div>
             </div>
           </div>
@@ -342,13 +512,20 @@ export function RunDetailPage() {
         {activeTab === "raw" && (
           <div>
             <div style={{ fontSize: "12px", color: "var(--color-ink-mute)", marginBottom: "8px" }}>
-              JSON Schema 校验状态: <span style={{ color: "#16a34a", fontWeight: 600 }}>VERIFIED_VALID (SolveResultDto)</span>
+              前端未执行 JSON Schema 校验：<span style={{ color: "#b45309", fontWeight: 600 }}>UNVERIFIED（校验状态未知）</span> —— 下方为接口原始载荷，未做任何改写。
             </div>
             <pre style={{ backgroundColor: "var(--color-surface-sunken)", padding: "16px", borderRadius: "8px", fontSize: "12px", fontFamily: "var(--font-mono)", overflowX: "auto" }}>
 {JSON.stringify({
   runId: state.runId,
-  status: state.status,
-  stopReason: state.stopReason,
+  recordedStatus: facts.status,
+  recordedStopReason: facts.stopReason,
+  terminalKind: facts.terminalKind,
+  finalResponse: facts.finalResponse,
+  executed: facts.executed,
+  code: facts.code,
+  detailLevel: traceLevel,
+  replayAvailable,
+  reducedStatus: state.status,
   candidateProposal: state.candidateProposal,
   candidate_verified: false,
   totalEvents: state.events.length,

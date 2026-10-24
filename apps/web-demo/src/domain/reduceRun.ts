@@ -3,7 +3,7 @@
  *
  * 红线约束（不可违背）：
  *   无论收到什么事件（包括 RESULT / FINAL / run.finished），
- *   state.candidateVerified 严格恒为 false，绝不展示“已验证 / 证明完成”。
+ *   state.candidateVerified 严格恒为 false，绝不声称形式化确认。
  *
  * 保证：
  *   1. 幂等：同 seq 同 payload 自动去重（返回同一 state 引用）。
@@ -13,9 +13,20 @@
  *   5. 未知事件：安全记入 unknownEvents 并标记 capabilityGaps 与 degraded: true。
  */
 
-import type { StatusCode, StopReason } from "@astra/web-contract";
+import type { StopReason } from "@astra/web-contract";
 
-export type RunStatus = "idle" | "running" | "candidate" | "unsolved" | "aborted" | "error" | "finished";
+export type RunStatus =
+  | "idle"
+  | "running"
+  | "candidate"
+  | "unsolved"
+  | "aborted"
+  | "error"
+  | "finished"
+  | "timeout"
+  | "failed"
+  | "cancelled"
+  | "unknown";
 
 export interface RunEventEnvelope<T = unknown> {
   readonly seq: number;
@@ -94,6 +105,11 @@ export interface RunViewState {
   readonly capabilityGaps: readonly string[];
   readonly resultSeen: boolean;
   readonly degraded: boolean;
+  /**
+   * FINAL / RESULT 已到达但未携带 final_response / answer 字段。
+   * 为 true 时界面必须显示「终态文本缺失」，禁止伪造结论文本。
+   */
+  readonly finalResponseMissing: boolean;
   readonly candidateProposal: string | null;
 
   /**
@@ -223,6 +239,97 @@ function pushGap(gaps: readonly string[], gap: string): string[] {
 // 初始状态生成
 // ---------------------------------------------------------------------------
 
+/**
+ * 由真实 stopReason 判定终态（红线：绝不把非交付类终止原因渲染为 candidate）。
+ *
+ *   candidate —— REVIEWS_COMPLETE / SOLVED（引擎交付候选，仍需人工复核）
+ *   unsolved  —— NO_CANDIDATE / REVISE_REJECTED / 预算与迭代上限
+ *   timeout   —— TIMEOUT / DEADLINE_EXCEEDED
+ *   cancelled —— CANCELLED
+ *   failed    —— SPAWN_FAILED / CHILD_FAILED（运行时启动或子进程失败）
+ *   error     —— TRANSPORT_STOP / ERROR / FIELD_VALUE
+ *   unknown   —— 未预注册终止码，或记录未携带 stopReason（不推测结论）
+ */
+export function classifyRunStatus(stopReason: string | null | undefined): RunStatus {
+  if (!stopReason || !stopReason.trim()) return "unknown";
+  switch (stopReason) {
+    case "REVIEWS_COMPLETE":
+    case "SOLVED":
+      return "candidate";
+    case "NO_CANDIDATE":
+    case "REVISE_REJECTED":
+    case "BUDGET_EXHAUSTED":
+    case "BUDGET_EXCEEDED":
+    case "MAX_ITER":
+      return "unsolved";
+    case "TIMEOUT":
+    case "DEADLINE_EXCEEDED":
+      return "timeout";
+    case "CANCELLED":
+      return "cancelled";
+    case "SPAWN_FAILED":
+    case "CHILD_FAILED":
+      return "failed";
+    case "TRANSPORT_STOP":
+    case "ERROR":
+    case "FIELD_VALUE":
+      return "error";
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * 由事件自身声明的终态 status 推导规范化终止码（真实 Astra FINAL 事件可能只带 status 不带 stopReason）。
+ * 该映射是 @astra/web-contract StatusCode → STOP_REASON_MAP 的固定对应，不引入事件未声明的结论。
+ */
+export function canonicalStopReasonForStatus(declaredStatus: string | undefined): StopReason | null {
+  switch (declaredStatus) {
+    case "candidate":
+      return "REVIEWS_COMPLETE";
+    case "unsolved":
+      return "NO_CANDIDATE";
+    case "aborted":
+      return "CANCELLED";
+    case "error":
+      return "ERROR";
+    case "solved":
+      return "SOLVED";
+    default:
+      return null;
+  }
+}
+
+/** 事件声明了终态 status 但未带 stopReason 时，直接采用其声明（solved 仍按待审候选呈现）。 */
+export function classifyDeclaredStatus(declaredStatus: string | undefined): RunStatus {
+  switch (declaredStatus) {
+    case "candidate":
+      return "candidate";
+    case "unsolved":
+      return "unsolved";
+    case "aborted":
+      return "aborted";
+    case "error":
+      return "error";
+    case "solved":
+      return "candidate";
+    default:
+      return "unknown";
+  }
+}
+
+/** 终态集合：已经定论的状态，不允许被 run.finished 冲淡。 */
+const TERMINAL_STATUSES: readonly RunStatus[] = [
+  "candidate",
+  "unsolved",
+  "aborted",
+  "error",
+  "timeout",
+  "failed",
+  "cancelled",
+  "unknown",
+];
+
 export function createInitialRunViewState(runId = "default-run"): RunViewState {
   return {
     runId,
@@ -242,6 +349,7 @@ export function createInitialRunViewState(runId = "default-run"): RunViewState {
     capabilityGaps: [],
     resultSeen: false,
     degraded: false,
+    finalResponseMissing: false,
     candidateProposal: null,
     candidateVerified: false, // 绝对恒为 false
   };
@@ -461,19 +569,35 @@ function applyKnownEvent(state: RunViewState, ev: RunEventEnvelope): RunViewStat
 
     case "FINAL":
     case "RESULT": {
-      // ★ 红线规则：收到 FINAL / RESULT 时，记录候选状态，但 candidateVerified 严格保持 false！
-      const stopReason = (str("stopReason") ?? "REVIEWS_COMPLETE") as StopReason;
-      const status: StatusCode = stopReason === "NO_CANDIDATE" || stopReason === "BUDGET_EXHAUSTED" ? "unsolved" : "candidate";
+      // ★ 红线规则：记录真实终态，但 candidateVerified 严格保持 false！
+      const declaredStop = str("stopReason");
+      const declaredStatus = str("status");
+      // 只使用事件自身声明的信息：优先 stopReason；否则由声明的终态 status 推导规范化终止码；
+      // 两者都缺失时保持 null + unknown，不默认填充 REVIEWS_COMPLETE（旧版默认值属于伪造终态）。
+      const stopReason = (declaredStop ??
+        canonicalStopReasonForStatus(declaredStatus)) as StopReason | null;
+      const status = declaredStop
+        ? classifyRunStatus(declaredStop)
+        : classifyDeclaredStatus(declaredStatus);
+      const finalResponse =
+        str("final_response") ?? str("finalResponse") ?? str("answer") ?? str("candidateProposal");
+      const finalResponseMissing = !(finalResponse && finalResponse.trim());
       return {
         ...state,
         status,
         stopReason,
         resultSeen: true,
         candidateVerified: false, // 严格保持 false
-        candidateProposal: str("answer") ?? str("candidateProposal") ?? state.candidateProposal,
+        finalResponseMissing,
+        candidateProposal: finalResponseMissing ? state.candidateProposal : (finalResponse as string),
         logs: [
           ...state.logs,
-          { seq: ev.seq, level: "info", message: `Run finished with stopReason=${stopReason} (candidate_verified=false)`, at: ev.at ?? ev.ts },
+          {
+            seq: ev.seq,
+            level: status === "candidate" ? "info" : "error",
+            message: `Run finished with stopReason=${stopReason ?? "MISSING"}${declaredStop ? "" : " (derived from declared status)"} -> status=${status}; final_response=${finalResponseMissing ? "MISSING (not fabricated)" : "present"}; candidate_verified=false`,
+            at: ev.at ?? ev.ts,
+          },
         ],
       };
     }
@@ -488,11 +612,11 @@ function applyKnownEvent(state: RunViewState, ev: RunEventEnvelope): RunViewStat
     }
 
     case "run.finished": {
-      return {
-        ...state,
-        status: state.status === "candidate" ? "candidate" : "finished",
-        candidateVerified: false,
-      };
+      // 已定论的终态不被冲淡：失败 / 超时 / 取消 / 错误绝不因 run.finished 而变成 finished。
+      if (state.resultSeen || TERMINAL_STATUSES.includes(state.status)) {
+        return { ...state, candidateVerified: false };
+      }
+      return { ...state, status: "finished", candidateVerified: false };
     }
 
     case "step.started": {

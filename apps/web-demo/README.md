@@ -170,8 +170,9 @@ apps/web-demo/
 - **实时推导流水线（SSE Stream）**：
   - 启动后与 BFF 端点 `/api/runs/{run_id}/events` 建立持久流；
   - 实时监听并响应 10 大核心事件：`SESSION_INIT`（会话初值）、`CONTRACT`（契约声明）、`TASK_STARTED`（工作单元分配）、`MODEL_REQUEST`（推理请求）、`METHOD_LOAD`（外脑加载）、`TOOL_OBSERVATION`（工具计算反馈）、`WORKUNIT`（子阶段产出）、`REVIEW_CHALLENGE`（批判性审查）、`FINAL`（推导收敛）、`RESULT`（终态输出）。
-- **离线模拟降级（Offline Simulation Fallback）**：
-  - 在完全脱机或未连接 Python BFF 环境下，自动切换至 11 步真实 Astra 会话回放流（`DEMO_SAMPLE_LOG`），确保任何现场网络异常下答辩流程 100% 顺畅。
+- **无静默降级（No Silent Fallback）**：
+  - 请求失败或运行记录不存在时，界面**只呈现真实错误态与真实降级级别**——不回落演示数据、不标 `L3`，失败必须可见；离线或未连接 BFF 时显示显式错误，不再自动切换到预置回放流；
+  - 终态由 SSE `close` 帧的终态载荷与 `GET /api/runs/{run_id}` 回读共同确定；`executed=false` 的运行渲染专门的「本运行未执行」卡片（含 `code`/`stopReason`/`final_response`），**绝不显示为候选答案**。
 - **终态结算卡片 (`ResultCard`)**：推导收敛后展示候选答案结论与终止原因代码（`StopReason`），并在显著位置标注合规免责声明。
 
 ---

@@ -46,7 +46,7 @@ describe("reduceRun 纯函数与核心契约", () => {
     assert.strictEqual(s2.stopReason, "REVIEWS_COMPLETE");
     assert.strictEqual(s2.candidateProposal, "x = 42");
     assert.strictEqual(s2.resultSeen, true);
-    // 红线铁律断言：绝不允许标为已验证！
+    // 红线铁律断言：绝不允许声称形式化确认！
     assert.strictEqual(s2.candidateVerified, false);
   });
 

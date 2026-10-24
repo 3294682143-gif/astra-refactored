@@ -1,6 +1,24 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertOctagon, CircleHelp, FlaskConical, History, PlayCircle, CheckCircle2, Clock } from "lucide-react";
+import {
+  AlertOctagon,
+  Ban,
+  CircleHelp,
+  FlaskConical,
+  History,
+  PlayCircle,
+  CheckCircle2,
+  Clock,
+  ShieldQuestion,
+  Timer,
+  Wrench,
+} from "lucide-react";
 
+/**
+ * 状态语义（红线）：
+ *   - candidate 恒标「候选 · 未经形式化验证」；
+ *   - timeout / failed / cancelled / error 与 candidate 在文案与配色上必须可区分；
+ *   - unknown 用于无法从接口确证的状态，绝不回落为 candidate。
+ */
 export type StatusKind =
   | "candidate"
   | "unsolved"
@@ -10,7 +28,11 @@ export type StatusKind =
   | "idle"
   | "finished"
   | "aborted"
-  | "solved";
+  | "solved"
+  | "timeout"
+  | "failed"
+  | "cancelled"
+  | "unknown";
 
 interface StatusConfig {
   readonly label: string;
@@ -23,7 +45,7 @@ interface StatusConfig {
 
 const REGISTRY: Record<StatusKind, StatusConfig> = {
   candidate: {
-    label: "候选答案",
+    label: "候选 · 未经形式化验证",
     icon: FlaskConical,
     bg: "var(--color-state-candidate-bg)",
     text: "var(--color-state-candidate)",
@@ -39,12 +61,44 @@ const REGISTRY: Record<StatusKind, StatusConfig> = {
     dot: "#475569",
   },
   error: {
-    label: "错误",
+    label: "运行错误",
     icon: AlertOctagon,
     bg: "var(--color-state-error-bg)",
     text: "var(--color-state-error)",
     border: "#fecaca",
     dot: "#b91c1c",
+  },
+  timeout: {
+    label: "超时终止",
+    icon: Timer,
+    bg: "#fff7ed",
+    text: "#c2410c",
+    border: "#fed7aa",
+    dot: "#ea580c",
+  },
+  failed: {
+    label: "运行时失败",
+    icon: Wrench,
+    bg: "#fef2f2",
+    text: "#b91c1c",
+    border: "#fca5a5",
+    dot: "#991b1b",
+  },
+  cancelled: {
+    label: "已取消",
+    icon: Ban,
+    bg: "#f8fafc",
+    text: "#475569",
+    border: "#cbd5e1",
+    dot: "#94a3b8",
+  },
+  unknown: {
+    label: "状态未知",
+    icon: ShieldQuestion,
+    bg: "var(--color-state-stale-bg)",
+    text: "var(--color-state-stale)",
+    border: "#d1d5db",
+    dot: "#9ca3af",
   },
   stale: {
     label: "已失效",
@@ -63,7 +117,7 @@ const REGISTRY: Record<StatusKind, StatusConfig> = {
     dot: "#2563eb",
   },
   idle: {
-    label: "就绪",
+    label: "待运行",
     icon: Clock,
     bg: "var(--color-surface-muted)",
     text: "var(--color-ink-soft)",
@@ -87,7 +141,7 @@ const REGISTRY: Record<StatusKind, StatusConfig> = {
     dot: "#dc2626",
   },
   solved: {
-    label: "形式化通过",
+    label: "引擎自报已解 · 未经形式化验证",
     icon: CheckCircle2,
     bg: "#f0fdf4",
     text: "#15803d",
@@ -95,6 +149,16 @@ const REGISTRY: Record<StatusKind, StatusConfig> = {
     dot: "#16a34a",
   },
 };
+
+/**
+ * 把接口返回的原始 status 字符串映射为受控状态。
+ * 未注册值一律落到 unknown —— 绝不回落为 candidate（旧版曾回落 candidate，属于伪造终态）。
+ */
+export function normalizeStatusKind(raw: unknown): StatusKind {
+  if (typeof raw !== "string") return "unknown";
+  const key = raw.trim().toLowerCase();
+  return (Object.prototype.hasOwnProperty.call(REGISTRY, key) ? key : "unknown") as StatusKind;
+}
 
 export interface StatusBadgeProps {
   status: StatusKind;
@@ -109,7 +173,7 @@ export function StatusBadge({
   size = "md",
   showDot = true,
 }: StatusBadgeProps) {
-  const cfg = REGISTRY[status] || REGISTRY.unsolved;
+  const cfg = REGISTRY[status] ?? REGISTRY.unknown;
   const text = label ?? cfg.label;
 
   return (

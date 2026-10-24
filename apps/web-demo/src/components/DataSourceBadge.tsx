@@ -1,7 +1,11 @@
-import { Database, History, ScanSearch } from "lucide-react";
+import { CircleHelp, Database, History, ScanSearch } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type DataSourceLevel = "L1" | "L2" | "L3";
+/**
+ * 数据可观测级别徽章。
+ * UNKNOWN 用于「接口未确证级别」的情形：绝不冒充 L2 / L3（记录缺失时不得标 L3）。
+ */
+export type DataSourceLevel = "L1" | "L2" | "L3" | "UNKNOWN";
 
 interface SourceConfig {
   readonly level: DataSourceLevel;
@@ -41,6 +45,15 @@ const REGISTRY: Record<DataSourceLevel, SourceConfig> = {
     text: "#3730a3",
     border: "#c7d2fe",
   },
+  UNKNOWN: {
+    level: "UNKNOWN",
+    name: "级别未确证",
+    caption: "当前请求失败或接口未返回存档路径，无法确证数据可观测级别（不冒充 L2 / L3）",
+    icon: CircleHelp,
+    bg: "var(--color-state-stale-bg)",
+    text: "var(--color-state-stale)",
+    border: "#d1d5db",
+  },
 };
 
 export interface DataSourceBadgeProps {
@@ -54,7 +67,7 @@ export function DataSourceBadge({
   withCaption = false,
   size = "md",
 }: DataSourceBadgeProps) {
-  const cfg = REGISTRY[level] || REGISTRY.L1;
+  const cfg = REGISTRY[level] ?? REGISTRY.UNKNOWN;
   const Icon = cfg.icon;
 
   return (
@@ -75,7 +88,7 @@ export function DataSourceBadge({
         }}
       >
         <Icon size={size === "sm" ? 12 : 14} />
-        <span>{cfg.level} · {cfg.name}</span>
+        <span>{cfg.level === "UNKNOWN" ? "未知级别" : `${cfg.level} · ${cfg.name}`}</span>
       </span>
       {withCaption ? (
         <span style={{ fontSize: "11px", color: "var(--color-ink-mute)" }}>{cfg.caption}</span>

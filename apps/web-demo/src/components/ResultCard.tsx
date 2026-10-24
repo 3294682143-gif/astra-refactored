@@ -30,7 +30,18 @@ export function ResultCard({
 }: ResultCardProps) {
   const showAnswer = status === "candidate" && Boolean(answer?.trim());
   const showUnsolved = status === "unsolved";
-  const showError = status === "error";
+  // 失败类终态各自独立文案，与 candidate / unsolved 在视觉与措辞上明确区分。
+  const failureLabel =
+    status === "timeout"
+      ? "超时终止"
+      : status === "failed"
+        ? "运行时失败"
+        : status === "cancelled"
+          ? "已取消"
+          : status === "error"
+            ? "运行异常"
+            : null;
+  const showFailure = failureLabel !== null;
 
   return (
     <article
@@ -108,7 +119,7 @@ export function ResultCard({
           </section>
         ) : null}
 
-        {showError ? (
+        {showFailure ? (
           <section
             style={{
               display: "flex",
@@ -122,10 +133,10 @@ export function ResultCard({
             <TriangleAlert size={16} color="var(--color-state-error)" style={{ marginTop: "2px", flexShrink: 0 }} />
             <div>
               <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-state-error)", marginBottom: "2px" }}>
-                运行异常
+                {failureLabel}
               </div>
               <div style={{ fontSize: "12px", fontFamily: "var(--font-mono)", color: "var(--color-state-error)" }}>
-                {errorMessage?.trim() || "未知系统异常"}
+                {errorMessage?.trim() || "未提供失败详情（接口未返回原因，前端不推测）"}
               </div>
             </div>
           </section>

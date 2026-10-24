@@ -132,7 +132,7 @@ export function AppLayout() {
               }}
             >
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--color-brand)" }} />
-              引擎: TS 统一循环 (默认)
+              引擎状态: 未探测（以后端 /api/capabilities 声明为准）
             </span>
           </div>
         </header>
