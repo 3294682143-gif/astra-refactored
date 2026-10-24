@@ -8,9 +8,11 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 import pytest
 
@@ -29,7 +31,9 @@ from python.astra_web.replays import (
 )
 from python.astra_web.app import (
     create_app,
+    create_run,
     health,
+    http_exception_handler,
     capabilities,
     list_runs,
     get_run,
@@ -335,3 +339,465 @@ def test_execution_manager_prepare_and_events(temp_store: Store):
     assert history[1]["seq"] == 2
 
 
+
+
+# ===========================================================================
+# t1 回归判据：后端保真与队列（去演示冒充 / 终态 / 幂等 / 串行）
+# ===========================================================================
+
+def test_no_real_solver_returns_explicit_not_executed_state(temp_store: Store):
+    """未接线真实求解入口时：显式未执行态，绝不伪造 official_result / 固定答案。"""
+    from python.astra_web.queue import ExecutionManager
+
+    manager = ExecutionManager(temp_store)  # 未接线真实求解链
+    assert manager.solver_configured is False
+
+    async def scenario():
+        r1 = await manager.enqueue_run(problem="证明质数有无穷多个", engine="ts")
+        r2 = await manager.enqueue_run(problem="求所有满足 x^2 = 4 的整数", engine="ts")
+        assert await manager.wait_idle(10.0)
+        return r1, r2
+
+    r1, r2 = asyncio.run(scenario())
+    assert r1["run_id"] != r2["run_id"]
+
+    for rid in (r1["run_id"], r2["run_id"]):
+        run = temp_store.get_run(rid)
+        assert run is not None
+        summary = run["summary"]
+
+        # 终态：system-failure（显式未执行），绝不显示为 candidate
+        assert run["status"] == "error"
+        assert summary["status"] == "error"
+        assert summary["candidate_verified"] is False
+        # final_response 不丢失，按官方契约给 Unsolved. 且带 stopReason
+        assert summary["final_response"] == "Unsolved."
+        assert summary["stopReason"] == "ERROR"
+        assert summary["terminalKind"] == "system_failure"
+        assert summary["executed"] is False
+        assert summary["code"] == "SOLVER_NOT_CONFIGURED"
+
+        # 不得生成任何伪造事件（尤其不得把演示数据标为 official_result）
+        assert manager.get_history_events(rid) == []
+
+    # 不得内置答案表：两个不同题目都不得吐出任何"固定答案"文本
+    blob = json.dumps([temp_store.get_run(r1["run_id"])["summary"],
+                       temp_store.get_run(r2["run_id"])["summary"]], ensure_ascii=False)
+    assert "official_result" not in blob
+
+
+def test_events_never_fabricated_official_result(temp_store: Store):
+    """真实求解链之外不得产生 sourceKind=official_result 的事件。"""
+    from python.astra_web.queue import ExecutionManager
+
+    manager = ExecutionManager(temp_store)
+
+    async def scenario():
+        r = await manager.enqueue_run(problem="任意题目", engine="ts", idempotency_key="no-fabrication")
+        assert await manager.wait_idle(10.0)
+        return r
+
+    r = asyncio.run(scenario())
+    history = manager.get_history_events(r["run_id"])
+    assert history == []
+    assert all(ev.get("sourceKind") != "official_result" for ev in history)
+
+    # L2 存档不得凭空存在（没有真实事件就没有详细存档）
+    assert temp_store.get_run(r["run_id"])["l2_path"] is None
+
+
+def test_terminal_kind_mapping_covers_four_buckets():
+    """math-unsolved / budget-timeout / system-failure / cancelled 四类必须可判别。"""
+    from python.astra_web.contracts.enums import StopReason, TerminalKind
+    from python.astra_web.contracts.mapping import classify_stop_reason, classify_terminal_kind
+
+    cases = {
+        StopReason.NO_CANDIDATE: (TerminalKind.MATH_UNSOLVED, "unsolved"),
+        StopReason.MAX_ITER: (TerminalKind.MATH_UNSOLVED, "unsolved"),
+        StopReason.TIMEOUT: (TerminalKind.BUDGET_TIMEOUT, "unsolved"),
+        StopReason.DEADLINE_EXCEEDED: (TerminalKind.BUDGET_TIMEOUT, "unsolved"),
+        StopReason.BUDGET_EXHAUSTED: (TerminalKind.BUDGET_TIMEOUT, "unsolved"),
+        StopReason.SPAWN_FAILED: (TerminalKind.SYSTEM_FAILURE, "error"),
+        StopReason.CHILD_FAILED: (TerminalKind.SYSTEM_FAILURE, "error"),
+        StopReason.ERROR: (TerminalKind.SYSTEM_FAILURE, "error"),
+        StopReason.CANCELLED: (TerminalKind.CANCELLED, "aborted"),
+    }
+    for reason, (kind, status) in cases.items():
+        assert classify_terminal_kind(reason) == kind, reason
+        assert classify_stop_reason(reason).value == status, reason
+        assert status != "candidate"
+
+    # 候选型 stopReason 不属于四类异常收口
+    assert classify_terminal_kind(StopReason.REVIEWS_COMPLETE) is None
+    assert classify_stop_reason(StopReason.REVIEWS_COMPLETE).value == "candidate"
+
+
+def test_terminal_records_preserve_final_response_and_never_candidate(temp_store: Store):
+    """真实终态（超时/启动失败/取消/未解）落库后与 candidate 可区分，且保留 final_response。"""
+    from python.astra_web.contracts.enums import StopReason
+    from python.astra_web.queue import ExecutionManager, SolveOutcome
+
+    cases = [
+        ("math", StopReason.NO_CANDIDATE, "unsolved", "math_unsolved"),
+        ("timeout", StopReason.DEADLINE_EXCEEDED, "unsolved", "budget_timeout"),
+        ("spawn", StopReason.SPAWN_FAILED, "error", "system_failure"),
+        ("cancel", StopReason.CANCELLED, "aborted", "cancelled"),
+    ]
+
+    for label, reason, expected_status, expected_kind in cases:
+        outcome = SolveOutcome(
+            stop_reason=reason,
+            final_response="Unsolved.",
+            reason=f"{label} terminal",
+            code=f"CODE_{label.upper()}",
+            executed=True,
+        )
+        manager = ExecutionManager(temp_store, solver=lambda request, o=outcome: o)
+
+        async def go(m=manager, l=label):
+            r = await m.enqueue_run(problem=f"题目-{l}", engine="ts", idempotency_key=f"terminal-{l}")
+            assert await m.wait_idle(10.0)
+            return r
+
+        r = asyncio.run(go())
+        run = temp_store.get_run(r["run_id"])
+        summary = run["summary"]
+
+        assert run["status"] == expected_status
+        assert run["status"] != "candidate"
+        assert summary["terminalKind"] == expected_kind
+        assert summary["final_response"] == "Unsolved."
+        assert summary["stopReason"] == reason.value
+        assert summary["candidate_verified"] is False
+
+
+def test_idempotent_key_starts_execution_once(temp_store: Store):
+    """同一幂等键只启动一次执行；重复提交返回同一 runId 与既有状态。"""
+    from python.astra_web.contracts.enums import StopReason
+    from python.astra_web.queue import ExecutionManager, SolveOutcome
+
+    calls = []
+
+    def solver(request):
+        calls.append(request["run_id"])
+        return SolveOutcome(stop_reason=StopReason.NO_CANDIDATE, final_response="Unsolved.", reason="no candidate")
+
+    manager = ExecutionManager(temp_store, solver=solver)
+
+    async def duplicate_while_running():
+        a = await manager.enqueue_run(problem="并发重复提交", engine="ts", idempotency_key="idem-concurrent")
+        b = await manager.enqueue_run(problem="并发重复提交", engine="ts", idempotency_key="idem-concurrent")
+        assert a["run_id"] == b["run_id"]
+        assert a["started"] is True
+        assert b["started"] is False and b["idempotent_replay"] is True
+        assert await manager.wait_idle(10.0)
+        return a, b
+
+    a, b = asyncio.run(duplicate_while_running())
+    assert calls == [a["run_id"]]  # 只启动了一次执行
+
+    async def duplicate_after_terminal():
+        first = await manager.enqueue_run(problem="同键重放", engine="ts", idempotency_key="idem-replay")
+        assert first["started"] is True
+        assert await manager.wait_idle(10.0)
+        second = await manager.enqueue_run(problem="同键重放", engine="ts", idempotency_key="idem-replay")
+        third = await manager.enqueue_run(problem="换了题面但同键", engine="ts", idempotency_key="idem-replay")
+        assert await manager.wait_idle(10.0)
+        return first, second, third
+
+    first, second, third = asyncio.run(duplicate_after_terminal())
+    assert first["run_id"] == second["run_id"] == third["run_id"]
+    assert second["idempotent_replay"] is True and second["started"] is False
+    assert third["started"] is False
+    assert second["status"] == "unsolved"   # 既有状态原样返回
+    assert second["terminal"] is True
+    assert calls == [a["run_id"], first["run_id"]]  # 仍只各启动一次
+    assert manager.stats()["started_total"] == 2
+
+
+def test_terminal_record_is_immutable(temp_store: Store):
+    """终态记录不可被覆盖：任何后续写入都必须保持原终态与原文。"""
+    from python.astra_web.contracts.enums import StopReason
+    from python.astra_web.queue import ExecutionManager, SolveOutcome
+
+    manager = ExecutionManager(
+        temp_store,
+        solver=lambda request: SolveOutcome(stop_reason=StopReason.NO_CANDIDATE, final_response="Unsolved.", reason="no candidate"),
+    )
+
+    async def go():
+        r = await manager.enqueue_run(problem="不可覆盖", engine="ts", idempotency_key="immutable-1")
+        assert await manager.wait_idle(10.0)
+        return r["run_id"]
+
+    run_id = asyncio.run(go())
+    before = temp_store.get_run(run_id)
+    assert before["status"] == "unsolved"
+
+    forged = {
+        "run_id": run_id,
+        "created_at": before["created_at"],
+        "source": "worker",
+        "status": "candidate",
+        "scenario": "forged",
+        "model": None,
+        "seed": None,
+        "duration_s": 0.0,
+        "summary_json": json.dumps({"status": "candidate", "final_response": "4", "candidate_verified": False}),
+        "l2_path": None,
+        "l3_path": None,
+        "tags": "",
+        "checksum": None,
+    }
+    assert temp_store.save_run_terminal(forged) is False
+
+    after = temp_store.get_run(run_id)
+    assert after["status"] == "unsolved"
+    assert after["summary"] == before["summary"]
+
+    # prepare_run 也不得改写既有终态
+    assert manager.prepare_run("另一个题目", run_id=run_id) == run_id
+    assert temp_store.get_run(run_id)["summary"] == before["summary"]
+
+    # 同键重复提交不重跑、不覆盖
+    async def again():
+        return await manager.enqueue_run(problem="不可覆盖", engine="ts", idempotency_key="immutable-1")
+
+    r2 = asyncio.run(again())
+    assert r2["idempotent_replay"] is True and r2["started"] is False
+    assert temp_store.get_run(run_id)["summary"] == before["summary"]
+
+
+def test_queue_enforces_single_concurrency_and_is_observable(temp_store: Store):
+    """并发上限强制 1：执行从不并行，且经 stats() 可观测。"""
+    import threading
+    from python.astra_web.contracts.enums import StopReason
+    from python.astra_web.queue import ExecutionManager, SolveOutcome
+
+    lock = threading.Lock()
+    state = {"inflight": 0, "max": 0, "order": []}
+
+    def solver(request):
+        with lock:
+            state["inflight"] += 1
+            state["max"] = max(state["max"], state["inflight"])
+            state["order"].append(request["run_id"])
+        time.sleep(0.05)
+        with lock:
+            state["inflight"] -= 1
+        return SolveOutcome(stop_reason=StopReason.NO_CANDIDATE, final_response="Unsolved.", reason="no candidate")
+
+    manager = ExecutionManager(temp_store, solver=solver)
+    assert manager.max_concurrent == 1
+    assert manager.stats()["max_concurrent_runs"] == 1
+
+    async def go():
+        rids = []
+        for i in range(3):
+            r = await manager.enqueue_run(problem=f"并发题-{i}", engine="ts", idempotency_key=f"conc-{i}")
+            rids.append(r["run_id"])
+        assert await manager.wait_idle(20.0)
+        return rids
+
+    rids = asyncio.run(go())
+    assert state["max"] == 1                                   # 求解链从未并行
+    assert state["order"] == rids                              # 串行且保持入队顺序
+    assert manager.stats()["max_observed_concurrency"] == 1
+    assert manager.stats()["running"] == 0 and manager.stats()["queued"] == 0
+    for rid in rids:
+        assert temp_store.get_run(rid)["status"] == "unsolved"
+
+
+def test_run_detail_level_comes_from_real_artifacts(temp_store: Store):
+    """详情级别由真实存档推导：L1 不得默认标 L3；缺记录显式 404。"""
+    app = create_app(data_root=temp_store.root, mount_static=False)
+
+    # 运行记录不存在 → 显式 404（不回落演示数据）
+    req = _make_dummy_request(app, path="/api/runs/nope", path_params={"run_id": "nope"})
+    with pytest.raises(HTTPException) as excinfo:
+        get_run(req)
+    assert excinfo.value.status_code == 404
+
+    # 仅 L1 摘要 → L1
+    import_json_bytes(temp_store, json.dumps({"run_id": "lvl-l1", "summary": {"status": "candidate"}}).encode("utf-8"))
+    req = _make_dummy_request(app, path="/api/runs/lvl-l1", path_params={"run_id": "lvl-l1"})
+    detail = json.loads(get_run(req).body.decode("utf-8"))
+    assert detail["detail_level"] == "L1"
+
+    # 有真实 L2 存档 → L2
+    import_json_bytes(temp_store, json.dumps({
+        "run_id": "lvl-l2", "summary": {"status": "candidate"}, "details": {"events": []},
+    }).encode("utf-8"))
+    req = _make_dummy_request(app, path="/api/runs/lvl-l2", path_params={"run_id": "lvl-l2"})
+    detail = json.loads(get_run(req).body.decode("utf-8"))
+    assert detail["detail_level"] == "L2"
+
+    # 有真实 L3 附件 → L3
+    import_json_bytes(temp_store, json.dumps({
+        "run_id": "lvl-l3", "summary": {"status": "candidate"},
+        "artifacts": [{"name": "proof.txt", "text": "QED"}],
+    }).encode("utf-8"))
+    req = _make_dummy_request(app, path="/api/runs/lvl-l3", path_params={"run_id": "lvl-l3"})
+    detail = json.loads(get_run(req).body.decode("utf-8"))
+    assert detail["detail_level"] == "L3"
+
+
+def test_capabilities_and_health_expose_queue_truth(temp_store: Store):
+    """能力/健康接口如实暴露队列与求解端口状态（不夸大能力）。"""
+    app = create_app(data_root=temp_store.root, mount_static=False)
+
+    cap = json.loads(capabilities(_make_dummy_request(app, path="/api/capabilities")).body.decode("utf-8"))
+    execution = cap["execution"]
+    assert execution["max_concurrent_runs"] == 1
+    assert execution["solver_configured"] is False
+    assert execution["fabricated_events"] is False
+    assert cap["cancellation_supported"] is False
+
+    hc = json.loads(health(_make_dummy_request(app, path="/api/health")).body.decode("utf-8"))
+    assert hc["status"] == "ok"
+    assert hc["model_invoked"] is False
+    assert hc["execution"]["max_concurrent_runs"] == 1
+
+
+def _make_json_request(app, path, payload, headers=()):
+    """构造带真实 receive 通道的 POST 请求（供 await request.json() 使用）。"""
+    raw = json.dumps(payload).encode("utf-8")
+    scope = {
+        "type": "http",
+        "app": app,
+        "method": "POST",
+        "path": path,
+        "query_string": b"",
+        "headers": [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers],
+        "path_params": {},
+    }
+    state = {"sent": False}
+
+    async def receive():
+        if state["sent"]:
+            return {"type": "http.disconnect"}
+        state["sent"] = True
+        return {"type": "http.request", "body": raw, "more_body": False}
+
+    return Request(scope, receive=receive)
+
+
+def test_create_run_response_is_idempotent_and_never_fabricates(temp_store: Store):
+    """POST /api/runs：首次 201；同幂等键重放 200 且返回同一 runId 与既有状态。"""
+    app = create_app(data_root=temp_store.root, mount_static=False)
+    manager = app.state.execution_manager
+    body = {"problem": "证明 sqrt(2) 是无理数", "engine": "ts"}
+    idem = (("Idempotency-Key", "create-idem-1"),)
+
+    async def submit_twice():
+        first = await create_run(_make_json_request(app, "/api/runs", body, idem))
+        assert await manager.wait_idle(10.0)
+        second = await create_run(_make_json_request(app, "/api/runs", body, idem))
+        return first, second
+
+    first, second = asyncio.run(submit_twice())
+    assert first.status_code == 201
+    assert second.status_code == 200
+    first_body = json.loads(first.body.decode("utf-8"))
+    second_body = json.loads(second.body.decode("utf-8"))
+    assert first_body["run_id"] == second_body["run_id"]
+    assert first_body["started"] is True
+    assert second_body["idempotent_replay"] is True and second_body["started"] is False
+    assert second_body["status"] == "error"      # 未接线求解入口 → 显式未执行态
+
+    # 库里是真话：没有候选答案、没有伪造事件
+    stored = temp_store.get_run(first_body["run_id"])
+    assert stored["status"] == "error"
+    assert stored["summary"]["final_response"] == "Unsolved."
+    assert stored["summary"]["executed"] is False
+    assert stored["summary"]["code"] == "SOLVER_NOT_CONFIGURED"
+    assert manager.get_history_events(first_body["run_id"]) == []
+    assert manager.stats()["started_total"] == 1
+
+def test_store_refuses_to_clobber_terminal_run_without_explicit_optin(temp_store: Store):
+    """存储层终态保护：overwrite=True 也不得静默改写终态行，需显式 opt-in。"""
+    record = {
+        "run_id": "immutable-store-1",
+        "created_at": 1700000000.0,
+        "source": "worker",
+        "status": "unsolved",
+        "scenario": "terminal",
+        "model": None,
+        "seed": None,
+        "duration_s": 1.0,
+        "summary_json": json.dumps({"status": "unsolved", "final_response": "Unsolved.", "stopReason": "NO_CANDIDATE"}),
+        "l2_path": None,
+        "l3_path": None,
+        "tags": "",
+        "checksum": None,
+    }
+    temp_store.save_run(record, overwrite=False)
+    assert temp_store.get_run("immutable-store-1")["status"] == "unsolved"
+
+    forged = dict(record)
+    forged["status"] = "candidate"
+    forged["summary_json"] = json.dumps({"status": "candidate", "final_response": "4"})
+
+    with pytest.raises(DuplicateRunError):
+        temp_store.save_run(forged, overwrite=True)
+    assert temp_store.get_run("immutable-store-1")["status"] == "unsolved"
+
+    # 显式 opt-in（离线重放导入的刻意覆盖）才允许替换
+    temp_store.save_run(forged, overwrite=True, allow_terminal_replace=True)
+    assert temp_store.get_run("immutable-store-1")["status"] == "candidate"
+
+def test_json_responses_declare_utf8_charset(temp_store: Store):
+    """回归护栏：JSON 响应必须显式声明 charset=utf-8。
+
+    端侧（如 PowerShell 5.1）在 Content-Type 无 charset 时会按系统 ANSI/GBK
+    解释响应体，中文即显示为 ``BFF æª...`` 乱码。本判据覆盖 /api/health、
+    /api/capabilities、/api/runs、/api/replays、/api/assets、运行详情与 404 错误体，
+    并断言含中文字段的响应在 UTF-8 解码后完整可读。
+    """
+    app = create_app(data_root=temp_store.root, mount_static=False)
+    manager = app.state.execution_manager
+
+    async def go():
+        r = await manager.enqueue_run(
+            problem="中文题目：证明 sqrt(2) 是无理数",
+            engine="ts",
+            idempotency_key="charset-regression-1",
+        )
+        assert await manager.wait_idle(10.0)
+        return r
+
+    run_id = asyncio.run(go())["run_id"]
+
+    responses = {
+        "health": health(_make_dummy_request(app, path="/api/health")),
+        "capabilities": capabilities(_make_dummy_request(app, path="/api/capabilities")),
+        "list_runs": list_runs(_make_dummy_request(app, path="/api/runs", query_params={"limit": 5})),
+        "list_replays": list_replays(_make_dummy_request(app, path="/api/replays")),
+        "list_assets": list_assets(_make_dummy_request(app, path="/api/assets")),
+        "get_run": get_run(_make_dummy_request(
+            app, path=f"/api/runs/{run_id}", path_params={"run_id": run_id})),
+    }
+    for name, resp in responses.items():
+        content_type = resp.headers.get("content-type", "")
+        assert "application/json" in content_type.lower(), (name, content_type)
+        assert "charset=utf-8" in content_type.lower(), (name, content_type)
+
+    # 含中文字段的响应：UTF-8 解码后中文完整可读（无替换字符 U+FFFD）
+    for name in ("get_run", "list_runs"):
+        body = json.loads(responses[name].body.decode("utf-8"))
+        obj = body if name == "get_run" else body["items"][0]
+        reason = obj["summary"]["reason"]
+        assert "未执行" in reason, (name, reason)
+        assert "\ufffd" not in reason, (name, reason)
+        assert any("\u4e00" <= ch <= "\u9fff" for ch in reason), (name, reason)
+
+    # 404 错误体同为 JSON：同样声明 charset，且状态码/响应体语义不变
+    req404 = _make_dummy_request(
+        app, path="/api/runs/absent-charset", path_params={"run_id": "absent-charset"})
+    with pytest.raises(HTTPException) as excinfo:
+        get_run(req404)
+    assert excinfo.value.status_code == 404
+    err = http_exception_handler(req404, excinfo.value)
+    assert err.status_code == 404
+    assert "charset=utf-8" in err.headers.get("content-type", "").lower()
+    assert json.loads(err.body.decode("utf-8")) == {"detail": "run not found"}

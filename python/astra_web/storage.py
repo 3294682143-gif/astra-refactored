@@ -42,6 +42,16 @@ class DuplicateRunError(StorageError):
     """run_id 已存在且未开启 overwrite。"""
 
 
+# 非终态状态：仍可能被推进为终态的状态集合。
+# 终态记录（不在此集合内）一律**不可覆盖**，见 Store.save_run_terminal。
+NON_TERMINAL_STATUSES = frozenset({"running", "queued"})
+
+
+def is_terminal_status(status: Any) -> bool:
+    """状态是否为终态（不可再被写入改写）。"""
+    return isinstance(status, str) and status not in NON_TERMINAL_STATUSES
+
+
 def is_valid_run_id(run_id: Any) -> bool:
     """run_id 白名单校验：非空、无 `..`、符合字符集。"""
     if not isinstance(run_id, str) or not run_id:
@@ -159,8 +169,14 @@ class Store:
         *,
         assets: Sequence[Mapping[str, Any]] = (),
         overwrite: bool = False,
+        allow_terminal_replace: bool = False,
     ) -> None:
-        """原子地写入 runs 行 + 关联 assets 行（单事务）。"""
+        """原子地写入 runs 行 + 关联 assets 行（单事务）。
+
+        终态保护：``overwrite=True`` 默认**仍拒绝**覆盖已存在的终态记录，
+        只有显式传入 ``allow_terminal_replace=True``（当前仅离线重放导入的
+        显式覆盖路径使用）才允许替换。这样“完成记录被覆盖”不可能由疏漏触发。
+        """
         run_id = record["run_id"]
         if not is_valid_run_id(run_id):
             raise DuplicateRunError(f"invalid run_id: {run_id!r}")
@@ -178,10 +194,14 @@ class Store:
             c.execute("BEGIN IMMEDIATE")
             try:
                 existing = c.execute(
-                    "SELECT 1 FROM runs WHERE run_id=?", (run_id,)
+                    "SELECT status FROM runs WHERE run_id=?", (run_id,)
                 ).fetchone()
                 if existing and not overwrite:
                     raise DuplicateRunError(f"run_id already exists: {run_id}")
+                if existing and is_terminal_status(existing["status"]) and not allow_terminal_replace:
+                    raise DuplicateRunError(
+                        f"terminal record is immutable (pass allow_terminal_replace=True to override): {run_id}"
+                    )
                 if existing:
                     c.execute("DELETE FROM assets WHERE run_id=?", (run_id,))
                     c.execute("DELETE FROM runs   WHERE run_id=?", (run_id,))
@@ -198,6 +218,47 @@ class Store:
                         ),
                     )
                 c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+
+    def save_run_terminal(self, record: Mapping[str, Any]) -> bool:
+        """原子写入终态记录；若既有记录已是终态则**拒绝覆盖**并返回 False。
+
+        与 ``save_run(overwrite=True)`` 的区别：
+        * 只更新 runs 行，不触碰该 run 的 assets 行；
+        * 已存在的终态记录不会被改写（t1-[4]：完成记录不可被覆盖）。
+        """
+        run_id = record["run_id"]
+        if not is_valid_run_id(run_id):
+            raise DuplicateRunError(f"invalid run_id: {run_id!r}")
+
+        cols = (
+            "run_id", "created_at", "source", "status", "scenario", "model",
+            "seed", "duration_s", "summary_json", "l2_path", "l3_path",
+            "tags", "checksum",
+        )
+        values = tuple(record.get(c) for c in cols)
+        update_cols = [c for c in cols if c != "run_id"]
+        set_sql = ",".join(f"{c}=?" for c in update_cols)
+        update_values = tuple(record.get(c) for c in update_cols)
+
+        with self._lock, self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                row = c.execute("SELECT status FROM runs WHERE run_id=?", (run_id,)).fetchone()
+                if row is not None and is_terminal_status(row["status"]):
+                    c.execute("ROLLBACK")
+                    return False
+                if row is None:
+                    c.execute(
+                        f"INSERT INTO runs({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
+                        values,
+                    )
+                else:
+                    c.execute(f"UPDATE runs SET {set_sql} WHERE run_id=?", (*update_values, run_id))
+                c.execute("COMMIT")
+                return True
             except Exception:
                 c.execute("ROLLBACK")
                 raise

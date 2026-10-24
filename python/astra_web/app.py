@@ -42,6 +42,18 @@ mimetypes.add_type("image/x-icon", ".ico")
 from .queue import ExecutionManager
 from .storage import PathTraversalError, Store
 
+class JSONResponseUTF8(JSONResponse):
+    """显式声明 ``charset=utf-8`` 的 JSON 响应。
+
+    为什么需要：``application/json`` 按 RFC 8259 本身就应以 UTF-8 编解码，但
+    Starlette 默认只发 ``content-type: application/json``（不带 charset），
+    部分端侧（例如 Windows PowerShell 5.1 的 Web 客户端）会按系统 ANSI/GBK
+    解释响应体，使中文显示成 ``BFF æª...`` 之类的乱码。显式声明 charset 即可
+    消除端侧歧义。响应体字节与状态码语义完全不变（json.dumps 仍按 UTF-8 编码）。
+    """
+    media_type = "application/json; charset=utf-8"
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SERVICE_NAME = "astra-web-bff"
 SERVICE_VERSION = "0.1.0"
@@ -53,27 +65,73 @@ def _env_path(var: str, default: str) -> Path:
     return Path(os.environ.get(var, default)).expanduser()
 
 
+def _terminal_payload(store: Store, run_id: str) -> dict[str, Any]:
+    """从真实运行记录里取出终态事实（供 SSE 关闭帧如实告知，不做任何编造）。"""
+    run = store.get_run(run_id)
+    if run is None:
+        return {}
+    summary = run.get("summary") or {}
+    return {
+        "status": run.get("status"),
+        "stopReason": summary.get("stopReason"),
+        "terminalKind": summary.get("terminalKind"),
+        "final_response": summary.get("final_response"),
+        "executed": summary.get("executed"),
+        "code": summary.get("code"),
+    }
+
+
+def _derive_detail_level(store: Store, run: dict[str, Any], assets: list[dict[str, Any]]) -> str:
+    """按**真实存在的存档文件**推导降级级别（L1/L2/L3）。
+
+    * L3 —— 该 run 有真实存在的附件文件；
+    * L2 —— 有真实存在的 L2 详细存档；
+    * L1 —— 只有索引里的摘要，不存在任何详细存档。
+
+    绝不默认标 L3：级别只由来源（真实文件）决定。
+    """
+    for row in assets:
+        try:
+            if store.safe_join(row["rel_path"]).is_file():
+                return "L3"
+        except (PathTraversalError, KeyError):
+            continue
+    l2_path = run.get("l2_path")
+    if l2_path:
+        try:
+            if store.safe_join(l2_path).is_file():
+                return "L2"
+        except PathTraversalError:
+            pass
+    return "L1"
+
+
 def health(request: Request) -> JSONResponse:
     """纯本地健康检查；不解析任何外部未授权模型、不触网、不做未授权 I/O。"""
     store: Store = request.app.state.store
-    return JSONResponse({
+    manager: ExecutionManager = request.app.state.execution_manager
+    return JSONResponseUTF8({
         "status": "ok",
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
         "model_invoked": False,
         "data_root": str(store.root),
+        "execution": manager.stats(),
     })
 
 
 def capabilities(request: Request) -> JSONResponse:
-    return JSONResponse({
+    manager: ExecutionManager = request.app.state.execution_manager
+    return JSONResponseUTF8({
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
         "read_only": False,
         "execution_queue": True,
         "sse_streaming": True,
+        "cancellation_supported": False,
         "model_invoked": False,
         "schema_version": 1,
+        "execution": manager.stats(),
         "routes": [
             "/api/health",
             "/api/capabilities",
@@ -103,7 +161,7 @@ def list_runs(request: Request) -> JSONResponse:
     items = store.list_runs(
         limit=limit, offset=offset, status=status, scenario=scenario,
     )
-    return JSONResponse({"items": items, "count": len(items), "limit": limit, "offset": offset})
+    return JSONResponseUTF8({"items": items, "count": len(items), "limit": limit, "offset": offset})
 
 
 async def create_run(request: Request) -> JSONResponse:
@@ -130,7 +188,7 @@ async def create_run(request: Request) -> JSONResponse:
     idempotency_key = request.headers.get("Idempotency-Key") or body.get("idempotency_key")
 
     manager: ExecutionManager = request.app.state.execution_manager
-    run_id = await manager.enqueue_run(
+    result = await manager.enqueue_run(
         problem=problem.strip(),
         max_model_calls=max_model_calls,
         max_method_loads=max_method_loads,
@@ -138,7 +196,10 @@ async def create_run(request: Request) -> JSONResponse:
         idempotency_key=idempotency_key,
     )
 
-    return JSONResponse({"run_id": run_id, "status": "running"}, status_code=201)
+    # 幂等重放：同一幂等键不会二次启动执行，返回同一 runId 与既有状态（200）；
+    # 首次受理返回 201。绝不因重试而重复派发。
+    status_code = 200 if result["idempotent_replay"] else 201
+    return JSONResponseUTF8(result, status_code=status_code)
 
 
 def get_run(request: Request) -> JSONResponse:
@@ -147,8 +208,10 @@ def get_run(request: Request) -> JSONResponse:
     run = store.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
-    run["assets"] = store.list_assets(run_id=run_id)
-    return JSONResponse(run)
+    assets = store.list_assets(run_id=run_id)
+    run["assets"] = assets
+    run["detail_level"] = _derive_detail_level(store, run, assets)
+    return JSONResponseUTF8(run)
 
 
 async def sse_events(request: Request) -> Response:
@@ -184,7 +247,9 @@ async def sse_events(request: Request) -> Response:
 
         # 2. 如果任务已不在活跃状态，发送结束包
         if not manager.is_active(run_id):
-            yield "event: close\ndata: {}\n\n"
+            # 运行已收口：关闭帧如实携带终态事实（不编造事件、不回落演示数据）
+            payload = json.dumps(_terminal_payload(store, run_id), ensure_ascii=False)
+            yield f"event: close\ndata: {payload}\n\n"
             return
 
         # 3. 实时订阅
@@ -201,7 +266,8 @@ async def sse_events(request: Request) -> Response:
                     continue
 
                 if ev.get("kind") == "close":
-                    yield "event: close\ndata: {}\n\n"
+                    payload = ev.get("payload") or _terminal_payload(store, run_id)
+                    yield f"event: close\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
                     break
 
                 seq = ev.get("seq", cursor + 1)
@@ -213,7 +279,8 @@ async def sse_events(request: Request) -> Response:
 
                 # 如果收到终态 RESULT 事件且 run 不再活跃，结束
                 if ev.get("kind") == "RESULT":
-                    yield "event: close\ndata: {}\n\n"
+                    payload = ev.get("payload") or _terminal_payload(store, run_id)
+                    yield f"event: close\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
                     break
         finally:
             manager.unsubscribe(run_id, queue)
@@ -234,7 +301,7 @@ def list_replays(request: Request) -> JSONResponse:
     limit = int(request.query_params.get("limit", 50))
     offset = int(request.query_params.get("offset", 0))
     items = store.list_runs(limit=limit, offset=offset, has_l2=True)
-    return JSONResponse({"items": items, "count": len(items), "limit": limit, "offset": offset})
+    return JSONResponseUTF8({"items": items, "count": len(items), "limit": limit, "offset": offset})
 
 
 def get_replay(request: Request) -> JSONResponse:
@@ -253,7 +320,7 @@ def get_replay(request: Request) -> JSONResponse:
         details = json.loads(payload_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="replay payload unreadable") from exc
-    return JSONResponse({
+    return JSONResponseUTF8({
         "run_id": run_id,
         "source": run["source"],
         "created_at": run["created_at"],
@@ -266,7 +333,7 @@ def list_assets(request: Request) -> JSONResponse:
     run_id = request.query_params.get("run_id")
     limit = int(request.query_params.get("limit", 100))
     items = store.list_assets(run_id=run_id, limit=limit)
-    return JSONResponse({"items": items, "count": len(items)})
+    return JSONResponseUTF8({"items": items, "count": len(items)})
 
 
 def download_asset(request: Request) -> Response:
@@ -324,7 +391,7 @@ class SPAStaticFiles(StaticFiles):
 
 
 def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    return JSONResponseUTF8({"detail": exc.detail}, status_code=exc.status_code)
 
 
 def create_app(

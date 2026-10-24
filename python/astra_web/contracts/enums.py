@@ -44,6 +44,26 @@ class StopReason(str, Enum):
     TRANSPORT_STOP = "TRANSPORT_STOP"
 
 
+class TerminalKind(str, Enum):
+    """终态大类（权威）。
+
+    由 ``StopReason`` 经 mapping.classify_terminal_kind 强制推导，用于把
+    异常/未解收口区分为四条可判别路径（每条都有对应 status）：
+
+    * MATH_UNSOLVED   —— 数学上未形成候选（status=unsolved）
+    * BUDGET_TIMEOUT  —— 预算/时限耗尽或通信超时（status=unsolved）
+    * SYSTEM_FAILURE  —— 启动失败/进程异常/内部错误（status=error）
+    * CANCELLED       —— 主动取消/断开（status=aborted）
+
+    候选型 stopReason（SOLVED / REVIEWS_COMPLETE / REVISE_REJECTED）不属于
+    上述四类，classify_terminal_kind 对它们返回 ``None``。
+    """
+    MATH_UNSOLVED = "math_unsolved"
+    BUDGET_TIMEOUT = "budget_timeout"
+    SYSTEM_FAILURE = "system_failure"
+    CANCELLED = "cancelled"
+
+
 class TraceStage(str, Enum):
     """单条 Trace 所处阶段."""
     PLAN = "plan"

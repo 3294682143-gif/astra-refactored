@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import Final, Mapping
 
-from .enums import StatusCode, StopReason
+from .enums import StatusCode, StopReason, TerminalKind
 
 STOP_REASON_TO_STATUS: Final[Mapping[StopReason, StatusCode]] = MappingProxyType(
     {
@@ -52,6 +52,46 @@ STOP_REASON_LABEL_ZH: Final[Mapping[StopReason, str]] = MappingProxyType(
     }
 )
 
+STOP_REASON_TO_TERMINAL: Final[Mapping[StopReason, TerminalKind]] = MappingProxyType(
+    {
+        # 数学上未形成候选
+        StopReason.NO_CANDIDATE: TerminalKind.MATH_UNSOLVED,
+        StopReason.MAX_ITER: TerminalKind.MATH_UNSOLVED,
+        # 预算 / 时限 / 通信超时
+        StopReason.TIMEOUT: TerminalKind.BUDGET_TIMEOUT,
+        StopReason.DEADLINE_EXCEEDED: TerminalKind.BUDGET_TIMEOUT,
+        StopReason.BUDGET_EXCEEDED: TerminalKind.BUDGET_TIMEOUT,
+        StopReason.BUDGET_EXHAUSTED: TerminalKind.BUDGET_TIMEOUT,
+        # 系统级失败（含启动失败/进程异常/内部错误/传输中断）
+        StopReason.ERROR: TerminalKind.SYSTEM_FAILURE,
+        StopReason.SPAWN_FAILED: TerminalKind.SYSTEM_FAILURE,
+        StopReason.CHILD_FAILED: TerminalKind.SYSTEM_FAILURE,
+        StopReason.FIELD_VALUE: TerminalKind.SYSTEM_FAILURE,
+        StopReason.TRANSPORT_STOP: TerminalKind.SYSTEM_FAILURE,
+        # 主动取消
+        StopReason.CANCELLED: TerminalKind.CANCELLED,
+    }
+)
+
+TERMINAL_KIND_LABEL_ZH: Final[Mapping[TerminalKind, str]] = MappingProxyType(
+    {
+        TerminalKind.MATH_UNSOLVED: "数学未解（未形成有效候选）",
+        TerminalKind.BUDGET_TIMEOUT: "预算/时限耗尽",
+        TerminalKind.SYSTEM_FAILURE: "系统级失败",
+        TerminalKind.CANCELLED: "已取消/断开",
+    }
+)
+
+
+def classify_terminal_kind(reason: StopReason) -> TerminalKind | None:
+    """由 stopReason 推导终态大类；候选型 stopReason 返回 None（不属四类异常收口）。"""
+    return STOP_REASON_TO_TERMINAL.get(reason)
+
+
+def terminal_kind_label_zh(kind: TerminalKind) -> str:
+    return TERMINAL_KIND_LABEL_ZH.get(kind, str(kind.value))
+
+
 _STATUS_REQUIRES_CANDIDATE: Final[frozenset[StatusCode]] = frozenset(
     {StatusCode.SOLVED, StatusCode.CANDIDATE, StatusCode.REVISE_REJECTED}
 )
@@ -88,6 +128,10 @@ def requires_error(status: StatusCode) -> bool:
 __all__ = [
     "STOP_REASON_TO_STATUS",
     "STOP_REASON_LABEL_ZH",
+    "STOP_REASON_TO_TERMINAL",
+    "TERMINAL_KIND_LABEL_ZH",
+    "classify_terminal_kind",
+    "terminal_kind_label_zh",
     "classify_stop_reason",
     "label_zh",
     "requires_candidate",

@@ -250,7 +250,13 @@ def _persist(store: Store, raw: Any, *, source: str, overwrite: bool) -> dict[st
     }
 
     try:
-        store.save_run(record, assets=asset_rows, overwrite=overwrite)
+        # 显式覆盖=离线重放导入的刻意动作：允许替换终态行（其余调用方不允许）
+        store.save_run(
+            record,
+            assets=asset_rows,
+            overwrite=overwrite,
+            allow_terminal_replace=overwrite,
+        )
     except DuplicateRunError as exc:
         raise ImportValidationError(str(exc)) from exc
 
