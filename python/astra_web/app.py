@@ -40,6 +40,18 @@ mimetypes.add_type("image/svg+xml", ".svg")
 mimetypes.add_type("image/x-icon", ".ico")
 
 from .queue import ExecutionManager
+from .solver_config import (
+    BALANCE_LEDGER_URL,
+    KEY_MANAGEMENT_URL,
+    SolverConfigError,
+    clear_config,
+    config_path,
+    endpoint_registry,
+    load_config,
+    public_view,
+    save_config,
+)
+from .solver_runtime import UsageLedger, build_solver, build_solver_from_path
 from .storage import PathTraversalError, Store
 
 class JSONResponseUTF8(JSONResponse):
@@ -390,6 +402,95 @@ class SPAStaticFiles(StaticFiles):
             raise
 
 
+def _solver_config_path(request: Request) -> Path:
+    return request.app.state.solver_config_path
+
+
+def _solver_usage(request: Request) -> UsageLedger:
+    return request.app.state.usage
+
+
+async def get_solver_config(request: Request) -> JSONResponse:
+    """Non-secret view of the model-access configuration (never a credential)."""
+    path = _solver_config_path(request)
+    manager: ExecutionManager = request.app.state.execution_manager
+    view = dict(public_view(load_config(path), path))
+    view.update(
+        {
+            "wired": manager.solver_configured,
+            "endpoints": endpoint_registry(),
+            "key_management_url": KEY_MANAGEMENT_URL,
+            "balance_ledger_url": BALANCE_LEDGER_URL,
+        }
+    )
+    return JSONResponseUTF8(view)
+
+
+async def put_solver_config(request: Request) -> JSONResponse:
+    """Accept a credential without ever returning it."""
+    path = _solver_config_path(request)
+    manager: ExecutionManager = request.app.state.execution_manager
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponseUTF8({"detail": "request body must be JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponseUTF8({"detail": "request body must be a JSON object"}, status_code=400)
+
+    endpoint = body.get("endpoint")
+    model = body.get("model")
+    credential = body.get("credential")
+    for name, value in (("endpoint", endpoint), ("model", model), ("credential", credential)):
+        if not isinstance(value, str) or not value.strip():
+            return JSONResponseUTF8({"detail": "%s is required" % name}, status_code=400)
+
+    try:
+        config = save_config(path, endpoint=endpoint, model=model, credential=credential)
+    except SolverConfigError as exc:
+        return JSONResponseUTF8({"detail": str(exc)}, status_code=400)
+
+    # Wire immediately. If it cannot be wired, roll the stored file back, so a
+    # saved configuration can never claim to be active when it is not.
+    try:
+        solver = build_solver(config, _solver_usage(request))
+    except ValueError as exc:
+        clear_config(path)
+        manager.set_solver(None)
+        return JSONResponseUTF8(
+            {"detail": "configuration rejected: %s" % exc}, status_code=400
+        )
+
+    manager.set_solver(solver)
+    view = dict(public_view(load_config(path), path))
+    view["wired"] = True
+    return JSONResponseUTF8(view, status_code=200)
+
+
+async def delete_solver_config(request: Request) -> JSONResponse:
+    path = _solver_config_path(request)
+    manager: ExecutionManager = request.app.state.execution_manager
+    removed = clear_config(path)
+    manager.set_solver(None)
+    view = dict(public_view(load_config(path), path))
+    view["wired"] = False
+    view["removed"] = removed
+    return JSONResponseUTF8(view)
+
+
+async def get_solver_usage(request: Request) -> JSONResponse:
+    """Observed usage only; the balance is linked out, never invented."""
+    return JSONResponseUTF8(
+        {
+            "usage": _solver_usage(request).snapshot(),
+            "balance": {
+                "available": False,
+                "reason": "未发现官方余额接口（该页面为登录态 SPA），请到平台账本页查看",
+                "ledger_url": BALANCE_LEDGER_URL,
+            },
+        }
+    )
+
+
 def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponseUTF8({"detail": exc.detail}, status_code=exc.status_code)
 
@@ -405,12 +506,21 @@ def create_app(
 
     store_root = Path(data_root) if data_root else _env_path("ASTRA_DATA_ROOT", str(default_data_root))
     store = Store(store_root)
-    execution_manager = ExecutionManager(store)
+
+    usage = UsageLedger()
+    solver_config_path = config_path(store_root)
+    execution_manager = ExecutionManager(
+        store, solver=build_solver_from_path(solver_config_path, usage)
+    )
 
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/api/health", health, methods=["GET"]),
         Route("/api/capabilities", capabilities, methods=["GET"]),
+        Route("/api/config/solver", get_solver_config, methods=["GET"]),
+        Route("/api/config/solver", put_solver_config, methods=["PUT"]),
+        Route("/api/config/solver", delete_solver_config, methods=["DELETE"]),
+        Route("/api/config/usage", get_solver_usage, methods=["GET"]),
         Route("/api/runs", list_runs, methods=["GET"]),
         Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),
@@ -437,6 +547,8 @@ def create_app(
     )
     app.state.store = store
     app.state.execution_manager = execution_manager
+    app.state.solver_config_path = solver_config_path
+    app.state.usage = usage
     app.state.data_root = store.root
     app.state.web_dist = dist_path if dist_path.is_dir() else None
 

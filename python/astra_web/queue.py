@@ -144,6 +144,16 @@ class ExecutionManager:
         self._started_total = 0
         self._completed_total = 0
 
+    def set_solver(self, solver: Optional[Callable[[Mapping[str, Any]], Any]]) -> None:
+        """Re-wire the real solver port.
+
+        ``None`` means "explicitly not wired" — which is exactly what
+        ``solver_configured`` reports. A saved-but-unusable configuration must
+        therefore also pass ``None`` rather than leave a callable behind that
+        cannot actually solve anything.
+        """
+        self._solver = solver
+
     # ------------------------------------------------------------- 可观测性
     @property
     def solver_configured(self) -> bool:
