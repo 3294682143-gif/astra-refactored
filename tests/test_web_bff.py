@@ -254,9 +254,20 @@ def test_bff_static_dist_mount(tmp_path: Path):
 
     app = create_app(data_root=tmp_path / "data", web_dist=dist_dir, mount_static=True)
     assert app.state.web_dist == dist_dir
-    # 验证路由表中已挂载静态资源
+    # 验证路由表中已挂载静态资源与 favicon
     route_names = [r.name for r in app.routes if hasattr(r, "name")]
     assert "web" in route_names
+
+    # 验证 favicon 接口
+    from python.astra_web.app import favicon
+    fav_req = _make_dummy_request(app, path="/favicon.ico")
+    fav_resp = favicon(fav_req)
+    assert fav_resp.status_code == 200
+
+    # 验证 MIME 类型已修复（Windows 注册表安全防御）
+    import mimetypes
+    assert mimetypes.guess_type("bundle.js")[0] == "application/javascript"
+    assert mimetypes.guess_type("module.mjs")[0] == "application/javascript"
 
 
 def test_validate_run_request():

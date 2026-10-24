@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
 from pathlib import Path
 from typing import Any
@@ -29,10 +30,19 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
+
+# 注册关键 MIME 类型，防御 Windows 注册表错误关联（如 .js 映射为 text/plain 导致浏览器严格 MIME 检查阻断 ES 模块）
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/x-icon", ".ico")
 
 from .queue import ExecutionManager
 from .storage import PathTraversalError, Store
 
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SERVICE_NAME = "astra-web-bff"
 SERVICE_VERSION = "0.1.0"
 
@@ -278,6 +288,41 @@ def download_asset(request: Request) -> Response:
     )
 
 
+def favicon(request: Request) -> Response:
+    """返回网站图标，优先寻找静态目录的 favicon.ico，缺省返回极简 SVG 图标。"""
+    web_dist: Path | None = request.app.state.web_dist
+    if web_dist:
+        ico = web_dist / "favicon.ico"
+        if ico.is_file():
+            return FileResponse(str(ico), media_type="image/x-icon")
+        svg_file = web_dist / "favicon.svg"
+        if svg_file.is_file():
+            return FileResponse(str(svg_file), media_type="image/svg+xml")
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        '<rect width="32" height="32" rx="8" fill="#0F265C"/>'
+        '<circle cx="16" cy="16" r="6" fill="#2E70EA"/>'
+        '<circle cx="16" cy="16" r="3" fill="#ffffff"/>'
+        '</svg>'
+    )
+    return Response(content=svg, media_type="image/svg+xml")
+
+
+class SPAStaticFiles(StaticFiles):
+    """单页应用 (SPA) 增强静态文件服务：
+    若请求的文件不存在且不以 'assets/' 开头，优雅回退到 'index.html'，
+    确保客户端路由（如 /solve、/runs/:id 等）直接访问或刷新时不报 404。
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exc:
+            if exc.status_code == 404 and not path.startswith("assets/"):
+                return await super().get_response("index.html", scope)
+            raise
+
+
 def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
@@ -288,10 +333,15 @@ def create_app(
     web_dist: str | os.PathLike[str] | None = None,
     mount_static: bool = True,
 ) -> Starlette:
-    store = Store(data_root or _env_path("ASTRA_DATA_ROOT", "./var/astra"))
+    default_data_root = REPO_ROOT / "var" / "astra"
+    default_web_dist = REPO_ROOT / "apps" / "web-demo" / "dist"
+
+    store_root = Path(data_root) if data_root else _env_path("ASTRA_DATA_ROOT", str(default_data_root))
+    store = Store(store_root)
     execution_manager = ExecutionManager(store)
 
     routes = [
+        Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/api/health", health, methods=["GET"]),
         Route("/api/capabilities", capabilities, methods=["GET"]),
         Route("/api/runs", list_runs, methods=["GET"]),
@@ -304,12 +354,12 @@ def create_app(
         Route("/api/assets/{asset_id:path}", download_asset, methods=["GET"]),
     ]
 
-    dist_path = Path(web_dist) if web_dist else _env_path("ASTRA_WEB_DIST", "apps/web-demo/dist")
+    dist_path = Path(web_dist) if web_dist else _env_path("ASTRA_WEB_DIST", str(default_web_dist))
     dist_path = dist_path.expanduser()
 
     if mount_static and dist_path.is_dir():
-        routes.append(Mount("/", StaticFiles(directory=str(dist_path), html=True), name="web"))
-        logger.info("mounted static assets from %s", dist_path)
+        routes.append(Mount("/", SPAStaticFiles(directory=str(dist_path), html=True), name="web"))
+        logger.info("mounted static assets with SPA fallback from %s", dist_path)
     else:
         logger.info("static assets not mounted (dist dir: %s)", dist_path)
 
