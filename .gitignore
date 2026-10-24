@@ -26,3 +26,5 @@ scripts/dispatch_d*.py
 # on demand (git archive), never committed — it duplicates every tracked path.
 tests/web_review/baseline/
 tests/web_review/baseline_*.zip
+# Local demo server logs
+.uvicorn-*.log*

@@ -93,7 +93,13 @@ PATTERN_SPECS = [
         re.compile(
             r"(?i)\b(?:api[_-]?key|apikey|access[_-]?key[_-]?id|secret[_-]?key"
             r"|client[_-]?secret|auth[_-]?token|access[_-]?token|password|passwd)\b"
-            r"\s*[:=]\s*(?P<q>['\"]?)(?P<val>[A-Za-z0-9_/+.\-]{16,})(?P=q)"
+            # A dotted reference such as `api_key=config.credential` is a variable
+            # path, never a secret literal, so it is excluded explicitly. Unquoted
+            # single-token values are still reported, because .env-style leaks are
+            # exactly that shape.
+            r"\s*[:=]\s*(?P<q>['\"]?)"
+            r"(?!(?:[A-Za-z_][A-Za-z0-9_]*\.)+[A-Za-z_][A-Za-z0-9_]*\b)"
+            r"(?P<val>[A-Za-z0-9_/+.\-]{16,})(?P=q)"
         ),
         "val",
     ),
