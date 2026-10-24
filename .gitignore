@@ -19,3 +19,4 @@ mathagent/resources/platform-python.json
 *.sqlite3-*
 var/*
 !var/**/.gitkeep
+scripts/dispatch_d*.py
