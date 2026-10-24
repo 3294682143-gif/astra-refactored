@@ -41,6 +41,8 @@ export type AnswerClosureKind =
   | "GF2_RANK_MISMATCH"
   | "GF2_NULLITY_MISMATCH"
   | "EXACT_COUNT_MISMATCH"
+  | "EXACT_VALUE_MISMATCH"
+  | "LINEAR_SYSTEM_STATUS_MISMATCH"
   | "COVER_TIME_MISMATCH"
   | "IDENTITY_VERDICT_MISMATCH";
 
@@ -78,6 +80,21 @@ export interface ExactObservationView {
   readonly nonnegative_samples?: unknown;
   readonly normalized_minors?: unknown;
   readonly complete_for_input?: unknown;
+  readonly exact?: unknown;
+  readonly numeric?: unknown;
+  readonly limit?: unknown;
+  readonly simplified?: unknown;
+  readonly trig_reduced?: unknown;
+  readonly value?: unknown;
+  readonly result?: unknown;
+  readonly kind?: unknown;
+  readonly status?: unknown;
+  readonly rank?: unknown;
+  readonly nullity?: unknown;
+  readonly particular?: unknown;
+  readonly solution?: unknown;
+  readonly basis?: unknown;
+  readonly free_variables?: unknown;
 }
 
 /**
@@ -281,6 +298,64 @@ function sameUpToConstantFactor(left: Poly, right: Poly): boolean {
   return true;
 }
 
+/**
+ * Coefficients of a single-variable polynomial keyed by exponent. A key that
+ * names a second variable is not a univariate object and yields null; this is
+ * what keeps a Laurent comparison from silently dropping a variable.
+ */
+function univariateCoefficients(poly: Poly, variable: string): Map<number, number> | null {
+  const out = new Map<number, number>();
+  for (const [monomial, coefficient] of poly) {
+    let exponent = 0;
+    if (monomial !== "") {
+      for (const part of monomial.split("*")) {
+        if (part === "") continue;
+        const [name, raw] = part.split("^");
+        if (name !== variable) return null;
+        const power = raw === undefined ? 1 : Number(raw);
+        if (!Number.isSafeInteger(power) || power < 0) return null;
+        exponent += power;
+      }
+    }
+    if (coefficient !== 0) {
+      out.set(exponent, (out.get(exponent) ?? 0) + coefficient);
+    }
+  }
+  return out;
+}
+
+/**
+ * True when two univariate polynomials agree up to a nonzero constant factor
+ * and one Laurent monomial shift. The shift is exactly the `±t^k` unit freedom
+ * of an Alexander polynomial; it is never used for an ordinary polynomial
+ * diagnostic unless both sides are written in the same variable.
+ */
+function sameLaurentUpToUnit(left: Poly, right: Poly, variable: string): boolean {
+  const a = univariateCoefficients(left, variable);
+  const b = univariateCoefficients(right, variable);
+  if (a === null || b === null || a.size === 0 || b.size !== a.size) return false;
+  const aKeys = [...a.keys()].sort((x, y) => x - y);
+  const bKeys = [...b.keys()].sort((x, y) => x - y);
+  const aMin = aKeys[0]!;
+  const bMin = bKeys[0]!;
+  const pivot = aKeys[0]!;
+  const aValue = a.get(pivot)!;
+  const bValue = b.get(pivot - aMin + bMin);
+  if (bValue === undefined || Math.abs(aValue) < 1e-12 || Math.abs(bValue) < 1e-12) {
+    return false;
+  }
+  const factor = bValue / aValue;
+  for (const exponent of aKeys) {
+    const other = b.get(exponent - aMin + bMin);
+    const value = a.get(exponent)!;
+    if (other === undefined) return false;
+    if (Math.abs(other - value * factor) > 1e-9 * Math.max(1, Math.abs(other))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** One `{polynomial}` object or a plain string entry of `normalized_minors`. */
 function minorPolynomialText(minor: unknown): string | null {
   if (typeof minor === "string") return minor;
@@ -371,16 +446,48 @@ function degreeConservationDefect(
   const answerPoly = candidatePolynomial(candidate, observed.variable);
   if (answerPoly === null) return null;
   const answerDegree = degreeIn(answerPoly, observed.variable);
-  if (answerDegree === observedDegree) return null;
+  // A Laurent unit shift (t^k) changes the ordinary degree but not the
+  // invariant. Check that equivalence before treating a degree difference as
+  // the lower-degree-factor failure.
+  if (sameLaurentUpToUnit(answerPoly, observedPoly, observed.variable)) {
+    return null;
+  }
+  // A different degree is the original lower-degree-factor case. The detail
+  // must carry the exact polynomial the tool computed so the closure turn can
+  // copy it instead of inventing a same-degree substitute.
+  if (answerDegree !== observedDegree) {
+    return defect(
+      "DEGREE_CONSERVATION",
+      "exact maximal-minor polynomial has degree " +
+        observedDegree +
+        " in " +
+        observed.variable +
+        " (specifically " +
+        observed.polynomial +
+        "), but the candidate polynomial has degree " +
+        answerDegree +
+        "; use the exact full invariant " +
+        observed.polynomial +
+        " (up to ±" +
+        observed.variable +
+        "^k unit normalization) instead of a lower-degree factor",
+      "OBSERVATION",
+    );
+  }
+  // Equal ordinary degree is not equality. The unit-equivalence check above
+  // already rejected a Laurent-shifted match, so this is a genuine coefficient
+  // mismatch.
   return defect(
     "DEGREE_CONSERVATION",
-    "exact maximal-minor polynomial has degree " +
-      observedDegree +
+    "candidate polynomial has degree " +
+      answerDegree +
       " in " +
       observed.variable +
-      ", but the candidate polynomial has degree " +
-      answerDegree +
-      "; a lower-degree factor cannot replace the full invariant",
+      " but its coefficients do not match the exact maximal-minor polynomial " +
+      observed.polynomial +
+      " (even up to ±" +
+      observed.variable +
+      "^k unit normalization)",
     "OBSERVATION",
   );
 }
@@ -522,7 +629,6 @@ function realRootCountDefect(
   candidate: string,
   observations: readonly ToolObservationView[] | null | undefined,
 ): AnswerClosureDefect | null {
-  if (semanticToolRoute(problemText)?.id !== "REAL_ROOT_COUNT") return null;
   const observation = lastObservation(observations, "real_root_count_expr");
   if (observation === null) return null;
   const observed = observationInteger(observation.result);
@@ -543,7 +649,14 @@ function splittingFieldDegreeDefect(
   candidate: string,
   observations: readonly ToolObservationView[] | null | undefined,
 ): AnswerClosureDefect | null {
-  if (semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE") return null;
+  if (
+    semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE" &&
+    !/(?:分裂域|splitting\s+field|galois|\[\s*[A-Za-z][^\]]{0,8}\s*:\s*(?:\\mathbb\{Q\}|Q)\s*\])/iu.test(
+      problemText,
+    )
+  ) {
+    return null;
+  }
   const observation = lastObservation(observations, "splitting_field_degree_expr");
   if (observation === null) return null;
   const observed = observationInteger(observation.result);
@@ -698,7 +811,6 @@ function interpolationResidualDefect(
   candidate: string,
   observations: readonly ToolObservationView[] | null | undefined,
 ): AnswerClosureDefect | null {
-  if (semanticToolRoute(problemText)?.id !== "INTERPOLATION_FIT") return null;
   const observation = lastObservation(observations, "interpolation_fit_check");
   if (observation === null) return null;
   const observed = interpolationObservation(observation.result);
@@ -806,12 +918,57 @@ function olsMismatchDefect(
 }
 
 /** `finite-group-structure-v1` payload, validated field by field. */
+interface SubgroupOrderSummaryView {
+  readonly order: number;
+  readonly count: number;
+  readonly normalCount: number;
+  readonly allAbelian: boolean;
+  readonly allCyclic: boolean;
+  readonly hasCyclic: boolean;
+}
+
 interface GroupObservationView {
   readonly order: number;
   readonly conjugacyClassCount: number;
   /** Only a real boolean is a usable verdict; anything else is `null`. */
   readonly isAbelian: boolean | null;
   readonly isCyclic: boolean | null;
+  readonly centerSize: number | null;
+  readonly derivedSize: number | null;
+  readonly subgroupSummary: readonly SubgroupOrderSummaryView[] | null;
+}
+
+function subgroupSummaryView(value: unknown): readonly SubgroupOrderSummaryView[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length > 64) return null;
+  const rows: SubgroupOrderSummaryView[] = [];
+  for (const item of value) {
+    const row = recordValue(item);
+    if (row === null) return null;
+    const order = row["order"];
+    const count = row["count"];
+    const normalCount = row["normal_count"];
+    if (
+      typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 ||
+      typeof count !== "number" || !Number.isSafeInteger(count) || count < 0 ||
+      typeof normalCount !== "number" || !Number.isSafeInteger(normalCount) ||
+      normalCount < 0 || normalCount > count ||
+      typeof row["all_abelian"] !== "boolean" ||
+      typeof row["all_cyclic"] !== "boolean" ||
+      typeof row["has_cyclic"] !== "boolean"
+    ) {
+      return null;
+    }
+    rows.push({
+      order,
+      count,
+      normalCount,
+      allAbelian: row["all_abelian"],
+      allCyclic: row["all_cyclic"],
+      hasCyclic: row["has_cyclic"],
+    });
+  }
+  return rows;
 }
 
 function groupObservation(result: unknown): GroupObservationView | null {
@@ -834,11 +991,16 @@ function groupObservation(result: unknown): GroupObservationView | null {
       return null;
     }
   }
+  const centerSize = observationInteger(record["center_size"]);
+  const derivedSize = observationInteger(record["derived_size"]);
   return {
     order,
     conjugacyClassCount: classes.length,
     isAbelian: typeof record["is_abelian"] === "boolean" ? record["is_abelian"] : null,
     isCyclic: typeof record["is_cyclic"] === "boolean" ? record["is_cyclic"] : null,
+    centerSize: centerSize !== null && centerSize >= 1 ? centerSize : null,
+    derivedSize: derivedSize !== null && derivedSize >= 1 ? derivedSize : null,
+    subgroupSummary: subgroupSummaryView(record["subgroup_summary"]),
   };
 }
 
@@ -948,9 +1110,15 @@ const OPTION_MARKER = /(?:^|[\s\n;；。，,（(])([A-E])[\.\)、:：]/gmu;
  */
 export function problemOptionTexts(problemText: string): readonly ProblemOptionView[] {
   if (typeof problemText !== "string" || problemText.length === 0) return [];
+  // The test set contains both `\item[A.]` and `\item[(A).]` LaTeX option
+  // labels. Normalize only those explicit item labels into plain markers; the
+  // `[E:Q]` exclusion below therefore remains intact.
+  const normalizedText = problemText
+    .replace(/\\item\s*\[\s*\(?([A-E])\)?\s*([\.\)、:：])\s*\]/gu, "\n$1$2 ")
+    .replace(/\\item\s*\[\s*\(?([A-E])\)?\s*\]/gu, "\n$1. ");
   const markers: { readonly letter: string; readonly start: number; readonly bodyStart: number }[] =
     [];
-  for (const match of problemText.matchAll(OPTION_MARKER)) {
+  for (const match of normalizedText.matchAll(OPTION_MARKER)) {
     const letter = (match[1] ?? "").toUpperCase();
     if (letter.length === 0) continue;
     const start = match.index ?? 0;
@@ -965,8 +1133,8 @@ export function problemOptionTexts(problemText: string): readonly ProblemOptionV
   const options: ProblemOptionView[] = [];
   for (let index = 0; index < markers.length; index += 1) {
     const marker = markers[index]!;
-    const end = index + 1 < markers.length ? markers[index + 1]!.start : problemText.length;
-    const text = problemText.slice(marker.bodyStart, end).trim();
+    const end = index + 1 < markers.length ? markers[index + 1]!.start : normalizedText.length;
+    const text = normalizedText.slice(marker.bodyStart, end).trim();
     if (text.length === 0 || text.length > MAX_OPTION_TEXT_CHARS) continue;
     options.push({ letter: marker.letter, text });
   }
@@ -1383,6 +1551,9 @@ function optionVerdictContradictionDefect(
     for (const rawClause of option.text.split(CLAUSE_SPLIT)) {
       const clause = rawClause.trim();
       if (clause.length === 0) continue;
+      // A statement about a subgroup inherits that subgroup's property, not
+      // the ambient group's. The finite-group option diagnostic below owns it.
+      if (/(?:子群|subgroup)/iu.test(clause)) continue;
       for (const property of GROUP_PROPERTY_ASSERTIONS) {
         if (!property.keyword.test(clause)) continue;
         // A negated or hedged clause ("不一定可交换") is not an assertion.
@@ -1406,6 +1577,209 @@ function optionVerdictContradictionDefect(
     }
   }
   if (parts.length === 0) return null;
+  return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
+}
+
+/** Parse the bounded Arabic or Chinese order used in an option body. */
+function optionOrderNumber(raw: string): number | null {
+  if (/^[0-9]{1,3}$/u.test(raw)) {
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  const digits: Readonly<Record<string, number>> = {
+    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+  };
+  if (raw === "十") return 10;
+  if (raw.length === 1) return digits[raw] ?? null;
+  if (raw.length === 2 && raw[0] === "十") {
+    const unit = digits[raw[1]!];
+    return unit === undefined ? null : 10 + unit;
+  }
+  if (raw.length === 2 && raw[1] === "十") {
+    const ten = digits[raw[0]!];
+    return ten === undefined ? null : ten * 10;
+  }
+  return null;
+}
+
+interface GroupOptionTruth {
+  readonly truth: boolean;
+  readonly detail: string;
+}
+
+/**
+ * Evaluate one finite-group option against the exact subgroup survey. Every
+ * expression is a fixed vocabulary; an unrecognised, ambiguous or unsupported
+ * assertion yields null rather than guessing a truth value.
+ */
+function groupOptionTruth(
+  text: string,
+  observed: GroupObservationView,
+): GroupOptionTruth | null {
+  // Strip math delimiters only; this is not an expression evaluator. The
+  // resulting text still has to match one of the fixed option vocabularies.
+  const normalized = text.replace(/\$/gu, "").replace(/\\/gu, "");
+  const rowFor = (order: number): SubgroupOrderSummaryView | null =>
+    observed.subgroupSummary?.find((row) => row.order === order) ?? null;
+  const orderPattern = "([0-9]{1,3}|[一二三四五六七八九十]{1,3})";
+  const allAbelian = new RegExp(
+    "(?:所有|全部|任意|每个)?(?:的|中|里)?\\s*" + orderPattern +
+      "\\s*阶子群[^\\n。；;]{0,28}?(?:都|一定|均|全部)?\\s*(?:是)?\\s*(?:阿贝尔|交换|abel(?:ian)?)",
+    "iu",
+  ).exec(normalized);
+  if (allAbelian !== null) {
+    const order = optionOrderNumber(allAbelian[1]!);
+    if (order === null) return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.allAbelian,
+      detail:
+        "order-" + order + " subgroups: count=" + (row?.count ?? 0) +
+        ", all_abelian=" + (row?.allAbelian ?? false),
+    };
+  }
+  const allCyclic = new RegExp(
+    "(?:所有|全部|任意|每个)?(?:的|中|里)?\\s*" + orderPattern +
+      "\\s*阶子群[^\\n。；;]{0,28}?(?:都|一定|均|全部)?\\s*(?:是)?\\s*(?:循环|cyclic)",
+    "iu",
+  ).exec(normalized);
+  if (allCyclic !== null) {
+    const order = optionOrderNumber(allCyclic[1]!);
+    if (order === null) return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.allCyclic,
+      detail:
+        "order-" + order + " subgroups: count=" + (row?.count ?? 0) +
+        ", all_cyclic=" + (row?.allCyclic ?? false),
+    };
+  }
+  const allNormal = new RegExp(
+    "(?:所有|全部|任意|每个)?(?:的|中|里)?\\s*" + orderPattern +
+      "\\s*阶子群[^\\n。；;]{0,28}?(?:都|一定|均|全部)?\\s*(?:是)?\\s*(?:正规|normal)",
+    "iu",
+  ).exec(normalized);
+  if (allNormal !== null) {
+    const order = optionOrderNumber(allNormal[1]!);
+    if (order === null) return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.normalCount === row.count,
+      detail:
+        "order-" + order + " subgroups: count=" + (row?.count ?? 0) +
+        ", normal_count=" + (row?.normalCount ?? 0),
+    };
+  }
+  if (/(?:所有|全部|任意|每个)/iu.test(text)) return null;
+  const noSubgroup = new RegExp(
+    "(?:不存在|没有|无)\\s*(?:任何)?\\s*" + orderPattern + "\\s*阶子群",
+    "iu",
+  ).exec(normalized);
+  if (noSubgroup !== null) {
+    const order = optionOrderNumber(noSubgroup[1]!);
+    if (order === null) return null;
+    const row = rowFor(order);
+    return {
+      truth: row === null || row.count === 0,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0),
+    };
+  }
+  const existsSubgroup = new RegExp(
+    "(?:存在|有|至少有一个|至少存在一个)\\s*(?:一个|a)?\\s*" + orderPattern + "\\s*阶子群",
+    "iu",
+  ).exec(normalized);
+  if (existsSubgroup !== null) {
+    const order = optionOrderNumber(existsSubgroup[1]!);
+    if (order === null) return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0),
+    };
+  }
+  const center = /(?:中心|center|(?:C|Z)\s*\(\s*(?:G|[A-Za-z0-9_]{1,8})\s*\))[^\n。；;]{0,28}?(?:(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|=\s*\{?\s*([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized) ||
+    /\{\s*([0-9]{1,4})\s*\}/u.exec(normalized);
+  if (center !== null && /(?:\|Z\s*\(\s*G\s*\)|中心|center|(?:C|Z)\s*\()/iu.test(normalized)) {
+    const size = Number(center[1] ?? center[2] ?? center[3]);
+    if (!Number.isSafeInteger(size) || observed.centerSize === null) return null;
+    return {
+      truth: observed.centerSize === size,
+      detail: "center_size=" + String(observed.centerSize),
+    };
+  }
+  const derived = /(?:\[[A-Za-z0-9_]+,[A-Za-z0-9_]+\]|换位子群|导群|commutator|derived)[^\n。；;]{0,28}?(?:([0-9]{1,4})\s*阶|(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized);
+  if (derived !== null) {
+    const size = Number(derived[1] ?? derived[2] ?? derived[3]);
+    if (!Number.isSafeInteger(size) || observed.derivedSize === null) return null;
+    return {
+      truth: observed.derivedSize === size,
+      detail: "derived_size=" + String(observed.derivedSize),
+    };
+  }
+  return null;
+}
+
+/**
+ * Option-level finite-group properties and omissions. This consumes the same
+ * `subgroup_summary`/`derived_size` observation as the numeric group check and
+ * only acts on the exact options the problem states.
+ */
+function finiteGroupOptionDefect(
+  problemText: string,
+  candidate: string,
+  observations: readonly ToolObservationView[] | null | undefined,
+): AnswerClosureDefect | null {
+  const options = problemOptionTexts(problemText);
+  if (options.length < 2) return null;
+  const chosen = new Set(candidateChoiceLetters(candidate));
+  if (chosen.size === 0) return null;
+  const observed = groupObservation(
+    lastObservation(observations, "finite_group_structure")?.result,
+  );
+  if (observed === null) return null;
+  if (observed.subgroupSummary === null && observed.centerSize === null && observed.derivedSize === null) {
+    return null;
+  }
+  const truths = options
+    .map((option) => {
+      const truth = groupOptionTruth(option.text, observed);
+      return truth === null ? null : { letter: option.letter, ...truth };
+    })
+    .filter((row): row is { letter: string; truth: boolean; detail: string } => row !== null);
+  if (truths.length === 0) return null;
+  const selectedFalse = truths.filter((row) => chosen.has(row.letter) && !row.truth);
+  const selectedTrue = truths.filter((row) => chosen.has(row.letter) && row.truth);
+  const trueOptions = truths.filter((row) => row.truth);
+  const falseOptions = truths.filter((row) => !row.truth);
+  const multiSelect =
+    chosen.size > 1 ||
+    /(?:多选|多项|哪些|所有正确|全部正确|选出所有|select\s+all|multiple\s+select|correct\s+ones)/iu.test(problemText) ||
+    trueOptions.length > 1;
+  const parts: string[] = [];
+  for (const row of selectedFalse) {
+    parts.push(
+      "option " + row.letter + " is proven FALSE by finite_group_structure (" +
+        row.detail + ")",
+    );
+  }
+  if (multiSelect) {
+    for (const row of trueOptions) {
+      if (!chosen.has(row.letter)) {
+        parts.push(
+          "option " + row.letter + " is proven TRUE by finite_group_structure (" +
+            row.detail + "), so omitting it contradicts the exact group observation",
+        );
+      }
+    }
+  }
+  // A selected true option with another true option is handled by the
+  // omission branch above. If every selected option is true and no omission is
+  // possible, there is no defect.
+  if (parts.length === 0) {
+    void selectedTrue;
+    void falseOptions;
+    return null;
+  }
   return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
 
@@ -1959,6 +2333,313 @@ function identityVerdictMismatchDefect(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Scalar exact-value diagnostics and linear-system status diagnostics.
+//
+// The exact-check tool reports input-relative values such as `0`, `1/2`,
+// `pi/2`, `sqrt(2)` or `2*pi/3`. Only a short scalar candidate is compared:
+// prose, a formula with free variables, an option without a clean scalar body,
+// and an ambiguous multi-number answer all yield no defect. This is the
+// fail-closed rule that keeps the new diagnostics from firing on concept
+// questions that merely mention a limit or an integral.
+// ---------------------------------------------------------------------------
+
+/** Normalize the bounded TeX spellings that can still denote one scalar. */
+function normalizeScalarText(source: string): string {
+  let text = source.trim();
+  text = text.replace(/^(?:最终答案|答案|回答|结果|final\s+answer|answer)\s*[:：]?\s*/iu, "");
+  text = text.replace(/^\$+|\$+$/gu, "");
+  text = text.replace(/^\\boxed\{([\s\S]*)\}$/u, "$1");
+  text = text.replace(/\\left|\\right/gu, "");
+  text = text.replace(/\\dfrac|\\tfrac/gu, "\\frac");
+  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gu, "($1)/($2)");
+  text = text.replace(/\\frac([+-]?\d)([+-]?\d)/gu, "($1)/($2)");
+  text = text.replace(/\\sqrt\s*\{([^{}]+)\}/gu, "sqrt($1)");
+  text = text.replace(/\\pi/gu, "pi").replace(/π/gu, "pi");
+  // A nested fraction such as `\frac{\sqrt{2}}{2}` was not reducible before
+  // the inner radical was rewritten; do one more pass now that braces are gone.
+  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gu, "($1)/($2)");
+  text = text.replace(/\\cdot|\\times/gu, "*");
+  text = text.replace(/\^\{([^{}]+)\}/gu, "^$1");
+  text = text.replace(/[{}]/gu, "");
+  text = text.replace(/\s+/gu, "");
+  // `\frac{a}{b}` becomes `(a)/(b)` above. Reduce only a whole fraction so
+  // `\frac{\pi}{2}` and `\frac{\sqrt{2}}{2}` stay one scalar.
+  text = text.replace(/^(-?)\((.+)\)\/\((.+)\)$/u, "$1$2/$3");
+  text = text.replace(/[。；;，,]+$/u, "");
+  return text;
+}
+
+/**
+ * Parse one short numeric scalar without evaluating arbitrary text. Supported
+ * forms are the ones the bounded exact-check producer emits: integers,
+ * decimals, rationals, pi multiples, square roots and `e`. Anything else,
+ * including a letter variable or an unparsed word, returns null.
+ */
+function parseScalarValue(source: string): number | null {
+  if (typeof source !== "string") return null;
+  let text = normalizeScalarText(source);
+  if (text.length === 0 || text.length > 96) return null;
+  const sign = text.startsWith("-") ? -1 : 1;
+  if (text.startsWith("-") || text.startsWith("+")) text = text.slice(1);
+  const finite = (value: number): number | null =>
+    Number.isFinite(value) ? sign * value : null;
+  const decimal = "([0-9]+(?:\\.[0-9]+)?)";
+  let match = new RegExp(`^sqrt\\(${decimal}\\)(?:\\/${decimal})?$`, "u").exec(text);
+  if (match !== null) {
+    const radicand = Number(match[1]);
+    const divisor = match[2] === undefined ? 1 : Number(match[2]);
+    if (radicand < 0 || divisor === 0) return null;
+    return finite(Math.sqrt(radicand) / divisor);
+  }
+  match = new RegExp(`^(?:${decimal}\\*?)?pi(?:\\/${decimal})?$`, "u").exec(text);
+  if (match !== null) {
+    const multiplier = match[1] === undefined ? 1 : Number(match[1]);
+    const divisor = match[2] === undefined ? 1 : Number(match[2]);
+    if (divisor === 0) return null;
+    return finite(Math.PI * multiplier / divisor);
+  }
+  match = new RegExp(`^pi\\*${decimal}(?:\\/${decimal})?$`, "u").exec(text);
+  if (match !== null) {
+    const divisor = match[2] === undefined ? 1 : Number(match[2]);
+    if (divisor === 0) return null;
+    return finite(Math.PI * Number(match[1]) / divisor);
+  }
+  if (text === "e") return finite(Math.E);
+  match = new RegExp(`^${decimal}(?:\\/${decimal})?$`, "u").exec(text);
+  if (match !== null) {
+    const numerator = Number(match[1]);
+    const denominator = match[2] === undefined ? 1 : Number(match[2]);
+    if (denominator === 0) return null;
+    return finite(numerator / denominator);
+  }
+  return null;
+}
+
+/** One scalar the candidate (or its single chosen option) states. */
+function scalarClaim(
+  source: string,
+): { readonly value: number; readonly raw: string } | null {
+  const direct = parseScalarValue(source);
+  if (direct !== null) return { value: direct, raw: normalizeScalarText(source) };
+  const match = /(?:=|为|是|等于|[:：])\s*([^，,；;。\n]+)\s*$/u.exec(source.trim());
+  if (match === null) return null;
+  const value = parseScalarValue(match[1]!);
+  return value === null
+    ? null
+    : { value, raw: normalizeScalarText(match[1]!) };
+}
+
+/** One exact-check operation result that represents a scalar value. */
+function exactScalarObservation(
+  observation: ExactObservationView | null | undefined,
+  operation: string,
+): { readonly raw: string; readonly value: number } | null {
+  if (observation === null || observation === undefined) return null;
+  const fields = operation === "LIMIT"
+    ? ["limit", "value", "result", "numeric"]
+    : operation === "DEFINITE_INTEGRAL"
+      ? ["exact", "value", "result", "numeric"]
+      : operation === "SIMPLIFY"
+        ? ["simplified", "value", "result"]
+        : ["trig_reduced", "value", "result"];
+  for (const field of fields) {
+    const raw = observation[field as keyof ExactObservationView];
+    if (typeof raw !== "string") continue;
+    const value = parseScalarValue(raw);
+    if (value !== null) return { raw, value };
+  }
+  return null;
+}
+
+function exactScalarValueDefect(input: AnswerClosureInput): AnswerClosureDefect | null {
+  const operations = ["DEFINITE_INTEGRAL", "LIMIT", "SIMPLIFY", "TRIG_REDUCE"] as const;
+  for (const operation of operations) {
+    const observed = exactScalarObservation(
+      exactObservationFor(input, operation),
+      operation,
+    );
+    if (observed === null) continue;
+    let stated = scalarClaim(input.candidate);
+    if (stated === null) {
+      const chosen = candidateChoiceLetters(input.candidate);
+      if (chosen.length === 1) {
+        const option = problemOptionTexts(input.problemText).find(
+          (row) => row.letter === chosen[0],
+        );
+        if (option !== undefined) stated = scalarClaim(option.text);
+      }
+    }
+    if (stated === null) continue;
+    if (Math.abs(stated.value - observed.value) <= 1e-6) continue;
+    return defect(
+      "EXACT_VALUE_MISMATCH",
+      "exact_check_expr[" +
+        operation +
+        "] computed " +
+        observed.raw +
+        ", but the candidate answer evaluates to " +
+        stated.raw,
+      "OBSERVATION",
+    );
+  }
+  return null;
+}
+
+interface LinearSystemObservationView {
+  readonly kind: "EMPTY" | "AFFINE" | "UNIQUE";
+  readonly rank: number | null;
+  readonly nullity: number | null;
+  readonly particular: readonly string[] | null;
+}
+
+/** Parse the producer payload of `linear_system_solution_set`, fail-closed. */
+function linearSystemObservation(result: unknown): LinearSystemObservationView | null {
+  const record = recordValue(result);
+  if (record === null) return null;
+  const rawKind = typeof record["kind"] === "string"
+    ? record["kind"]
+    : typeof record["status"] === "string"
+      ? record["status"]
+      : null;
+  if (rawKind === null) return null;
+  const kind = rawKind.toUpperCase();
+  let normalized: "EMPTY" | "AFFINE" | "UNIQUE";
+  if (kind === "EMPTY" || kind === "INCONSISTENT" || kind === "NO_SOLUTION") {
+    normalized = "EMPTY";
+  } else if (kind === "UNIQUE" || kind === "ONE_SOLUTION") {
+    normalized = "UNIQUE";
+  } else if (kind === "AFFINE" || kind === "PARAMETRIC" || kind === "INFINITE") {
+    normalized = "AFFINE";
+  } else {
+    return null;
+  }
+  const rank = observationInteger(record["rank"]);
+  const basis = Array.isArray(record["basis"]) ? record["basis"] : null;
+  const nullity = observationInteger(record["nullity"]) ??
+    (basis === null ? null : basis.length);
+  const rawParticular = record["particular"] ?? record["solution"];
+  const particular = Array.isArray(rawParticular)
+    ? rawParticular.filter((item): item is string => typeof item === "string")
+    : null;
+  return { kind: normalized, rank, nullity, particular };
+}
+
+/**
+ * One explicit solution vector in the candidate, or null. Only a labelled
+ * tuple (`x=1,y=2`) or a standalone numeric tuple/pmatrix is accepted; the
+ * parser does not evaluate arbitrary prose or an expression with free variables.
+ */
+function candidateSolutionVector(candidate: string): readonly number[] | null {
+  const text = candidate
+    .replace(/\$/gu, "")
+    .replace(/\\left|\\right/gu, "")
+    .replace(/\\(?:begin|end)\{[pb]?matrix\}/gu, "(")
+    .replace(/\\(?:begin|end)\{array\}(?:\{[^{}]*\})?/gu, "(")
+    .replace(/\\\{/gu, "{")
+    .replace(/\\\}/gu, "}");
+  const labelled = [...text.matchAll(
+    /(?<![A-Za-z])([A-Za-z](?:_?\{?[0-9]+\}?)?)\s*=\s*([+-]?(?:[0-9]+(?:\.[0-9]+)?)(?:\s*\/\s*[0-9]+)?)/gu,
+  )];
+  if (labelled.length >= 1) {
+    const names = new Set(labelled.map((match) => match[1]!.replace(/[{}]/gu, "")));
+    if (names.size === labelled.length) {
+      const values: number[] = [];
+      for (const match of labelled) {
+        const value = parseScalarValue(match[2]!);
+        if (value === null) return null;
+        values.push(value);
+      }
+      return values;
+    }
+  }
+  const cue =
+    /(?:唯一解|解为|解是|解集为|通解为|solution|particular|answer\s*(?:is|:|=))/iu.test(text);
+  const candidates = [...text.matchAll(
+    /(?:\(([^()\[\]{}]{1,160})\)|\[([^()\[\]{}]{1,160})\]|\{([^()\[\]{}]{1,160})\})/gu,
+  )];
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const match = candidates[index]!;
+    const body = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (body === "") continue;
+    const tokens = body.split(/[,，;；]|\\\\/u).map((item) => item.trim()).filter(Boolean);
+    if (tokens.length < 1) continue;
+    const values: number[] = [];
+    let parsed = true;
+    for (const token of tokens) {
+      const value = parseScalarValue(token);
+      if (value === null) {
+        parsed = false;
+        break;
+      }
+      values.push(value);
+    }
+    if (!parsed) continue;
+    const remainder = text.replace(match[0], "").replace(/[\s。；;，,]+/gu, "");
+    if (cue || remainder === "" || /^(?:答案|解|答|\(\^?T\))$/iu.test(remainder)) {
+      return values;
+    }
+  }
+  return null;
+}
+
+function linearSystemMismatchDefect(
+  input: AnswerClosureInput,
+): AnswerClosureDefect | null {
+  const observation = lastObservation(input.toolObservations, "linear_system_solution_set");
+  if (observation === null) return null;
+  const observed = linearSystemObservation(observation.result);
+  if (observed === null) return null;
+  const text = input.candidate;
+  const noSolution = /无解|不存在解|没有解|无解集|inconsistent|no\s+solution/iu.test(text);
+  const unique = /唯一解|恰有一解|仅有一解|唯一的解|unique\s+solution|exactly\s+one\s+solution/iu.test(text);
+  const infinite = /无穷多解|无限多解|无穷多个解|通解|一般解|参数化解|infinitely\s+many|parametric/iu.test(text);
+  const hasSolution = /有解|存在解|至少一个解|solution/iu.test(text);
+  let contradiction = false;
+  if (observed.kind === "EMPTY") {
+    contradiction = !noSolution && (unique || infinite || hasSolution);
+  } else if (observed.kind === "UNIQUE") {
+    contradiction = noSolution || infinite;
+  } else {
+    contradiction = noSolution || unique;
+  }
+  // A unique solution is also a vector claim: `唯一解` alone can be true while
+  // the stated coordinates contradict the exact particular solution.
+  let vectorMismatch: readonly number[] | null = null;
+  if (observed.kind === "UNIQUE" && observed.particular !== null) {
+    const statedVector = candidateSolutionVector(text);
+    if (statedVector !== null && statedVector.length === observed.particular.length) {
+      const observedVector = observed.particular.map((item) => parseScalarValue(item));
+      if (observedVector.every((item): item is number => item !== null)) {
+        const differs = statedVector.some((value, index) =>
+          Math.abs(value - observedVector[index]!) > 1e-9 *
+            Math.max(1, Math.abs(value), Math.abs(observedVector[index]!)),
+        );
+        if (differs) vectorMismatch = statedVector;
+      }
+    }
+  }
+  if (!contradiction && vectorMismatch === null) return null;
+  const observedDetail =
+    "kind " + observed.kind +
+    (observed.rank === null ? "" : ", rank " + String(observed.rank)) +
+    (observed.nullity === null ? "" : ", nullity " + String(observed.nullity)) +
+    (observed.particular === null
+      ? ""
+      : ", particular " + JSON.stringify(observed.particular));
+  const statedDetail = vectorMismatch === null
+    ? "a different solution status"
+    : "the solution vector " + JSON.stringify(vectorMismatch);
+  return defect(
+    "LINEAR_SYSTEM_STATUS_MISMATCH",
+    "linear_system_solution_set reports " +
+      observedDetail +
+      ", but the candidate states " +
+      statedDetail,
+    "OBSERVATION",
+  );
+}
+
 /**
  * The exact observation for ONE operation, or null when this run never recorded
  * it. The keyed index is consulted first; the legacy single slot counts only
@@ -1992,6 +2673,7 @@ function exactObservationFor(
  *   8. `GROUP_STRUCTURE_MISMATCH`   `finite_group_structure` observation
  *   9. `OPTION_NUMERIC_CONTRADICTION` chosen option text vs an observation
  *  10. `OPTION_VERDICT_CONTRADICTION` chosen option text vs an observation
+ *  10a. finite-group subgroup/derived option truth and omission
  *  11. `GF2_RANK_MISMATCH`           `gf2_rank` bare integer observation
  *  12. `GF2_NULLITY_MISMATCH`        `gf2_nullspace` basis-length observation
  *  13. `EXACT_COUNT_MISMATCH`        `bounded_enumeration`/counting observation
@@ -2039,6 +2721,10 @@ export function answerClosureDefects(
     input.toolObservations,
   );
   if (splittingField !== null) defects.push(splittingField);
+  const exactValue = exactScalarValueDefect(input);
+  if (exactValue !== null) defects.push(exactValue);
+  const linearSystem = linearSystemMismatchDefect(input);
+  if (linearSystem !== null) defects.push(linearSystem);
   const interpolation = interpolationResidualDefect(
     input.problemText,
     input.candidate,
@@ -2064,6 +2750,12 @@ export function answerClosureDefects(
     input.toolObservations,
   );
   if (optionVerdict !== null) defects.push(optionVerdict);
+  const finiteGroupOption = finiteGroupOptionDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations,
+  );
+  if (finiteGroupOption !== null) defects.push(finiteGroupOption);
   const gf2Rank = gf2RankMismatchDefect(
     input.problemText,
     input.candidate,
@@ -2116,6 +2808,21 @@ export function answerClosureNote(defects: readonly AnswerClosureDefect[]): stri
   // observed exact values are already named by the defect lines above; these
   // lines only say what the corrected packet has to contain.
   const hints: string[] = [];
+  if (kinds.has("DEGREE_CONSERVATION")) {
+    hints.push(
+      "Replace the candidate polynomial with the exact maximal-minor polynomial reported by exact_check_expr[MAXIMAL_MINORS] in the defect detail above (normalized up to ±t^k if an Alexander polynomial is requested), and never replace the full determinant/minor invariant with a proper factor.",
+    );
+  }
+  if (kinds.has("EXACT_VALUE_MISMATCH")) {
+    hints.push(
+      "Use exactly the scalar value reported by exact_check_expr for LIMIT, DEFINITE_INTEGRAL, SIMPLIFY or TRIG_REDUCE; do not keep the rejected scalar or an unnormalized equivalent.",
+    );
+  }
+  if (kinds.has("LINEAR_SYSTEM_STATUS_MISMATCH")) {
+    hints.push(
+      "State the linear-system status exactly as the observation reports: EMPTY means no solution, UNIQUE means one solution, and AFFINE means a non-unique solution family; include the observed rank/nullity when relevant.",
+    );
+  }
   if (kinds.has("INTERPOLATION_RESIDUAL")) {
     hints.push(
       "If the answer is an interpolating polynomial, fit it through every stated point exactly and state the polynomial that is named as the interpolating polynomial above.",
@@ -2175,6 +2882,7 @@ export function answerClosureNote(defects: readonly AnswerClosureDefect[]): stri
     ...defects.map((row) => "- " + row.kind + ": " + row.detail + "."),
     ...hints,
     "Return exactly one complete WorkPacket with a corrected candidateProposal.",
+    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet.",
     "Include one `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` row for each corrected property.",
     "If the answer is multiple choice, include `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option in the problem exactly once and make candidateProposal exactly the TRUE options.",
     "If the problem asks for every solution or case, include `CERT1|COMPLETENESS|<exhaustive case split> => PASS`.",

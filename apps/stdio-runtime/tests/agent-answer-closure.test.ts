@@ -468,14 +468,17 @@ test("interpolation residuals are a defect when the candidate misses the stated 
     }),
     [],
   );
-  assert.deepEqual(
+  // The observation is self-identifying: the former route guard was removed,
+  // so a real interpolation observation is checked even on a differently
+  // worded task. A malformed/absent observation still produces nothing.
+  assert.equal(
     answerClosureDefects({
       problemText: "计算三阶行列式的值。",
       candidate: "x^2 + 2",
       packet: { candidateProposal: "x^2 + 2" },
       toolObservations: interpolationObservation(FAILING_INTERPOLATION),
-    }),
-    [],
+    })[0]?.kind,
+    "INTERPOLATION_RESIDUAL",
   );
 });
 
@@ -850,6 +853,56 @@ test("a chosen option's group order or conjugacy count contradicts the enumerati
     ),
     ["OPTION_VERDICT_CONTRADICTION"],
   );
+});
+
+test("finite-group options are judged against the exact subgroup survey", () => {
+  const problem = [
+    "设 $D_8$ 是 8 阶二面体群，判断下列命题：",
+    "A. $D_8$ 有 8 阶元.",
+    "B. $D_8$ 的四阶子群一定是Abel群.",
+    "C. $C(D_8)=\\{1\\}$.",
+    "D. $[D_8,D_8]$是$2$阶群.",
+  ].join("\n");
+  const observation = {
+    schema: "finite-group-structure-v1",
+    operation: "GROUP_STRUCTURE",
+    order: 8,
+    is_abelian: false,
+    is_cyclic: false,
+    center_size: 2,
+    derived_size: 2,
+    conjugacy_classes: [{ size: 1, representative: "1", element_order: 1 }],
+    subgroup_summary: [
+      { order: 1, count: 1, normal_count: 1, all_abelian: true, all_cyclic: true, has_cyclic: true },
+      { order: 2, count: 5, normal_count: 1, all_abelian: true, all_cyclic: true, has_cyclic: true },
+      { order: 4, count: 3, normal_count: 3, all_abelian: true, all_cyclic: false, has_cyclic: true },
+      { order: 8, count: 1, normal_count: 1, all_abelian: false, all_cyclic: false, has_cyclic: false },
+    ],
+  };
+  const closure = (candidate: string) =>
+    answerClosureDefects({
+      problemText: problem,
+      candidate,
+      packet: {
+        candidateProposal: candidate,
+        suggestedChecks: ["CERT1|OPTIONS|A=TRUE,B=TRUE,C=FALSE,D=TRUE"],
+      },
+      toolObservations: optionGroupObservation(observation),
+    });
+  // D is true, but the omitted B is also true: the exact survey proves the
+  // omission rather than trusting the candidate's single letter.
+  const omitted = closure("D");
+  assert.deepEqual(omitted.map((row) => row.kind), ["OPTION_VERDICT_CONTRADICTION"]);
+  assert.match(omitted[0]?.detail ?? "", /option B is proven TRUE/u);
+  assert.match(omitted[0]?.detail ?? "", /order-4 subgroups/u);
+  // C is false by center_size=2, while B and D remain the true options.
+  const selectedFalse = closure("C");
+  assert.deepEqual(selectedFalse.map((row) => row.kind), ["OPTION_VERDICT_CONTRADICTION"]);
+  assert.match(selectedFalse[0]?.detail ?? "", /option C is proven FALSE/u);
+  assert.match(selectedFalse[0]?.detail ?? "", /center_size=2/u);
+  // Choosing both true options is accepted; A's element-order assertion is not
+  // an option fact this survey can disprove and must stay unparsed.
+  assert.deepEqual(closure("B, D"), []);
 });
 
 test("a chosen option's real-root count contradicts the exact Sturm count", () => {
@@ -1826,4 +1879,256 @@ test("the closure note names the observed value for each new defect kind", () =>
   ]);
   assert.doesNotMatch(unrelated, /GF\(2\) rank|expected cover time|functional identity/u);
   assert.doesNotMatch(rankNote, /#\d+|item\s+\d+/iu);
+});
+
+test("degree conservation includes the exact polynomial and compares equal degrees up to a Laurent unit", () => {
+  const problem = "计算亚历山大多项式 P(t)。";
+  const observed = {
+    operation: "MAXIMAL_MINORS",
+    normalized_minors: [
+      { polynomial: "t**3 - 3*t**2 + t", multiplicity: 2 },
+    ],
+  };
+  const impostor = answerClosureDefects({
+    problemText: problem,
+    candidate: "t^3 + 1",
+    packet: { candidateProposal: "t^3 + 1" },
+    exactObservation: observed,
+  });
+  assert.equal(impostor[0]?.kind, "DEGREE_CONSERVATION");
+  assert.equal(impostor[0]?.evidence, "OBSERVATION");
+  assert.match(impostor[0]?.detail ?? "", /t\*\*3 - 3\*t\*\*2 \+ t/u);
+  assert.match(impostor[0]?.detail ?? "", /coefficients do not match/u);
+
+  // `t^3 - 3t^2 + t` and `t^2 - 3t + 1` differ by the Alexander unit t.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "t^2 - 3*t + 1",
+      packet: { candidateProposal: "t^2 - 3*t + 1" },
+      exactObservation: observed,
+    }),
+    [],
+  );
+});
+
+test("observation defects no longer require the same semantic route", () => {
+  const roots = answerClosureDefects({
+    problemText: "求函数 f(x)=x^3-x 的零点个数。",
+    candidate: "3",
+    packet: { candidateProposal: "3" },
+    toolObservations: [
+      { name: "real_root_count_expr", operation: "REAL_ROOT_COUNT", result: 2 },
+    ],
+  });
+  assert.equal(roots[0]?.kind, "REAL_ROOT_COUNT");
+
+  const splitting = answerClosureDefects({
+    problemText: "求扩张 [K:Q] 的次数。",
+    candidate: "16",
+    packet: { candidateProposal: "16" },
+    toolObservations: [
+      {
+        name: "splitting_field_degree_expr",
+        operation: "SPLITTING_FIELD_DEGREE",
+        result: 8,
+      },
+    ],
+  });
+  assert.equal(splitting[0]?.kind, "SPLITTING_FIELD_DEGREE");
+
+  const interpolation = answerClosureDefects({
+    problemText: "给定两个点 (0,0),(1,1)，候选多项式为 x+1，核对残差。",
+    candidate: "x+1",
+    packet: { candidateProposal: "x+1" },
+    toolObservations: [
+      {
+        name: "interpolation_fit_check",
+        operation: "INTERPOLATION_FIT",
+        result: {
+          all_zero: false,
+          residuals: ["1/2"],
+          variable: "x",
+          interpolating_polynomial: "x",
+        },
+      },
+    ],
+  });
+  assert.equal(interpolation[0]?.kind, "INTERPOLATION_RESIDUAL");
+});
+
+test("exact scalar observations catch LIMIT, DEFINITE_INTEGRAL, SIMPLIFY and TRIG_REDUCE mismatches", () => {
+  const cases = [
+    ["LIMIT", { operation: "LIMIT", limit: "1/2" }, "1"],
+    ["DEFINITE_INTEGRAL", { operation: "DEFINITE_INTEGRAL", exact: "pi/2" }, "0"],
+    ["SIMPLIFY", { operation: "SIMPLIFY", simplified: "1/3" }, "1/2"],
+    ["TRIG_REDUCE", { operation: "TRIG_REDUCE", trig_reduced: "1" }, "0"],
+  ] as const;
+  for (const [, observation, candidate] of cases) {
+    const defects = answerClosureDefects({
+      problemText: "计算下列精确值。",
+      candidate,
+      packet: { candidateProposal: candidate },
+      exactObservation: observation,
+    });
+    assert.equal(defects[0]?.kind, "EXACT_VALUE_MISMATCH", candidate);
+    assert.equal(defects[0]?.evidence, "OBSERVATION");
+    assert.match(defects[0]?.detail ?? "", /exact_check_expr\[/u);
+  }
+
+  // A symbolic candidate with free variables is not coerced into a scalar.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "计算下列精确值。",
+      candidate: "pi*(1+ab)*exp(-ab)/(2*b^3)",
+      packet: { candidateProposal: "pi*(1+ab)*exp(-ab)/(2*b^3)" },
+      exactObservation: { operation: "DEFINITE_INTEGRAL", exact: "pi/2" },
+    }),
+    [],
+  );
+  // Standard TeX fractions are the same scalar, not an unknown expression.
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "计算下列精确值。",
+      candidate: "\\frac{\\pi}{2}",
+      packet: { candidateProposal: "\\frac{\\pi}{2}" },
+      exactObservation: { operation: "LIMIT", limit: "pi/2" },
+    }),
+    [],
+  );
+  assert.equal(
+    answerClosureDefects({
+      problemText: "计算下列精确值。",
+      candidate: "\\frac{\\sqrt{2}}{2}",
+      packet: { candidateProposal: "\\frac{\\sqrt{2}}{2}" },
+      exactObservation: { operation: "LIMIT", limit: "1/2" },
+    })[0]?.kind,
+    "EXACT_VALUE_MISMATCH",
+  );
+});
+
+test("exact scalar observations compare a chosen option body when the candidate is one letter", () => {
+  const problem = "求极限。\nA. 1/2\nB. 1/3";
+  const wrong = answerClosureDefects({
+    problemText: problem,
+    candidate: "B",
+    packet: {
+      candidateProposal: "B",
+      suggestedChecks: ["CERT1|OPTIONS|A=TRUE,B=FALSE"],
+    },
+    exactObservation: { operation: "LIMIT", limit: "1/2" },
+  });
+  assert.equal(wrong[0]?.kind, "EXACT_VALUE_MISMATCH");
+  assert.match(wrong[0]?.detail ?? "", /1\/3/u);
+
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: problem,
+      candidate: "A",
+      packet: {
+        candidateProposal: "A",
+        suggestedChecks: ["CERT1|OPTIONS|A=TRUE,B=FALSE"],
+      },
+      exactObservation: { operation: "LIMIT", limit: "1/2" },
+    }),
+    [],
+  );
+});
+
+test("linear-system observations enforce the exact solution status", () => {
+  const observation = (kind: string) => [
+    {
+      name: "linear_system_solution_set",
+      operation: "SOLUTION_SET",
+      result: { kind, rank: 2, basis: [] },
+    },
+  ];
+  const empty = answerClosureDefects({
+    problemText: "解线性方程组。",
+    candidate: "该方程组有唯一解",
+    packet: { candidateProposal: "该方程组有唯一解" },
+    toolObservations: observation("EMPTY"),
+  });
+  assert.equal(empty[0]?.kind, "LINEAR_SYSTEM_STATUS_MISMATCH");
+  assert.match(empty[0]?.detail ?? "", /kind EMPTY/u);
+
+  const unique = answerClosureDefects({
+    problemText: "解线性方程组。",
+    candidate: "无解",
+    packet: { candidateProposal: "无解" },
+    toolObservations: observation("UNIQUE"),
+  });
+  assert.equal(unique[0]?.kind, "LINEAR_SYSTEM_STATUS_MISMATCH");
+
+  const affine = answerClosureDefects({
+    problemText: "解线性方程组。",
+    candidate: "唯一解",
+    packet: { candidateProposal: "唯一解" },
+    toolObservations: observation("AFFINE"),
+  });
+  assert.equal(affine[0]?.kind, "LINEAR_SYSTEM_STATUS_MISMATCH");
+
+  assert.deepEqual(
+    answerClosureDefects({
+      problemText: "解线性方程组。",
+      candidate: "唯一解",
+      packet: { candidateProposal: "唯一解" },
+      toolObservations: observation("UNIQUE"),
+    }),
+    [],
+  );
+  // A unique status is not enough: an explicit vector must match `particular`.
+  const uniqueObservation = [
+    {
+      name: "linear_system_solution_set",
+      operation: "SOLUTION_SET",
+      result: { kind: "UNIQUE", rank: 2, basis: [], particular: ["1", "-2"] },
+    },
+  ];
+  const vectorClosure = (candidate: string) =>
+    answerClosureDefects({
+      problemText: "解线性方程组。",
+      candidate,
+      packet: { candidateProposal: candidate },
+      toolObservations: uniqueObservation,
+    });
+  const wrongVector = vectorClosure("唯一解为 (1, 2)");
+  assert.equal(wrongVector[0]?.kind, "LINEAR_SYSTEM_STATUS_MISMATCH");
+  assert.match(wrongVector[0]?.detail ?? "", /\[1,2\]/u);
+  assert.equal(
+    vectorClosure("唯一解为 x=1,y=3")[0]?.kind,
+    "LINEAR_SYSTEM_STATUS_MISMATCH",
+  );
+  assert.deepEqual(vectorClosure("(1, -2)"), []);
+  assert.deepEqual(vectorClosure("x=1, y=-2"), []);
+  // A function call `f(1,2)` is not a solution vector.
+  assert.deepEqual(vectorClosure("f(1,2)"), []);
+  // A one-dimensional unique solution keeps the same check.
+  const oneDimensional = answerClosureDefects({
+    problemText: "解线性方程组。",
+    candidate: "x=2",
+    packet: { candidateProposal: "x=2" },
+    toolObservations: [
+      {
+        name: "linear_system_solution_set",
+        operation: "SOLUTION_SET",
+        result: { kind: "UNIQUE", rank: 1, particular: ["1"] },
+      },
+    ],
+  });
+  assert.equal(oneDimensional[0]?.kind, "LINEAR_SYSTEM_STATUS_MISMATCH");
+  // A bare status is not a vector claim and stays accepted.
+  assert.deepEqual(vectorClosure("唯一解"), []);
+});
+
+test("closure note has actionable hints for the new observation defects and preserves certificates", () => {
+  const note = answerClosureNote([
+    { kind: "DEGREE_CONSERVATION", detail: "degree 6 versus 2" },
+    { kind: "EXACT_VALUE_MISMATCH", detail: "1/2 versus 1" },
+    { kind: "LINEAR_SYSTEM_STATUS_MISMATCH", detail: "kind EMPTY" },
+  ]);
+  assert.match(note, /exact maximal-minor polynomial/u);
+  assert.match(note, /exact_check_expr\[MAXIMAL_MINORS\]/u);
+  assert.match(note, /Preserve all valid `CERT1\|\.\.\.` rows/u);
+  assert.match(note, /EMPTY means no solution/u);
 });

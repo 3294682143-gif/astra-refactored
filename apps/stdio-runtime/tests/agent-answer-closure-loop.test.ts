@@ -64,23 +64,43 @@ function maximalMinorEffect(request: P3EffectRequest): P3EffectReceipt {
 async function runClosure(options: {
   readonly candidate: string;
   readonly closureCandidate: string;
+  readonly problem?: string;
+  readonly initialChecks?: readonly string[];
+  readonly closureChecks?: readonly string[];
 }) {
   let turn = 0;
+  const workWithChecks = (
+    request: AgentModelRequest,
+    candidate: string,
+    checks: readonly string[],
+  ): string => {
+    const packet = JSON.parse(reactiveWork(request, { candidate })) as Record<string, unknown>;
+    packet["suggestedChecks"] = [...checks];
+    return JSON.stringify(packet);
+  };
   const ports = reactivePorts({
     work: (request: AgentModelRequest) => {
       turn += 1;
       // Turn 1 calls the exact tool; every later turn delivers a WorkPacket. The
       // bounded closure turn is the last WORK call of the answer task.
       if (turn === 1) return exactCheckReply();
-      if (turn === 2) return reactiveWork(request, { candidate: options.candidate });
-      if (turn === 3) return reactiveWork(request, { candidate: options.candidate });
+      if (turn === 2) {
+        return workWithChecks(request, options.candidate, options.initialChecks ?? []);
+      }
+      if (turn === 3) {
+        return workWithChecks(request, options.candidate, options.initialChecks ?? []);
+      }
       if (options.closureCandidate === "") return "not a work packet";
-      return reactiveWork(request, { candidate: options.closureCandidate });
+      return workWithChecks(
+        request,
+        options.closureCandidate,
+        options.closureChecks ?? [],
+      );
     },
     effect: maximalMinorEffect,
   });
   const result = await runAgentLoop(
-    PROBLEM,
+    options.problem ?? PROBLEM,
     "s",
     {
       remainingMs: 5000,
@@ -158,6 +178,28 @@ test("a spent closure turn that repairs nothing keeps the candidate and the defe
   assert.deepEqual(row["remainingDefects"], ["DEGREE_CONSERVATION"]);
   // The unusable closure reply never replaces the delivered candidate.
   assert.equal(run.result.summary.finalResponse, "t²-t+1");
+});
+
+test("a corrected observation is adopted even when the closure packet drops a certificate marker", async () => {
+  const run = await runClosure({
+    // `所有解` makes the packet require a completeness marker. The initial
+    // packet carries the marker, while the closure packet forgets it.
+    problem: "计算亚历山大多项式 P(t)，并给出所有解。",
+    candidate: "t²-t+1",
+    closureCandidate: OBSERVED_MINOR,
+    initialChecks: ["CERT1|COMPLETENESS|all cases covered => PASS"],
+    closureChecks: [],
+  });
+  const row = run.closureRows[0]!;
+  assert.deepEqual(row["defects"], ["DEGREE_CONSERVATION"]);
+  assert.deepEqual(row["remainingDefects"], ["SOLUTION_COMPLETENESS"]);
+  assert.equal(row["candidateChanged"], true);
+  assert.equal(row["observationUsed"], true);
+  // The mathematical correction wins even though the total defect count did
+  // not fall: one observation defect disappeared and one certificate defect
+  // appeared. The old `remaining.length < defects.length` rule would keep the
+  // wrong polynomial here.
+  assert.equal(run.result.summary.finalResponse, OBSERVED_MINOR);
 });
 
 // ---------------------------------------------------------------------------

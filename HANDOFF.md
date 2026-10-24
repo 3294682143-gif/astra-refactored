@@ -2,7 +2,12 @@
 
 > 本文件写给**新上下文的执行者**。只记录本会话已核实的事实与下一步动作。
 > 不要相信任何"已完成/已提分"的叙述，除非重新跑出证据。
-> **状态（2026-10-22 校正，先读这五条）：**
+> **状态（2026-10-24 最新）：** v5 Stage 1–5 已落地（§18）：精确观测闭环、有限群子群普查、
+>   WASI explore 提示、路由扩展与全量门禁；Node **535/535**、Python **1122 passed / 24 skipped**。
+>   真实 API 12 题：**10/12 candidate**，#4 已从只选 `D` 修成 `B,D`；#35 仍未修好
+>   （late `MAXIMAL_MINORS` observation 未进入闭合），详见 §18.6–§18.7。
+>
+> **状态（2026-10-22 校正，先读这五条；以下数字是当时历史值）：**
 > 1. 现行主口径见 §12：两臂全量 + 逐题人审 + 三次稳定率，重试臂 81 正确 / 14 错误 / 4 争议 / 1 未解，**三次全对率仅 59%**。
 > 2. 86 / 91 / 96 / 97 **永久不得作为成绩引用**（合并 + 人工翻案 + 定向重跑）。
 > 3. 稳定性主因已定位：投票按原文比、语义路由只覆盖 6 类、强制轮不是门禁、方法卡与工具共享 effect 预算、只有 `exact_check_expr` 结果进闭合（§12.3）。
@@ -1827,3 +1832,111 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - 全量 pytest：**1117 passed, 24 skipped**
 - bundle 已用 esbuild 重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**（commit `71cbd4e`）
 - `git diff --check`：clean
+
+---
+
+## 18. 2026-10-24 v5 Stage 1–5 落地记录
+
+> 本节只记录本轮实际代码、测试与门禁，不把“已实现”写成“已提分”。
+> 真实 API 复跑见 §18.6；若该项未完成，明确写“未完成”，不得用离线测试冒充。
+
+### 18.1 Stage 1：观测到最终答案的闭环转化
+
+- `degreeConservationDefect`（`agent-answer-closure.ts`）的 `detail` 现在携带
+  `exact_check_expr[MAXIMAL_MINORS]` 的精确多项式；同次数但系数不等价（包括同次伪因子）
+  会触发 `DEGREE_CONSERVATION`；`±t^k` 的 Alexander 单位移位先于次数比较处理。
+- `answerClosureNote` 增加 `DEGREE_CONSERVATION` 专用提示，并要求
+  `Preserve all valid CERT1|... rows in suggestedChecks`。
+- `agent-loop.ts` 的闭环采纳判据改为：优先看 `evidence === "OBSERVATION"` 的缺陷数，
+  只有观测缺陷数不增加时才允许总数下降，避免“证书缺陷抵消观测修复”。
+- `realRootCountDefect` 不再要求同一路由；`splittingFieldDegreeDefect` 放宽为语义
+  措辞或路由；`interpolationResidualDefect` 只依赖合法观测本身。
+
+### 18.2 Stage 2：exact_check_expr 与线性方程组观测
+
+- 新增 `EXACT_VALUE_MISMATCH`：覆盖 `LIMIT`、`DEFINITE_INTEGRAL`、`SIMPLIFY`、
+  `TRIG_REDUCE` 的精确标量；支持 `pi/2`、`sqrt(2)/2`、`\frac{\pi}{2}`、
+  `\frac{\sqrt{2}}{2}` 等标准写法；符号表达式/自由变量不会被强行转成标量。
+- 新增 `LINEAR_SYSTEM_STATUS_MISMATCH`：核对 `EMPTY/UNIQUE/AFFINE` 状态、`rank`、
+  `nullity`，并在 `UNIQUE` 时核对 `particular` 解向量（支持 `(1,-2)`、`x=1,y=-2`、
+  一维 `x=2`；`f(1,2)` 这类函数调用不会被误当解向量）。
+
+### 18.3 Stage 3：有限群子群普查
+
+- `mathagent/finite_group_tools.py` 新增 `derived_size` 与 `subgroup_summary`
+  （仅 `order <= 64`；旧 7 个字段完全保留），按阶统计 `count`、`normal_count`、
+  `all_abelian`、`all_cyclic`、`has_cyclic`。
+- named-group 词表新增 `V4`（`K4/K_4/V_4/klein/克莱因四元群`）与 `Q8`
+  （`Q_8/quaternion/四元数群`）；`input_contracts.py` 的 named-group 描述同步更新。
+  `tool-registry.json` 与方法卡正文的哈希锁定资产本轮**未改**，避免无谓的资产指纹漂移。
+- 闭环新增 `finiteGroupOptionDefect`：对“所有 d 阶子群都阿贝尔/循环/正规”“存在 d 阶
+  子群”、中心阶 `|Z(G)|`、换位子群阶 `|[G,G]|` 做选项级真假判断；多选题漏选真选项
+  或误选假选项触发 `OPTION_VERDICT_CONTRADICTION`。
+- `D_8` 回归：B（4 阶子群全 Abel）判真、D（`[D_8,D_8]` 阶 2）判真、C（`C(D_8)={1}`）
+  判假；候选只给 `D` 时能指出漏选 B。
+
+### 18.4 Stage 4：WASI explore 提示与路由
+
+- post-card WORK 轮在满足以下全部条件时，仅向 `messages[0].content`（system）追加
+  有界 `POST-METHOD EXPLORATION ADVISORY`：无固定语义工具路由、`allowExplore === true`、
+  尚无 `PROGRAM_OBSERVATION`/`GENERATED_OBSERVATION`、effect 与 model call 预算仍保留
+  一次后续 WorkPacket。默认 `allowExplore=false` 时完全不触发，user JSON 保持字节不变。
+- 方法卡 ≥2 的提示不再写死“立即作答”：仍可执行一次工具或一次 `explore`。
+- `agent-semantics.ts` 扩展：LaTeX `\int_{a}^{b}`/`\int_a^b`、`\lim_{...}`、
+  Taylor/Maclaurin 展开、显式数值矩阵的秩/零度、K4/V4/Q8 命名群；混合“行列式 + 秩”
+  题因需要多个观测而保持不路由，避免把 determinant 部分藏掉。
+- WASI：找到 `/home/ma-user/work/wasi-local-run/profile.json` 与 accepted profile；
+  `run_wasi_acceptance.py` 本轮实跑 **24 passed**，`accept_wasi_profile.py` 生成临时
+  accepted profile；真实 `PythonSandbox` 冒烟 `integrate(sin(x),0,pi)` 返回 `2`。
+
+### 18.5 Stage 5：门禁与静态扫描
+
+- `tsc -b`：0
+- Node（protocol + stdio-runtime）：**535/535**
+- 全量 pytest：**1122 passed, 24 skipped**
+- 方法卡 JSON 模板：**48/48** 经真实 contract/bridge 执行 `status=ok`
+- `test0` 100 题静态路由：**24/100**，分布未回退：
+  OLS 5、EXACT_TRIG_REDUCE 4、EXACT_LIMIT 3、INTERPOLATION_FIT 3、GROUP_STRUCTURE 2、
+  FINITE_ENUMERATION 2，其余各 1；24 条路由的 `toolName` **24/24** 在 P3 白名单。
+- bundle 已用 esbuild 重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**（source commit `5919e7d`）。
+- `git diff --check`：clean。
+
+### 18.6 真实 API 12 题复跑（2026-10-24 完成）
+
+- 输入：`/tmp/test0-stage16.txt`，sha256
+  `6217523d5ffebbe4171c65bc3bef91df3ca3966cea1f4c9dee822354b07f9854`；
+  factory `real_client_factory_retry2:build_client`，4/4 并发，`max_model_calls=800`。
+  新 key 的最小请求先返回 HTTP 200；该 key 不再有旧的 `-20080 输入 tokens 配额` 错误。
+- 结果目录：`/tmp/astra-v5-stage16-pilot2`。
+  **12/12 runner success、12/12 有输出、10/12 有 candidate、2 题 unsolved
+  （#35、#15，均为 `FIELD_VALUE @ session.solve`）**；219 次 provider 请求、
+  0 retry、0 truncated、1,964,301 tokens。
+- 语义核对（ReferenceJudge 只做格式严格匹配，2/12 不是准确率）：
+  - **#4（D8 多选题）已修好**：候选从旧 pilot 的 `D` 变为 **`B、D`**；
+    `finite_group_structure` 被调用，`subgroup_summary` 进入 observation。
+  - 其余语义正确：#4 对应 D8、A4 共轭类 4、复积分公式、插值判断、Lagrange 选项、
+    Runge 端点、OLS 系数公式、非线性 OLS 判断、多重共线性 ABCD，合计 **9/12**。
+  - #1 分裂域：候选 `Q(4√5,i), [E:Q]=8, 是`；参考写 16。按 §17.7.4，
+    参考次数 16 本身可疑；本轮不把该题算作无条件正确，仍标“争议”。
+  - **#35 没有修好**：12 题 run 中 13 次模型调用后 `FIELD_VALUE` 未产出 candidate。
+    单题 8k `max_tokens` 复核（`/tmp/astra-v5-one35-log`）首轮 `finishReason=length`；
+    把 `--default-max-tokens` 提到 16384 后（`/tmp/astra-v5-one35-16k`）能出 candidate，
+    但答案是 **`t^4-2t^3+3t^2-2t+1`**，不是精确的
+    `t^6-5t^5+10t^4-13t^3+10t^2-5t+1`。
+    日志显示 `exact_check_expr[MAXIMAL_MINORS]` 确实返回了 `normalized_minors`
+    （第一项就是正确 6 次式），但该工具调用发生在候选已保护之后：
+    `observation_views=0`、`closure_defects=0`，后续任务 packet 虽提出
+    `t^2-3t+1` 也无法替换已保护的 candidate。故 **Stage 1 的闭环代码未拿到这次
+    观测**；真正缺口是“候选保护后到达的精确观测”没有触发重开候选或再跑一次闭合。
+  - #15 概率题同样 `FIELD_VALUE` unsolved，不是本轮改动引入的路由失败。
+- 全部 12 题的 `closure_defects` 都是 0、`observation_used` 都是 0：本轮真实 API
+  只证明了 #4 能从工具 payload 直接改成 `B,D`，没有提供“缺陷驱动闭环改写候选”的正例。
+  严格 ReferenceJudge 为 2/12；按语义核对为 **9/12 正确、1 题争议、2 题 unsolved**。
+
+### 18.7 test0 路由上限（不要重复踩坑）
+
+本轮扩充后静态命中仍是 **24/100**，不是新路由失效，而是剩余 76 题大多为
+证明/概念选择/拓扑/ODE/PDE/数理统计推断，固定 26 个算子没有对应的“给定输入 →
+可核对对象”。继续堆关键词只会把概念题强制送进空参数工具，违反零空参铁律。
+要再提高必须**新增可核对的数据型工具**（如 ODE 通解、置信区间、线性变换矩阵），
+不能继续在 `semanticToolRoute` 里加宽泛措辞。

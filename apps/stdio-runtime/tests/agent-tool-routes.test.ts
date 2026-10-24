@@ -712,3 +712,99 @@ test("the Phase-3 tool routes are deterministic and call-order independent", () 
     "FINITE_DIFFERENCE_DERIVATIVE",
   ]);
 });
+
+test("v5 group wording recognizes K_4, V_4 and Q_8 without stealing graph/cover routes", () => {
+  for (const problem of [
+    "求 $K_4$ 的元素阶。",
+    "求 $K_{4}$ 的群结构。",
+    "求 $V_4$ 的子群。",
+    "求 $Q_8$ 是否交换。",
+    "判断 $V_4$ 是不是 Abel 群。",
+    "求 Klein 四元群的结构。",
+    "求四元数群 $Q_8$ 的中心。",
+  ]) {
+    assert.equal(routeId(problem), "GROUP_STRUCTURE", problem);
+  }
+  // A graph named K_4 is not a finite-group request by name alone.
+  assert.equal(routeId("求完全图 K_4 上随机游走的覆盖时间。"), "COVER_TIME_COMPLETE_GRAPH");
+  assert.equal(routeId("求完全图 K_4 的边数。"), null);
+});
+
+test("v5 standard LaTeX definite integrals require both scripts and stay out of limits", () => {
+  assert.equal(routeId("计算 \\int_{0}^{\\pi} \\sin x dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.equal(routeId("求 \\int_0^1 x^2 dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.equal(routeId("求 \\int\\limits_{0}^{1} x^2 dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.equal(routeId("求 \\int_{\\frac{0}{1}}^{1} x^2 dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.notEqual(routeId("求 \\int f(x) dx。"), "EXACT_DEFINITE_INTEGRAL");
+  assert.equal(routeId("求定积分的定义。"), null);
+});
+
+test("v5 standard LaTeX limits route value questions but not definition/existence prose", () => {
+  assert.equal(routeId("求 \\lim_{x\\to 0} \\frac{\\sin x}{x}。"), "EXACT_LIMIT");
+  assert.equal(routeId("计算 \\lim\\limits_{x\\to\\infty} (1+1/x)^x。"), "EXACT_LIMIT");
+  assert.equal(routeId("叙述函数极限的定义。"), null);
+  assert.equal(routeId("讨论函数极限的存在性。"), null);
+  assert.equal(routeId("判断极限是否存在。"), null);
+  assert.equal(routeId("极限的概念与基本性质。"), null);
+});
+
+test("v5 Taylor and Maclaurin expansion wording routes coefficient expansion only", () => {
+  assert.equal(
+    routeId("求 f(x)=e^x 在 x=0 处的泰勒展开式。"),
+    "POLYNOMIAL_EXPAND_COEFFICIENTS",
+  );
+  assert.equal(
+    routeId("求 e^x 的麦克劳林展开中 x^3 的系数。"),
+    "POLYNOMIAL_EXPAND_COEFFICIENTS",
+  );
+  assert.equal(
+    routeId("写出 f(x)=sin x 的麦克劳林公式到 x^5 项。"),
+    "POLYNOMIAL_EXPAND_COEFFICIENTS",
+  );
+  // A theorem/definition/remainder mention is not an expansion request.
+  assert.equal(routeId("叙述泰勒公式的定义。"), null);
+  assert.equal(routeId("求泰勒公式的余项。"), null);
+  // A convergence question belongs to the pre-existing series/limit family.
+  assert.notEqual(routeId("求泰勒级数的收敛半径。"), "POLYNOMIAL_EXPAND_COEFFICIENTS");
+});
+
+test("v5 explicit numeric matrix rank/nullity routes to the linear-system family", () => {
+  assert.equal(
+    routeId("求矩阵 [[1,2],[3,4]] 的秩。"),
+    "LINEAR_SYSTEM_SOLUTION_SET",
+  );
+  assert.equal(
+    routeId("设 A = \\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}，求 A 的零度。"),
+    "LINEAR_SYSTEM_SOLUTION_SET",
+  );
+  assert.equal(
+    routeId("解线性方程组 \\begin{cases} x+y=3 \\\\ 2x-y=0 \\end{cases}。"),
+    "LINEAR_SYSTEM_SOLUTION_SET",
+  );
+  // No numeric matrix, or a definitional question, stays out.
+  assert.equal(routeId("叙述矩阵秩的定义。"), null);
+  assert.equal(routeId("求矩阵 A 的秩。"), null);
+  // A mixed determinant-and-rank request is not one linear-system observation.
+  assert.equal(
+    routeId("Compute the determinant of the matrix [[1,2],[3,4]] and its rank."),
+    null,
+  );
+  // GF(2) keeps its more specific rank family.
+  assert.equal(routeId("求 GF(2) 上矩阵 [[1,0],[0,1]] 的秩。"), "GF2_RANK");
+});
+
+test("v5 conceptual interpolation and OLS wording does not route on a keyword alone", () => {
+  assert.equal(routeId("什么是插值多项式？"), null);
+  assert.equal(routeId("叙述拉格朗日插值法的定义。"), null);
+  assert.equal(routeId("简述 OLS 的基本思想。"), null);
+  assert.equal(routeId("最小二乘法的基本假设是什么？"), null);
+  // Actual data-fitting requests still route.
+  assert.equal(
+    routeId("给定数据点 (0,1)、(1,4)、(2,9)，用拉格朗日插值求过这些点的多项式。"),
+    "INTERPOLATION_FIT",
+  );
+  assert.equal(
+    routeId("对下列成对数据做最小二乘拟合直线，并给出回归系数和残差。"),
+    "OLS_CHECK",
+  );
+});

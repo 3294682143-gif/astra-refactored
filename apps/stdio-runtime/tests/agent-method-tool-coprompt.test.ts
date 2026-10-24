@@ -95,6 +95,9 @@ async function run(options: {
   readonly work: (request: AgentModelRequest) => string;
   readonly maxModelCalls: number;
   readonly catalog?: P2MethodCatalog;
+  readonly maxEffects?: number;
+  readonly allowExploration?: boolean;
+  readonly deriveBudget?: boolean;
 }) {
   const activeCatalog = options.catalog ?? CATALOG;
   const ports = reactivePorts({
@@ -111,11 +114,17 @@ async function run(options: {
       remainingMs: 5000,
       maxModelCalls: options.maxModelCalls,
       maxWorkUnits: 1,
-      maxEffects: 1,
+      maxEffects: options.maxEffects ?? 1,
       maxReviews: 0,
       maxMethodLoads: 1,
       maxConsensus: 1,
       now: () => 0,
+      ...(options.deriveBudget === undefined
+        ? {}
+        : { deriveBudget: options.deriveBudget }),
+      ...(options.allowExploration === undefined
+        ? {}
+        : { allowExploration: options.allowExploration }),
     },
     {
       model: ports.model,
@@ -222,6 +231,56 @@ test("a routed problem with a card loaded still falls back to the forced tool tu
   assert.equal(toolEffects.length, 1);
   assert.equal(runResult.result.summary.methodLoads, 1);
   assert.equal(runResult.result.summary.status, "candidate");
+});
+
+test("an unrouted problem with exploration available gets the bounded explore advisory", async () => {
+  assert.equal(semanticToolRoute(NO_ROUTE_PROBLEM), null);
+  const runResult = await run({
+    problem: NO_ROUTE_PROBLEM,
+    maxModelCalls: 5,
+    maxEffects: 2,
+    allowExploration: true,
+    deriveBudget: false,
+    work: (request) => {
+      const system = request.messages[0]!.content;
+      if (system.includes("METHOD SELECTION TURN")) return methodReply();
+      return reactiveWork(withoutAdvisory(request));
+    },
+  });
+
+  assert.deepEqual(
+    runResult.requests.map((request) => request.requestId),
+    ["model-1", "model-2", "model-3", "model-4"],
+  );
+  const postCard = runResult.requests[2]!;
+  const system = postCard.messages[0]!.content;
+  assert.match(system, /POST-METHOD EXPLORATION ADVISORY/u);
+  assert.match(system, /\{"action":"explore"/u);
+  assert.match(system, /BOUNDED_OBSERVATION_NOT_PROOF/u);
+  assert.ok(!system.includes("METHOD+TOOL ADVISORY"));
+  // The advisory is system-only; the trusted user body stays exactly one JSON object.
+  const user = postCard.messages[1]!.content;
+  assert.doesNotThrow(() => JSON.parse(user) as unknown);
+  assert.ok(!user.includes("POST-METHOD EXPLORATION ADVISORY"));
+  assert.equal(runResult.result.summary.methodLoads, 1);
+  assert.equal(runResult.result.summary.status, "candidate");
+});
+
+test("the post-card prompt stays byte-identical when exploration is disabled", async () => {
+  const runResult = await run({
+    problem: NO_ROUTE_PROBLEM,
+    maxModelCalls: 3,
+    maxEffects: 2,
+    allowExploration: false,
+    work: (request) =>
+      request.messages[0]!.content.includes("METHOD SELECTION TURN")
+        ? methodReply()
+        : reactiveWork(withoutAdvisory(request)),
+  });
+  const postCard = runResult.requests[2]!;
+  assert.doesNotMatch(postCard.messages[0]!.content, /POST-METHOD EXPLORATION ADVISORY/u);
+  assert.doesNotMatch(postCard.messages[0]!.content, /METHOD\+TOOL ADVISORY/u);
+  assert.equal(postCard.messages[1]!.content, JSON.stringify(userJson(postCard)));
 });
 
 test("a problem without a tool route keeps the post-card prompt byte-identical", async () => {

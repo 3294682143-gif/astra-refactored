@@ -636,8 +636,9 @@ def validate_inputs(name, args):
                     },
                     {
                         "named_group": (
-                            "S3, S4, A4, A5, D8, D10, Z2..Z12 or C2..C12; "
-                            "Z_n/C_n spellings accepted"
+                            "S3, S4, A4, A5, D8, D10, V4 (K4/K_4/V_4/klein), "
+                            "Q8 (Q_8/quaternion), Z2..Z12 or C2..C12; "
+                            "underscores and case are accepted"
                         )
                     },
                 ],

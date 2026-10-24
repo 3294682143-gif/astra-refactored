@@ -15778,6 +15778,9 @@ function finiteCountingWording(problemText) {
   }
   return /(排列|组合|整数|正整数|自然数|集合|子集|元素|群元素|子群|共轭类|生成元|顶点|边|图|树|字符串|元组|划分|方式|方法|选法|\bways?\b|permutation|combination|integer|set|subset|element|group|conjugacy|generator|vertex|vertices|edge|graph|tree|string|tuple|partition)/iu.test(problemText);
 }
+function conceptualDefinitionWording(problemText) {
+  return /(?:的定义|定义是|定义为何|概念|含义|意义|什么是|何为|基本思想|基本原理|基本假设|\bwhat\s+is\b|\bdefinition\b|\bdefine\b)/iu.test(problemText);
+}
 function polynomialExpandWording(problemText) {
   if (rookNumbersWording(problemText) || independencePolynomialChainWording(problemText)) {
     return false;
@@ -15792,14 +15795,25 @@ function polynomialExpandWording(problemText) {
   if (expansionAction) {
     return true;
   }
+  const taylorMaclaurin = /(?:泰勒|麦克劳林|\bTaylor\b|\bMaclaurin\b)/iu.test(problemText);
+  const taylorExpansionAction = /(?:展开|展开式|级数|多项式|系数|\b(?:expand(?:ed|ing|s)?|series|coefficients?)\b|(?:[x-z]|t)\s*\^\s*\{?\s*[0-9]|[0-9]+\s*(?:次|阶)?\s*项|(?:到|至|前)\s*[^\n。；;]{0,12}\s*项)/iu.test(problemText);
+  if (taylorMaclaurin && taylorExpansionAction && !/(?:定义|概念|含义|意义|收敛半径|收敛域|余项|定理|证明|不等式)/iu.test(problemText)) {
+    return true;
+  }
   const coefficientAction = /(系数|\bcoefficients?\b)/iu.test(problemText);
   const polynomialContext = /(多项式|代数式|展开式|二项式|多项式环|乘积|\bpolynomial\b|\bbinomial\b|\bexpansion\b|\balgebraic\s+expression\b|\bmultiply\b|\bproduct\b|\([^()\n]{1,120}\)\s*\^\s*\{?\s*[0-9A-Za-z]|[xyztuvw]\s*\^\s*\{?\s*[0-9][^\n。；;]{0,12}(?:项|的)?\s*系数|系数[^\n。；;]{0,16}[xyztuvw]\s*\^|\bcoefficients?\b[^\n。；;]{0,20}[xyztuvw]\s*\^)/iu.test(problemText);
   return coefficientAction && polynomialContext;
 }
 function interpolationFitWording(problemText) {
+  if (conceptualDefinitionWording(problemText)) {
+    return false;
+  }
   return /(插值|拉格朗日|Lagrange|牛顿插值|Newton\s+interpolation|过这些点的多项式|\binterpolat(?:e|ed|es|ing|ion)\b)/iu.test(problemText);
 }
 function statsOlsWording(problemText) {
+  if (conceptualDefinitionWording(problemText)) {
+    return false;
+  }
   const explicitRegression = /(最小二乘|least\s+squares?|\bOLS\b|回归系数|regression\s+coefficients?|拟合直线|linear\s+regression|回归直线)/iu.test(problemText);
   const residual = /(残差|\bresiduals?\b)/iu.test(problemText);
   if (!explicitRegression && !residual) {
@@ -15812,14 +15826,14 @@ function statsOlsWording(problemText) {
 }
 function finiteGroupStructureWording(problemText) {
   const explicitCycle = /\(\s*[0-9]{2,}\s*\)|\(\s*[0-9]+\s*(?:[,\s]\s*[0-9]+\s*)+\)/u.test(problemText);
-  const namedGroup = /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2]))(?![A-Za-z0-9_])/iu.test(problemText);
+  const namedGroup = /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2])|K_?\{?\s*4\s*\}?|V_?\{?\s*4\s*\}?|Q_?\{?\s*8\s*\}?)(?![A-Za-z0-9_])|(?:Klein\s*(?:四元群|four[-\s]+group)|克莱因(?:四元群|群)|四元数群|quaternion\s+group)/iu.test(problemText);
   if (!explicitCycle && !namedGroup) {
     return false;
   }
   if (/(环论|环同态|整环|商环|多项式环|一个环|是环|为环|在环|设环|令环|(?<!循)环(?:上|中|内|的)|理想|\bideals?\b|\bring\b|域论|有限域|域扩张|扩域|数域|一个域|是域|为域|在域|设域|令域|域(?:上|中|内)|\bfields?\b)/iu.test(problemText)) {
     return false;
   }
-  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|abelian|commutative|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|阶)/iu.test(problemText);
+  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|阿贝尔|Abel|\babelian\b|\bcommutative\b|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|结构|structure|同构|isomorphic|阶)/iu.test(problemText);
 }
 function integerSolutionWording(problemText) {
   return /(整数解|整数点|整数对|integer\s+solutions?|integer\s+pairs?|integer\s+points?)/iu.test(problemText);
@@ -15887,21 +15901,52 @@ function gf2RankWording(problemText) {
 function gf2NullspaceWording(problemText) {
   return gf2LinearSpaceContext(problemText) && /(零空间|核空间|\bkernel\b|null\s*space|nullspace|解空间|齐次线性方程组|线性相关|linearly\s+dependent)/iu.test(problemText);
 }
+function explicitNumericMatrixWording(problemText) {
+  const latexMatrix = /\\begin\s*\{(?:[bpBvV]?matrix|array)\}[\s\S]{0,400}?\\end\s*\{(?:[bpBvV]?matrix|array)\}/u.test(problemText);
+  const nestedRows = /\[\s*\[[^\]\n]{1,80}\][^\n]{0,200}\]/u.test(problemText);
+  const matrixAssignment = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,24}[=＝][^\n。；;]{0,16}(?:\\begin\s*\{|\[\[|\\left\s*[\[\(])/u.test(problemText);
+  return latexMatrix || nestedRows || matrixAssignment;
+}
+function matrixRankNullityWording(problemText) {
+  if (/(行列式|determinant)/iu.test(problemText)) {
+    return false;
+  }
+  const rankNullity = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,40}(?:的)?(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b|解空间维数)/iu.test(problemText) || /(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b)[^\n。；;]{0,20}(?:矩阵|matrix)/iu.test(problemText);
+  if (!rankNullity || conceptualDefinitionWording(problemText)) {
+    return false;
+  }
+  return explicitNumericMatrixWording(problemText);
+}
+function explicitNumericMatrixSystemWording(problemText) {
+  if (!explicitNumericMatrixWording(problemText)) {
+    return false;
+  }
+  return /(?:解|求解|求|计算|solve|evaluate)[^\n。；;]{0,32}(?:线性方程组|线性系统|方程组|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=|\bA\s*[xX]\s*=\s*b\b)/iu.test(problemText) || /(?:线性方程组|线性系统|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=\s*b)[^\n。；;]{0,32}(?:解|solution|solve)/iu.test(problemText);
+}
 function linearSystemWording(problemText) {
-  const explicitSystem = /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(problemText);
-  if (!explicitSystem) {
+  const explicitSystem = /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(problemText) || explicitNumericMatrixSystemWording(problemText);
+  const rankNullity = matrixRankNullityWording(problemText);
+  if (!explicitSystem && !rankNullity) {
+    return false;
+  }
+  if ((explicitSystem || rankNullity) && conceptualDefinitionWording(problemText)) {
     return false;
   }
   if (/(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:丢番图|求解|搜索)|symbolic\s+(?:diophantine|search|solver))/iu.test(problemText)) {
     return false;
   }
-  if (gf2LinearSpaceContext(problemText) && (gf2RankWording(problemText) || gf2NullspaceWording(problemText))) {
+  if (gf2LinearSpaceContext(problemText) && (rankNullity || gf2RankWording(problemText) || gf2NullspaceWording(problemText))) {
     return false;
   }
   return !(/(微分方程组|常微分方程组|differential\s+(?:equation\s+)?system)/iu.test(problemText) && !/(线性方程组|linear\s+system)/iu.test(problemText));
 }
 function exactLimitWording(problemText) {
-  if (/(极限|limit|\\lim|lim\s*_)/iu.test(problemText)) {
+  const conceptualLimit = /(?:极限|\blimit\b)[^\n。；;]{0,20}(?:的?定义|概念|含义|意义|存在性|是否存在|不存在|唯一性|性质|运算法则|基本思想)|(?:定义|概念|什么是|何为|\bwhat\s+is\b)[^\n。；;]{0,20}(?:极限|\blimit\b)/iu.test(problemText);
+  const valueRequest = /(?:求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText);
+  if (conceptualLimit && !valueRequest) {
+    return false;
+  }
+  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_)/iu.test(problemText)) {
     return true;
   }
   const seriesLimit = /(级数[^\n。；;]{0,32}(?:的?和|求和|收敛|发散)|\b(?:series|power\s+series)\b[^\n。；;]{0,32}(?:sum|converges?|diverges?|limit)|\bsum\s+of\s+(?:the\s+)?(?:power\s+)?series\b|收敛到|收敛于|\bconverges?\s+to\b|\basymptotic\s+limit\b|渐近极限|(?:∑|\\sum|Σ)[^\n。；;]{0,32}(?:和|求和|极限|sum|limit))/iu.test(problemText);
@@ -15911,13 +15956,16 @@ function exactLimitWording(problemText) {
   return !/(?:求|计算|evaluate|compute)[^\n。；;]{0,20}(?:积分|integral)/iu.test(problemText);
 }
 function exactDefiniteIntegralWording(problemText) {
-  if (/(极限|limit|\\lim|lim\s*_|渐近)/iu.test(problemText)) {
+  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_|渐近)/iu.test(problemText)) {
     return false;
   }
   const definiteMark = /(定积分|definite\s+integral)/iu.test(problemText);
   const integralSign = /(?:∫|\\int)/u.test(problemText);
-  const integralLimits = /(?:∫|\\int)\s*(?:_\s*\{?[^}\s]{1,16}\}?\s*\^\s*\{?[^}\s]{1,16}\}?|\^\s*\{?[^}\s]{1,16}\}?\s*_\s*\{?[^}\s]{1,16}\}?)/u.test(problemText);
+  const integralLimits = /(?:∫|\\int)\s*(?:\\limits\s*)?(?:[_^]\s*(?:\{(?:[^{}\n]|\{[^{}\n]{0,48}\}){1,96}\}|[^\s{^_]{1,24})\s*){2}/u.test(problemText);
   if (!definiteMark && !(integralSign && integralLimits)) {
+    return false;
+  }
+  if (conceptualDefinitionWording(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
     return false;
   }
   if (/(收敛性|敛散性|是否收敛|是否发散|收敛还是发散|可积性|是否可积|不可积|存在性|是否存在|判断|讨论|证明|convergence|converges?|divergence|diverges?|integrab|exist)/iu.test(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
@@ -16702,6 +16750,56 @@ function sameUpToConstantFactor(left, right) {
   }
   return true;
 }
+function univariateCoefficients(poly, variable) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [monomial, coefficient] of poly) {
+    let exponent = 0;
+    if (monomial !== "") {
+      for (const part of monomial.split("*")) {
+        if (part === "")
+          continue;
+        const [name, raw] = part.split("^");
+        if (name !== variable)
+          return null;
+        const power = raw === void 0 ? 1 : Number(raw);
+        if (!Number.isSafeInteger(power) || power < 0)
+          return null;
+        exponent += power;
+      }
+    }
+    if (coefficient !== 0) {
+      out.set(exponent, (out.get(exponent) ?? 0) + coefficient);
+    }
+  }
+  return out;
+}
+function sameLaurentUpToUnit(left, right, variable) {
+  const a = univariateCoefficients(left, variable);
+  const b = univariateCoefficients(right, variable);
+  if (a === null || b === null || a.size === 0 || b.size !== a.size)
+    return false;
+  const aKeys = [...a.keys()].sort((x, y) => x - y);
+  const bKeys = [...b.keys()].sort((x, y) => x - y);
+  const aMin = aKeys[0];
+  const bMin = bKeys[0];
+  const pivot = aKeys[0];
+  const aValue = a.get(pivot);
+  const bValue = b.get(pivot - aMin + bMin);
+  if (bValue === void 0 || Math.abs(aValue) < 1e-12 || Math.abs(bValue) < 1e-12) {
+    return false;
+  }
+  const factor = bValue / aValue;
+  for (const exponent of aKeys) {
+    const other = b.get(exponent - aMin + bMin);
+    const value = a.get(exponent);
+    if (other === void 0)
+      return false;
+    if (Math.abs(other - value * factor) > 1e-9 * Math.max(1, Math.abs(other))) {
+      return false;
+    }
+  }
+  return true;
+}
 function minorPolynomialText(minor) {
   if (typeof minor === "string")
     return minor;
@@ -16775,9 +16873,13 @@ function degreeConservationDefect(problemText, candidate, observation) {
   if (answerPoly === null)
     return null;
   const answerDegree = degreeIn(answerPoly, observed.variable);
-  if (answerDegree === observedDegree)
+  if (sameLaurentUpToUnit(answerPoly, observedPoly, observed.variable)) {
     return null;
-  return defect("DEGREE_CONSERVATION", "exact maximal-minor polynomial has degree " + observedDegree + " in " + observed.variable + ", but the candidate polynomial has degree " + answerDegree + "; a lower-degree factor cannot replace the full invariant", "OBSERVATION");
+  }
+  if (answerDegree !== observedDegree) {
+    return defect("DEGREE_CONSERVATION", "exact maximal-minor polynomial has degree " + observedDegree + " in " + observed.variable + " (specifically " + observed.polynomial + "), but the candidate polynomial has degree " + answerDegree + "; use the exact full invariant " + observed.polynomial + " (up to \xB1" + observed.variable + "^k unit normalization) instead of a lower-degree factor", "OBSERVATION");
+  }
+  return defect("DEGREE_CONSERVATION", "candidate polynomial has degree " + answerDegree + " in " + observed.variable + " but its coefficients do not match the exact maximal-minor polynomial " + observed.polynomial + " (even up to \xB1" + observed.variable + "^k unit normalization)", "OBSERVATION");
 }
 function normalizationDefect(problemText, candidate, packet, observation) {
   if (!/(密度|density)/iu.test(problemText))
@@ -16878,8 +16980,6 @@ function lastObservation(observations, name) {
   return null;
 }
 function realRootCountDefect(problemText, candidate, observations) {
-  if (semanticToolRoute(problemText)?.id !== "REAL_ROOT_COUNT")
-    return null;
   const observation = lastObservation(observations, "real_root_count_expr");
   if (observation === null)
     return null;
@@ -16890,8 +16990,9 @@ function realRootCountDefect(problemText, candidate, observations) {
   return defect("REAL_ROOT_COUNT", "the exact Sturm count reports " + observed + " distinct real root(s), but the candidate states " + stated, "OBSERVATION");
 }
 function splittingFieldDegreeDefect(problemText, candidate, observations) {
-  if (semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE")
+  if (semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE" && !/(?:分裂域|splitting\s+field|galois|\[\s*[A-Za-z][^\]]{0,8}\s*:\s*(?:\\mathbb\{Q\}|Q)\s*\])/iu.test(problemText)) {
     return null;
+  }
   const observation = lastObservation(observations, "splitting_field_degree_expr");
   if (observation === null)
     return null;
@@ -16978,8 +17079,6 @@ function interpolationObservation(result) {
   };
 }
 function interpolationResidualDefect(problemText, candidate, observations) {
-  if (semanticToolRoute(problemText)?.id !== "INTERPOLATION_FIT")
-    return null;
   const observation = lastObservation(observations, "interpolation_fit_check");
   if (observation === null)
     return null;
@@ -17041,6 +17140,33 @@ function olsMismatchDefect(candidate, observations) {
     return null;
   return defect("OLS_MISMATCH", "the exact least-squares fit reports slope " + observed.slope + " and intercept " + observed.intercept + (observed.n === null ? "" : " for " + observed.n + " exact data pair(s)") + ", but the candidate states " + stated.join(" and "), "OBSERVATION");
 }
+function subgroupSummaryView(value) {
+  if (value === void 0 || value === null)
+    return null;
+  if (!Array.isArray(value) || value.length > 64)
+    return null;
+  const rows3 = [];
+  for (const item of value) {
+    const row = recordValue(item);
+    if (row === null)
+      return null;
+    const order = row["order"];
+    const count = row["count"];
+    const normalCount = row["normal_count"];
+    if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 || typeof count !== "number" || !Number.isSafeInteger(count) || count < 0 || typeof normalCount !== "number" || !Number.isSafeInteger(normalCount) || normalCount < 0 || normalCount > count || typeof row["all_abelian"] !== "boolean" || typeof row["all_cyclic"] !== "boolean" || typeof row["has_cyclic"] !== "boolean") {
+      return null;
+    }
+    rows3.push({
+      order,
+      count,
+      normalCount,
+      allAbelian: row["all_abelian"],
+      allCyclic: row["all_cyclic"],
+      hasCyclic: row["has_cyclic"]
+    });
+  }
+  return rows3;
+}
 function groupObservation(result) {
   const record = recordValue(result);
   if (record === null)
@@ -17064,11 +17190,16 @@ function groupObservation(result) {
       return null;
     }
   }
+  const centerSize = observationInteger(record["center_size"]);
+  const derivedSize = observationInteger(record["derived_size"]);
   return {
     order,
     conjugacyClassCount: classes.length,
     isAbelian: typeof record["is_abelian"] === "boolean" ? record["is_abelian"] : null,
-    isCyclic: typeof record["is_cyclic"] === "boolean" ? record["is_cyclic"] : null
+    isCyclic: typeof record["is_cyclic"] === "boolean" ? record["is_cyclic"] : null,
+    centerSize: centerSize !== null && centerSize >= 1 ? centerSize : null,
+    derivedSize: derivedSize !== null && derivedSize >= 1 ? derivedSize : null,
+    subgroupSummary: subgroupSummaryView(record["subgroup_summary"])
   };
 }
 function groupStructureMismatchDefect(candidate, observations) {
@@ -17096,8 +17227,9 @@ function groupStructureMismatchDefect(candidate, observations) {
 function problemOptionTexts(problemText) {
   if (typeof problemText !== "string" || problemText.length === 0)
     return [];
+  const normalizedText = problemText.replace(/\\item\s*\[\s*\(?([A-E])\)?\s*([\.\)、:：])\s*\]/gu, "\n$1$2 ").replace(/\\item\s*\[\s*\(?([A-E])\)?\s*\]/gu, "\n$1. ");
   const markers = [];
-  for (const match of problemText.matchAll(OPTION_MARKER)) {
+  for (const match of normalizedText.matchAll(OPTION_MARKER)) {
     const letter = (match[1] ?? "").toUpperCase();
     if (letter.length === 0)
       continue;
@@ -17115,8 +17247,8 @@ function problemOptionTexts(problemText) {
   const options = [];
   for (let index = 0; index < markers.length; index += 1) {
     const marker = markers[index];
-    const end = index + 1 < markers.length ? markers[index + 1].start : problemText.length;
-    const text8 = problemText.slice(marker.bodyStart, end).trim();
+    const end = index + 1 < markers.length ? markers[index + 1].start : normalizedText.length;
+    const text8 = normalizedText.slice(marker.bodyStart, end).trim();
     if (text8.length === 0 || text8.length > MAX_OPTION_TEXT_CHARS)
       continue;
     options.push({ letter: marker.letter, text: text8 });
@@ -17323,6 +17455,8 @@ function optionVerdictContradictionDefect(problemText, candidate, observations) 
       const clause = rawClause.trim();
       if (clause.length === 0)
         continue;
+      if (/(?:子群|subgroup)/iu.test(clause))
+        continue;
       for (const property of GROUP_PROPERTY_ASSERTIONS) {
         if (!property.keyword.test(clause))
           continue;
@@ -17341,6 +17475,161 @@ function optionVerdictContradictionDefect(problemText, candidate, observations) 
   }
   if (parts.length === 0)
     return null;
+  return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
+}
+function optionOrderNumber(raw) {
+  if (/^[0-9]{1,3}$/u.test(raw)) {
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  const digits = {
+    \u4E00: 1,
+    \u4E8C: 2,
+    \u4E09: 3,
+    \u56DB: 4,
+    \u4E94: 5,
+    \u516D: 6,
+    \u4E03: 7,
+    \u516B: 8,
+    \u4E5D: 9
+  };
+  if (raw === "\u5341")
+    return 10;
+  if (raw.length === 1)
+    return digits[raw] ?? null;
+  if (raw.length === 2 && raw[0] === "\u5341") {
+    const unit = digits[raw[1]];
+    return unit === void 0 ? null : 10 + unit;
+  }
+  if (raw.length === 2 && raw[1] === "\u5341") {
+    const ten = digits[raw[0]];
+    return ten === void 0 ? null : ten * 10;
+  }
+  return null;
+}
+function groupOptionTruth(text8, observed) {
+  const normalized = text8.replace(/\$/gu, "").replace(/\\/gu, "");
+  const rowFor = (order) => observed.subgroupSummary?.find((row) => row.order === order) ?? null;
+  const orderPattern = "([0-9]{1,3}|[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341]{1,3})";
+  const allAbelian = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u963F\u8D1D\u5C14|\u4EA4\u6362|abel(?:ian)?)", "iu").exec(normalized);
+  if (allAbelian !== null) {
+    const order = optionOrderNumber(allAbelian[1]);
+    if (order === null)
+      return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.allAbelian,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", all_abelian=" + (row?.allAbelian ?? false)
+    };
+  }
+  const allCyclic = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u5FAA\u73AF|cyclic)", "iu").exec(normalized);
+  if (allCyclic !== null) {
+    const order = optionOrderNumber(allCyclic[1]);
+    if (order === null)
+      return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.allCyclic,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", all_cyclic=" + (row?.allCyclic ?? false)
+    };
+  }
+  const allNormal = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u6B63\u89C4|normal)", "iu").exec(normalized);
+  if (allNormal !== null) {
+    const order = optionOrderNumber(allNormal[1]);
+    if (order === null)
+      return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0 && row.normalCount === row.count,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", normal_count=" + (row?.normalCount ?? 0)
+    };
+  }
+  if (/(?:所有|全部|任意|每个)/iu.test(text8))
+    return null;
+  const noSubgroup = new RegExp("(?:\u4E0D\u5B58\u5728|\u6CA1\u6709|\u65E0)\\s*(?:\u4EFB\u4F55)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4", "iu").exec(normalized);
+  if (noSubgroup !== null) {
+    const order = optionOrderNumber(noSubgroup[1]);
+    if (order === null)
+      return null;
+    const row = rowFor(order);
+    return {
+      truth: row === null || row.count === 0,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0)
+    };
+  }
+  const existsSubgroup = new RegExp("(?:\u5B58\u5728|\u6709|\u81F3\u5C11\u6709\u4E00\u4E2A|\u81F3\u5C11\u5B58\u5728\u4E00\u4E2A)\\s*(?:\u4E00\u4E2A|a)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4", "iu").exec(normalized);
+  if (existsSubgroup !== null) {
+    const order = optionOrderNumber(existsSubgroup[1]);
+    if (order === null)
+      return null;
+    const row = rowFor(order);
+    return {
+      truth: row !== null && row.count > 0,
+      detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0)
+    };
+  }
+  const center = /(?:中心|center|(?:C|Z)\s*\(\s*(?:G|[A-Za-z0-9_]{1,8})\s*\))[^\n。；;]{0,28}?(?:(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|=\s*\{?\s*([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized) || /\{\s*([0-9]{1,4})\s*\}/u.exec(normalized);
+  if (center !== null && /(?:\|Z\s*\(\s*G\s*\)|中心|center|(?:C|Z)\s*\()/iu.test(normalized)) {
+    const size = Number(center[1] ?? center[2] ?? center[3]);
+    if (!Number.isSafeInteger(size) || observed.centerSize === null)
+      return null;
+    return {
+      truth: observed.centerSize === size,
+      detail: "center_size=" + String(observed.centerSize)
+    };
+  }
+  const derived = /(?:\[[A-Za-z0-9_]+,[A-Za-z0-9_]+\]|换位子群|导群|commutator|derived)[^\n。；;]{0,28}?(?:([0-9]{1,4})\s*阶|(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized);
+  if (derived !== null) {
+    const size = Number(derived[1] ?? derived[2] ?? derived[3]);
+    if (!Number.isSafeInteger(size) || observed.derivedSize === null)
+      return null;
+    return {
+      truth: observed.derivedSize === size,
+      detail: "derived_size=" + String(observed.derivedSize)
+    };
+  }
+  return null;
+}
+function finiteGroupOptionDefect(problemText, candidate, observations) {
+  const options = problemOptionTexts(problemText);
+  if (options.length < 2)
+    return null;
+  const chosen = new Set(candidateChoiceLetters(candidate));
+  if (chosen.size === 0)
+    return null;
+  const observed = groupObservation(lastObservation(observations, "finite_group_structure")?.result);
+  if (observed === null)
+    return null;
+  if (observed.subgroupSummary === null && observed.centerSize === null && observed.derivedSize === null) {
+    return null;
+  }
+  const truths = options.map((option) => {
+    const truth2 = groupOptionTruth(option.text, observed);
+    return truth2 === null ? null : { letter: option.letter, ...truth2 };
+  }).filter((row) => row !== null);
+  if (truths.length === 0)
+    return null;
+  const selectedFalse = truths.filter((row) => chosen.has(row.letter) && !row.truth);
+  const selectedTrue = truths.filter((row) => chosen.has(row.letter) && row.truth);
+  const trueOptions = truths.filter((row) => row.truth);
+  const falseOptions = truths.filter((row) => !row.truth);
+  const multiSelect = chosen.size > 1 || /(?:多选|多项|哪些|所有正确|全部正确|选出所有|select\s+all|multiple\s+select|correct\s+ones)/iu.test(problemText) || trueOptions.length > 1;
+  const parts = [];
+  for (const row of selectedFalse) {
+    parts.push("option " + row.letter + " is proven FALSE by finite_group_structure (" + row.detail + ")");
+  }
+  if (multiSelect) {
+    for (const row of trueOptions) {
+      if (!chosen.has(row.letter)) {
+        parts.push("option " + row.letter + " is proven TRUE by finite_group_structure (" + row.detail + "), so omitting it contradicts the exact group observation");
+      }
+    }
+  }
+  if (parts.length === 0) {
+    void selectedTrue;
+    void falseOptions;
+    return null;
+  }
   return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
 function exactCountObservation(result) {
@@ -17619,6 +17908,227 @@ function identityVerdictMismatchDefect(candidate, observations) {
     return null;
   return defect("IDENTITY_VERDICT_MISMATCH", "the exact residual computation reports identity_holds=" + String(observed.identityHolds) + (observed.witness === null ? "" : " with witness " + observed.witness) + ", but the candidate states the pure verdict " + boundedNoteExcerpt(candidate, 48), "OBSERVATION");
 }
+function normalizeScalarText(source) {
+  let text8 = source.trim();
+  text8 = text8.replace(/^(?:最终答案|答案|回答|结果|final\s+answer|answer)\s*[:：]?\s*/iu, "");
+  text8 = text8.replace(/^\$+|\$+$/gu, "");
+  text8 = text8.replace(/^\\boxed\{([\s\S]*)\}$/u, "$1");
+  text8 = text8.replace(/\\left|\\right/gu, "");
+  text8 = text8.replace(/\\dfrac|\\tfrac/gu, "\\frac");
+  text8 = text8.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gu, "($1)/($2)");
+  text8 = text8.replace(/\\frac([+-]?\d)([+-]?\d)/gu, "($1)/($2)");
+  text8 = text8.replace(/\\sqrt\s*\{([^{}]+)\}/gu, "sqrt($1)");
+  text8 = text8.replace(/\\pi/gu, "pi").replace(/π/gu, "pi");
+  text8 = text8.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/gu, "($1)/($2)");
+  text8 = text8.replace(/\\cdot|\\times/gu, "*");
+  text8 = text8.replace(/\^\{([^{}]+)\}/gu, "^$1");
+  text8 = text8.replace(/[{}]/gu, "");
+  text8 = text8.replace(/\s+/gu, "");
+  text8 = text8.replace(/^(-?)\((.+)\)\/\((.+)\)$/u, "$1$2/$3");
+  text8 = text8.replace(/[。；;，,]+$/u, "");
+  return text8;
+}
+function parseScalarValue(source) {
+  if (typeof source !== "string")
+    return null;
+  let text8 = normalizeScalarText(source);
+  if (text8.length === 0 || text8.length > 96)
+    return null;
+  const sign = text8.startsWith("-") ? -1 : 1;
+  if (text8.startsWith("-") || text8.startsWith("+"))
+    text8 = text8.slice(1);
+  const finite = (value) => Number.isFinite(value) ? sign * value : null;
+  const decimal = "([0-9]+(?:\\.[0-9]+)?)";
+  let match = new RegExp(`^sqrt\\(${decimal}\\)(?:\\/${decimal})?$`, "u").exec(text8);
+  if (match !== null) {
+    const radicand = Number(match[1]);
+    const divisor = match[2] === void 0 ? 1 : Number(match[2]);
+    if (radicand < 0 || divisor === 0)
+      return null;
+    return finite(Math.sqrt(radicand) / divisor);
+  }
+  match = new RegExp(`^(?:${decimal}\\*?)?pi(?:\\/${decimal})?$`, "u").exec(text8);
+  if (match !== null) {
+    const multiplier = match[1] === void 0 ? 1 : Number(match[1]);
+    const divisor = match[2] === void 0 ? 1 : Number(match[2]);
+    if (divisor === 0)
+      return null;
+    return finite(Math.PI * multiplier / divisor);
+  }
+  match = new RegExp(`^pi\\*${decimal}(?:\\/${decimal})?$`, "u").exec(text8);
+  if (match !== null) {
+    const divisor = match[2] === void 0 ? 1 : Number(match[2]);
+    if (divisor === 0)
+      return null;
+    return finite(Math.PI * Number(match[1]) / divisor);
+  }
+  if (text8 === "e")
+    return finite(Math.E);
+  match = new RegExp(`^${decimal}(?:\\/${decimal})?$`, "u").exec(text8);
+  if (match !== null) {
+    const numerator = Number(match[1]);
+    const denominator = match[2] === void 0 ? 1 : Number(match[2]);
+    if (denominator === 0)
+      return null;
+    return finite(numerator / denominator);
+  }
+  return null;
+}
+function scalarClaim(source) {
+  const direct = parseScalarValue(source);
+  if (direct !== null)
+    return { value: direct, raw: normalizeScalarText(source) };
+  const match = /(?:=|为|是|等于|[:：])\s*([^，,；;。\n]+)\s*$/u.exec(source.trim());
+  if (match === null)
+    return null;
+  const value = parseScalarValue(match[1]);
+  return value === null ? null : { value, raw: normalizeScalarText(match[1]) };
+}
+function exactScalarObservation(observation, operation) {
+  if (observation === null || observation === void 0)
+    return null;
+  const fields = operation === "LIMIT" ? ["limit", "value", "result", "numeric"] : operation === "DEFINITE_INTEGRAL" ? ["exact", "value", "result", "numeric"] : operation === "SIMPLIFY" ? ["simplified", "value", "result"] : ["trig_reduced", "value", "result"];
+  for (const field of fields) {
+    const raw = observation[field];
+    if (typeof raw !== "string")
+      continue;
+    const value = parseScalarValue(raw);
+    if (value !== null)
+      return { raw, value };
+  }
+  return null;
+}
+function exactScalarValueDefect(input) {
+  const operations = ["DEFINITE_INTEGRAL", "LIMIT", "SIMPLIFY", "TRIG_REDUCE"];
+  for (const operation of operations) {
+    const observed = exactScalarObservation(exactObservationFor(input, operation), operation);
+    if (observed === null)
+      continue;
+    let stated = scalarClaim(input.candidate);
+    if (stated === null) {
+      const chosen = candidateChoiceLetters(input.candidate);
+      if (chosen.length === 1) {
+        const option = problemOptionTexts(input.problemText).find((row) => row.letter === chosen[0]);
+        if (option !== void 0)
+          stated = scalarClaim(option.text);
+      }
+    }
+    if (stated === null)
+      continue;
+    if (Math.abs(stated.value - observed.value) <= 1e-6)
+      continue;
+    return defect("EXACT_VALUE_MISMATCH", "exact_check_expr[" + operation + "] computed " + observed.raw + ", but the candidate answer evaluates to " + stated.raw, "OBSERVATION");
+  }
+  return null;
+}
+function linearSystemObservation(result) {
+  const record = recordValue(result);
+  if (record === null)
+    return null;
+  const rawKind = typeof record["kind"] === "string" ? record["kind"] : typeof record["status"] === "string" ? record["status"] : null;
+  if (rawKind === null)
+    return null;
+  const kind = rawKind.toUpperCase();
+  let normalized;
+  if (kind === "EMPTY" || kind === "INCONSISTENT" || kind === "NO_SOLUTION") {
+    normalized = "EMPTY";
+  } else if (kind === "UNIQUE" || kind === "ONE_SOLUTION") {
+    normalized = "UNIQUE";
+  } else if (kind === "AFFINE" || kind === "PARAMETRIC" || kind === "INFINITE") {
+    normalized = "AFFINE";
+  } else {
+    return null;
+  }
+  const rank = observationInteger(record["rank"]);
+  const basis = Array.isArray(record["basis"]) ? record["basis"] : null;
+  const nullity = observationInteger(record["nullity"]) ?? (basis === null ? null : basis.length);
+  const rawParticular = record["particular"] ?? record["solution"];
+  const particular = Array.isArray(rawParticular) ? rawParticular.filter((item) => typeof item === "string") : null;
+  return { kind: normalized, rank, nullity, particular };
+}
+function candidateSolutionVector(candidate) {
+  const text8 = candidate.replace(/\$/gu, "").replace(/\\left|\\right/gu, "").replace(/\\(?:begin|end)\{[pb]?matrix\}/gu, "(").replace(/\\(?:begin|end)\{array\}(?:\{[^{}]*\})?/gu, "(").replace(/\\\{/gu, "{").replace(/\\\}/gu, "}");
+  const labelled = [...text8.matchAll(/(?<![A-Za-z])([A-Za-z](?:_?\{?[0-9]+\}?)?)\s*=\s*([+-]?(?:[0-9]+(?:\.[0-9]+)?)(?:\s*\/\s*[0-9]+)?)/gu)];
+  if (labelled.length >= 1) {
+    const names = new Set(labelled.map((match) => match[1].replace(/[{}]/gu, "")));
+    if (names.size === labelled.length) {
+      const values = [];
+      for (const match of labelled) {
+        const value = parseScalarValue(match[2]);
+        if (value === null)
+          return null;
+        values.push(value);
+      }
+      return values;
+    }
+  }
+  const cue = /(?:唯一解|解为|解是|解集为|通解为|solution|particular|answer\s*(?:is|:|=))/iu.test(text8);
+  const candidates = [...text8.matchAll(/(?:\(([^()\[\]{}]{1,160})\)|\[([^()\[\]{}]{1,160})\]|\{([^()\[\]{}]{1,160})\})/gu)];
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const match = candidates[index];
+    const body = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (body === "")
+      continue;
+    const tokens = body.split(/[,，;；]|\\\\/u).map((item) => item.trim()).filter(Boolean);
+    if (tokens.length < 1)
+      continue;
+    const values = [];
+    let parsed = true;
+    for (const token of tokens) {
+      const value = parseScalarValue(token);
+      if (value === null) {
+        parsed = false;
+        break;
+      }
+      values.push(value);
+    }
+    if (!parsed)
+      continue;
+    const remainder = text8.replace(match[0], "").replace(/[\s。；;，,]+/gu, "");
+    if (cue || remainder === "" || /^(?:答案|解|答|\(\^?T\))$/iu.test(remainder)) {
+      return values;
+    }
+  }
+  return null;
+}
+function linearSystemMismatchDefect(input) {
+  const observation = lastObservation(input.toolObservations, "linear_system_solution_set");
+  if (observation === null)
+    return null;
+  const observed = linearSystemObservation(observation.result);
+  if (observed === null)
+    return null;
+  const text8 = input.candidate;
+  const noSolution = /无解|不存在解|没有解|无解集|inconsistent|no\s+solution/iu.test(text8);
+  const unique = /唯一解|恰有一解|仅有一解|唯一的解|unique\s+solution|exactly\s+one\s+solution/iu.test(text8);
+  const infinite = /无穷多解|无限多解|无穷多个解|通解|一般解|参数化解|infinitely\s+many|parametric/iu.test(text8);
+  const hasSolution = /有解|存在解|至少一个解|solution/iu.test(text8);
+  let contradiction = false;
+  if (observed.kind === "EMPTY") {
+    contradiction = !noSolution && (unique || infinite || hasSolution);
+  } else if (observed.kind === "UNIQUE") {
+    contradiction = noSolution || infinite;
+  } else {
+    contradiction = noSolution || unique;
+  }
+  let vectorMismatch = null;
+  if (observed.kind === "UNIQUE" && observed.particular !== null) {
+    const statedVector = candidateSolutionVector(text8);
+    if (statedVector !== null && statedVector.length === observed.particular.length) {
+      const observedVector = observed.particular.map((item) => parseScalarValue(item));
+      if (observedVector.every((item) => item !== null)) {
+        const differs = statedVector.some((value, index) => Math.abs(value - observedVector[index]) > 1e-9 * Math.max(1, Math.abs(value), Math.abs(observedVector[index])));
+        if (differs)
+          vectorMismatch = statedVector;
+      }
+    }
+  }
+  if (!contradiction && vectorMismatch === null)
+    return null;
+  const observedDetail = "kind " + observed.kind + (observed.rank === null ? "" : ", rank " + String(observed.rank)) + (observed.nullity === null ? "" : ", nullity " + String(observed.nullity)) + (observed.particular === null ? "" : ", particular " + JSON.stringify(observed.particular));
+  const statedDetail = vectorMismatch === null ? "a different solution status" : "the solution vector " + JSON.stringify(vectorMismatch);
+  return defect("LINEAR_SYSTEM_STATUS_MISMATCH", "linear_system_solution_set reports " + observedDetail + ", but the candidate states " + statedDetail, "OBSERVATION");
+}
 function exactObservationFor(input, operation) {
   const indexed = input.exactObservations?.get(operation) ?? null;
   if (indexed !== null)
@@ -17645,6 +18155,12 @@ function answerClosureDefects(input) {
   const splittingField = splittingFieldDegreeDefect(input.problemText, input.candidate, input.toolObservations);
   if (splittingField !== null)
     defects.push(splittingField);
+  const exactValue = exactScalarValueDefect(input);
+  if (exactValue !== null)
+    defects.push(exactValue);
+  const linearSystem = linearSystemMismatchDefect(input);
+  if (linearSystem !== null)
+    defects.push(linearSystem);
   const interpolation = interpolationResidualDefect(input.problemText, input.candidate, input.toolObservations);
   if (interpolation !== null)
     defects.push(interpolation);
@@ -17660,6 +18176,9 @@ function answerClosureDefects(input) {
   const optionVerdict = optionVerdictContradictionDefect(input.problemText, input.candidate, input.toolObservations);
   if (optionVerdict !== null)
     defects.push(optionVerdict);
+  const finiteGroupOption = finiteGroupOptionDefect(input.problemText, input.candidate, input.toolObservations);
+  if (finiteGroupOption !== null)
+    defects.push(finiteGroupOption);
   const gf2Rank = gf2RankMismatchDefect(input.problemText, input.candidate, input.toolObservations);
   if (gf2Rank !== null)
     defects.push(gf2Rank);
@@ -17687,6 +18206,15 @@ function boundedNoteExcerpt(text8, limit = 240) {
 function answerClosureNote(defects) {
   const kinds = new Set(defects.map((row) => row.kind));
   const hints = [];
+  if (kinds.has("DEGREE_CONSERVATION")) {
+    hints.push("Replace the candidate polynomial with the exact maximal-minor polynomial reported by exact_check_expr[MAXIMAL_MINORS] in the defect detail above (normalized up to \xB1t^k if an Alexander polynomial is requested), and never replace the full determinant/minor invariant with a proper factor.");
+  }
+  if (kinds.has("EXACT_VALUE_MISMATCH")) {
+    hints.push("Use exactly the scalar value reported by exact_check_expr for LIMIT, DEFINITE_INTEGRAL, SIMPLIFY or TRIG_REDUCE; do not keep the rejected scalar or an unnormalized equivalent.");
+  }
+  if (kinds.has("LINEAR_SYSTEM_STATUS_MISMATCH")) {
+    hints.push("State the linear-system status exactly as the observation reports: EMPTY means no solution, UNIQUE means one solution, and AFFINE means a non-unique solution family; include the observed rank/nullity when relevant.");
+  }
   if (kinds.has("INTERPOLATION_RESIDUAL")) {
     hints.push("If the answer is an interpolating polynomial, fit it through every stated point exactly and state the polynomial that is named as the interpolating polynomial above.");
   }
@@ -17721,6 +18249,7 @@ function answerClosureNote(defects) {
     ...defects.map((row) => "- " + row.kind + ": " + row.detail + "."),
     ...hints,
     "Return exactly one complete WorkPacket with a corrected candidateProposal.",
+    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet.",
     "Include one `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` row for each corrected property.",
     "If the answer is multiple choice, include `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option in the problem exactly once and make candidateProposal exactly the TRUE options.",
     "If the problem asks for every solution or case, include `CERT1|COMPLETENESS|<exhaustive case split> => PASS`.",
@@ -18531,6 +19060,11 @@ function methodToolCoPrompt(methodId2, route) {
   const block = "\n\nMETHOD+TOOL ADVISORY (card " + methodId2 + ", tool " + route.toolName + '). Prefer one tool turn over a final WorkPacket: {"action":"tool","name":"' + route.toolName + '","args":' + route.argsTemplate + ',"scope":"<what is computed from the problem statement>"}. ' + methodToolInputConstraint(route) + " After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
   const chars = [...block];
   return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS ? block : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
+}
+function explorationCoPrompt() {
+  const block = '\n\nPOST-METHOD EXPLORATION ADVISORY. No fixed semantic tool route matched this problem. A bounded Python exploration is available in this session. If the problem involves symbolic integration, series or limits, linear algebra, differential equations, group/ring properties, or a numeric multi-option check, reply first with exactly one JSON exploration action {"action":"explore","code":"import sympy as sp\\n# compute exact invariants and print results\\nprint(...)","scope":"verify key mathematical quantities with SymPy"} and nothing else. Its observation is a BOUNDED_OBSERVATION_NOT_PROOF and is input-relative data, not a proof or a certificate. After the observation, submit the complete WorkPacket. Do not invent a tool name or a different action.';
+  const chars = [...block];
+  return chars.length <= MAX_EXPLORATION_COPROMPT_CHARS ? block : chars.slice(0, MAX_EXPLORATION_COPROMPT_CHARS).join("");
 }
 function goalKindOf(goals, goalId) {
   for (const goal of goals) {
@@ -19397,7 +19931,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           methodOfferNote = "\n\n" + methodLoadRefusalNotice + loadedMethodNote + remainingRoutedNote;
           methodLoadRefusalNotice = null;
         } else if (methodAssets.length >= 2) {
-          methodOfferNote = "\n\nMETHOD CONTEXT." + loadedMethodNote + remainingRoutedNote + "\nNo further method load is available; answer with exactly one complete WorkPacket now.";
+          const canStillAct = !observations.some((item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION") && (allowTools && toolEffects < opts.maxEffects || allowExplore) && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews;
+          methodOfferNote = "\n\nMETHOD CONTEXT." + loadedMethodNote + remainingRoutedNote + (canStillAct ? "\nNo further method load is available; you may invoke one registered tool or one bounded exploration action if needed, or answer with exactly one complete WorkPacket now." : "\nNo further method load is available; answer with exactly one complete WorkPacket now.");
         }
         if (methodOfferNote !== "") {
           const messages = [
@@ -19421,6 +19956,20 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               {
                 role: "system",
                 content: context.messages[0].content + methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute)
+              },
+              context.messages[1]
+            ];
+            context = {
+              ...context,
+              messages,
+              contextHash: p4Hash(JSON.stringify(messages)),
+              contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+            };
+          } else if (methodToolRoute === null && allowExplore && !observations.some((item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION")) {
+            const messages = [
+              {
+                role: "system",
+                content: context.messages[0].content + explorationCoPrompt()
               },
               context.messages[1]
             ];
@@ -20290,7 +20839,10 @@ async function runAgentLoop(problem, sessionId, options, ports) {
                         expectedSolutionKeys: null,
                         requiresExhaustive
                       });
-                      if (remaining.length < defects.length) {
+                      const initialObservationDefects = defects.filter((defect2) => defect2.evidence === "OBSERVATION").length;
+                      const remainingObservationDefects = remaining.filter((defect2) => defect2.evidence === "OBSERVATION").length;
+                      const improved = remainingObservationDefects < initialObservationDefects || remainingObservationDefects === initialObservationDefects && remaining.length < defects.length;
+                      if (improved) {
                         candidateChanged = nextCandidate !== closureCandidate;
                         prepared = closure.prepared;
                         outcome = closure.outcome;
@@ -20904,7 +21456,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   });
   return p2Snapshot({ summary, privateState });
 }
-var MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
+var MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, MAX_EXPLORATION_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
   "apps/stdio-runtime/dist/src/agent-loop.js"() {
     "use strict";
@@ -20929,6 +21481,7 @@ var init_agent_loop2 = __esm({
     MIN_MS = 25;
     EXPLORATION_TOOL_NAME = "generated_exploration";
     MAX_METHOD_TOOL_COPROMPT_CHARS = 600;
+    MAX_EXPLORATION_COPROMPT_CHARS = 900;
     AUX_OBLIGATION_KINDS = ["PREMISES", "ATTAINMENT"];
     SCHEMA_REPAIR_CODES = /* @__PURE__ */ new Set([
       "PACKET_SCHEMA",

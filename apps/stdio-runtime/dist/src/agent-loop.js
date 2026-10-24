@@ -142,6 +142,23 @@ function methodToolCoPrompt(methodId, route) {
         ? block
         : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
 }
+const MAX_EXPLORATION_COPROMPT_CHARS = 900;
+/**
+ * Bounded post-card advisory for a problem with no fixed semantic tool route
+ * while the Host has advertised a usable bounded Python sandbox. It is prompt
+ * text only and is never emitted on the default path (`allowExplore=false`),
+ * so the offline run stays byte-identical.
+ */
+function explorationCoPrompt() {
+    const block = "\n\nPOST-METHOD EXPLORATION ADVISORY. No fixed semantic tool route matched this problem. " +
+        "A bounded Python exploration is available in this session. If the problem involves symbolic integration, series or limits, linear algebra, differential equations, group/ring properties, or a numeric multi-option check, reply first with exactly one JSON exploration action " +
+        "{\"action\":\"explore\",\"code\":\"import sympy as sp\\n# compute exact invariants and print results\\nprint(...)\",\"scope\":\"verify key mathematical quantities with SymPy\"} " +
+        "and nothing else. Its observation is a BOUNDED_OBSERVATION_NOT_PROOF and is input-relative data, not a proof or a certificate. After the observation, submit the complete WorkPacket. Do not invent a tool name or a different action.";
+    const chars = [...block];
+    return chars.length <= MAX_EXPLORATION_COPROMPT_CHARS
+        ? block
+        : chars.slice(0, MAX_EXPLORATION_COPROMPT_CHARS).join("");
+}
 /**
  * B2 (DECISION-0150): auxiliary (non-answer) obligations whose open state must
  * be reported honestly. A proof's `PREMISES` (E05) and an optimization's
@@ -1388,11 +1405,18 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     methodLoadRefusalNotice = null;
                 }
                 else if (methodAssets.length >= 2) {
+                    const canStillAct = !observations.some((item) => item.source === "PROGRAM_OBSERVATION" ||
+                        item.source === "GENERATED_OBSERVATION") &&
+                        ((allowTools && toolEffects < opts.maxEffects) || allowExplore) &&
+                        root.effectCalls() < totalEffectCapacity &&
+                        callsLeft() >= 2 + opts.maxReviews;
                     methodOfferNote =
                         "\n\nMETHOD CONTEXT." +
                             loadedMethodNote +
                             remainingRoutedNote +
-                            "\nNo further method load is available; answer with exactly one complete WorkPacket now.";
+                            (canStillAct
+                                ? "\nNo further method load is available; you may invoke one registered tool or one bounded exploration action if needed, or answer with exactly one complete WorkPacket now."
+                                : "\nNo further method load is available; answer with exactly one complete WorkPacket now.");
                 }
                 if (methodOfferNote !== "") {
                     const messages = [
@@ -1430,6 +1454,24 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 role: "system",
                                 content: context.messages[0].content +
                                     methodToolCoPrompt(methodToolCoPromptCardId, methodToolRoute),
+                            },
+                            context.messages[1],
+                        ];
+                        context = {
+                            ...context,
+                            messages,
+                            contextHash: p4Hash(JSON.stringify(messages)),
+                            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                        };
+                    }
+                    else if (methodToolRoute === null &&
+                        allowExplore &&
+                        !observations.some((item) => item.source === "PROGRAM_OBSERVATION" ||
+                            item.source === "GENERATED_OBSERVATION")) {
+                        const messages = [
+                            {
+                                role: "system",
+                                content: context.messages[0].content + explorationCoPrompt(),
                             },
                             context.messages[1],
                         ];
@@ -2649,10 +2691,19 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                                 expectedSolutionKeys: null,
                                                 requiresExhaustive,
                                             });
-                                            // Adopt the closure packet only when it strictly reduces
-                                            // the machine-visible defect count. A different answer
-                                            // with the same unresolved defect is not an improvement.
-                                            if (remaining.length < defects.length) {
+                                            // Adopt a closure correction when the OBSERVATION-grounded
+                                            // defect count falls. A certificate-only defect introduced
+                                            // by the correction must not discard a corrected exact
+                                            // answer (the original #35 failure mode). If observation
+                                            // defects are unchanged, require the total defect count to
+                                            // fall, so a different answer with the same unresolved
+                                            // defect is still not an improvement.
+                                            const initialObservationDefects = defects.filter((defect) => defect.evidence === "OBSERVATION").length;
+                                            const remainingObservationDefects = remaining.filter((defect) => defect.evidence === "OBSERVATION").length;
+                                            const improved = remainingObservationDefects < initialObservationDefects ||
+                                                (remainingObservationDefects === initialObservationDefects &&
+                                                    remaining.length < defects.length);
+                                            if (improved) {
                                                 candidateChanged = nextCandidate !== closureCandidate;
                                                 prepared = closure.prepared;
                                                 outcome = closure.outcome;

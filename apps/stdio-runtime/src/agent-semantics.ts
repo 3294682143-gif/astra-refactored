@@ -1248,6 +1248,17 @@ function finiteCountingWording(problemText: string): boolean {
   );
 }
 
+/**
+ * Shared marker for definition/meaning wording. Each caller decides whether a
+ * simultaneous explicit computation request overrides it; definition-only
+ * prose must not be routed to a numeric tool.
+ */
+function conceptualDefinitionWording(problemText: string): boolean {
+  return /(?:的定义|定义是|定义为何|概念|含义|意义|什么是|何为|基本思想|基本原理|基本假设|\bwhat\s+is\b|\bdefinition\b|\bdefine\b)/iu.test(
+    problemText,
+  );
+}
+
 function polynomialExpandWording(problemText: string): boolean {
   // Rook and path-independence polynomials expose coefficients, but their
   // finite combinatorial families own those requests.
@@ -1277,6 +1288,24 @@ function polynomialExpandWording(problemText: string): boolean {
   if (expansionAction) {
     return true;
   }
+  // Taylor/Maclaurin requests are coefficient-expansion requests only when
+  // the wording asks for an expansion, a series or a coefficient. A mention of
+  // the theorem alone (definition, remainder, convergence radius) is not one.
+  const taylorMaclaurin =
+    /(?:泰勒|麦克劳林|\bTaylor\b|\bMaclaurin\b)/iu.test(problemText);
+  const taylorExpansionAction =
+    /(?:展开|展开式|级数|多项式|系数|\b(?:expand(?:ed|ing|s)?|series|coefficients?)\b|(?:[x-z]|t)\s*\^\s*\{?\s*[0-9]|[0-9]+\s*(?:次|阶)?\s*项|(?:到|至|前)\s*[^\n。；;]{0,12}\s*项)/iu.test(
+      problemText,
+    );
+  if (
+    taylorMaclaurin &&
+    taylorExpansionAction &&
+    !/(?:定义|概念|含义|意义|收敛半径|收敛域|余项|定理|证明|不等式)/iu.test(
+      problemText,
+    )
+  ) {
+    return true;
+  }
   const coefficientAction = /(系数|\bcoefficients?\b)/iu.test(problemText);
   const polynomialContext =
     /(多项式|代数式|展开式|二项式|多项式环|乘积|\bpolynomial\b|\bbinomial\b|\bexpansion\b|\balgebraic\s+expression\b|\bmultiply\b|\bproduct\b|\([^()\n]{1,120}\)\s*\^\s*\{?\s*[0-9A-Za-z]|[xyztuvw]\s*\^\s*\{?\s*[0-9][^\n。；;]{0,12}(?:项|的)?\s*系数|系数[^\n。；;]{0,16}[xyztuvw]\s*\^|\bcoefficients?\b[^\n。；;]{0,20}[xyztuvw]\s*\^)/iu.test(
@@ -1286,12 +1315,18 @@ function polynomialExpandWording(problemText: string): boolean {
 }
 
 function interpolationFitWording(problemText: string): boolean {
+  if (conceptualDefinitionWording(problemText)) {
+    return false;
+  }
   return /(插值|拉格朗日|Lagrange|牛顿插值|Newton\s+interpolation|过这些点的多项式|\binterpolat(?:e|ed|es|ing|ion)\b)/iu.test(
     problemText,
   );
 }
 
 function statsOlsWording(problemText: string): boolean {
+  if (conceptualDefinitionWording(problemText)) {
+    return false;
+  }
   const explicitRegression =
     /(最小二乘|least\s+squares?|\bOLS\b|回归系数|regression\s+coefficients?|拟合直线|linear\s+regression|回归直线)/iu.test(
       problemText,
@@ -1320,7 +1355,7 @@ function finiteGroupStructureWording(problemText: string): boolean {
       problemText,
     );
   const namedGroup =
-    /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2]))(?![A-Za-z0-9_])/iu.test(
+    /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2])|K_?\{?\s*4\s*\}?|V_?\{?\s*4\s*\}?|Q_?\{?\s*8\s*\}?)(?![A-Za-z0-9_])|(?:Klein\s*(?:四元群|four[-\s]+group)|克莱因(?:四元群|群)|四元数群|quaternion\s+group)/iu.test(
       problemText,
     );
   if (!explicitCycle && !namedGroup) {
@@ -1334,7 +1369,7 @@ function finiteGroupStructureWording(problemText: string): boolean {
   ) {
     return false;
   }
-  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|abelian|commutative|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|阶)/iu.test(
+  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|阿贝尔|Abel|\babelian\b|\bcommutative\b|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|结构|structure|同构|isomorphic|阶)/iu.test(
     problemText,
   );
 }
@@ -1498,12 +1533,74 @@ function gf2NullspaceWording(problemText: string): boolean {
   );
 }
 
+/**
+ * A concrete numeric matrix written in LaTeX or in nested-list form. The
+ * marker is deliberately narrow: symbolic names such as "matrix A" alone do
+ * not provide the numeric data the linear-system tool needs.
+ */
+function explicitNumericMatrixWording(problemText: string): boolean {
+  const latexMatrix =
+    /\\begin\s*\{(?:[bpBvV]?matrix|array)\}[\s\S]{0,400}?\\end\s*\{(?:[bpBvV]?matrix|array)\}/u.test(
+      problemText,
+    );
+  const nestedRows = /\[\s*\[[^\]\n]{1,80}\][^\n]{0,200}\]/u.test(problemText);
+  const matrixAssignment =
+    /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,24}[=＝][^\n。；;]{0,16}(?:\\begin\s*\{|\[\[|\\left\s*[\[\(])/u.test(
+      problemText,
+    );
+  return latexMatrix || nestedRows || matrixAssignment;
+}
+
+/**
+ * A rank/nullity question about an explicit numeric matrix. The linear-system
+ * route is reused for these finite linear-algebra observations, while a
+ * definitional question or a purely symbolic "matrix A" stays unrouted.
+ */
+function matrixRankNullityWording(problemText: string): boolean {
+  // A mixed determinant-and-rank question needs more than one observation;
+  // forcing the linear-system family there would hide the determinant part.
+  if (/(行列式|determinant)/iu.test(problemText)) {
+    return false;
+  }
+  const rankNullity =
+    /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,40}(?:的)?(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b|解空间维数)/iu.test(
+      problemText,
+    ) ||
+    /(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b)[^\n。；;]{0,20}(?:矩阵|matrix)/iu.test(
+      problemText,
+    );
+  if (!rankNullity || conceptualDefinitionWording(problemText)) {
+    return false;
+  }
+  return explicitNumericMatrixWording(problemText);
+}
+
+/** A linear system stated with an explicit numeric coefficient matrix. */
+function explicitNumericMatrixSystemWording(problemText: string): boolean {
+  if (!explicitNumericMatrixWording(problemText)) {
+    return false;
+  }
+  return (
+    /(?:解|求解|求|计算|solve|evaluate)[^\n。；;]{0,32}(?:线性方程组|线性系统|方程组|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=|\bA\s*[xX]\s*=\s*b\b)/iu.test(
+      problemText,
+    ) ||
+    /(?:线性方程组|线性系统|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=\s*b)[^\n。；;]{0,32}(?:解|solution|solve)/iu.test(
+      problemText,
+    )
+  );
+}
+
 function linearSystemWording(problemText: string): boolean {
   const explicitSystem =
     /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(
       problemText,
-    );
-  if (!explicitSystem) {
+    ) || explicitNumericMatrixSystemWording(problemText);
+  const rankNullity = matrixRankNullityWording(problemText);
+  if (!explicitSystem && !rankNullity) {
+    return false;
+  }
+  // A conceptual description of systems/rank is not a solution-set request.
+  if ((explicitSystem || rankNullity) && conceptualDefinitionWording(problemText)) {
     return false;
   }
   // Nonlinear/polynomial/symbolic systems and GF(2) linear-space questions
@@ -1518,7 +1615,7 @@ function linearSystemWording(problemText: string): boolean {
   }
   if (
     gf2LinearSpaceContext(problemText) &&
-    (gf2RankWording(problemText) || gf2NullspaceWording(problemText))
+    (rankNullity || gf2RankWording(problemText) || gf2NullspaceWording(problemText))
   ) {
     return false;
   }
@@ -1530,7 +1627,25 @@ function linearSystemWording(problemText: string): boolean {
 }
 
 function exactLimitWording(problemText: string): boolean {
-  if (/(极限|limit|\\lim|lim\s*_)/iu.test(problemText)) {
+  // Definition/existence discussions are not value requests. Keep the
+  // exclusion narrow (and value-oriented) so an actual `\lim` exercise is not
+  // lost merely because its prose mentions a concept word.
+  const conceptualLimit =
+    /(?:极限|\blimit\b)[^\n。；;]{0,20}(?:的?定义|概念|含义|意义|存在性|是否存在|不存在|唯一性|性质|运算法则|基本思想)|(?:定义|概念|什么是|何为|\bwhat\s+is\b)[^\n。；;]{0,20}(?:极限|\blimit\b)/iu.test(
+      problemText,
+    );
+  const valueRequest =
+    /(?:求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(
+      problemText,
+    );
+  if (conceptualLimit && !valueRequest) {
+    return false;
+  }
+  if (
+    /(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_)/iu.test(
+      problemText,
+    )
+  ) {
     return true;
   }
   const seriesLimit =
@@ -1553,16 +1668,30 @@ function exactLimitWording(problemText: string): boolean {
  */
 function exactDefiniteIntegralWording(problemText: string): boolean {
   // `\lim` items stay LIMIT even when an integral appears inside them.
-  if (/(极限|limit|\\lim|lim\s*_|渐近)/iu.test(problemText)) {
+  if (
+    /(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_|渐近)/iu.test(
+      problemText,
+    )
+  ) {
     return false;
   }
   const definiteMark = /(定积分|definite\s+integral)/iu.test(problemText);
   const integralSign = /(?:∫|\\int)/u.test(problemText);
+  // Standard LaTeX `\\int_{a}^{b}` / `\\int_a^b`, including `\\limits` and a
+  // simple nested bound such as `\\frac{0}{1}`. Both scripts are required.
   const integralLimits =
-    /(?:∫|\\int)\s*(?:_\s*\{?[^}\s]{1,16}\}?\s*\^\s*\{?[^}\s]{1,16}\}?|\^\s*\{?[^}\s]{1,16}\}?\s*_\s*\{?[^}\s]{1,16}\}?)/u.test(
+    /(?:∫|\\int)\s*(?:\\limits\s*)?(?:[_^]\s*(?:\{(?:[^{}\n]|\{[^{}\n]{0,48}\}){1,96}\}|[^\s{^_]{1,24})\s*){2}/u.test(
       problemText,
     );
   if (!definiteMark && !(integralSign && integralLimits)) {
+    return false;
+  }
+  if (
+    conceptualDefinitionWording(problemText) &&
+    !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(
+      problemText,
+    )
+  ) {
     return false;
   }
   // A question about convergence, integrability or existence asks no value.

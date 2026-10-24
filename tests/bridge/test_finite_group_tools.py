@@ -128,6 +128,17 @@ def test_identity_only_group_and_canonical_normalization():
         "conjugacy_classes": [
             {"size": 1, "representative": "()", "element_order": 1}
         ],
+        "derived_size": 1,
+        "subgroup_summary": [
+            {
+                "order": 1,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": True,
+                "all_cyclic": True,
+                "has_cyclic": True,
+            }
+        ],
     }
     _assert_no_float(payload)
 
@@ -271,8 +282,171 @@ def test_named_s3_matches_the_explicit_generator_payload():
     assert comparable == explicit.result
 
 
+def test_named_klein_aliases_all_expand_to_v4():
+    names = ("K_4", "K4", "V_4", "V4", "klein", "Klein", "克莱因四元群")
+    results = [
+        _execute("finite_group_structure", {"named_group": name})
+        for name in names
+    ]
+    for name, result in zip(names, results):
+        assert result.status == "ok", (name, result.status, result.detail)
+        payload = result.result
+        assert payload["input_mode"] == "named_group"
+        assert payload["group_name"] == "V4"
+        assert payload["degree"] == 4
+        assert payload["order"] == 4
+        assert payload["is_abelian"] is True
+        assert payload["is_cyclic"] is False
+        assert payload["exponent"] == 2
+        assert payload["center_size"] == 4
+        assert payload["element_orders"] == {"1": 1, "2": 3}
+        assert payload["derived_size"] == 1
+        assert payload["subgroup_summary"] == [
+            {
+                "order": 1,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": True,
+                "all_cyclic": True,
+                "has_cyclic": True,
+            },
+            {
+                "order": 2,
+                "count": 3,
+                "normal_count": 3,
+                "all_abelian": True,
+                "all_cyclic": True,
+                "has_cyclic": True,
+            },
+            {
+                "order": 4,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": True,
+                "all_cyclic": False,
+                "has_cyclic": False,
+            },
+        ]
+        _assert_no_float(payload)
+
+    # Every spelling is canonicalized to exactly the same V4 payload.
+    assert all(result.result == results[0].result for result in results)
+
+
+def test_named_q8_has_order_eight_and_expected_subgroup_census():
+    names = ("Q_8", "Q8", "quaternion", "四元数群")
+    results = [
+        _execute("finite_group_structure", {"named_group": name})
+        for name in names
+    ]
+    for name, result in zip(names, results):
+        assert result.status == "ok", (name, result.status, result.detail)
+        payload = result.result
+        assert payload["input_mode"] == "named_group"
+        assert payload["group_name"] == "Q8"
+        assert payload["degree"] == 8
+        assert payload["order"] == 8
+        assert payload["is_abelian"] is False
+        assert payload["is_cyclic"] is False
+        assert payload["exponent"] == 4
+        assert payload["center_size"] == 2
+        assert payload["element_orders"] == {"1": 1, "2": 1, "4": 6}
+        assert payload["derived_size"] == 2
+        assert payload["subgroup_summary"] == [
+            {
+                "order": 1,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": True,
+                "all_cyclic": True,
+                "has_cyclic": True,
+            },
+            {
+                "order": 2,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": True,
+                "all_cyclic": True,
+                "has_cyclic": True,
+            },
+            {
+                "order": 4,
+                "count": 3,
+                "normal_count": 3,
+                "all_abelian": True,
+                # The three order-4 subgroups are <i>, <j>, <k>; all cyclic.
+                "all_cyclic": True,
+                "has_cyclic": True,
+            },
+            {
+                "order": 8,
+                "count": 1,
+                "normal_count": 1,
+                "all_abelian": False,
+                "all_cyclic": False,
+                "has_cyclic": False,
+            },
+        ]
+        _assert_no_float(payload)
+
+    assert all(result.result == results[0].result for result in results)
+
+
+def test_a4_has_no_subgroup_of_order_six():
+    result = _execute("finite_group_structure", {"named_group": "A4"})
+    assert result.status == "ok", (result.status, result.detail)
+    payload = result.result
+    assert payload["derived_size"] == 4
+    summary = {row["order"]: row for row in payload["subgroup_summary"]}
+    assert sorted(summary) == [1, 2, 3, 4, 6, 12]
+    assert summary[6] == {
+        "order": 6,
+        "count": 0,
+        "normal_count": 0,
+        "all_abelian": False,
+        "all_cyclic": False,
+        "has_cyclic": False,
+    }
+    assert summary[4]["all_abelian"] is True
+    assert summary[4]["all_cyclic"] is False
+    assert summary[4]["count"] == 1
+    _assert_no_float(payload)
+
+
+def test_d8_has_three_order_four_subgroups_and_all_are_abelian():
+    result = _execute("finite_group_structure", {"named_group": "D8"})
+    assert result.status == "ok", (result.status, result.detail)
+    payload = result.result
+    assert payload["derived_size"] == 2
+    summary = {row["order"]: row for row in payload["subgroup_summary"]}
+    assert summary[4] == {
+        "order": 4,
+        "count": 3,
+        "normal_count": 3,
+        "all_abelian": True,
+        "all_cyclic": False,
+        "has_cyclic": True,
+    }
+    _assert_no_float(payload)
+
+
+def test_groups_above_sixty_four_keep_the_old_payload_shape():
+    # A direct product S4 x C3 on disjoint points has order 72 while remaining
+    # well inside the explicit closure cap.
+    result = _execute(
+        "finite_group_structure",
+        {"generators": ["(12)", "(1234)", "(567)"], "degree": 7},
+    )
+    assert result.status == "ok", (result.status, result.detail)
+    payload = result.result
+    assert payload["order"] == 72
+    assert "derived_size" not in payload
+    assert "subgroup_summary" not in payload
+    _assert_no_float(payload)
+
+
 def test_named_group_refuses_unknown_and_out_of_vocabulary_names():
-    for name in ("Q8", "S5", "A6", "D12", "Z13", "C13", "Z1"):
+    for name in ("S5", "A6", "D12", "Z13", "C13", "Z1", "Q16", "K5"):
         result = _execute("finite_group_structure", {"named_group": name})
         assert result.status == "invalid_input", (name, result.status)
         assert result.result is None
