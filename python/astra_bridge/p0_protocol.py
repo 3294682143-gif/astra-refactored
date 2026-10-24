@@ -77,6 +77,16 @@ ERROR_CODES = frozenset(
         "ILLEGAL_TRANSITION",
         "BUDGET",
         "DEADLINE_EXCEEDED",
+        # Stage D+ controlled exploration. The Host's capability refusal and the
+        # generative-execution gate's own closed refusal vocabulary are fixed
+        # codes of their own; without them every exploration refusal would be
+        # reported as a generic field failure.
+        "ACTION_NOT_ALLOWED",
+        "REFUSED_NO_PROFILE",
+        "REFUSED_PROFILE_MISMATCH",
+        "REFUSED_SHA_MISMATCH",
+        "REFUSED_UNBOUNDED",
+        "REFUSED_EXECUTION_FAILED",
     }
 )
 

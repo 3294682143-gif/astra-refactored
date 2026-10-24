@@ -11,8 +11,8 @@ import {
   P2Error,
   detectLoneSurrogates,
   p2Snapshot,
-  type P3Action,
   type P3Binding,
+  type P3EffectAction,
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
@@ -140,11 +140,12 @@ function compareCodePoints(left: string, right: string): number {
 }
 
 /**
- * Canonical identity of one tool/method action. The description wording of a
- * tool `scope` is excluded; array order is preserved. This is an identity of
- * the same data, not a mathematical equivalence.
+ * Canonical identity of one tool/method/exploration action. The description
+ * wording of a `scope` is excluded (an exploration is identified by its source
+ * alone); array order is preserved. This is an identity of the same data, not
+ * a mathematical equivalence.
  */
-export function p3EffectKey(action: Extract<P3Action, { action: "tool" | "method" }>): string {
+export function p3EffectKey(action: P3EffectAction): string {
   const parsed = parseP3Action(JSON.stringify(p2Snapshot(action)));
   if (parsed.action === "tool") {
     return sha256(canonical(["tool", parsed.name, parsed.args]));
@@ -152,7 +153,29 @@ export function p3EffectKey(action: Extract<P3Action, { action: "tool" | "method
   if (parsed.action === "method") {
     return sha256(canonical(["method", parsed.id]));
   }
+  if (parsed.action === "explore") {
+    return sha256(canonical(["explore", parsed.code]));
+  }
   fail(P2_ERROR_CODES.PACKET_SCHEMA);
+}
+
+/**
+ * The fixed receipt `source` of one effect action. A tool produces a program
+ * observation, a method card a method reference, and a bounded generated-Python
+ * exploration an explicitly untrusted generated observation.
+ */
+function sourceOf(action: P3EffectAction): P3EffectReceipt["source"] {
+  if (action.action === "tool") return "PROGRAM_OBSERVATION";
+  if (action.action === "method") return "METHOD_REFERENCE";
+  return "GENERATED_OBSERVATION";
+}
+
+/**
+ * The fixed receipt `level` of one effect action. Only a generated observation
+ * is `OBSERVED`; it is still never a proof, a certificate or a verification.
+ */
+function levelOf(action: P3EffectAction): P3EffectReceipt["level"] {
+  return action.action === "explore" ? "OBSERVED" : "PROVISIONAL";
 }
 
 /** Validate one admitted effect request. */
@@ -167,7 +190,7 @@ export function p3EffectRequest(value: unknown): P3EffectRequest {
   }
   const binding = p3Binding(source.binding);
   const action = parseP3Action(JSON.stringify(source.action));
-  if (action.action !== "tool" && action.action !== "method") {
+  if (action.action !== "tool" && action.action !== "method" && action.action !== "explore") {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const remainingMs = source.remainingMs;
@@ -196,7 +219,7 @@ export function p3EffectReceipt(value: unknown, request: P3EffectRequest): P3Eff
   if (status !== "COMPLETE" && status !== "ERROR" && status !== "UNKNOWN") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
-  const expectedSource = request.action.action === "tool" ? "PROGRAM_OBSERVATION" : "METHOD_REFERENCE";
+  const expectedSource = sourceOf(request.action);
   if (source.source !== expectedSource) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -214,7 +237,8 @@ export function p3EffectReceipt(value: unknown, request: P3EffectRequest): P3Eff
   if (sha256(observation) !== observationHash) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
-  if (source.level !== "PROVISIONAL" || source.checkResult !== "UNKNOWN") {
+  const expectedLevel = levelOf(request.action);
+  if (source.level !== expectedLevel || source.checkResult !== "UNKNOWN") {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
@@ -224,7 +248,7 @@ export function p3EffectReceipt(value: unknown, request: P3EffectRequest): P3Eff
     source: expectedSource,
     observation,
     observationHash,
-    level: "PROVISIONAL",
+    level: expectedLevel,
     checkResult: "UNKNOWN",
   }) as P3EffectReceipt;
 }
@@ -240,10 +264,10 @@ export function p3EffectFailure(request: P3EffectRequest, status: "ERROR" | "UNK
     effectId: bound.effectId,
     binding: bound.binding,
     status,
-    source: bound.action.action === "tool" ? "PROGRAM_OBSERVATION" : "METHOD_REFERENCE",
+    source: sourceOf(bound.action),
     observation,
     observationHash: sha256(observation),
-    level: "PROVISIONAL",
+    level: levelOf(bound.action),
     checkResult: "UNKNOWN",
   }) as P3EffectReceipt;
 }

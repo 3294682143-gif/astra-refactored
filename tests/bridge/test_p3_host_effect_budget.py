@@ -347,6 +347,9 @@ def test_funnel_metrics_derivation(no_reads):
         "observation_views": 0,
         "tool_effect_calls": 1,
         "method_effect_calls": 1,
+        # Stage D+: the bounded exploration counter is present and zero unless
+        # an exploration was really admitted.
+        "exploration_calls": 0,
         "tool_names": [TOOL],
         "method_ids": [MID],
         # Stage quota audit: the Host's split of this 16-call cap is
@@ -370,6 +373,7 @@ def test_funnel_metrics_defaults_are_zero_without_a_log(no_reads):
         "routed": 0, "forced": 0, "obeyed": 0, "observation_used": 0,
         "closure_evaluations": 0, "closure_defects": 0, "observation_views": 0,
         "tool_effect_calls": 0, "method_effect_calls": 0,
+        "exploration_calls": 0,
         "tool_names": [], "method_ids": [],
         # The stage quotas are host configuration, not funnel counters, so they
         # keep their real values even when the SessionLog is missing.

@@ -19,7 +19,7 @@ import {
   type AgentTraceCode,
   type P2MethodCatalog,
   type P2Task,
-  type P3Action,
+  type P3EffectAction,
   type P3EffectReceipt,
   type P3EffectRequest,
 } from "@astra/protocol";
@@ -240,7 +240,7 @@ export class AgentCalls {
   async effect(
     task: P2Task,
     sourceRequestId: string,
-    action: Extract<P3Action, { action: "tool" | "method" }>,
+    action: P3EffectAction,
     effectGate: P3EffectGate,
     remainingModelCalls: number,
     catalog?: P2MethodCatalog,

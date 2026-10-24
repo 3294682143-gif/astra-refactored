@@ -47,9 +47,26 @@ export const P3_TOOL_NAMES = Object.freeze([
 export type P3ToolName = (typeof P3_TOOL_NAMES)[number];
 
 /**
- * One strict model action. Exactly one of the four shapes; `scope` on a tool
- * action is an intent string only — the real session/hash/version/task/scope
- * come from the trusted control binding, never from the model.
+ * One controlled, bounded generated-Python exploration (Stage D+).
+ *
+ * `code` is untrusted model-authored source of at most 65536 UTF-8 bytes and
+ * `scope` is a bounded intent string of 1..256 code points. Nothing here is
+ * authorization: the Host admits one exploration only when it advertises
+ * `capabilities.generatedPython === "AVAILABLE_BOUNDED"`, its
+ * `GenerativeExecutionGate` admits the request and one effect id is still free.
+ * The outcome is a `BOUNDED_OBSERVATION` tagged `BOUNDED_OBSERVATION_NOT_PROOF`
+ * — never a proof, never a certificate, never an obligation discharge.
+ */
+export type P3ExploreAction = {
+  readonly action: "explore";
+  readonly code: string;
+  readonly scope: string;
+};
+
+/**
+ * One strict model action. Exactly one of the five shapes; `scope` is an intent
+ * string only — the real session/hash/version/task/scope come from the trusted
+ * control binding, never from the model.
  */
 export type P3Action =
   | {
@@ -59,6 +76,7 @@ export type P3Action =
       readonly scope: string;
     }
   | { readonly action: "method"; readonly id: string }
+  | P3ExploreAction
   | {
       readonly action: "final";
       readonly answer: string;
@@ -66,6 +84,14 @@ export type P3Action =
       readonly unresolved: readonly string[];
     }
   | { readonly action: "unsolved"; readonly reason: string };
+
+/**
+ * The three action kinds that spend a P3 effect id: a registered tool, a method
+ * card load and a bounded generated-Python exploration. An exploration is
+ * counted against the same tool-kind effect quota, so `maxEffects` and the
+ * effect-id capacity math never widen.
+ */
+export type P3EffectAction = Extract<P3Action, { action: "tool" | "method" | "explore" }>;
 
 /** Trusted control-side identity of one effect. Never model-supplied. */
 export interface P3Binding {
@@ -81,24 +107,27 @@ export interface P3Binding {
 export interface P3EffectRequest {
   readonly effectId: string;
   readonly binding: P3Binding;
-  readonly action: Extract<P3Action, { action: "tool" | "method" }>;
+  readonly action: P3EffectAction;
   readonly remainingMs: number;
 }
 
 /**
  * One effect outcome. `observation` is normalized private material; an ERROR or
- * UNKNOWN receipt may still carry a fixed explanation. Every receipt stays
- * PROVISIONAL/UNKNOWN: a successful execution is not a mathematical proof and
- * never satisfies an obligation.
+ * UNKNOWN receipt may still carry a fixed explanation. A tool/method receipt
+ * stays PROVISIONAL/UNKNOWN: a successful execution is not a mathematical proof
+ * and never satisfies an obligation. A `GENERATED_OBSERVATION` receipt is the
+ * one OBSERVED level in the surface: it carries an explicitly unverified
+ * `BOUNDED_OBSERVATION` (`BOUNDED_OBSERVATION_NOT_PROOF`) and is still never a
+ * proof, a certificate or an obligation discharge.
  */
 export interface P3EffectReceipt {
   readonly effectId: string;
   readonly binding: P3Binding;
   readonly status: "COMPLETE" | "ERROR" | "UNKNOWN";
-  readonly source: "PROGRAM_OBSERVATION" | "METHOD_REFERENCE";
+  readonly source: "PROGRAM_OBSERVATION" | "METHOD_REFERENCE" | "GENERATED_OBSERVATION";
   readonly observation: string;
   readonly observationHash: string;
-  readonly level: "PROVISIONAL";
+  readonly level: "PROVISIONAL" | "OBSERVED";
   readonly checkResult: "UNKNOWN";
 }
 

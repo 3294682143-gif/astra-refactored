@@ -26,6 +26,8 @@ export { P3_TOOL_NAMES };
 const MAX_TEXT_CHARS = 20000;
 const MAX_ARGS_BYTES = 10000;
 const MAX_SCOPE_CHARS = 256;
+/** Stage D+ exploration: model-authored source bound, in UTF-8 bytes. */
+const MAX_CODE_BYTES = 65536;
 const MAX_ANSWER_CHARS = 4096;
 const MAX_REASON_CHARS = 256;
 const MAX_UNRESOLVED = 32;
@@ -97,6 +99,29 @@ function parseMethod(value: Record<string, unknown>): P3Action {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   return p2Snapshot({ action: "method", id: value.id }) as P3Action;
+}
+
+/**
+ * Stage D+ controlled exploration: `{action:"explore", code, scope}`.
+ *
+ * Strict like every other shape: the exact three keys, `code` a non-empty
+ * string of at most 65536 UTF-8 bytes, `scope` a non-blank string of at most
+ * 256 code points. A parse is only a request: no admission, no execution and
+ * no evidence claim lives here.
+ */
+function parseExplore(value: Record<string, unknown>): P3Action {
+  if (!exactKeys(value, ["action", "code", "scope"])) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const code = value.code;
+  if (typeof code !== "string" || code.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (Buffer.byteLength(code, "utf8") > MAX_CODE_BYTES) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  const scope = boundedString(value.scope, MAX_SCOPE_CHARS);
+  return p2Snapshot({ action: "explore", code, scope }) as P3Action;
 }
 
 function parseFinal(value: Record<string, unknown>): P3Action {
@@ -180,6 +205,9 @@ export function parseP3Action(text: string): P3Action {
   }
   if (action === "method") {
     return parseMethod(parsed);
+  }
+  if (action === "explore") {
+    return parseExplore(parsed);
   }
   if (action === "final") {
     return parseFinal(parsed);

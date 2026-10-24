@@ -124,6 +124,14 @@ import {
 const MIN_MS = 25;
 
 /**
+ * Stage D+: the single recorded identity of one admitted bounded exploration
+ * effect. It never names a registered tool and never matches a closure lookup,
+ * so an exploration observation can ground no defect and satisfies no
+ * obligation; it stays bounded, deduplicated telemetry.
+ */
+const EXPLORATION_TOOL_NAME = "generated_exploration";
+
+/**
  * The post-card method/tool co-prompt is advisory prompt text only: it names
  * the card that was just loaded, the deterministic route and the safe argument
  * skeleton. It changes no control flow, spends no model call and never counts
@@ -1059,6 +1067,12 @@ export async function runAgentLoop(
 
   const callsLeft = (): number => opts.maxModelCalls - root.modelCalls();
 
+  // Stage D+: the single controlled exploration action is offered only when the
+  // Host advertised the bounded generated-Python capability. With the default
+  // (absent/false) the action word is never offered and a parsed `explore`
+  // reply is treated exactly like an unparseable one.
+  const allowExploration = opts.allowExploration === true;
+
   const reserve = (): number =>
     target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
 
@@ -1269,6 +1283,16 @@ export async function runAgentLoop(
           ((methodLoads < methodLoadCapacity &&
             root.effectCalls() < totalEffectCapacity) ||
             cachedMethod);
+        // Stage D+: one bounded exploration is offered only when the Host
+        // advertised the bounded capability AND the same tool-kind effect room
+        // a tool action would need is still free. It reserves one model call
+        // for the follow-up work packet, exactly like a tool action.
+        const allowExplore =
+          allowExploration &&
+          subGate !== null &&
+          callsLeft() >= 2 + opts.maxReviews &&
+          toolEffects < opts.maxEffects &&
+          root.effectCalls() < totalEffectCapacity;
         const protectedCandidate = projectProtectedFinal(ledger.snapshot(), target);
         const sameScope =
           protectedCandidate !== null &&
@@ -1391,6 +1415,7 @@ export async function runAgentLoop(
             revisionTarget: revision.targetFor(running.taskId),
             scopeCoverage: declaredCoverage,
             refutationRequired,
+            explorationAvailable: allowExplore,
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -1728,7 +1753,13 @@ export async function runAgentLoop(
         }
         let action: P3Action | null = null;
         try {
-          action = parseP3Action(outcome.receipt.text);
+          const parsedAction = parseP3Action(outcome.receipt.text);
+          // Stage D+ controlled exploration: the action word is offered (and
+          // honoured) only when the Host advertised `AVAILABLE_BOUNDED`
+          // generated Python. Otherwise an `explore` reply is treated exactly
+          // like an unparseable one, so every default run is unchanged.
+          action =
+            parsedAction.action === "explore" && !allowExploration ? null : parsedAction;
         } catch {
           action = null;
         }
@@ -2044,6 +2075,118 @@ export async function runAgentLoop(
               callsLeft() >= 2 + opts.maxReviews;
           }
           if (repeated && revision.pendingTaskId() === null) {
+            try {
+              ledger.validateYieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.validateRecordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              ledger.yieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.recordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+            yielded = true;
+            stop = "NO_CANDIDATE";
+            break;
+          }
+          continue;
+        }
+        if (action !== null && action.action === "explore") {
+          // Stage D+ controlled exploration. This is a protocol gate, not
+          // advice: the Host must have advertised `AVAILABLE_BOUNDED`, one
+          // tool-kind effect slot must still be free and the tool reserve must
+          // keep the follow-up work packet. A refusal is one fixed control
+          // rejection; nothing is executed and no observation is invented.
+          const exploreGuard = monotonicToolGuard({
+            action,
+            allowTools: false,
+            allowMethods: false,
+            allowExplorations: allowExplore,
+            methodId: null,
+            catalogIds: [],
+            callsLeft: callsLeft(),
+            maxReviews: opts.maxReviews,
+          });
+          if (!exploreGuard.admitted || subGate === null) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const exploreEffectsBefore = root.effectCalls();
+          let receipt: P3EffectReceipt;
+          try {
+            receipt = await calls.effect(
+              running,
+              outcome.requestId,
+              action,
+              subGate,
+              callsLeft(),
+            );
+          } catch (error) {
+            // A quota/capacity refusal is a fail-closed control rejection, not
+            // a transport outcome and not a fabricated receipt.
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          // An admitted exploration spends exactly one tool-kind effect id, so
+          // the `maxEffects` / total-capacity math never widens. A cached
+          // repeat of the same source spends no new id.
+          if (root.effectCalls() > exploreEffectsBefore) {
+            toolEffects += 1;
+          }
+          sessionLog.append("TOOL_OBSERVATION", {
+            effectId: receipt.effectId,
+            source: receipt.source,
+            level: receipt.level,
+            checkResult: receipt.checkResult,
+            toolName: EXPLORATION_TOOL_NAME,
+            operation: null,
+            forced: false,
+            routeId: null,
+          });
+          // The observation view keeps the exploration visible to the model
+          // and to telemetry. Its name is not a registered tool, so no closure
+          // lookup can ever match it: it grounds no defect, satisfies no
+          // obligation and is never treated as a certificate.
+          if (receipt.status === "COMPLETE") {
+            try {
+              const observed = JSON.parse(receipt.observation) as { result?: unknown };
+              toolObservationViews.push({
+                name: EXPLORATION_TOOL_NAME,
+                operation: null,
+                result: observed.result ?? null,
+              });
+            } catch {
+              // An unparsable observation is never evidence.
+            }
+          }
+          if (receipt.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
+            stop = receipt.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
+            break;
+          }
+          let exploreRepeated = false;
+          try {
+            exploreRepeated = progress.observeEffect(
+              running.taskId,
+              outcome.requestId,
+              p3EffectKey(action),
+              root.effectCalls() === exploreEffectsBefore,
+            );
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          if (!observations.some((item) => item.effectId === receipt.effectId)) {
+            observations.push(receipt);
+          }
+          if (exploreRepeated && revision.pendingTaskId() === null) {
             try {
               ledger.validateYieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
               progress.validateRecordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");

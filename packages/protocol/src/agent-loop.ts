@@ -183,6 +183,14 @@ export interface AgentLoopOptions {
   }[];
   /** Declared contract version of the resume prefix (1 or 2). */
   readonly resumeContractVersion?: number | null;
+  /**
+   * Stage D+ controlled exploration: expose the single `explore` action to the
+   * model only when the Host reported `capabilities.generatedPython ===
+   * "AVAILABLE_BOUNDED"`. Absent or false is the default: the action word is
+   * not offered, a parsed `explore` reply is treated exactly like an
+   * unparseable one, and every existing run stays byte-identical.
+   */
+  readonly allowExploration?: boolean;
 }
 
 /** Fixed trace kinds. No free-form kind is accepted. */

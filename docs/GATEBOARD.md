@@ -393,3 +393,23 @@ expanded permissions and default-engine switching retain their separate gates.
 - Stage E: 48/48 card templates re-verified by execution (0 failures, 0 oversized cards), 9 malformed
   card headings fixed, triple SHA refresh with `verify_integrity` ok, bundle + manifest rebuilt
   (`VERIFY_OK`), `tsc -b` 0, Node **508/508**, full pytest **1086 passed / 24 skipped**.
+
+### Session update — 2026-10-24 (controlled explore action + routing reality check)
+
+- Added the controlled P3 exploration action `{"action":"explore","code","scope"}` so the WASI sandbox
+  is reachable from the TS loop: strict shape on both sides (code ≤ 65536 bytes, scope 1..256, exact
+  key set), capability `generatedPython: "AVAILABLE_BOUNDED"` reported only while the Host actually
+  holds a usable sandbox, admission requiring capability + gate `ADMITTED` + a free effect id, and
+  fixed refusal codes that consume **no** effect id. An admitted run is recorded as one tool-kind
+  effect (`tool_names` gains `generated_exploration`, new metric `exploration_calls`) and its output is
+  a `BOUNDED_OBSERVATION` tagged `NOT_PROOF` that can never satisfy an obligation or become a
+  certificate. With no profile the action is refused and existing runs are unchanged.
+- Gates: `tsc -b` 0; Node **519/519**; bridge **701 passed**; full pytest **1117 passed / 24 skipped**;
+  manifest `VERIFY_OK` after a bundle rebuild.
+- The real-API pilot for this round could not run: every request ended in `INTERN_RETRY_EXHAUSTED`
+  (~405 s each) and a minimal liveness probe returned HTTP 400, i.e. an upstream outage, not a code
+  regression. The run directory and input hash are recorded in HANDOFF §17.4 for a rerun.
+- Routing reality check on the real 100-item input: 24 items route (OLS 5, TRIG_REDUCE 4, LIMIT 3,
+  INTERPOLATION 3, GROUP 2, ENUMERATION 2, five singles). The nine Stage-B operators match **zero**
+  items of this input — they target competition/discrete problem mixes, so they cannot move this
+  suite's accuracy.

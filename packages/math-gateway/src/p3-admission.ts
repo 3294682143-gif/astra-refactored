@@ -29,6 +29,12 @@ export interface ToolGuardInput {
   /** Model calls left, including the reserved review slots. */
   readonly callsLeft: number;
   readonly maxReviews: number;
+  /**
+   * Stage D+: whether the Host advertised `AVAILABLE_BOUNDED` generated Python.
+   * Absent is false, so an `explore` action is refused exactly like an
+   * unavailable tool and every existing caller is unchanged.
+   */
+  readonly allowExplorations?: boolean;
 }
 
 export interface ToolGuardDecision {
@@ -57,6 +63,18 @@ function reject(stage: "pre" | "guards", code: ToolGuardDecision["code"]): ToolG
  */
 export function monotonicToolGuard(input: ToolGuardInput): ToolGuardDecision {
   const { action } = input;
+  if (action.action === "explore") {
+    // A bounded exploration is admitted only when the Host advertised the
+    // bounded capability; it spends tool-kind effect capacity, never a method
+    // attempt, and it is never treated as an evidence-bearing tool.
+    if (input.allowExplorations !== true) {
+      return reject("guards", "ACTION_NOT_ALLOWED");
+    }
+    if (input.callsLeft < 1 + input.maxReviews) {
+      return reject("guards", "BUDGET_RESERVED");
+    }
+    return Object.freeze({ admitted: true, stage: "guards", code: "ADMITTED", monotonic: true } as const);
+  }
   if (action.action !== "tool" && action.action !== "method") {
     return reject("pre", "NOT_AN_EFFECT_ACTION");
   }

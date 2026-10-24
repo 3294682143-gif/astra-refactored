@@ -28,6 +28,8 @@ __all__ = [
     "TOOL_NAMES",
     "MAX_REQUEST_BYTES",
     "MAX_ARGS_BYTES",
+    "MAX_CODE_BYTES",
+    "MAX_SCOPE_CHARS",
     "MAX_OBSERVATION_BYTES",
     "MIN_REMAINING_MS",
     "MAX_REMAINING_MS",
@@ -75,6 +77,10 @@ TOOL_NAMES = (
 )
 MAX_REQUEST_BYTES = 65536
 MAX_ARGS_BYTES = 10000
+# Stage D+ controlled exploration: the model-authored source bound (UTF-8 bytes)
+# and the intent-string bound (code points) of the one added action shape.
+MAX_CODE_BYTES = 65536
+MAX_SCOPE_CHARS = 256
 MAX_OBSERVATION_BYTES = 16000
 MIN_REMAINING_MS = 26
 MAX_REMAINING_MS = 3600000
@@ -202,8 +208,21 @@ def _action(value):
             _fail("FIELD_VALUE")
         if _utf8_bytes(encoded) > MAX_ARGS_BYTES:
             _fail("FIELD_VALUE")
-        scope = _strict_text(value["scope"], "FIELD_VALUE", 256)
+        scope = _strict_text(value["scope"], "FIELD_VALUE", MAX_SCOPE_CHARS)
         return {"action": "tool", "name": name, "args": args, "scope": scope}
+    if kind == "explore":
+        # Stage D+ controlled exploration: untrusted model-authored source only.
+        # Nothing here is authorization; the Host still needs its advertised
+        # bounded capability, an admitting gate and a free effect id.
+        if not _exact_keys(value, ("action", "code", "scope")):
+            _fail("FIELD_VALUE")
+        code = value["code"]
+        if not isinstance(code, str) or not js_nonempty(code):
+            _fail("FIELD_VALUE")
+        if _utf8_bytes(code) > MAX_CODE_BYTES:
+            _fail("FIELD_VALUE")
+        scope = _strict_text(value["scope"], "FIELD_VALUE", MAX_SCOPE_CHARS)
+        return {"action": "explore", "code": code, "scope": scope}
     _fail("FIELD_VALUE")
 
 
@@ -274,7 +293,16 @@ def receipt(request, status, observation):
     if _utf8_bytes(observation) > MAX_OBSERVATION_BYTES:
         _fail("FIELD_VALUE")
     action = bound["action"]
-    source = "PROGRAM_OBSERVATION" if action["action"] == "tool" else "METHOD_REFERENCE"
+    kind = action["action"]
+    if kind == "tool":
+        source, level = "PROGRAM_OBSERVATION", "PROVISIONAL"
+    elif kind == "method":
+        source, level = "METHOD_REFERENCE", "PROVISIONAL"
+    else:
+        # The one OBSERVED level of the surface: an explicitly untrusted
+        # bounded generated observation. It is never a proof, never a
+        # certificate and never an obligation discharge.
+        source, level = "GENERATED_OBSERVATION", "OBSERVED"
     return {
         "effectId": bound["effectId"],
         "binding": bound["binding"],
@@ -282,7 +310,7 @@ def receipt(request, status, observation):
         "source": source,
         "observation": observation,
         "observationHash": _sha256(observation),
-        "level": "PROVISIONAL",
+        "level": level,
         "checkResult": "UNKNOWN",
     }
 

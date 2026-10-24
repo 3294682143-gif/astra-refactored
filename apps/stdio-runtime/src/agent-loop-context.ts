@@ -289,6 +289,21 @@ const REFUTATION_PARAGRAPH = [
   "a failure and it never changes the packet shape.",
 ].join(" ");
 
+/**
+ * Stage D+ one-sentence offer of the single controlled exploration action. It
+ * adds no new prompt section: it only names the action shape and repeats that
+ * its observation is untrusted data, never a proof and never a certificate.
+ */
+const EXPLORATION_PARAGRAPH = [
+  "BOUNDED EXPLORATION AVAILABLE. Instead of a tool action you may reply with exactly one",
+  "exploration action {action:\"explore\", code, scope} where code is Python source of at most",
+  "65536 bytes and scope is a non-empty intent string of at most 256 characters. It runs only",
+  "inside the isolated sandbox under the Host's own profile, deadline and output bound, and it",
+  "spends one tool-kind effect. Its result is an untrusted BOUNDED_OBSERVATION tagged",
+  "BOUNDED_OBSERVATION_NOT_PROOF: it is never evidence, never a proof, never a certificate and",
+  "never discharges an obligation, so still deliver the work packet yourself.",
+].join(" ");
+
 export interface AgentWorkContext {
   readonly schemaVersion: typeof AGENT_WORK_CONTEXT_SCHEMA_VERSION;
   readonly messages: readonly { readonly role: "system" | "user"; readonly content: string }[];
@@ -324,6 +339,14 @@ export interface AgentWorkContextInput {
    * unaffected and the projection stays the single source of truth.
    */
   readonly refutationRequired?: boolean;
+  /**
+   * Stage D+: the Host advertised `AVAILABLE_BOUNDED` generated Python, so this
+   * turn may additionally answer with exactly one bounded exploration action.
+   * Like `refutationRequired` the flag only appends one sentence to the fixed
+   * system prompt: the recorded user payload stays byte-identical and the
+   * default (absent/false) run is unchanged.
+   */
+  readonly explorationAvailable?: boolean;
 }
 
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
@@ -924,10 +947,19 @@ function guardedObservations(
     if (receipt.status !== "COMPLETE" && receipt.status !== "ERROR") {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (receipt.source !== "PROGRAM_OBSERVATION" && receipt.source !== "METHOD_REFERENCE") {
+    if (
+      receipt.source !== "PROGRAM_OBSERVATION" &&
+      receipt.source !== "METHOD_REFERENCE" &&
+      receipt.source !== "GENERATED_OBSERVATION"
+    ) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (receipt.level !== "PROVISIONAL" || receipt.checkResult !== "UNKNOWN") {
+    // A bounded generated exploration is the one OBSERVED level in the surface.
+    // It is untrusted data only: it is never a proof, never a certificate and
+    // never an obligation discharge.
+    const expectedLevel =
+      receipt.source === "GENERATED_OBSERVATION" ? "OBSERVED" : "PROVISIONAL";
+    if (receipt.level !== expectedLevel || receipt.checkResult !== "UNKNOWN") {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const observation = receipt.observation;
@@ -1024,7 +1056,9 @@ function guardedObservations(
       source: receipt.source,
       observation,
       observationHash: receipt.observationHash,
-      level: "PROVISIONAL",
+      // A generated observation keeps its own OBSERVED level; tool and method
+      // receipts stay PROVISIONAL. Both remain untrusted data only.
+      level: receipt.source === "GENERATED_OBSERVATION" ? "OBSERVED" : "PROVISIONAL",
       checkResult: "UNKNOWN",
     }) as P3EffectReceipt);
   }
@@ -1283,10 +1317,13 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     toolObservations: observations,
     scopeCoverage,
   };
-  const systemPrompt =
+  let systemPrompt =
     captured.refutationRequired === true
       ? `${SYSTEM_PROMPT} ${REFUTATION_PARAGRAPH}`
       : SYSTEM_PROMPT;
+  if (captured.explorationAvailable === true) {
+    systemPrompt = `${systemPrompt} ${EXPLORATION_PARAGRAPH}`;
+  }
   const messages = [
     { role: "system" as const, content: systemPrompt },
     { role: "user" as const, content: JSON.stringify(payload) },

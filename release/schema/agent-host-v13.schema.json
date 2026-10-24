@@ -180,7 +180,10 @@
               },
               "generatedPython": {
                 "type": "string",
-                "const": "UNAVAILABLE"
+                "enum": [
+                  "UNAVAILABLE",
+                  "AVAILABLE_BOUNDED"
+                ]
               },
               "maxTokens": {
                 "type": "integer",
@@ -2067,14 +2070,20 @@
                 "additionalProperties": false,
                 "required": [
                   "action",
-                  "name",
-                  "args",
                   "scope"
                 ],
                 "properties": {
                   "action": {
                     "type": "string",
-                    "const": "tool"
+                    "enum": [
+                      "tool",
+                      "explore"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
                   },
                   "name": {
                     "type": "string",
@@ -2482,7 +2491,10 @@
               },
               "source": {
                 "type": "string",
-                "const": "PROGRAM_OBSERVATION"
+                "enum": [
+                  "PROGRAM_OBSERVATION",
+                  "GENERATED_OBSERVATION"
+                ]
               },
               "observation": {
                 "type": "string",
@@ -2496,7 +2508,10 @@
               },
               "level": {
                 "type": "string",
-                "const": "PROVISIONAL"
+                "enum": [
+                  "PROVISIONAL",
+                  "OBSERVED"
+                ]
               },
               "checkResult": {
                 "type": "string",

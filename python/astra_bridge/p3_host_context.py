@@ -12,7 +12,7 @@ import hashlib
 import json
 
 from .p0_probe import ProbeError
-from .p3_effect_contract import TOOL_NAMES, validate_request
+from .p3_effect_contract import MAX_CODE_BYTES, TOOL_NAMES, validate_request
 from .p2_host_fixture import _parse_inner
 from .text_contract import js_nonempty
 
@@ -26,6 +26,10 @@ __all__ = [
 
 _MAX_ACTION_CHARS = 20000
 _MAX_ACTION_BYTES = 65536
+# Stage D+ controlled exploration: source bound (UTF-8 bytes) and intent-string
+# bound (code points) of the one added action shape.
+_MAX_CODE_BYTES = MAX_CODE_BYTES
+_MAX_EXPLORE_SCOPE_CHARS = 256
 _MAX_ANSWER_CHARS = 4096
 _MAX_REASON_CHARS = 256
 _MAX_UNRESOLVED = 32
@@ -158,6 +162,27 @@ def parse_action(text, binding):
             }
         )
         return request["action"]
+    if kind == "explore":
+        # Stage D+ controlled exploration. Strict like every other shape: the
+        # exact three keys, `code` a non-empty string of at most 65536 UTF-8
+        # bytes and `scope` a non-blank string of at most 256 code points. A
+        # parse is a request only: no admission, no execution, no evidence.
+        _exact_keys(value, ("action", "code", "scope"))
+        code = value["code"]
+        if not isinstance(code, str) or not js_nonempty(code):
+            _fail()
+        if len(_utf8(code)) > _MAX_CODE_BYTES:
+            _fail()
+        scope = _text(value["scope"], _MAX_EXPLORE_SCOPE_CHARS)
+        request = validate_request(
+            {
+                "effectId": "effect-1",
+                "binding": binding,
+                "action": {"action": "explore", "code": code, "scope": scope},
+                "remainingMs": 1000,
+            }
+        )
+        return request["action"]
     if kind == "final":
         _exact_keys(value, ("action", "answer", "complete", "unresolved"))
         answer = _text(value["answer"], _MAX_ANSWER_CHARS)
@@ -207,6 +232,15 @@ def effect_key(action):
             }
         )
         identity = ["method", checked["action"]["id"]]
+    elif kind == "explore":
+        code = action.get("code")
+        if not isinstance(code, str) or not js_nonempty(code):
+            _fail()
+        if len(_utf8(code)) > _MAX_CODE_BYTES:
+            _fail()
+        # An exploration is identified by its source; the scope wording is
+        # excluded exactly like a tool scope.
+        identity = ["explore", code]
     elif kind == "tool":
         name = action.get("name")
         if name not in TOOL_NAMES:

@@ -29,8 +29,15 @@ from .agent_history import project_artifacts
 from .agent_progress import PROGRESS_POLICY, yielded_task_ids
 from .p0_probe import ProbeError, _Host
 from .p2_host_fixture import _parse_inner
+from .generated_execution_gate import (
+    EXECUTION_REFUSALS,
+    GATE_REASONS,
+    ExecutionRequest,
+    GenerativeExecutionGate,
+)
 from .p3_effect_contract import (
     EFFECT_IDS,
+    MAX_OBSERVATION_BYTES,
     failure_receipt,
     receipt as build_receipt,
     validate_request,
@@ -102,6 +109,21 @@ WASI_PROFILE_ENV = "ASTRA_WASI_PROFILE"
 # Fixed diagnostic code for an unavailable generated-Python runtime. Nothing
 # else (no path, no message, no traceback) is ever carried.
 _WASI_UNAVAILABLE = "WASI_SANDBOX_UNAVAILABLE"
+# Stage D+: the two values the ``generatedPython`` capability may carry. Only
+# ``AVAILABLE_BOUNDED`` -- reported exclusively while a usable sandbox is held --
+# enables the one controlled exploration action.
+_GENERATED_PYTHON_UNAVAILABLE = "UNAVAILABLE"
+_GENERATED_PYTHON_BOUNDED = "AVAILABLE_BOUNDED"
+# The single recorded identity of an admitted bounded exploration effect.
+_EXPLORATION_TOOL_NAME = "generated_exploration"
+# The fixed profile identity and bounds the Host asks the gate for. They never
+# come from the model: the gate admits an exploration only when the approved
+# deployment profile names this id and covers these caps.
+EXPLORE_PROFILE_ID = "astra-wasi-bounded-v1"
+_EXPLORE_MAX_SECONDS = 5
+_EXPLORE_MAX_BYTES = 65536
+# Fixed refusal for an exploration action while no bounded sandbox is offered.
+_EXPLORE_ACTION_NOT_ALLOWED = "ACTION_NOT_ALLOWED"
 
 
 def _resolve_python_sandbox_profile(python_sandbox_profile):
@@ -226,7 +248,8 @@ class AgentHost(_Host):
     """Host-side unified AgentLoop callback state machine."""
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
-                 options, client, *, python_sandbox_profile=None):
+                 options, client, *, python_sandbox_profile=None,
+                 generated_python_gate=None):
         if manifest.get("protocolVersion") != AGENT_HOST_VERSION:
             _fail()
         super().__init__(manifest, session_id, None, deadline)
@@ -297,6 +320,16 @@ class AgentHost(_Host):
             self.python_sandbox_identity,
             self.python_sandbox_diagnostic,
         ) = _build_python_sandbox(self.python_sandbox_profile)
+        # Stage D+: the fail-closed generative-execution gate. The default
+        # instance carries no approved profile, so it can only refuse; a trusted
+        # caller may inject an approving one. It never executes anything itself.
+        self.generated_python_gate = (
+            generated_python_gate
+            if generated_python_gate is not None
+            else GenerativeExecutionGate()
+        )
+        # Bounded, deduplicated telemetry: admitted explorations only.
+        self.exploration_calls = 0
         self.stop_acked = False
         self.history = {}
         self.effects = []
@@ -399,19 +432,44 @@ class AgentHost(_Host):
             return _MAX_REMAINING_MS
         return left
 
-    def generated_exploration(self, request, code, *, gate, scope=None):
-        """Internal, explicitly-called seam; never reachable from the Node wire.
+    def generated_python_capability(self):
+        """The advertised ``capabilities.generatedPython`` value of this Host.
 
-        The P3 vocabulary is ``("tool", "method")`` only, so no wire action can
-        request generated Python today. This method is therefore *not* called by
-        any callback: a trusted caller that owns an approved
-        ``GenerativeExecutionGate`` calls it directly to let one bounded guest
-        program run through the already-accepted ``self.python_sandbox``.
+        ``AVAILABLE_BOUNDED`` only while a usable sandbox is actually held;
+        every other state reports ``UNAVAILABLE`` so the Node side never offers
+        the exploration action it cannot serve.
+        """
+        sandbox = self.python_sandbox
+        if sandbox is not None and getattr(sandbox, "available", False):
+            return _GENERATED_PYTHON_BOUNDED
+        return _GENERATED_PYTHON_UNAVAILABLE
+
+    def _exploration_request(self, code):
+        """The Host's own bounded execution request for one source string.
+
+        The bounds are Host constants, never model input: the gate admits the
+        request only when the approved profile covers them.
+        """
+        digest = hashlib.sha256(code.encode("utf-8")).hexdigest()
+        return ExecutionRequest(
+            EXPLORE_PROFILE_ID, digest, _EXPLORE_MAX_SECONDS, _EXPLORE_MAX_BYTES
+        )
+
+    def generated_exploration(self, request, code, *, gate, scope=None):
+        """The one execution seam for bounded generated Python.
+
+        Stage D+ reaches it only through ``_on_explore_effect`` -- i.e. only for
+        an admitted ``explore`` action, only while this Host advertises
+        ``AVAILABLE_BOUNDED`` (a usable sandbox), only when the injected
+        ``GenerativeExecutionGate`` admits the request and only when one
+        tool-kind effect id is still free. A trusted caller may also call it
+        directly with its own gate.
 
         The decision is taken by the gate before anything executes; without a
         sandbox (the default path) the result is the fixed ``REFUSED_NO_PROFILE``
         refusal and no code runs. A successful run is a
-        ``BOUNDED_OBSERVATION`` tagged ``BOUNDED_OBSERVATION_NOT_PROOF``.
+        ``BOUNDED_OBSERVATION`` tagged ``BOUNDED_OBSERVATION_NOT_PROOF``: it is
+        never a proof, never a certificate and never an obligation discharge.
         """
         from .generated_execution_gate import DEFAULT_SCOPE, execute_with_gate
 
@@ -936,6 +994,11 @@ class AgentHost(_Host):
             _fail()
         binding = self._binding(self.last_model_id)
         action = parse_action(record["receipt"]["text"], binding)
+        if action["action"] == "explore":
+            # Stage D+ controlled exploration: its own admission branch, so the
+            # tool/method wire contract below stays byte-identical.
+            self._on_explore_effect(frame_id, params, wire_method, action, binding)
+            return
         expected_kind = "method" if wire_method == "method.load" else "tool"
         if action["action"] != expected_kind:
             _fail()
@@ -1043,6 +1106,132 @@ class AgentHost(_Host):
             wire_method,
         )
         self.pending_is_callback = True
+
+    def _on_explore_effect(self, frame_id, params, wire_method, action, binding):
+        """Admit and run one bounded generated-Python exploration.
+
+        The admission order is fixed and fail-closed, and every refusal happens
+        before the effect id is consumed and before any code can run:
+
+        1. the Host must actually hold a usable sandbox -- the same state that
+           makes it advertise ``AVAILABLE_BOUNDED`` -- else ``ACTION_NOT_ALLOWED``;
+        2. one tool-kind effect id must still be free, else ``BUDGET``;
+        3. the GenerativeExecutionGate must return ``ADMITTED``, else its own
+           fixed ``REFUSED_NO_PROFILE`` / ``REFUSED_PROFILE_MISMATCH`` /
+           ``REFUSED_SHA_MISMATCH`` / ``REFUSED_UNBOUNDED``.
+
+        An admitted run is exactly one tool-kind effect: it spends one id from
+        the existing capacity, records ``generated_exploration`` in
+        ``tool_names`` and yields an explicitly untrusted ``BOUNDED_OBSERVATION``
+        tagged ``BOUNDED_OBSERVATION_NOT_PROOF``. It is never a proof, never a
+        certificate and never an obligation discharge.
+        """
+        if wire_method != "tool.execute":
+            _fail()
+        if self.generated_python_capability() != _GENERATED_PYTHON_BOUNDED:
+            _fail(_EXPLORE_ACTION_NOT_ALLOWED)
+        if not self._effect_admission("tool"):
+            _fail("BUDGET")
+        execution_request = self._exploration_request(action["code"])
+        try:
+            gate_decision = self.generated_python_gate.decision(execution_request)
+        except Exception:  # noqa: BLE001 - a broken gate is a refusal, not a crash
+            gate_decision = "REFUSED_NO_PROFILE"
+        if gate_decision != "ADMITTED":
+            if not isinstance(gate_decision, str) or gate_decision not in GATE_REASONS:
+                gate_decision = "REFUSED_UNBOUNDED"
+            _fail(gate_decision)
+        # From here on the wire contract is validated exactly like a tool
+        # effect; the effect id is consumed only after every check passes.
+        effect_request = validate_request(params["request"])
+        if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
+            _fail()
+        if frame_id != "node-" + effect_request["effectId"]:
+            _fail()
+        if not same_json(effect_request["binding"], binding):
+            _fail()
+        if not same_json(effect_request["action"], action):
+            _fail()
+        source_id = effect_request["binding"]["sourceRequestId"]
+        for entry in self.effects:
+            if (
+                isinstance(entry, dict)
+                and isinstance(entry.get("request"), dict)
+                and isinstance(entry["request"].get("binding"), dict)
+                and entry["request"]["binding"].get("sourceRequestId") == source_id
+            ):
+                _fail()
+        bound = copy.deepcopy(effect_request)
+        bound["remainingMs"] = min(effect_request["remainingMs"], self.remaining_ms())
+        if bound["remainingMs"] < _MIN_REMAINING_MS + 1:
+            _fail()
+        # Admitted: one tool-kind effect id, one bounded exploration record.
+        self.effect_calls += 1
+        self.tool_effect_count += 1
+        self.exploration_calls += 1
+        if (
+            _EXPLORATION_TOOL_NAME not in self.tool_names
+            and len(self.tool_names) < self.max_effects
+        ):
+            self.tool_names.append(_EXPLORATION_TOOL_NAME)
+        outcome = self.generated_exploration(
+            execution_request,
+            action["code"],
+            gate=self.generated_python_gate,
+            scope=action["scope"],
+        )
+        checked = self._exploration_receipt(bound, outcome)
+        if self.remaining_ms() <= _MIN_REMAINING_MS and checked["status"] != "UNKNOWN":
+            checked = failure_receipt(bound, "ERROR", "DEADLINE_EXCEEDED")
+        self.effects.append({"request": copy.deepcopy(bound), "receipt": copy.deepcopy(checked)})
+        if checked["status"] == "UNKNOWN":
+            self.stopped = True
+            self.client.blocked = True
+        self.callback_done = False
+        self.send(
+            self.proc,
+            {
+                "jsonrpc": "2.0",
+                "id": frame_id,
+                "result": {
+                    **self._common(),
+                    "receipt": copy.deepcopy(checked),
+                    "remainingMs": self.remaining_ms(),
+                },
+            },
+            wire_method,
+        )
+        self.pending_is_callback = True
+
+    @staticmethod
+    def _exploration_receipt(bound, outcome):
+        """One receipt for one gate outcome; never a truncated or invented one."""
+        admitted = isinstance(outcome, dict) and outcome.get("admitted") is True
+        payload = outcome.get("result") if admitted else None
+        if admitted and isinstance(payload, dict):
+            observation = {
+                "kind": "BOUNDED_OBSERVATION",
+                "interpretation": "BOUNDED_OBSERVATION_NOT_PROOF",
+                "status": payload.get("status"),
+                "result": payload.get("output"),
+            }
+            try:
+                text = json.dumps(
+                    observation, allow_nan=False, ensure_ascii=False,
+                    separators=(",", ":"), default=str,
+                )
+            except (ValueError, TypeError, RecursionError, OverflowError):
+                text = None
+            if text is not None and len(text.encode("utf-8", "replace")) <= MAX_OBSERVATION_BYTES:
+                return build_receipt(bound, "COMPLETE", text)
+            # An oversized observation is refused, never truncated or faked.
+            return failure_receipt(bound, "ERROR", "OUTPUT_TOO_LARGE")
+        reason = outcome.get("reason") if isinstance(outcome, dict) else None
+        if not isinstance(reason, str) or (
+            reason not in EXECUTION_REFUSALS and reason not in GATE_REASONS
+        ):
+            reason = "EFFECT_FAILED"
+        return build_receipt(bound, "ERROR", json.dumps({"code": reason}, separators=(",", ":")))
 
     def _method_asset(self, checked, method_id):
         """Strictly re-check one METHOD_REFERENCE observation; None on failure."""

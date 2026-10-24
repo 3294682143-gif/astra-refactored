@@ -53,6 +53,15 @@ export const ERROR_CODES = {
   // `session.stop` while `session.solve` is still in flight. The code exists so
   // that case is named instead of collapsing into a generic field failure.
   ILLEGAL_TRANSITION: "ILLEGAL_TRANSITION",
+  // Stage D+ controlled exploration: the Host's capability refusal and the
+  // generative-execution gate's closed refusal vocabulary. They are fixed
+  // codes so an exploration refusal never collapses into a field failure.
+  ACTION_NOT_ALLOWED: "ACTION_NOT_ALLOWED",
+  REFUSED_NO_PROFILE: "REFUSED_NO_PROFILE",
+  REFUSED_PROFILE_MISMATCH: "REFUSED_PROFILE_MISMATCH",
+  REFUSED_SHA_MISMATCH: "REFUSED_SHA_MISMATCH",
+  REFUSED_UNBOUNDED: "REFUSED_UNBOUNDED",
+  REFUSED_EXECUTION_FAILED: "REFUSED_EXECUTION_FAILED",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

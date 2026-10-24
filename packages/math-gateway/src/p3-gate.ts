@@ -139,7 +139,9 @@ export class P3EffectGate {
         fail(P2_ERROR_CODES.PACKET_BINDING);
       }
     }
-    if (parsed.action !== "tool" && parsed.action !== "method") {
+    // A bounded generated-Python exploration spends the same tool-kind effect
+    // quota; only a method action has its own attempt counter.
+    if (parsed.action !== "tool" && parsed.action !== "method" && parsed.action !== "explore") {
       fail(P2_ERROR_CODES.PACKET_SCHEMA);
     }
     if (turns <= 1) {

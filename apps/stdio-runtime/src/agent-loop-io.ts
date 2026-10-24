@@ -44,6 +44,7 @@ const OPTION_FIELDS = [
   "deriveBudget",
   "resumeSessionLog",
   "resumeContractVersion",
+  "allowExploration",
 ] as const;
 const PORT_FIELDS = ["model", "effect", "catalog", "asset"] as const;
 
@@ -179,6 +180,12 @@ export interface CapturedAgentOptions {
     readonly data: Readonly<Record<string, unknown>>;
   }[] | null;
   readonly resumeContractVersion: number | null;
+  /**
+   * Stage D+: the Host advertised `AVAILABLE_BOUNDED` generated Python, so the
+   * single `explore` action may be offered to the model. Absent/false keeps the
+   * action invisible and the run byte-identical.
+   */
+  readonly allowExploration: boolean;
 }
 
 const MAX_RESUME_EVENTS = 512;
@@ -286,6 +293,11 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
   const deriveBudget = rawDeriveBudget === true;
   const resumeSessionLog = checkedResumeLog(source.resumeSessionLog);
   const resumeContractVersion = checkedResumeVersion(source.resumeContractVersion);
+  const rawAllowExploration = source.allowExploration;
+  if (rawAllowExploration !== undefined && typeof rawAllowExploration !== "boolean") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const allowExploration = rawAllowExploration === true;
   if (resumeSessionLog !== null && resumeContractVersion === null) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -305,6 +317,7 @@ export function captureAgentOptions(options: AgentLoopOptions): CapturedAgentOpt
     deriveBudget,
     resumeSessionLog,
     resumeContractVersion,
+    allowExploration,
   });
 }
 

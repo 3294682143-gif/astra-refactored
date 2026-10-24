@@ -175,6 +175,8 @@ export class AgentHostFlow {
   private pending: Pending | null = null;
   private effectAvailable = false;
   private methodAvailable = false;
+  /** Stage D+: the Host advertised `AVAILABLE_BOUNDED` generated Python. */
+  private exploreAvailable = false;
   private solveStarted = false;
   private stopSent = false;
   private catalogRead = false;
@@ -299,7 +301,11 @@ export class AgentHostFlow {
     if (capabilities["modelGenerate"] !== "AVAILABLE") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
-    if (capabilities["generatedPython"] !== "UNAVAILABLE") {
+    // Stage D+: `UNAVAILABLE` (the default) keeps the exploration action
+    // refused; `AVAILABLE_BOUNDED` only enables that one controlled action. Any
+    // other value is a fixed field failure.
+    const generatedPython = capabilities["generatedPython"];
+    if (generatedPython !== "UNAVAILABLE" && generatedPython !== "AVAILABLE_BOUNDED") {
       fail(ERROR_CODES.FIELD_VALUE);
     }
     if (capabilities["maxTokens"] !== 8192 || capabilities["maxTokensVerified"] !== false) {
@@ -326,6 +332,9 @@ export class AgentHostFlow {
     this.effectAvailable = toolExecute === "AVAILABLE" && maxEffects > 0;
     this.methodAvailable =
       methodLoad === "AVAILABLE" && maxMethodLoads > 0 && this.effectAvailable;
+    // The exploration action needs both the advertised bounded capability and
+    // the same effect port a tool action needs.
+    this.exploreAvailable = generatedPython === "AVAILABLE_BOUNDED" && this.effectAvailable;
     const deriveBudget = params["deriveBudget"] === true;
     this.options = Object.freeze({
       maxModelCalls,
@@ -425,6 +434,9 @@ export class AgentHostFlow {
               resumeSessionLog: this.resumeSessionLog,
               resumeContractVersion: this.resumeContractVersion,
             }),
+        // Absent unless the Host advertised `AVAILABLE_BOUNDED`, so every
+        // default run keeps the exact same option object.
+        ...(this.exploreAvailable ? { allowExploration: true } : {}),
       }, ports);
     } catch (error) {
       this.io.fail(error);

@@ -2443,7 +2443,16 @@ var init_src = __esm({
       // A frame arrived in a phase where the contract forbids it, such as a
       // `session.stop` while `session.solve` is still in flight. The code exists so
       // that case is named instead of collapsing into a generic field failure.
-      ILLEGAL_TRANSITION: "ILLEGAL_TRANSITION"
+      ILLEGAL_TRANSITION: "ILLEGAL_TRANSITION",
+      // Stage D+ controlled exploration: the Host's capability refusal and the
+      // generative-execution gate's closed refusal vocabulary. They are fixed
+      // codes so an exploration refusal never collapses into a field failure.
+      ACTION_NOT_ALLOWED: "ACTION_NOT_ALLOWED",
+      REFUSED_NO_PROFILE: "REFUSED_NO_PROFILE",
+      REFUSED_PROFILE_MISMATCH: "REFUSED_PROFILE_MISMATCH",
+      REFUSED_SHA_MISMATCH: "REFUSED_SHA_MISMATCH",
+      REFUSED_UNBOUNDED: "REFUSED_UNBOUNDED",
+      REFUSED_EXECUTION_FAILED: "REFUSED_EXECUTION_FAILED"
     };
     P0_METHODS = [
       "runtime.initialize",
@@ -2694,6 +2703,15 @@ function reject(stage, code) {
 }
 function monotonicToolGuard(input) {
   const { action } = input;
+  if (action.action === "explore") {
+    if (input.allowExplorations !== true) {
+      return reject("guards", "ACTION_NOT_ALLOWED");
+    }
+    if (input.callsLeft < 1 + input.maxReviews) {
+      return reject("guards", "BUDGET_RESERVED");
+    }
+    return Object.freeze({ admitted: true, stage: "guards", code: "ADMITTED", monotonic: true });
+  }
   if (action.action !== "tool" && action.action !== "method") {
     return reject("pre", "NOT_AN_EFFECT_ACTION");
   }
@@ -2849,6 +2867,20 @@ function parseMethod(value) {
   }
   return p2Snapshot({ action: "method", id: value.id });
 }
+function parseExplore(value) {
+  if (!exactKeys(value, ["action", "code", "scope"])) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const code = value.code;
+  if (typeof code !== "string" || code.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (Buffer.byteLength(code, "utf8") > MAX_CODE_BYTES) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  const scope = boundedString(value.scope, MAX_SCOPE_CHARS);
+  return p2Snapshot({ action: "explore", code, scope });
+}
 function parseFinal(value) {
   if (!exactKeys(value, ["action", "answer", "complete", "unresolved"])) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
@@ -2921,6 +2953,9 @@ function parseP3Action(text8) {
   if (action === "method") {
     return parseMethod(parsed);
   }
+  if (action === "explore") {
+    return parseExplore(parsed);
+  }
   if (action === "final") {
     return parseFinal(parsed);
   }
@@ -2929,7 +2964,7 @@ function parseP3Action(text8) {
   }
   fail(P2_ERROR_CODES.NOT_REUSABLE);
 }
-var MAX_TEXT_CHARS2, MAX_ARGS_BYTES, MAX_SCOPE_CHARS, MAX_ANSWER_CHARS, MAX_REASON_CHARS, MAX_UNRESOLVED, MAX_METHOD_ID_CHARS, METHOD_ID;
+var MAX_TEXT_CHARS2, MAX_ARGS_BYTES, MAX_SCOPE_CHARS, MAX_CODE_BYTES, MAX_ANSWER_CHARS, MAX_REASON_CHARS, MAX_UNRESOLVED, MAX_METHOD_ID_CHARS, METHOD_ID;
 var init_p3_parser = __esm({
   "packages/math-gateway/dist/src/p3-parser.js"() {
     "use strict";
@@ -2937,6 +2972,7 @@ var init_p3_parser = __esm({
     MAX_TEXT_CHARS2 = 2e4;
     MAX_ARGS_BYTES = 1e4;
     MAX_SCOPE_CHARS = 256;
+    MAX_CODE_BYTES = 65536;
     MAX_ANSWER_CHARS = 4096;
     MAX_REASON_CHARS = 256;
     MAX_UNRESOLVED = 32;
@@ -3040,7 +3076,20 @@ function p3EffectKey(action) {
   if (parsed.action === "method") {
     return sha256(canonical(["method", parsed.id]));
   }
+  if (parsed.action === "explore") {
+    return sha256(canonical(["explore", parsed.code]));
+  }
   fail2(P2_ERROR_CODES.PACKET_SCHEMA);
+}
+function sourceOf(action) {
+  if (action.action === "tool")
+    return "PROGRAM_OBSERVATION";
+  if (action.action === "method")
+    return "METHOD_REFERENCE";
+  return "GENERATED_OBSERVATION";
+}
+function levelOf(action) {
+  return action.action === "explore" ? "OBSERVED" : "PROVISIONAL";
 }
 function p3EffectRequest(value) {
   const source = p2Snapshot(value);
@@ -3053,7 +3102,7 @@ function p3EffectRequest(value) {
   }
   const binding = p3Binding(source.binding);
   const action = parseP3Action(JSON.stringify(source.action));
-  if (action.action !== "tool" && action.action !== "method") {
+  if (action.action !== "tool" && action.action !== "method" && action.action !== "explore") {
     fail2(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const remainingMs = source.remainingMs;
@@ -3080,7 +3129,7 @@ function p3EffectReceipt(value, request) {
   if (status !== "COMPLETE" && status !== "ERROR" && status !== "UNKNOWN") {
     fail2(P2_ERROR_CODES.PACKET_BINDING);
   }
-  const expectedSource = request.action.action === "tool" ? "PROGRAM_OBSERVATION" : "METHOD_REFERENCE";
+  const expectedSource = sourceOf(request.action);
   if (source.source !== expectedSource) {
     fail2(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -3098,7 +3147,8 @@ function p3EffectReceipt(value, request) {
   if (sha256(observation) !== observationHash) {
     fail2(P2_ERROR_CODES.PACKET_BINDING);
   }
-  if (source.level !== "PROVISIONAL" || source.checkResult !== "UNKNOWN") {
+  const expectedLevel = levelOf(request.action);
+  if (source.level !== expectedLevel || source.checkResult !== "UNKNOWN") {
     fail2(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
@@ -3108,7 +3158,7 @@ function p3EffectReceipt(value, request) {
     source: expectedSource,
     observation,
     observationHash,
-    level: "PROVISIONAL",
+    level: expectedLevel,
     checkResult: "UNKNOWN"
   });
 }
@@ -3122,10 +3172,10 @@ function p3EffectFailure(request, status) {
     effectId: bound.effectId,
     binding: bound.binding,
     status,
-    source: bound.action.action === "tool" ? "PROGRAM_OBSERVATION" : "METHOD_REFERENCE",
+    source: sourceOf(bound.action),
     observation,
     observationHash: sha256(observation),
-    level: "PROVISIONAL",
+    level: levelOf(bound.action),
     checkResult: "UNKNOWN"
   });
 }
@@ -3246,7 +3296,7 @@ var init_p3_gate = __esm({
             fail3(P2_ERROR_CODES.PACKET_BINDING);
           }
         }
-        if (parsed.action !== "tool" && parsed.action !== "method") {
+        if (parsed.action !== "tool" && parsed.action !== "method" && parsed.action !== "explore") {
           fail3(P2_ERROR_CODES.PACKET_SCHEMA);
         }
         if (turns <= 1) {
@@ -12774,6 +12824,11 @@ function captureAgentOptions(options) {
   const deriveBudget = rawDeriveBudget === true;
   const resumeSessionLog = checkedResumeLog(source.resumeSessionLog);
   const resumeContractVersion = checkedResumeVersion(source.resumeContractVersion);
+  const rawAllowExploration = source.allowExploration;
+  if (rawAllowExploration !== void 0 && typeof rawAllowExploration !== "boolean") {
+    fail18(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const allowExploration = rawAllowExploration === true;
   if (resumeSessionLog !== null && resumeContractVersion === null) {
     fail18(P2_ERROR_CODES.PACKET_BINDING);
   }
@@ -12792,7 +12847,8 @@ function captureAgentOptions(options) {
     now,
     deriveBudget,
     resumeSessionLog,
-    resumeContractVersion
+    resumeContractVersion,
+    allowExploration
   });
 }
 function deriveRootBudget(taskCount, maxReviews, maxModelCallsCap, maxWorkUnitsCap, maxConsensus = 0) {
@@ -12894,7 +12950,8 @@ var init_agent_loop_io = __esm({
       "goalSpecs",
       "deriveBudget",
       "resumeSessionLog",
-      "resumeContractVersion"
+      "resumeContractVersion",
+      "allowExploration"
     ];
     PORT_FIELDS = ["model", "effect", "catalog", "asset"];
     MAX_RESUME_EVENTS = 512;
@@ -13912,10 +13969,11 @@ function guardedObservations(contract, task, requestId, observations, catalog, a
     if (receipt.status !== "COMPLETE" && receipt.status !== "ERROR") {
       fail22(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (receipt.source !== "PROGRAM_OBSERVATION" && receipt.source !== "METHOD_REFERENCE") {
+    if (receipt.source !== "PROGRAM_OBSERVATION" && receipt.source !== "METHOD_REFERENCE" && receipt.source !== "GENERATED_OBSERVATION") {
       fail22(P2_ERROR_CODES.PACKET_BINDING);
     }
-    if (receipt.level !== "PROVISIONAL" || receipt.checkResult !== "UNKNOWN") {
+    const expectedLevel = receipt.source === "GENERATED_OBSERVATION" ? "OBSERVED" : "PROVISIONAL";
+    if (receipt.level !== expectedLevel || receipt.checkResult !== "UNKNOWN") {
       fail22(P2_ERROR_CODES.PACKET_BINDING);
     }
     const observation = receipt.observation;
@@ -14203,7 +14261,10 @@ function buildAgentWorkContext(input) {
     toolObservations: observations,
     scopeCoverage
   };
-  const systemPrompt = captured.refutationRequired === true ? `${SYSTEM_PROMPT6} ${REFUTATION_PARAGRAPH}` : SYSTEM_PROMPT6;
+  let systemPrompt = captured.refutationRequired === true ? `${SYSTEM_PROMPT6} ${REFUTATION_PARAGRAPH}` : SYSTEM_PROMPT6;
+  if (captured.explorationAvailable === true) {
+    systemPrompt = `${systemPrompt} ${EXPLORATION_PARAGRAPH}`;
+  }
   const messages = [
     { role: "system", content: systemPrompt },
     { role: "user", content: JSON.stringify(payload) }
@@ -14220,7 +14281,7 @@ function buildAgentWorkContext(input) {
     contextBytes
   });
 }
-var AGENT_WORK_CONTEXT_SCHEMA_VERSION, AGENT_WORK_CONTEXT_PROGRESS_POLICY, MAX_CONTEXT_BYTES9, MAX_OBSERVATIONS, MAX_OBSERVATION_BYTES4, MAX_METHOD_ASSETS, HASH7, REQUEST_ORDINAL3, PROVENANCE_ORDINAL, EFFECT_IDS4, RECEIPT_FIELDS3, BINDING_FIELDS4, PROVENANCE_FIELDS, PROVENANCE_REF_FIELDS, REVISION_PROVENANCE_FIELDS, REVISION_TARGET_FIELDS, REVISION_TARGET_ENVELOPE_FIELDS, REVISION_TARGET_REF_FIELDS, REVISION_ORDINAL, REVISION_MAX_ID_CHARS, DEPENDENCY_TASK_PREFIX, SYSTEM_PROMPT6, REFUTATION_PARAGRAPH;
+var AGENT_WORK_CONTEXT_SCHEMA_VERSION, AGENT_WORK_CONTEXT_PROGRESS_POLICY, MAX_CONTEXT_BYTES9, MAX_OBSERVATIONS, MAX_OBSERVATION_BYTES4, MAX_METHOD_ASSETS, HASH7, REQUEST_ORDINAL3, PROVENANCE_ORDINAL, EFFECT_IDS4, RECEIPT_FIELDS3, BINDING_FIELDS4, PROVENANCE_FIELDS, PROVENANCE_REF_FIELDS, REVISION_PROVENANCE_FIELDS, REVISION_TARGET_FIELDS, REVISION_TARGET_ENVELOPE_FIELDS, REVISION_TARGET_REF_FIELDS, REVISION_ORDINAL, REVISION_MAX_ID_CHARS, DEPENDENCY_TASK_PREFIX, SYSTEM_PROMPT6, REFUTATION_PARAGRAPH, EXPLORATION_PARAGRAPH;
 var init_agent_loop_context = __esm({
   "apps/stdio-runtime/dist/src/agent-loop-context.js"() {
     "use strict";
@@ -14463,6 +14524,15 @@ var init_agent_loop_context = __esm({
       "exact_check_expr or bounded_enumeration when one of their bounded operations can test the",
       "answer. Otherwise deliver the work packet exactly as specified above; an absent check is never",
       "a failure and it never changes the packet shape."
+    ].join(" ");
+    EXPLORATION_PARAGRAPH = [
+      "BOUNDED EXPLORATION AVAILABLE. Instead of a tool action you may reply with exactly one",
+      'exploration action {action:"explore", code, scope} where code is Python source of at most',
+      "65536 bytes and scope is a non-empty intent string of at most 256 characters. It runs only",
+      "inside the isolated sandbox under the Host's own profile, deadline and output bound, and it",
+      "spends one tool-kind effect. Its result is an untrusted BOUNDED_OBSERVATION tagged",
+      "BOUNDED_OBSERVATION_NOT_PROOF: it is never evidence, never a proof, never a certificate and",
+      "never discharges an obligation, so still deliver the work packet yourself."
     ].join(" ");
   }
 });
@@ -18966,6 +19036,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   const exactObservations = /* @__PURE__ */ new Map();
   let answerClosureAttempted = false;
   const callsLeft = () => opts.maxModelCalls - root.modelCalls();
+  const allowExploration = opts.allowExploration === true;
   const reserve = () => target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
   if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0 && reconstructedPartial) {
     for (const row of opts.resumeSessionLog) {
@@ -19137,6 +19208,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         const cachedMethod = observations.some((item) => item.source === "METHOD_REFERENCE");
         const allowTools = subGate !== null && callsLeft() >= 2 + opts.maxReviews && (toolEffects < opts.maxEffects || cachedTool);
         const allowMethods = catalog !== null && subGate !== null && callsLeft() >= 2 + opts.maxReviews && (methodLoads < methodLoadCapacity && root.effectCalls() < totalEffectCapacity || cachedMethod);
+        const allowExplore = allowExploration && subGate !== null && callsLeft() >= 2 + opts.maxReviews && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity;
         const protectedCandidate = projectProtectedFinal(ledger.snapshot(), target);
         const sameScope = protectedCandidate !== null && protectedCandidate.binding.scopeId === running.scopeId;
         const exposedCandidate = sameScope ? protectedCandidate : null;
@@ -19193,7 +19265,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             revisionProvenance: revision.provenanceFor(running.taskId),
             revisionTarget: revision.targetFor(running.taskId),
             scopeCoverage: declaredCoverage,
-            refutationRequired
+            refutationRequired,
+            explorationAvailable: allowExplore
           });
         } catch (error) {
           if (!(error instanceof P2Error)) {
@@ -19383,7 +19456,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         }
         let action = null;
         try {
-          action = parseP3Action(outcome.receipt.text);
+          const parsedAction = parseP3Action(outcome.receipt.text);
+          action = parsedAction.action === "explore" && !allowExploration ? null : parsedAction;
         } catch {
           action = null;
         }
@@ -19585,6 +19659,92 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             secondMethodOfferPending = secondMethodRouteEligible && methodLoads < methodLoadCapacity && subGate !== null && captured.catalog !== null && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews;
           }
           if (repeated && revision.pendingTaskId() === null) {
+            try {
+              ledger.validateYieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.validateRecordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              ledger.yieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+              progress.recordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
+            } catch (error) {
+              if (!(error instanceof P2Error)) {
+                throw error;
+              }
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+            yielded = true;
+            stop = "NO_CANDIDATE";
+            break;
+          }
+          continue;
+        }
+        if (action !== null && action.action === "explore") {
+          const exploreGuard = monotonicToolGuard({
+            action,
+            allowTools: false,
+            allowMethods: false,
+            allowExplorations: allowExplore,
+            methodId: null,
+            catalogIds: [],
+            callsLeft: callsLeft(),
+            maxReviews: opts.maxReviews
+          });
+          if (!exploreGuard.admitted || subGate === null) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const exploreEffectsBefore = root.effectCalls();
+          let receipt;
+          try {
+            receipt = await calls.effect(running, outcome.requestId, action, subGate, callsLeft());
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          if (root.effectCalls() > exploreEffectsBefore) {
+            toolEffects += 1;
+          }
+          sessionLog.append("TOOL_OBSERVATION", {
+            effectId: receipt.effectId,
+            source: receipt.source,
+            level: receipt.level,
+            checkResult: receipt.checkResult,
+            toolName: EXPLORATION_TOOL_NAME,
+            operation: null,
+            forced: false,
+            routeId: null
+          });
+          if (receipt.status === "COMPLETE") {
+            try {
+              const observed = JSON.parse(receipt.observation);
+              toolObservationViews.push({
+                name: EXPLORATION_TOOL_NAME,
+                operation: null,
+                result: observed.result ?? null
+              });
+            } catch {
+            }
+          }
+          if (receipt.status === "UNKNOWN" || root.remainingMs() <= MIN_MS) {
+            stop = receipt.status === "UNKNOWN" ? "STOPPED" : "DEADLINE_EXCEEDED";
+            break;
+          }
+          let exploreRepeated = false;
+          try {
+            exploreRepeated = progress.observeEffect(running.taskId, outcome.requestId, p3EffectKey(action), root.effectCalls() === exploreEffectsBefore);
+          } catch (error) {
+            if (!(error instanceof P2Error)) {
+              throw error;
+            }
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          if (!observations.some((item) => item.effectId === receipt.effectId)) {
+            observations.push(receipt);
+          }
+          if (exploreRepeated && revision.pendingTaskId() === null) {
             try {
               ledger.validateYieldTask(running.taskId, outcome.requestId, "REPEATED_EFFECT");
               progress.validateRecordYield(running.taskId, outcome.requestId, "REPEATED_EFFECT");
@@ -20742,7 +20902,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   });
   return p2Snapshot({ summary, privateState });
 }
-var MIN_MS, MAX_METHOD_TOOL_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
+var MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
   "apps/stdio-runtime/dist/src/agent-loop.js"() {
     "use strict";
@@ -20765,6 +20925,7 @@ var init_agent_loop2 = __esm({
     init_agent_loop_io();
     init_agent_semantics();
     MIN_MS = 25;
+    EXPLORATION_TOOL_NAME = "generated_exploration";
     MAX_METHOD_TOOL_COPROMPT_CHARS = 600;
     AUX_OBLIGATION_KINDS = ["PREMISES", "ATTAINMENT"];
     SCHEMA_REPAIR_CODES = /* @__PURE__ */ new Set([
@@ -20887,6 +21048,8 @@ var init_agent_host_flow = __esm({
       pending = null;
       effectAvailable = false;
       methodAvailable = false;
+      /** Stage D+: the Host advertised `AVAILABLE_BOUNDED` generated Python. */
+      exploreAvailable = false;
       solveStarted = false;
       stopSent = false;
       catalogRead = false;
@@ -21000,7 +21163,8 @@ var init_agent_host_flow = __esm({
         if (capabilities["modelGenerate"] !== "AVAILABLE") {
           fail26(ERROR_CODES.FIELD_VALUE);
         }
-        if (capabilities["generatedPython"] !== "UNAVAILABLE") {
+        const generatedPython = capabilities["generatedPython"];
+        if (generatedPython !== "UNAVAILABLE" && generatedPython !== "AVAILABLE_BOUNDED") {
           fail26(ERROR_CODES.FIELD_VALUE);
         }
         if (capabilities["maxTokens"] !== 8192 || capabilities["maxTokensVerified"] !== false) {
@@ -21026,6 +21190,7 @@ var init_agent_host_flow = __esm({
         }
         this.effectAvailable = toolExecute === "AVAILABLE" && maxEffects > 0;
         this.methodAvailable = methodLoad === "AVAILABLE" && maxMethodLoads > 0 && this.effectAvailable;
+        this.exploreAvailable = generatedPython === "AVAILABLE_BOUNDED" && this.effectAvailable;
         const deriveBudget = params["deriveBudget"] === true;
         this.options = Object.freeze({
           maxModelCalls,
@@ -21113,7 +21278,10 @@ var init_agent_host_flow = __esm({
             ...this.resumeSessionLog === null ? {} : {
               resumeSessionLog: this.resumeSessionLog,
               resumeContractVersion: this.resumeContractVersion
-            }
+            },
+            // Absent unless the Host advertised `AVAILABLE_BOUNDED`, so every
+            // default run keeps the exact same option object.
+            ...this.exploreAvailable ? { allowExploration: true } : {}
           }, ports);
         } catch (error) {
           this.io.fail(error);

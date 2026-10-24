@@ -1708,3 +1708,65 @@ cover-time 不进 `TRANSITION_COUNT`、Richardson 不被普通差分路由吃掉
 3. **数值类算子的观测是浮点**（`finite_difference_derivative` / `richardson_extrapolate` /
    `markov_expected_steps`），闭环对它们只做"显式断言且不等"的比对，不参与精确有理数闭环。
 4. **没有跑真实 API**：本轮全部是本地门禁 + 假 client，正确率口径仍是 §12.6 的旧数字。
+
+---
+
+## 17. 2026-10-24 受控 WASI 探索动作（Stage D 的最后一环）+ 路由覆盖实测
+
+### 17.1 为什么还要改
+
+§16.4 把 WASI 沙箱在 Host 侧接好了，但**线上动作词表仍只有 `("tool","method")`**，TS 循环无法主动请求
+一次沙箱探索——沙箱实际上不可达。本轮补上这个受控动作，并把"默认不可用"做成硬约束。
+
+### 17.2 新增 `{"action":"explore","code":...,"scope":...}`（默认关闭）
+
+| 环节 | 规则 |
+| --- | --- |
+| 动作形状 | `code` 非空、UTF-8 ≤ 65536 字节；`scope` 1..256 码点；键集精确（多一个键即拒）；TS 与 Python 双侧同一套严格校验 |
+| 能力位 | `capabilities.generatedPython` 新增 `"AVAILABLE_BOUNDED"`，**仅当 Host 真的持有可用沙箱**时才上报；默认仍是 `"UNAVAILABLE"` |
+| 准入 | 必须同时满足：能力位为 `AVAILABLE_BOUNDED`、`GenerativeExecutionGate` 判定 `ADMITTED`、仍有空闲 effect id；否则返回固定码（`ACTION_NOT_ALLOWED` / `REFUSED_NO_PROFILE` / `REFUSED_PROFILE_MISMATCH` / `REFUSED_SHA_MISMATCH` / `REFUSED_UNBOUNDED`） |
+| 拒绝不烧预算 | 被拒的探索**不消耗 effect id**（有测试断言 `effect_calls` 不变） |
+| 观测形态 | `{kind:"BOUNDED_OBSERVATION", interpretation:"BOUNDED_OBSERVATION_NOT_PROOF", ...}`，`source: "GENERATED_OBSERVATION"`、`level: "OBSERVED"`、`checkResult: "UNKNOWN"`；**永远不能**满足 `checkerSupportsObligation`、**永远不能**成为证书 |
+| 记账 | 一次被准入的探索计为一次工具类 effect（沿用 `maxEffects`/容量算术），`tool_names` 记 `generated_exploration`，新增指标 `exploration_calls` |
+| 默认路径 | 无 profile 时能力位 `UNAVAILABLE`、探索动作被固定拒绝、**现有运行的输出逐字节不变** |
+
+### 17.3 门禁
+
+- `tsc -b`：0
+- Node：**519/519**（基线 508，+11 探索动作用例）
+- 聚焦 bridge：**701 passed**（基线 670，+31）
+- 全量 pytest：**1117 passed, 24 skipped**（基线 1086，+31）
+- bundle 已重建；`release/BUILD_MANIFEST.json`：**VERIFY_OK**（首轮 pytest 曾因 manifest 未重建而红 1 例，重建后恢复）
+- `git diff --check`：clean
+
+### 17.4 真实 API 本轮未跑成（上游故障，不是代码问题）
+
+计划跑 12 题（`/tmp/test0-stage16.txt`：分裂域/群结构/行列式/插值/OLS/密度/定积分）验证新闭环，
+但本轮所有请求都以 `INTERN_RETRY_EXHAUSTED` 结束（每次约 405 秒后失败），直接用最小请求探活也是
+`HTTP 400`。因此：
+
+- 该 run（`/tmp/astra-stage16-115`）8 题的 `unsolved` **全部是传输层失败**，`logical_model_calls=1`、
+  `frames=10`、`code=None`，不能作为能力证据，也不能当作回归。
+- 复跑命令与输入已固定（`sha256 6217523d5ffebbe4171c65bc3bef91df3ca3966cea1f4c9dee822354b07f9854`），
+  API 恢复后可直接重跑。
+
+### 17.5 顺带实测出的路由覆盖（这套输入的真相）
+
+在 100 题输入上，当前 26 个算子 + 全部路由族合计命中 **24 题**（14 → 22 → 23 → 24 的演进）：
+
+`OLS_CHECK 5`、`EXACT_TRIG_REDUCE 4`、`EXACT_LIMIT 3`、`INTERPOLATION_FIT 3`、`GROUP_STRUCTURE 2`、
+`FINITE_ENUMERATION 2`、`SPLITTING_FIELD_DEGREE`/`EXACT_DENSITY_CHECK`/`EXACT_DEFINITE_INTEGRAL`/
+`CIRCLE_LAPLACIAN`/`EXACT_MAXIMAL_MINORS` 各 1。
+
+**Stage B 新增的 9 个算子（`transition_count`、`rook_numbers`、`markov_expected_steps`、
+`finite_difference_derivative` 等）在这套输入上命中 0 题**——它们是竞赛/离散组合型算子，与这套
+大学数学题（环论/群论/分析/概率）不重叠。这不影响正确性，但意味着：**这批算子对当前 100 题的
+正确率贡献预计为 0**，要看到收益必须换一批匹配的题（离散组合/DP/随机过程）。
+
+### 17.6 已知限制
+
+1. **仍然没有可用的 WASI profile**：全机器找不到 `python-3.12.0.wasm`，所以 `AVAILABLE_BOUNDED`
+   永远不上报，探索动作在真实运行里仍是关闭状态（代码路径已就绪、有 stub 测试覆盖）。
+2. **探索观测不进闭环**：它被明确标记为不可作证，因此不会产生任何 `AnswerClosureDefect`。
+3. **数值型算子（差分/外推/Markov）**只做"显式断言且不等"的比对，不参与精确有理数闭环。
+4. **真实 API 证据缺失一轮**：见 §17.4，上游 400/重试耗尽，等恢复后重跑。

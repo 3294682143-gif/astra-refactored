@@ -73,6 +73,15 @@ _UNSOLVED_CODES = (
     # The Host's own deadline and budget refusals keep their codes here too,
     # otherwise the projection would downgrade them back to a field failure.
     "DEADLINE_EXCEEDED",
+    # Stage D+ exploration refusals: the Host's capability refusal and the
+    # generative-execution gate's own closed vocabulary. They are reported
+    # verbatim instead of collapsing to a field failure.
+    "ACTION_NOT_ALLOWED",
+    "REFUSED_NO_PROFILE",
+    "REFUSED_PROFILE_MISMATCH",
+    "REFUSED_SHA_MISMATCH",
+    "REFUSED_UNBOUNDED",
+    "REFUSED_EXECUTION_FAILED",
     # Budget refusals already arrive as ``BUDGET``; listed for symmetry below.
 )
 
@@ -184,6 +193,10 @@ def _funnel_metrics(host, session_log):
     * ``tool_effect_calls`` / ``method_effect_calls`` -- Host effects by action;
     * ``tool_names`` / ``method_ids`` -- deduplicated identities actually spent,
       bounded by the declared caps;
+    * ``exploration_calls`` -- admitted bounded generated-Python explorations
+      (an exploration is one tool-kind effect, so it is also counted in
+      ``tool_effect_calls`` and appears in ``tool_names`` as
+      ``generated_exploration``);
     * ``front_budget`` / ``tail_reserve`` -- the Host's deterministic split of
       the flat model-call cap into a front-stage ceiling and a finalization
       reserve (HANDOFF §5 item 4);
@@ -241,6 +254,9 @@ def _funnel_metrics(host, session_log):
             continue
         if action.get("action") == "tool":
             tool_effect_calls += 1
+        elif action.get("action") == "explore":
+            # Stage D+: an admitted exploration is one tool-kind effect.
+            tool_effect_calls += 1
         elif action.get("action") == "method":
             method_effect_calls += 1
     tool_names = getattr(host, "tool_names", None)
@@ -257,6 +273,7 @@ def _funnel_metrics(host, session_log):
         "observation_views": observation_views,
         "tool_effect_calls": tool_effect_calls,
         "method_effect_calls": method_effect_calls,
+        "exploration_calls": getattr(host, "exploration_calls", 0),
         "tool_names": _bounded_identities(tool_names, tool_cap),
         "method_ids": _bounded_identities(method_ids, method_cap),
         # Stage quota audit (HANDOFF §5 item 4): the Host's own deterministic
@@ -406,6 +423,7 @@ class AgentRuntime:
         node="node",
         mode="platform",
         python_sandbox_profile=None,
+        generated_python_gate=None,
     ):
         if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 256:
             raise ValueError("invalid max_model_calls")
@@ -461,6 +479,10 @@ class AgentRuntime:
             self.python_sandbox_identity,
             self.python_sandbox_diagnostic,
         ) = _build_python_sandbox(self.python_sandbox_profile)
+        # Stage D+: the fail-closed generative-execution gate. Absent means the
+        # default instance, which carries no approved profile and can only
+        # refuse; an approved gate is injected explicitly, never discovered.
+        self.generated_python_gate = generated_python_gate
         self._solve_lock = threading.Lock()
         self.last_journal = None
         # Defect 3: the real immutable SessionLog events and the real accumulated
@@ -677,6 +699,7 @@ class AgentRuntime:
         host = AgentHost(
             manifest, session_id, deadline, problem, problem_hash, host_options,
             self.client, python_sandbox_profile=self.python_sandbox_profile,
+            generated_python_gate=self.generated_python_gate,
         )
         proc = None
         reaped = False
@@ -701,7 +724,10 @@ class AgentRuntime:
                         if options["maxMethodLoads"] > 0 and options["maxEffects"] > 0
                         else "UNAVAILABLE"
                     ),
-                    "generatedPython": "UNAVAILABLE",
+                    # Stage D+: `AVAILABLE_BOUNDED` only while the Host really
+                    # holds a usable sandbox; otherwise `UNAVAILABLE`, which
+                    # keeps the exploration action refused.
+                    "generatedPython": host.generated_python_capability(),
                     "maxTokens": _MAX_TOKENS,
                     "maxTokensVerified": False,
                     "journal": "IN_MEMORY_ONLY",
@@ -962,6 +988,7 @@ class AgentRuntime:
                 "observation_views": 0,
                 "tool_effect_calls": 0,
                 "method_effect_calls": 0,
+                "exploration_calls": 0,
                 "tool_names": [],
                 "method_ids": [],
                 "front_budget": 0,
