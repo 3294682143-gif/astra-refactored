@@ -65,6 +65,9 @@ Python Host 启动一个 Node stdio 运行时，由统一的 `runAgentLoop` 调�
 | Runtime Core | [packages/runtime-core](packages/runtime-core) | 根预算、事件、上下文投影和运行生命周期 |
 | 协议 | [packages/protocol](packages/protocol) | 跨模块类型、Host 协议与 schema |
 | 数学领域资产 | [mathagent](mathagent)、[math_families](math_families) | 方法知识、受信算法、检查器及保留的 Python 实现 |
+| Web 观测控制台 | [apps/web-demo](apps/web-demo) ([完整说明](apps/web-demo/README.md)) | 挑战杯可观测驾驶舱、7 标签审计详情与确定性时间胶囊回放 |
+| Web BFF 服务 | [python/astra_web](python/astra_web) | Starlette 只读与实时 BFF，数据归档索引、静态托管与 SSE 广播通道 |
+| Web 共享契约 | [packages/web-contract](packages/web-contract) | 前后端强类型 DTO、JSON Schema 与代码生成映射 |
 
 一次求解的主要控制关系如下。分支是否触发还取决于配置、预算和实际收到的证据：
 
