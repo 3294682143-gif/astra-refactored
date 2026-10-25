@@ -378,7 +378,9 @@ function minorPolynomialText(minor: unknown): string | null {
 function observationPolynomial(
   observation: ExactObservationView | null | undefined,
 ): { polynomial: string; variable: string } | null {
-  if (observation?.operation !== "MAXIMAL_MINORS") return null;
+  if (!observation) return null;
+  const op = typeof observation.operation === "string" ? observation.operation.toUpperCase() : "";
+  if (op !== "MAXIMAL_MINORS") return null;
   const minors = observation.normalized_minors;
   if (!Array.isArray(minors) || minors.length === 0) return null;
   const parsed: { readonly text: string; readonly poly: Poly; readonly degree: number }[] = [];
@@ -613,35 +615,39 @@ function explicitDegree(candidate: string): number | null {
 }
 
 const TOOL_NAME_ALIASES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  real_root_count_expr: ["real_root_count", "real_roots", "math.equations", "math.algebra"],
-  real_roots: ["real_root_count_expr", "real_root_count", "math.equations"],
-  splitting_field_degree_expr: ["splitting_field_degree", "splitting_field", "math.algebraic-structures"],
-  splitting_field_degree: ["splitting_field_degree_expr", "splitting_field", "math.algebraic-structures"],
-  linear_system_solution_set: ["solution_set", "solve_system", "math.linear-algebra"],
-  solution_set: ["linear_system_solution_set", "solve_system", "math.linear-algebra"],
-  independence_polynomial_chain: ["independence_polynomial", "math.finite-states"],
-  independence_polynomial: ["independence_polynomial_chain", "math.finite-states"],
-  count_by_digit_property: ["digit_property_count", "math.finite-states"],
-  digit_property_count: ["count_by_digit_property", "math.finite-states"],
-  count_avoiding_permutations: ["avoiding_permutations", "math.combinatorics"],
-  avoiding_permutations: ["count_avoiding_permutations", "math.combinatorics"],
-  cover_time_complete_graph: ["cover_time", "math.probability"],
-  cover_time: ["cover_time_complete_graph", "math.probability"],
-  finite_difference_derivative: ["finite_difference", "math.numerics"],
-  finite_difference: ["finite_difference_derivative", "math.numerics"],
-  richardson_extrapolate: ["richardson_extrapolate", "math.numerics"],
-  gf2_rank: ["gf2_rank", "rank", "math.linear-algebra"],
-  gf2_nullspace: ["gf2_nullspace", "nullspace", "math.linear-algebra"],
-  finite_group_structure: ["group_structure", "finite_group_structure", "math.algebraic-structures"],
-  group_structure: ["finite_group_structure", "group_structure", "math.algebraic-structures"],
-  stats_ols_check: ["ols_check", "stats_ols_check", "math.regression"],
-  ols_check: ["stats_ols_check", "ols_check", "math.regression"],
-  interpolation_fit_check: ["interpolation_fit", "interpolation_fit_check", "math.numerics"],
-  interpolation_fit: ["interpolation_fit_check", "interpolation_fit", "math.numerics"],
-  polynomial_function_check: ["function_identity", "polynomial_function_check", "math.equations"],
-  function_identity: ["polynomial_function_check", "function_identity", "math.equations"],
-  polynomial_invariant_check: ["polynomial_invariant", "polynomial_invariant_check", "math.invariants"],
-  polynomial_invariant: ["polynomial_invariant_check", "polynomial_invariant", "math.invariants"],
+  real_root_count_expr: ["real_root_count", "real_roots"],
+  real_roots: ["real_root_count_expr", "real_root_count"],
+  splitting_field_degree_expr: ["splitting_field_degree", "splitting_field"],
+  splitting_field_degree: ["splitting_field_degree_expr", "splitting_field"],
+  linear_system_solution_set: ["solution_set"],
+  solution_set: ["linear_system_solution_set"],
+  independence_polynomial_chain: ["independence_polynomial"],
+  independence_polynomial: ["independence_polynomial_chain"],
+  count_by_digit_property: ["digit_property_count"],
+  digit_property_count: ["count_by_digit_property"],
+  count_avoiding_permutations: ["avoiding_permutations"],
+  avoiding_permutations: ["count_avoiding_permutations"],
+  cover_time_complete_graph: ["cover_time"],
+  cover_time: ["cover_time_complete_graph"],
+  finite_difference_derivative: ["finite_difference"],
+  finite_difference: ["finite_difference_derivative"],
+  richardson_extrapolate: ["richardson_extrapolate"],
+  gf2_rank: ["gf2_rank", "rank"],
+  gf2_nullspace: ["gf2_nullspace", "nullspace"],
+  finite_group_structure: ["group_structure", "finite_group_structure"],
+  group_structure: ["finite_group_structure", "group_structure"],
+  stats_ols_check: ["ols_check", "stats_ols_check"],
+  ols_check: ["stats_ols_check", "ols_check"],
+  interpolation_fit_check: ["interpolation_fit", "interpolation_fit_check"],
+  interpolation_fit: ["interpolation_fit_check", "interpolation_fit"],
+  polynomial_function_check: ["function_identity", "polynomial_function_check"],
+  function_identity: ["polynomial_function_check", "function_identity"],
+  polynomial_invariant_check: ["polynomial_invariant", "polynomial_invariant_check"],
+  polynomial_invariant: ["polynomial_invariant_check", "polynomial_invariant"],
+  maximal_minors: ["MAXIMAL_MINORS", "maximal_minors"],
+  MAXIMAL_MINORS: ["maximal_minors", "MAXIMAL_MINORS"],
+  solve_system_guarded_expr: ["solve_system", "solve_system_guarded_expr"],
+  solve_system: ["solve_system_guarded_expr", "solve_system"],
 });
 
 function lastObservation(
@@ -650,12 +656,16 @@ function lastObservation(
 ): ToolObservationView | null {
   if (!Array.isArray(observations)) return null;
   const aliases = TOOL_NAME_ALIASES[name] ?? [];
-  const targetNames = new Set<string>([name, ...aliases]);
+  const targetNames = new Set<string>([name, ...aliases].map((s) => s.toLowerCase()));
   for (let index = observations.length - 1; index >= 0; index -= 1) {
     const observation = observations[index];
     if (observation === undefined || observation === null) continue;
-    if (targetNames.has(observation.name)) return observation;
-    if (typeof observation.operation === "string" && targetNames.has(observation.operation)) {
+    const op = typeof observation.operation === "string" ? observation.operation.toLowerCase() : "";
+    if (op && targetNames.has(op)) {
+      return observation;
+    }
+    const obsName = typeof observation.name === "string" ? observation.name.toLowerCase() : "";
+    if (obsName && !obsName.startsWith("math.") && targetNames.has(obsName)) {
       return observation;
     }
   }
@@ -2688,11 +2698,15 @@ function exactObservationFor(
   input: AnswerClosureInput,
   operation: string,
 ): ExactObservationView | null {
-  const indexed = input.exactObservations?.get(operation) ?? null;
+  const indexed = input.exactObservations?.get(operation) ??
+                  input.exactObservations?.get(operation.toUpperCase()) ??
+                  input.exactObservations?.get(operation.toLowerCase()) ??
+                  null;
   if (indexed !== null) return indexed;
   const single = input.exactObservation ?? null;
   if (single === null) return null;
-  return single.operation === operation ? single : null;
+  const singleOp = typeof single.operation === "string" ? single.operation.toUpperCase() : "";
+  return singleOp === operation.toUpperCase() ? single : null;
 }
 
 /**

@@ -62,18 +62,19 @@ test("§5.5 late observation contradicts protected candidate and triggers revisi
   const mathAssetPort = {
     execute: async (req: { readonly binding: any; readonly input: any }): Promise<MathAssetResult> => {
       mathAssetCalled = true;
+      const b = req.binding ?? {
+        taskId: "task-1",
+        goalId: "goal-1",
+        scopeId: "scope-1",
+        contractVersion: 1,
+      };
       const result: MathAssetResult = {
         schemaVersion: "math-assets-v1",
         assetId: "math.linear-algebra",
         assetVersion: "1.0.0",
         catalogDigest: MATH_ASSET_CATALOG_DIGEST,
         requestId: "node-math-asset-late-obs",
-        binding: req.binding ?? {
-          taskId: "task-1",
-          goalId: "goal-1",
-          scopeId: "scope-1",
-          contractVersion: 1,
-        },
+        binding: b,
         normalizedInput: req.input ?? { rows: [1, 2] },
         inputHash: p4Hash("rows"),
         status: "COMPLETE",
@@ -86,8 +87,8 @@ test("§5.5 late observation contradicts protected candidate and triggers revisi
             exactness: "EXACT_FOR_INPUT",
             coverage: "EXHAUSTIVE",
             sourceInputHash: p4Hash("rows"),
-            taskId: "task-1",
-            contractVersion: 1,
+            taskId: b.taskId,
+            contractVersion: b.contractVersion,
           },
         ],
         checks: [],

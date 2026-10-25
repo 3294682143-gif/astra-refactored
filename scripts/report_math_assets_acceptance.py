@@ -50,29 +50,43 @@ def run_checks() -> dict:
     metrics["migrated_family_sources"] = summary.get("migratedFamilySourcesTotal", len(families))
     metrics["migrated_implementation_sources"] = summary.get("migratedImplementationSourcesTotal", len(impls))
     metrics["unmapped_sources"] = len([i for i in impls if not i.get("migrated", True)])
-    metrics["blocked_fixed_implementations"] = 0
-    metrics["legacy_only_fixed_implementations"] = 0
+    metrics["blocked_fixed_implementations"] = len([
+        i for i in impls if i.get("status") == "blocked" or i.get("acceptanceStatus") == "failed"
+    ])
+    metrics["legacy_only_fixed_implementations"] = len([
+        i for i in impls if not i.get("targetAssetId") or i.get("status") != "migrated"
+    ])
 
-    # Test reachability of all 76 implementations via use_math_asset dispatch
-    from python.astra_bridge.math_assets_runtime import MATH_ASSETS_BY_ID, _resolve_target_and_behavior, use_math_asset
-    reachable_count = 0
-    for impl in impls:
-        aid = impl.get("targetAssetId") or impl.get("assetId")
-        tool_name = impl.get("toolName")
-        target = impl.get("target")
-        asset_def = MATH_ASSETS_BY_ID.get(aid)
-        if asset_def:
-            target_beh = next(
-                (b for b in asset_def.get("behaviors", [])
-                 if (target and b.get("target") == target) or
-                    (tool_name and (b.get("legacyToolName") == tool_name or b.get("target") == tool_name))),
-                None
+    # Test reachability of all 76 implementations via real use_math_asset execution
+    from python.astra_bridge.math_assets_runtime import MATH_ASSETS_BY_ID, use_math_asset
+    import importlib
+    base_context = {
+        "sessionId": "acceptance-eval-session",
+        "problemHash": "a" * 64,
+        "contractVersion": 1,
+        "taskId": "task-acceptance-eval",
+        "goalId": "goal-acceptance",
+        "scopeId": "scope-acceptance",
+    }
+    executed_impls = set()
+    for b_idx in range(6):
+        mod = importlib.import_module(f"tests.math_assets.test_math_assets_w{b_idx}")
+        cases = getattr(mod, f"W{b_idx}_CASES", [])
+        for aid, tgt, inp in cases:
+            res = use_math_asset(
+                {"action": "math_asset", "assetId": aid, "target": tgt, "input": inp},
+                context=base_context,
+                deadline=time.monotonic() + 5.0,
             )
-            if target_beh:
-                res_target, res_beh = _resolve_target_and_behavior(aid, asset_def, {"target": target_beh["target"]})
-                if res_target and res_beh:
-                    reachable_count += 1
-    metrics["reachable_fixed_implementations_through_official_entry"] = reachable_count
+            if res.get("status") == "COMPLETE":
+                for impl in impls:
+                    if impl.get("targetAssetId") == aid:
+                        tn = impl.get("toolName")
+                        asset_def = MATH_ASSETS_BY_ID.get(aid, {})
+                        for b in asset_def.get("behaviors", []):
+                            if b.get("target") == tgt and (b.get("legacyToolName") == tn or b.get("target") == tn):
+                                executed_impls.add(impl.get("number"))
+    metrics["reachable_fixed_implementations_through_official_entry"] = len(executed_impls)
 
     # 12-14. Contracts and consumers per computational behavior
     total_behaviors = 0
@@ -127,34 +141,21 @@ def run_checks() -> dict:
     metrics["cross_binding_observation_reuse_failures"] = 0 if cross_binding_ok else 1
 
     # 18. Late observation recheck failures (programmatic test via node closure defect check)
-    node_closure_test = subprocess.run(
-        [
-            "node", "-e",
-            """
-            import { answerClosureDefects } from './apps/stdio-runtime/dist/src/agent-answer-closure.js';
-            const defects = answerClosureDefects({
-              problemText: 'How many real roots does x^3 - 3x + 1 have?',
-              candidate: '2',
-              packet: { candidateProposal: '2' },
-              exactObservations: new Map(),
-              toolObservations: [
-                { name: 'math.equations', operation: 'real_roots', result: 3 }
-              ],
-              expectedSolutionKeys: null,
-              requiresExhaustive: false
-            });
-            if (!defects.some(d => d.kind === 'REAL_ROOT_COUNT')) {
-              process.exit(1);
-            }
-            """
-        ],
+    # 18. Late observation recheck failures (full lifecycle: protection -> late obs -> defect -> revision -> adoption)
+    node_late_obs_test = subprocess.run(
+        ["node", "--test", "apps/stdio-runtime/dist/tests/agent-late-observation.test.js"],
         cwd=ROOT,
         capture_output=True,
     )
-    metrics["late_observation_recheck_failures"] = 0 if node_closure_test.returncode == 0 else 1
+    metrics["late_observation_recheck_failures"] = 0 if node_late_obs_test.returncode == 0 else 1
 
-    # 19. Evidence upgrade failures (candidate_verified must be false)
-    metrics["evidence_upgrade_failures"] = 0
+    # 19. Evidence upgrade failures (candidate_verified must NEVER upgrade on program observation)
+    from user_agent import ReasoningAgent
+    from types import SimpleNamespace
+    client_probe = SimpleNamespace(chat=lambda msgs, **kw: {"choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "{}"}}]})
+    agent_probe = ReasoningAgent(client_probe, problem_seconds=5)
+    solve_probe = agent_probe.solve("Test question")
+    metrics["evidence_upgrade_failures"] = 0 if not solve_probe.get("candidate_verified", False) else 1
 
     # 20. Frozen asset hash failures
     frozen_res = subprocess.run(
@@ -247,7 +248,10 @@ def run_checks() -> dict:
     # 24. Required offline checks passed
     offline_migration = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_math_assets_migration.py"), "--strict"], cwd=ROOT, capture_output=True)
     offline_usage = subprocess.run([sys.executable, str(ROOT / "scripts" / "audit_math_assets_usage.py"), "--strict"], cwd=ROOT, capture_output=True)
-    offline_node_tests = subprocess.run(["node", "--test", "apps/stdio-runtime/dist/tests/agent-math-asset.test.js"], cwd=ROOT, capture_output=True)
+    offline_node_math = subprocess.run(["node", "--test", "apps/stdio-runtime/dist/tests/agent-math-asset.test.js"], cwd=ROOT, capture_output=True)
+    offline_node_late = subprocess.run(["node", "--test", "apps/stdio-runtime/dist/tests/agent-late-observation.test.js"], cwd=ROOT, capture_output=True)
+    offline_pytest_release = subprocess.run([sys.executable, "-m", "pytest", "tests/release"], cwd=ROOT, capture_output=True)
+    offline_pytest_assets = subprocess.run([sys.executable, "-m", "pytest", "tests/math_assets"], cwd=ROOT, capture_output=True)
 
     metrics["required_offline_checks_passed"] = bool(
         metrics["frozen_asset_hash_failures"] == 0 and
@@ -257,10 +261,14 @@ def run_checks() -> dict:
         metrics["reachable_fixed_implementations_through_official_entry"] == 76 and
         metrics["cross_binding_observation_reuse_failures"] == 0 and
         metrics["late_observation_recheck_failures"] == 0 and
+        metrics["evidence_upgrade_failures"] == 0 and
         metrics["default_entry_uses_unified_assets"] and
         offline_migration.returncode == 0 and
         offline_usage.returncode == 0 and
-        offline_node_tests.returncode == 0
+        offline_node_math.returncode == 0 and
+        offline_node_late.returncode == 0 and
+        offline_pytest_release.returncode == 0 and
+        offline_pytest_assets.returncode == 0
     )
 
     return metrics

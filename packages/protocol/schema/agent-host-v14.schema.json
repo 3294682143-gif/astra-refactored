@@ -3510,6 +3510,11 @@
                 "minLength": 1,
                 "maxLength": 64
               },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
               "input": {
                 "type": "object"
               },

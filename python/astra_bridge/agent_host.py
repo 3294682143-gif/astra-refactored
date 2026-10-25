@@ -709,8 +709,7 @@ class AgentHost(_Host):
                 "jsonrpc": "2.0",
                 "id": frame_id,
                 "result": {
-                    "protocolVersion": self.protocol_version,
-                    "sessionId": self.session_id,
+                    **self._common(),
                     "remainingMs": self.remaining_ms(),
                     "result": result,
                 },

@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "4800c7fe6417df1a6fd953d797a2f100aa32b82a",
-    "tree": "8706b2c2456406d51bb0d306849f3b8255c35cf8"
+    "commit": "8c0a158f0934625bb2de34fdbad5aa866e01dc6a",
+    "tree": "a7721ca4bf126171b18c7c6b14b5540cc5603377"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "dfe46a45a21c6b0a6c1f5ea6ef3df9f9be43a9764342161bb0aac2781d0e650a",
-      "bytes": 217054
+      "sha256": "05b312f0a9a9ae1eaf4512c7b1a586c97eeec6b2419e9a1f1dac4591d13800a9",
+      "bytes": 218173
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -31,7 +31,7 @@
     },
     "protocolSchemaV14": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
-      "sha256": "6de02ccfe77d5d63115937001a1dca45ea8d789bd67eed9b9d60d60f0bfb9802"
+      "sha256": "80f3797579989da009303cfa0f8850d16dbd7781989018928f655c6dafe57d48"
     },
     "mathAssetsSchema": {
       "path": "packages/protocol/schema/math-assets.schema.json",
@@ -65,7 +65,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "ce4069583db3cdfeef8ecde51e077e2a3db53f107487f11b35017770373ad0d1"
+      "sha256": "98aa2d5b5b239bd2329a711b69f6d051596679c8e9b643161e727758428ad709"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
@@ -73,7 +73,7 @@
     },
     "bundleSchemaV14": {
       "path": "release/schema/agent-host-v14.schema.json",
-      "sha256": "6de02ccfe77d5d63115937001a1dca45ea8d789bd67eed9b9d60d60f0bfb9802"
+      "sha256": "80f3797579989da009303cfa0f8850d16dbd7781989018928f655c6dafe57d48"
     },
     "bundleMathAssetsSchema": {
       "path": "release/schema/math-assets.schema.json",

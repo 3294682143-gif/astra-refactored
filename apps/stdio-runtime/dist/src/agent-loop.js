@@ -1751,6 +1751,20 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             break;
                         }
                     }
+                    // Strict item-level observation verification
+                    let hasInvalidObservation = false;
+                    for (const obs of mathAssetResult.observations) {
+                        if (obs.taskId !== running.taskId ||
+                            obs.contractVersion !== contract.contractVersion ||
+                            (mathAssetResult.inputHash && obs.sourceInputHash && obs.sourceInputHash !== mathAssetResult.inputHash)) {
+                            hasInvalidObservation = true;
+                            break;
+                        }
+                    }
+                    if (hasInvalidObservation) {
+                        stop = "CONTROL_REJECTED";
+                        break;
+                    }
                     // Propagate method guidance / knowledge across subsequent model turns
                     if (Array.isArray(mathAssetResult.guidance) && mathAssetResult.guidance.length > 0) {
                         assetGuidanceNotes.push({
@@ -1787,19 +1801,23 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             checkResult: "UNKNOWN",
                         });
                         toolObservationViews.push({
-                            name: action.assetId,
-                            operation: obs.quantity,
+                            name: (action.target || obs.quantity || action.assetId),
+                            operation: (obs.quantity || action.target || null),
                             result: obs.value,
                         });
                         if (typeof obs.quantity === "string" && obs.quantity.length > 0) {
                             const exactView = {
-                                operation: obs.quantity,
+                                operation: obs.quantity.toUpperCase(),
                                 value: obs.value,
                                 result: obs.value,
                                 ...((typeof obs.value === "object" && obs.value !== null) ? obs.value : {}),
                             };
                             exactObservations.set(obs.quantity, exactView);
-                            if (obs.quantity === "DENSITY_CHECK" && typeof obs.value === "object" && obs.value !== null) {
+                            exactObservations.set(obs.quantity.toLowerCase(), exactView);
+                            exactObservations.set(obs.quantity.toUpperCase(), exactView);
+                            if ((obs.quantity === "DENSITY_CHECK" || obs.quantity === "density_check") &&
+                                typeof obs.value === "object" &&
+                                obs.value !== null) {
                                 const rec = obs.value;
                                 if (rec["integrates_to_one"] === false) {
                                     densityCheckFailure = typeof rec["integral"] === "string" ? rec["integral"] : "a value other than 1";
