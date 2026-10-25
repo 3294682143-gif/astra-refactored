@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { p4Hash, type AgentModelRequest, type MathAssetResult } from "@astra/protocol";
+import { p4Hash, MATH_ASSET_CATALOG_DIGEST, type AgentModelRequest, type MathAssetResult } from "@astra/protocol";
 import { runAgentLoop } from "../src/agent-loop.js";
 import { reactivePorts, reactiveWork } from "./agent-loop-test-support.js";
 
@@ -66,7 +66,7 @@ test("§5.5 late observation contradicts protected candidate and triggers revisi
         schemaVersion: "math-assets-v1",
         assetId: "math.linear-algebra",
         assetVersion: "1.0.0",
-        catalogDigest: "7ba616ecd21f791f4187512207efe05d29e32a769956a2d61a4f84f18a377233",
+        catalogDigest: MATH_ASSET_CATALOG_DIGEST,
         requestId: "node-math-asset-late-obs",
         binding: req.binding ?? {
           taskId: "task-1",

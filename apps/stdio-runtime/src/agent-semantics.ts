@@ -9,7 +9,7 @@
  * is. Pure module: no I/O, no clock, no model call.
  */
 
-import type { P2MethodEntry } from "@astra/protocol";
+import { MATH_ASSET_BY_ID, type P2MethodEntry } from "@astra/protocol";
 
 export type Poly = ReadonlyMap<string, number>;
 
@@ -2188,255 +2188,71 @@ export interface SemanticMathAssetRoute {
   readonly argsTemplate: string;
 }
 
+export const MATH_ASSET_ROUTE_TARGETS: Readonly<Record<string, { readonly assetId: string; readonly target: string }>> = Object.freeze({
+  GROUP_STRUCTURE: { assetId: "math.algebraic-structures", target: "group_structure" },
+  FINITE_ENUMERATION: { assetId: "math.combinatorics", target: "enumerate" },
+  REAL_ROOT_COUNT: { assetId: "math.equations", target: "real_roots" },
+  SPLITTING_FIELD_DEGREE: { assetId: "math.algebraic-structures", target: "splitting_field_degree" },
+  CIRCLE_LAPLACIAN: { assetId: "math.differential", target: "circle_laplacian" },
+  PLANAR_LAPLACIAN: { assetId: "math.differential", target: "planar_laplacian" },
+  INTERPOLATION_FIT: { assetId: "math.numerics", target: "interpolation_fit" },
+  STATS_OLS: { assetId: "math.regression", target: "ols_check" },
+  MAXIMAL_MINORS: { assetId: "math.linear-algebra", target: "maximal_minors" },
+  DENSITY_CHECK: { assetId: "math.probability", target: "density_check" },
+  GF2_RANK: { assetId: "math.linear-algebra", target: "gf2_rank" },
+  GF2_NULLSPACE: { assetId: "math.linear-algebra", target: "gf2_nullspace" },
+  SOLUTION_SET: { assetId: "math.linear-algebra", target: "solution_set" },
+  INDEPENDENCE_POLYNOMIAL: { assetId: "math.finite-states", target: "independence_polynomial" },
+  DIGIT_PROPERTY_COUNT: { assetId: "math.finite-states", target: "digit_property_count" },
+  AVOIDING_PERMUTATIONS: { assetId: "math.combinatorics", target: "avoiding_permutations" },
+  COVER_TIME_COMPLETE_GRAPH: { assetId: "math.probability", target: "cover_time" },
+  FINITE_DIFFERENCE_DERIVATIVE: { assetId: "math.numerics", target: "finite_difference" },
+  RICHARDSON_EXTRAPOLATE: { assetId: "math.numerics", target: "richardson_extrapolate" },
+});
+
 export const MATH_ASSET_ROUTE_MAP: Readonly<Record<string, {
   readonly assetId: string;
   readonly target: string;
   readonly targetPurpose: string;
   readonly requiredParams: readonly string[];
   readonly optionalParams: readonly string[];
-}>> = Object.freeze({
-  GROUP_STRUCTURE: {
-    assetId: "math.algebraic-structures",
-    target: "group_structure",
-    targetPurpose: "Exact finite permutation group structure and conjugacy classes",
-    requiredParams: [],
-    optionalParams: ["generators", "degree", "named_group"],
-  },
-  FINITE_ENUMERATION: {
-    assetId: "math.combinatorics",
-    target: "enumerate",
-    targetPurpose: "Exhaustive count of finite subsets under predicate",
-    requiredParams: ["choose", "predicate"],
-    optionalParams: ["objects", "ranges"],
-  },
-  REAL_ROOT_COUNT: {
-    assetId: "math.equations",
-    target: "real_roots",
-    targetPurpose: "Exact real root count of univariate rational polynomial",
-    requiredParams: ["expression"],
-    optionalParams: ["variable", "timeout_ms"],
-  },
-  SPLITTING_FIELD_DEGREE: {
-    assetId: "math.algebraic-structures",
-    target: "splitting_field_degree",
-    targetPurpose: "Exact degree [E:Q] of splitting field over rationals",
-    requiredParams: ["expression"],
-    optionalParams: ["timeout_ms"],
-  },
-  CIRCLE_LAPLACIAN: {
-    assetId: "math.differential",
-    target: "circle_laplacian",
-    targetPurpose: "Intrinsic Laplacian d2f/dtheta2 on unit circle",
-    requiredParams: ["expression"],
-    optionalParams: [],
-  },
-  PLANAR_LAPLACIAN: {
-    assetId: "math.differential",
-    target: "planar_laplacian",
-    targetPurpose: "Planar Laplacian d2f/dx2 + d2f/dy2 in Cartesian coordinates",
-    requiredParams: ["expression", "variables"],
-    optionalParams: [],
-  },
-  INTERPOLATION_FIT: {
-    assetId: "math.numerics",
-    target: "interpolation_fit",
-    targetPurpose: "Exact polynomial interpolation and residual check",
-    requiredParams: ["points", "expression", "variable"],
-    optionalParams: [],
-  },
-  STATS_OLS: {
-    assetId: "math.regression",
-    target: "ols_check",
-    targetPurpose: "Exact OLS linear regression coefficients and residuals",
-    requiredParams: ["data"],
-    optionalParams: ["claimed"],
-  },
-  EXACT_MAXIMAL_MINORS: {
-    assetId: "math.linear-algebra",
-    target: "maximal_minors",
-    targetPurpose: "Maximal minors and characteristic polynomial",
-    requiredParams: ["matrix", "variable"],
-    optionalParams: [],
-  },
-  EXACT_FACTOR_OVER_EXTENSION: {
-    assetId: "math.algebraic-structures",
-    target: "factor_over_extension",
-    targetPurpose: "Polynomial factorization over explicit algebraic extensions",
-    requiredParams: ["expression", "variable", "minimal_polynomials"],
-    optionalParams: [],
-  },
-  EXACT_DENSITY_CHECK: {
-    assetId: "math.probability",
-    target: "density_check",
-    targetPurpose: "Density normalization and non-negativity check",
-    requiredParams: ["expression", "variable", "lower", "upper"],
-    optionalParams: ["density"],
-  },
-  EXACT_TRIG_REDUCE: {
-    assetId: "math.differential",
-    target: "trig_reduce",
-    targetPurpose: "Trigonometric expression reduction and Fourier coefficients",
-    requiredParams: ["expression", "variable"],
-    optionalParams: [],
-  },
-  EXACT_LIMIT: {
-    assetId: "math.limits",
-    target: "limit",
-    targetPurpose: "Exact limit computation",
-    requiredParams: ["expression", "variable", "point"],
-    optionalParams: ["direction"],
-  },
-  EXACT_DEFINITE_INTEGRAL: {
-    assetId: "math.integration",
-    target: "definite_integral",
-    targetPurpose: "Exact definite integral",
-    requiredParams: ["expression", "variable", "lower", "upper"],
-    optionalParams: [],
-  },
-  EXACT_SIMPLIFY: {
-    assetId: "math.equations",
-    target: "simplify",
-    targetPurpose: "Exact algebraic expression simplification",
-    requiredParams: ["expression"],
-    optionalParams: ["variable"],
-  },
-  POLYNOMIAL_EXPAND_COEFFICIENTS: {
-    assetId: "math.generating-functions",
-    target: "expand_coefficients",
-    targetPurpose: "Exact rational polynomial coefficient table",
-    requiredParams: ["expression", "variables", "parameters"],
-    optionalParams: [],
-  },
-  LINEAR_SYSTEM_SOLUTION_SET: {
-    assetId: "math.linear-algebra",
-    target: "solution_set",
-    targetPurpose: "Exact linear system solution set",
-    requiredParams: ["matrix", "rhs", "variables", "domain"],
-    optionalParams: [],
-  },
-  SOLVE_QUADRATIC_DIOPHANTINE: {
-    assetId: "math.diophantine",
-    target: "quadratic_diophantine",
-    targetPurpose: "Exact integer solutions of quadratic Diophantine equation",
-    requiredParams: ["a", "b", "c", "d", "e", "f"],
-    optionalParams: ["y_bound"],
-  },
-  SYMBOLIC_DIOPHANTINE: {
-    assetId: "math.diophantine",
-    target: "symbolic_diophantine",
-    targetPurpose: "Symbolic bivariate Diophantine equation solver",
-    requiredParams: ["lhs"],
-    optionalParams: ["rhs", "variables", "timeout_ms"],
-  },
-  SYSTEM_OF_EXPRESSIONS: {
-    assetId: "math.equations",
-    target: "solve_system",
-    targetPurpose: "Nonlinear polynomial system solution count",
-    requiredParams: ["expressions", "variables"],
-    optionalParams: ["timeout_ms", "n_starts", "seed"],
-  },
-  POLYNOMIAL_FUNCTION_CHECK: {
-    assetId: "math.equations",
-    target: "function_identity",
-    targetPurpose: "Polynomial functional identity verification",
-    requiredParams: ["equation", "function", "argument", "variables", "expression"],
-    optionalParams: [],
-  },
-  GF2_NULLSPACE: {
-    assetId: "math.linear-algebra",
-    target: "gf2_nullspace",
-    targetPurpose: "Exact kernel basis over GF(2)",
-    requiredParams: ["rows", "width"],
-    optionalParams: [],
-  },
-  GF2_RANK: {
-    assetId: "math.linear-algebra",
-    target: "gf2_rank",
-    targetPurpose: "Exact rank of binary matrix over GF(2)",
-    requiredParams: ["rows"],
-    optionalParams: [],
-  },
-  TRANSITION_COUNT: {
-    assetId: "math.finite-states",
-    target: "transition_count",
-    targetPurpose: "Count of paths of fixed length in state transition graph",
-    requiredParams: ["length", "num_states", "transitions"],
-    optionalParams: ["starts", "ends"],
-  },
-  INDEPENDENCE_POLYNOMIAL_CHAIN: {
-    assetId: "math.finite-states",
-    target: "independence_polynomial",
-    targetPurpose: "Independence polynomial of path graph P_n",
-    requiredParams: ["n"],
-    optionalParams: [],
-  },
-  COUNT_BY_DIGIT_PROPERTY: {
-    assetId: "math.finite-states",
-    target: "digit_property_count",
-    targetPurpose: "Count of integers with digits from restricted set",
-    requiredParams: ["digit_set", "max_digits"],
-    optionalParams: ["modulus", "residue", "include_zero"],
-  },
-  ROOK_NUMBERS: {
-    assetId: "math.combinatorics",
-    target: "rook_numbers",
-    targetPurpose: "Rook numbers for chessboard with forbidden positions",
-    requiredParams: ["n", "forbidden"],
-    optionalParams: [],
-  },
-  COUNT_AVOIDING_PERMUTATIONS: {
-    assetId: "math.combinatorics",
-    target: "avoiding_permutations",
-    targetPurpose: "Permutations avoiding forbidden board positions",
-    requiredParams: ["n", "forbidden"],
-    optionalParams: [],
-  },
-  MARKOV_EXPECTED_STEPS: {
-    assetId: "math.probability",
-    target: "markov_expected_steps",
-    targetPurpose: "Expected hitting time in absorbing Markov chain",
-    requiredParams: ["transition", "start", "targets"],
-    optionalParams: [],
-  },
-  COVER_TIME_COMPLETE_GRAPH: {
-    assetId: "math.probability",
-    target: "cover_time",
-    targetPurpose: "Expected cover time of random walk on complete graph K_n",
-    requiredParams: ["num_vertices"],
-    optionalParams: [],
-  },
-  FINITE_DIFFERENCE_DERIVATIVE: {
-    assetId: "math.numerics",
-    target: "finite_difference",
-    targetPurpose: "Numerical derivative via finite differences",
-    requiredParams: ["f", "x", "h"],
-    optionalParams: ["method", "order"],
-  },
-  RICHARDSON_EXTRAPOLATE: {
-    assetId: "math.numerics",
-    target: "richardson_extrapolate",
-    targetPurpose: "Richardson extrapolation for numerical derivative",
-    requiredParams: ["f", "x", "h"],
-    optionalParams: ["method", "order"],
-  },
-});
+}>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(MATH_ASSET_ROUTE_TARGETS).map(([k, v]) => {
+      const asset = MATH_ASSET_BY_ID.get(v.assetId);
+      const beh = asset?.behaviors.find((b) => b.target === v.target);
+      return [
+        k,
+        {
+          assetId: v.assetId,
+          target: v.target,
+          targetPurpose: beh?.declaredScope ?? "",
+          requiredParams: beh?.requiredParams ?? [],
+          optionalParams: beh?.optionalParams ?? [],
+        },
+      ];
+    }),
+  ),
+);
 
 export function semanticMathAssetRoute(problemText: string): SemanticMathAssetRoute | null {
   const toolRoute = semanticToolRoute(problemText);
   if (!toolRoute) {
     return null;
   }
-  const entry = MATH_ASSET_ROUTE_MAP[toolRoute.id];
+  const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
   if (!entry) {
     return null;
   }
+  const asset = MATH_ASSET_BY_ID.get(entry.assetId);
+  const behavior = asset?.behaviors.find((b) => b.target === entry.target);
   return {
     id: toolRoute.id,
     assetId: entry.assetId,
     target: entry.target,
-    targetPurpose: entry.targetPurpose,
-    requiredParams: entry.requiredParams,
-    optionalParams: entry.optionalParams,
+    targetPurpose: behavior?.declaredScope ?? "",
+    requiredParams: behavior?.requiredParams ?? [],
+    optionalParams: behavior?.optionalParams ?? [],
     argsTemplate: toolRoute.argsTemplate,
   };
 }

@@ -86,23 +86,23 @@ def build() -> dict:
         path = ROOT / rel
         if not path.is_file():
             raise SystemExit(f"missing precompiled JS: {rel} (run `tsc -b` first)")
-        js.append({"path": rel, "sha256": _sha256(path), "bytes": path.stat().st_size})
+        js.append({"path": Path(rel).as_posix(), "sha256": _sha256(path), "bytes": path.stat().st_size})
     assets = {}
     for name, rel in ASSET_ARTIFACTS.items():
         path = ROOT / rel
         if not path.is_file():
             raise SystemExit(f"missing asset: {rel}")
-        assets[name] = {"path": rel, "sha256": _sha256(path)}
+        assets[name] = {"path": Path(rel).as_posix(), "sha256": _sha256(path)}
     bundle = {}
     for name, rel in BUNDLE_ARTIFACTS.items():
         path = ROOT / rel
         if not path.is_file():
             raise SystemExit(f"missing bundle artifact: {rel} (run the esbuild bundle step)")
-        bundle[name] = {"path": rel, "sha256": _sha256(path)}
+        bundle[name] = {"path": Path(rel).as_posix(), "sha256": _sha256(path)}
     family_files = {}
     for path in sorted((ROOT / "math_families").rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
-            family_files[str(path.relative_to(ROOT))] = _sha256(path)
+            family_files[path.relative_to(ROOT).as_posix()] = _sha256(path)
     return {
         "manifestVersion": MANIFEST_VERSION,
         "profileId": PROFILE_ID,

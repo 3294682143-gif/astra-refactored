@@ -9,7 +9,7 @@
  * model/effect call goes through the captured ports. Every candidate stays
  * unverified.
  */
-import { P2_ERROR_CODES, P2Error, P3_TOOL_NAMES, P4_R0_MAX_ROOT_CALLS, P4_R0_ROLE, P4_R0_ROLE_DIMENSION, p2AnswerObligationForGoal, p2IsAnswerObligationKindForGoal, p2Snapshot, p4Hash, p4Target, } from "@astra/protocol";
+import { P2_ERROR_CODES, P2Error, P3_TOOL_NAMES, P4_R0_MAX_ROOT_CALLS, P4_R0_ROLE, P4_R0_ROLE_DIMENSION, p2AnswerObligationForGoal, p2IsAnswerObligationKindForGoal, p2Snapshot, p4Hash, p4Target, MATH_ASSET_CATALOG_DIGEST, MATH_ASSET_BY_ID, } from "@astra/protocol";
 import { ContractLedger, P4R0PlanRevisionSession, compileP2Contract, prepareP4R0, prepareP4R0Recheck, } from "@astra/math-contract";
 import { P3EffectGate, P4RecheckModelGate, chooseP2ReadyTask, monotonicToolGuard, parseP3Action, p3EffectKey, } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
@@ -844,6 +844,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
     let catalog = null;
     let methodAssets = [];
     const mathAssetObservations = [];
+    const assetGuidanceNotes = [];
     let stop = "NO_CANDIDATE";
     let target = null;
     let protectedOrigin = null;
@@ -1585,6 +1586,26 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     // "Just loaded" is consumed by exactly this next WORK turn.
                     methodToolCoPromptCardId = null;
                 }
+                if (assetGuidanceNotes.length > 0) {
+                    const guidanceStr = assetGuidanceNotes
+                        .map((g) => `\n\n[MATH ASSET GUIDANCE: ${g.assetId}]\n${g.guidance.join("\n")}`)
+                        .join("");
+                    if (!context.messages[0].content.includes(guidanceStr)) {
+                        const messages = [
+                            {
+                                role: "system",
+                                content: context.messages[0].content + guidanceStr,
+                            },
+                            context.messages[1],
+                        ];
+                        context = {
+                            ...context,
+                            messages,
+                            contextHash: p4Hash(JSON.stringify(messages)),
+                            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                        };
+                    }
+                }
                 let outcome = await calls.model({
                     task: running,
                     phase: "WORK",
@@ -1683,11 +1704,19 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         stop = "CONTROL_REJECTED";
                         break;
                     }
+                    if (root.effectCalls() >= totalEffectCapacity || toolEffects >= opts.maxEffects) {
+                        stop = "CONTROL_REJECTED";
+                        break;
+                    }
+                    const reservedOrdinal = root.effectCalls() + 1;
+                    const effectId = `effect-${reservedOrdinal}`;
+                    const reservedEffect = root.reserveEffect(effectId);
                     let mathAssetResult;
                     try {
                         mathAssetResult = (await captured.mathAsset.execute({
                             action: "math_asset",
                             assetId: action.assetId,
+                            ...(action.target ? { target: action.target } : {}),
                             input: action.input,
                             binding: {
                                 taskId: running.taskId,
@@ -1699,10 +1728,36 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         }));
                     }
                     catch {
+                        root.settleEffect(reservedEffect, "ERROR");
                         stop = "CONTROL_REJECTED";
                         break;
                     }
+                    const isComplete = mathAssetResult.status === "COMPLETE" || mathAssetResult.status === "SUCCESS";
+                    root.settleEffect(reservedEffect, isComplete ? "COMPLETE" : "ERROR");
                     toolEffects += 1;
+                    // Reject catalog digest drift fail-closed
+                    if (mathAssetResult.catalogDigest && mathAssetResult.catalogDigest !== MATH_ASSET_CATALOG_DIGEST) {
+                        stop = "CONTROL_REJECTED";
+                        break;
+                    }
+                    // Strict binding verification: reject cross-task, cross-contract, or cross-scope observations fail-closed
+                    if (mathAssetResult.binding) {
+                        const b = mathAssetResult.binding;
+                        if (b.taskId !== running.taskId ||
+                            b.contractVersion !== contract.contractVersion ||
+                            (b.goalId && b.goalId !== running.goalId) ||
+                            (b.scopeId && b.scopeId !== running.scopeId)) {
+                            stop = "CONTROL_REJECTED";
+                            break;
+                        }
+                    }
+                    // Propagate method guidance / knowledge across subsequent model turns
+                    if (Array.isArray(mathAssetResult.guidance) && mathAssetResult.guidance.length > 0) {
+                        assetGuidanceNotes.push({
+                            assetId: mathAssetResult.assetId,
+                            guidance: mathAssetResult.guidance,
+                        });
+                    }
                     sessionLog.append("TOOL_OBSERVATION", {
                         toolName: `math_asset:${mathAssetResult.assetId}`,
                         assetId: mathAssetResult.assetId,

@@ -39,6 +39,8 @@ import {
   type P3EffectReceipt,
   type MathAssetResult,
   type MathAssetObservation,
+  MATH_ASSET_CATALOG_DIGEST,
+  MATH_ASSET_BY_ID,
   type P4Challenge,
   type P4CoverageRow,
   type P4DeliveryPolicy,
@@ -1075,6 +1077,7 @@ export async function runAgentLoop(
   let catalog: P2MethodCatalog | null = null;
   let methodAssets: P2MethodAsset[] = [];
   const mathAssetObservations: MathAssetObservation[] = [];
+  const assetGuidanceNotes: Array<{ assetId: string; guidance: readonly string[] }> = [];
   let stop: AgentTraceCode = "NO_CANDIDATE";
   let target: P4Target | null = null;
   let protectedOrigin: P4Target | null = null;
@@ -1881,6 +1884,26 @@ export async function runAgentLoop(
           // "Just loaded" is consumed by exactly this next WORK turn.
           methodToolCoPromptCardId = null;
         }
+        if (assetGuidanceNotes.length > 0) {
+          const guidanceStr = assetGuidanceNotes
+            .map((g) => `\n\n[MATH ASSET GUIDANCE: ${g.assetId}]\n${g.guidance.join("\n")}`)
+            .join("");
+          if (!context.messages[0]!.content.includes(guidanceStr)) {
+            const messages = [
+              {
+                role: "system" as const,
+                content: context.messages[0]!.content + guidanceStr,
+              },
+              context.messages[1]!,
+            ];
+            context = {
+              ...context,
+              messages,
+              contextHash: p4Hash(JSON.stringify(messages)),
+              contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+            };
+          }
+        }
         let outcome = await calls.model({
           task: running,
           phase: "WORK",
@@ -1986,11 +2009,19 @@ export async function runAgentLoop(
             stop = "CONTROL_REJECTED";
             break;
           }
+          if (root.effectCalls() >= totalEffectCapacity || toolEffects >= opts.maxEffects) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const reservedOrdinal = root.effectCalls() + 1;
+          const effectId = `effect-${reservedOrdinal}`;
+          const reservedEffect = root.reserveEffect(effectId);
           let mathAssetResult: MathAssetResult;
           try {
             mathAssetResult = (await captured.mathAsset.execute({
               action: "math_asset",
               assetId: action.assetId,
+              ...(action.target ? { target: action.target } : {}),
               input: action.input,
               binding: {
                 taskId: running.taskId,
@@ -2001,10 +2032,41 @@ export async function runAgentLoop(
               },
             })) as MathAssetResult;
           } catch {
+            root.settleEffect(reservedEffect, "ERROR");
             stop = "CONTROL_REJECTED";
             break;
           }
+          const isComplete = (mathAssetResult.status as string) === "COMPLETE" || (mathAssetResult.status as string) === "SUCCESS";
+          root.settleEffect(reservedEffect, isComplete ? "COMPLETE" : "ERROR");
           toolEffects += 1;
+
+          // Reject catalog digest drift fail-closed
+          if (mathAssetResult.catalogDigest && mathAssetResult.catalogDigest !== MATH_ASSET_CATALOG_DIGEST) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+
+          // Strict binding verification: reject cross-task, cross-contract, or cross-scope observations fail-closed
+          if (mathAssetResult.binding) {
+            const b = mathAssetResult.binding;
+            if (
+              b.taskId !== running.taskId ||
+              b.contractVersion !== contract.contractVersion ||
+              (b.goalId && b.goalId !== running.goalId) ||
+              (b.scopeId && b.scopeId !== running.scopeId)
+            ) {
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+          }
+
+          // Propagate method guidance / knowledge across subsequent model turns
+          if (Array.isArray(mathAssetResult.guidance) && mathAssetResult.guidance.length > 0) {
+            assetGuidanceNotes.push({
+              assetId: mathAssetResult.assetId,
+              guidance: mathAssetResult.guidance,
+            });
+          }
           sessionLog.append("TOOL_OBSERVATION", {
             toolName: `math_asset:${mathAssetResult.assetId}`,
             assetId: mathAssetResult.assetId,

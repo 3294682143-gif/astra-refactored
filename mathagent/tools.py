@@ -185,11 +185,42 @@ def _registered_worker(conn, name, args):
 
 class RegisteredExecutor:
     def __init__(self):
-        self.registry = json.loads(
-            files("mathagent")
-            .joinpath("resources/tool-registry.json")
-            .read_text(encoding="utf-8")
-        )["tools"]
+        math_assets_path = files("mathagent").joinpath("resources/math-assets.json")
+        if math_assets_path.is_file():
+            catalog = json.loads(math_assets_path.read_text(encoding="utf-8"))
+            self.registry = {}
+            for asset in catalog.get("assets", []):
+                for beh in asset.get("behaviors", []):
+                    spec = {
+                        "required_params": list(beh.get("requiredParams", [])),
+                        "optional_params": list(beh.get("optionalParams", [])),
+                        "declared_scope": beh.get("declaredScope", asset.get("summary", "")),
+                        "asset_id": asset["assetId"],
+                        "target": beh["target"],
+                    }
+                    self.registry[beh["target"]] = spec
+                    legacy_name = beh.get("legacyToolName")
+                    if legacy_name:
+                        if legacy_name == "exact_check_expr":
+                            if "exact_check_expr" not in self.registry:
+                                self.registry["exact_check_expr"] = {
+                                    "required_params": ["operation"],
+                                    "optional_params": [],
+                                    "declared_scope": "Bounded exact symbolic checks: trig reduction, maximal minors, factorization over explicit algebraic extensions, definite integrals, limits and density normalization",
+                                    "asset_id": asset["assetId"],
+                                    "target": "exact_check_expr",
+                                }
+                            for p in beh.get("requiredParams", []) + beh.get("optionalParams", []):
+                                if p not in self.registry["exact_check_expr"]["optional_params"]:
+                                    self.registry["exact_check_expr"]["optional_params"].append(p)
+                        else:
+                            self.registry[legacy_name] = spec
+        else:
+            self.registry = json.loads(
+                files("mathagent")
+                .joinpath("resources/tool-registry.json")
+                .read_text(encoding="utf-8")
+            )["tools"]
 
     def execute(self, name, args, *, deadline, scope: str):
         if (
@@ -225,7 +256,7 @@ class RegisteredExecutor:
                 name,
                 None,
                 "NONE",
-                spec["declared_scope"],
+                spec.get("declared_scope", scope),
                 detail=str(exc),
                 requested_scope=scope,
             )
@@ -235,7 +266,7 @@ class RegisteredExecutor:
                 name,
                 None,
                 "NONE",
-                spec["declared_scope"],
+                spec.get("declared_scope", scope),
                 detail=str(exc),
                 requested_scope=scope,
             )
@@ -248,7 +279,7 @@ class RegisteredExecutor:
                     name,
                     None,
                     "NONE",
-                    spec["declared_scope"],
+                    spec.get("declared_scope", scope),
                     detail=str(exc),
                     requested_scope=scope,
                 )
@@ -338,7 +369,7 @@ class RegisteredExecutor:
             audit.scope
             if audit.status == "VERIFIED_FOR_INPUT"
             or audit.status.startswith("CHECKED_")
-            else spec["declared_scope"],
+            else spec.get("declared_scope", scope),
             result.get("certificate"),
             "Execution is not proof; mapping is provisional.",
             audit,

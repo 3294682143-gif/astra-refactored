@@ -34,6 +34,7 @@ import {
   type P3EffectRequest,
   type MathAssetPortRequest,
   type MathAssetResult,
+  MATH_ASSET_CATALOG_DIGEST,
 } from "@astra/protocol";
 import { p3EffectReceipt } from "@astra/math-gateway";
 import { AGENT_MAX_METHOD_LOADS, p3MethodCatalog } from "@astra/runtime-core";
@@ -184,6 +185,7 @@ export class AgentHostFlow {
   private exploreAvailable = false;
   private mathAssetAvailable = false;
   private mathAssetCalls = 0;
+  private effectCalls = 0;
   private solveStarted = false;
   private stopSent = false;
   private catalogRead = false;
@@ -570,11 +572,15 @@ export class AgentHostFlow {
     if (this.pending !== null) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
+    if (this.options !== null && this.effectCalls >= this.options.maxEffects) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
     if (this.io.remainingMs() <= MIN_REMAINING_MS) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
     const id = `node-math-asset-${this.mathAssetCalls + 1}`;
     this.mathAssetCalls += 1;
+    this.effectCalls += 1;
     return new Promise<MathAssetResult>((resolve, reject) => {
       this.pending = {
         id,
@@ -594,6 +600,7 @@ export class AgentHostFlow {
               request: {
                 action: "math_asset",
                 assetId: request.assetId,
+                ...(request.target ? { target: request.target } : {}),
                 input: request.input,
                 binding: request.binding,
               },
@@ -612,6 +619,11 @@ export class AgentHostFlow {
     agentHostPayload(this.manifest, "math_asset.execute", "result", result, this.sessionId ?? undefined);
     const mathResult = result["result"];
     if (!isPlainObject(mathResult)) {
+      this.pending = null;
+      pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
+      return;
+    }
+    if (mathResult["catalogDigest"] !== MATH_ASSET_CATALOG_DIGEST) {
       this.pending = null;
       pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
       return;

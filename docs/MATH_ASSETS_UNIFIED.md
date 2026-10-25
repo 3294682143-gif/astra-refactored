@@ -39,32 +39,32 @@ Astra 统一数学资产（Unified Math Assets）将原先分裂的三套体系�
 
 | # | 资产 ID | 资产名称 | 包含行为数 | 核心数学能力与覆盖范围 |
 |---|---|---|---|---|
-| 1 | `math.polynomial` | 多项式代数与代数方程 | 5 | 符号因式分解、根判定、判别式、结式、多项式除法 |
-| 2 | `math.symbolic-calculus` | 符号微积分与极限分析 | 4 | 定积分/不定积分、高阶导数、泰勒级数展开、多变量极限 |
-| 3 | `math.linear-algebra` | 线性代数与矩阵分析 | 5 | 特征值/特征向量、Jordan 标准型、GF(2) 秩与零空间、最大子式 |
-| 4 | `math.number-theory` | 初等数论与同余方程 | 6 | 扩展欧几里得、模逆元、中国剩余定理、素性检验、原根、离散对数 |
-| 5 | `math.diophantine` | 丢番图方程与整系数系统 | 3 | 线性不定方程、Pell 方程、Thue 方程、椭圆曲线整点 |
-| 6 | `math.combinatorics` | 组合数学与计数体系 | 4 | 排列组合数、斯特林数、贝尔数、划分数、容斥原理计算 |
-| 7 | `math.graph-extremal` | 图论极值与图谱性质 | 3 | Tutte 多项式、色多项式、最大团与独立数、拉普拉斯谱 |
-| 8 | `math.probability-discrete` | 离散概率与马尔可夫链 | 4 | 吸收态转移概率、平稳分布、马尔可夫链命中时、鞅停时计算 |
-| 9 | `math.recurrence-algebra` | 递推序列与差分方程 | 3 | 齐次/非齐次常系数线性递推通项、生成函数有理式封闭形式 |
-| 10 | `math.group-finite` | 有限群结构与置换群 | 4 | 群阶分解、Sylow 子群分析、特征标表、群元素共轭类普查 |
-| 11 | `math.real-analysis` | 实分析与实根计数 | 3 | Sturm 序列实根严格计数、柯西序列检验、区间算术验证 |
-| 12 | `math.complex-geometry` | 复分析与共形几何 | 2 | 留数计算、辐角原理、施瓦茨-克里斯托费尔映射 |
-| 13 | `math.optimization-discrete` | 离散优化与整数规划 | 3 | Branch-and-Bound 混合整数规划、单纯形法线性规划松弛 |
-| 14 | `math.lattice-geometry` | 点阵与几何数论 | 3 | LLL 点阵基规约、Minkowski 极值凸体体积、格点计数 |
-| 15 | `math.special-functions` | 特殊函数与解析数论 | 3 | Gamma/Beta 函数值、Riemann Zeta 临界区检验、超几何函数展开 |
-| 16 | `math.finite-fields` | 有限域与伽罗瓦群 | 4 | 极小多项式构造、有限域本原元、有限扩域伽罗瓦群分析 |
-| 17 | `math.differential-equations` | 常微分方程符号解 | 3 | 一阶线性/变系数 ODE、常系数线性 ODE 基础解系、Wronskian 检验 |
-| 18 | `math.numerical-integration` | 高精度数值分析与容错验证 | 2 | Gauss-Kronrod 自适应数值积分、有界误差估计 |
-| 19 | `math.game-theory` | 博弈策略与组合游戏 | 2 | Sprague-Grundy 尼姆数计算、二人零和博弈纳什均衡 |
-| 20 | `math.tiling-geometry` | 离散铺排与组合几何 | 2 | 骨牌平铺匹配多项式、Kasteleyn 铺排计数矩阵 |
-| 21 | `math.asymptotics` | 渐近展开与微扰分析 | 3 | 鞍点法渐近、Laplace 方法、Bender 奇点分析 |
-| 22 | `math.rational-approximation` | 有理逼近与连分数 | 3 | 连分数收敛展开、最佳有理逼近、无理数度量界 |
-| 23 | `math.topology-invariants` | 代数拓扑与纽结不变量 | 2 | 亚历山大多项式、Jones 多项式、同调群秩 |
-| 24 | `math.matrix-lie` | 李群与矩阵李代数 | 2 | 矩阵指数封闭形式、Baker-Campbell-Hausdorff 展开 |
-| 25 | `math.inequality-prover` | 代数不等式与实代数几何 | 2 | SOS 广义平方和实非负分解、CAD 柱形代数分解 |
-| 26 | `math.symbolic-verifier` | 综合多步骤符号化定理校核 | 2 | 恒等式简化判定、反例生成与前提约束满意度验证 |
+| 1 | `math.equations` | 方程与代数等式 | 4 | 代数化简、多项式实根严格计数 (Sturm)、多元方程组求解、多项式恒等式检验 |
+| 2 | `math.proof` | 形式证明与反例 | 0 | 形式逻辑结构推理、反例寻找与形式化证明元指导 |
+| 3 | `math.invariants` | 不变量与极值原理 | 2 | 多项式不变量验证、双计数上界与离散极值构造 |
+| 4 | `math.recurrence` | 递推序列与差分 | 0 | 线性递推序列通项构造、母函数展开与差分方程分析 |
+| 5 | `math.finite-states` | 有限状态机与网格路径 | 6 | 自动机转移计数、独立集多项式、数位DP、网格汉密尔顿路径与滑动窗口 |
+| 6 | `math.combinatorics` | 组合数学与离散枚举 | 3 | 有界离散枚举、模式禁避排列计数 (Pattern-Avoiding)、车多项式 (Rook Numbers) |
+| 7 | `math.generating-functions` | 生成函数与级数展开 | 1 | 符号多项式与有理生成函数高阶展开、目标系数精准提取 |
+| 8 | `math.diophantine` | 丢番图方程与不定方程 | 3 | 二元二次不定方程、符号化丢番图判定、二次判别式族求解 |
+| 9 | `math.integration` | 积分变换与对称性 | 1 | 符号定积分求值与反常积分对称性化简 |
+| 10 | `math.geometry` | 欧氏与解析几何 | 7 | 顶点夹角、面积平分线覆盖、交点分析、线段分离数与最差几何构型搜索 |
+| 11 | `math.optimization` | 极值搜索与优化验证 | 3 | 凸规划证书验证、实数连续数值极值搜索、子集间隙最坏情况分析 |
+| 12 | `math.linear-algebra` | 线性代数与矩阵分析 | 4 | GF(2) 秩与零空间基向量、线性方程组精确解集 (Q)、多项式矩阵最大子式 |
+| 13 | `math.probability` | 概率测度与随机过程 | 4 | 概率密度一元归一化检验、完全图马尔可夫链覆盖时、吸收态期望步数、正态超额席位 |
+| 14 | `math.limits` | 极限理论与级数收敛 | 1 | 极限精确计算、泰勒展开与渐近分析 |
+| 15 | `math.differential` | 微分算子与拉普拉斯方程 | 3 | 单位圆周拉普拉斯算子、笛卡尔平面二维拉普拉斯、三角恒等式降阶 |
+| 16 | `math.algebraic-structures` | 近世代数与代数结构 | 5 | 置换群结构与共轭类、分裂域扩张次数、数域因式分解、Wronskian 根无关性 |
+| 17 | `math.topology` | 点集拓扑与同伦不变量 | 0 | 点集拓扑紧致性、连通性与代数拓扑不变量指导 |
+| 18 | `math.statistics` | 数理统计与信息论 | 0 | 充分统计量判定、最大似然估计与信息熵度量指导 |
+| 19 | `math.regression` | 线性回归与最小二乘 | 1 | 普通最小二乘法 (OLS) 拟合优度、回归斜率与截距核对 |
+| 20 | `math.numerics` | 数值算法与函数拟合 | 6 | Lagrange 多项式插值拟合残差、有限差分数值导数、Richardson 外推、常数逆向识别 |
+| 21 | `math.encoding` | 信息编码与压缩算法 | 5 | LZ78 序列字典编码、解码验证、短语元组结构分析与校验 |
+| 22 | `math.graphs` | 图论结构与极值网络 | 6 | 完美匹配判定与构造、Tutte 条件违例检测、无三角形图二染色与完全二部子图计数 |
+| 23 | `math.tiling` | 铺排几何与全息匹配 | 5 | 骨牌密铺证书核验、棋盘染色边界估计、精确铺排计数、最少多米诺覆盖与唯一铺排判定 |
+| 24 | `math.games` | 组合博弈与极小化极大 | 6 | 组合翻牌博弈、子序列差异度、独立应答证书、博弈树 Minimax 价值与对策验证 |
+| 25 | `math.lattices` | 格理论与几何离散点 | 3 | 六边形格点多边形计数、凸多边形内部整格点精确普查 (Pick 定理) |
+| 26 | `math.integer-structure` | 整数结构与乘法群 | 3 | 弗罗贝尼乌斯半群钱币问题、奇部因数分解与模乘奇部因数分布表 |
 
 ---
 

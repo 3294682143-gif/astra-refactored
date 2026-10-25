@@ -92,10 +92,21 @@ function parseTool(value: Record<string, unknown>): P3Action {
 }
 
 function parseMathAsset(value: Record<string, unknown>): P3Action {
-  if (!exactKeys(value, ["action", "assetId", "input"]) && !exactKeys(value, ["action", "assetId", "input", "scope"])) {
+  const allowed = ["action", "assetId", "input"];
+  const optional = ["target", "scope"];
+  const keys = Object.keys(value);
+  const hasRequired = allowed.every((k) => keys.includes(k));
+  const allAllowed = keys.every((k) => allowed.includes(k) || optional.includes(k));
+  if (!hasRequired || !allAllowed) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (typeof value.assetId !== "string" || value.assetId.trim().length === 0 || value.assetId.length > 64) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (
+    value.target !== undefined &&
+    (typeof value.target !== "string" || value.target.trim().length === 0 || value.target.length > 64)
+  ) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (!isPlainObject(value.input)) {
@@ -105,10 +116,12 @@ function parseMathAsset(value: Record<string, unknown>): P3Action {
   if (inputBytes > MAX_ARGS_BYTES) {
     fail(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
+  const target = typeof value.target === "string" ? boundedString(value.target, 64) : undefined;
   const scope = typeof value.scope === "string" ? boundedString(value.scope, MAX_SCOPE_CHARS) : undefined;
   return p2Snapshot({
     action: "math_asset",
     assetId: value.assetId,
+    ...(target !== undefined ? { target } : {}),
     input: value.input,
     ...(scope !== undefined ? { scope } : {}),
   }) as P3Action;

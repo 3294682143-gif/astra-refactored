@@ -613,15 +613,35 @@ function explicitDegree(candidate: string): number | null {
 }
 
 const TOOL_NAME_ALIASES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  real_root_count_expr: ["real_root_count"],
-  splitting_field_degree_expr: ["splitting_field_degree"],
-  linear_system_solution_set: ["solution_set"],
-  independence_polynomial_chain: ["independence_polynomial"],
-  count_by_digit_property: ["digit_property_count"],
-  count_avoiding_permutations: ["avoiding_permutations"],
-  cover_time_complete_graph: ["cover_time"],
-  finite_difference_derivative: ["finite_difference"],
-  richardson_extrapolate: ["richardson_extrapolate"],
+  real_root_count_expr: ["real_root_count", "real_roots", "math.equations", "math.algebra"],
+  real_roots: ["real_root_count_expr", "real_root_count", "math.equations"],
+  splitting_field_degree_expr: ["splitting_field_degree", "splitting_field", "math.algebraic-structures"],
+  splitting_field_degree: ["splitting_field_degree_expr", "splitting_field", "math.algebraic-structures"],
+  linear_system_solution_set: ["solution_set", "solve_system", "math.linear-algebra"],
+  solution_set: ["linear_system_solution_set", "solve_system", "math.linear-algebra"],
+  independence_polynomial_chain: ["independence_polynomial", "math.finite-states"],
+  independence_polynomial: ["independence_polynomial_chain", "math.finite-states"],
+  count_by_digit_property: ["digit_property_count", "math.finite-states"],
+  digit_property_count: ["count_by_digit_property", "math.finite-states"],
+  count_avoiding_permutations: ["avoiding_permutations", "math.combinatorics"],
+  avoiding_permutations: ["count_avoiding_permutations", "math.combinatorics"],
+  cover_time_complete_graph: ["cover_time", "math.probability"],
+  cover_time: ["cover_time_complete_graph", "math.probability"],
+  finite_difference_derivative: ["finite_difference", "math.numerics"],
+  finite_difference: ["finite_difference_derivative", "math.numerics"],
+  richardson_extrapolate: ["richardson_extrapolate", "math.numerics"],
+  gf2_rank: ["gf2_rank", "rank", "math.linear-algebra"],
+  gf2_nullspace: ["gf2_nullspace", "nullspace", "math.linear-algebra"],
+  finite_group_structure: ["group_structure", "finite_group_structure", "math.algebraic-structures"],
+  group_structure: ["finite_group_structure", "group_structure", "math.algebraic-structures"],
+  stats_ols_check: ["ols_check", "stats_ols_check", "math.regression"],
+  ols_check: ["stats_ols_check", "ols_check", "math.regression"],
+  interpolation_fit_check: ["interpolation_fit", "interpolation_fit_check", "math.numerics"],
+  interpolation_fit: ["interpolation_fit_check", "interpolation_fit", "math.numerics"],
+  polynomial_function_check: ["function_identity", "polynomial_function_check", "math.equations"],
+  function_identity: ["polynomial_function_check", "function_identity", "math.equations"],
+  polynomial_invariant_check: ["polynomial_invariant", "polynomial_invariant_check", "math.invariants"],
+  polynomial_invariant: ["polynomial_invariant_check", "polynomial_invariant", "math.invariants"],
 });
 
 function lastObservation(
@@ -630,14 +650,12 @@ function lastObservation(
 ): ToolObservationView | null {
   if (!Array.isArray(observations)) return null;
   const aliases = TOOL_NAME_ALIASES[name] ?? [];
+  const targetNames = new Set<string>([name, ...aliases]);
   for (let index = observations.length - 1; index >= 0; index -= 1) {
     const observation = observations[index];
     if (observation === undefined || observation === null) continue;
-    if (observation.name === name) return observation;
-    if (typeof observation.operation === "string" && (observation.operation === name || aliases.includes(observation.operation))) {
-      return observation;
-    }
-    if (typeof observation.name === "string" && (aliases.includes(observation.name) || (observation.name.startsWith("math.") && aliases.some(a => observation.operation === a)))) {
+    if (targetNames.has(observation.name)) return observation;
+    if (typeof observation.operation === "string" && targetNames.has(observation.operation)) {
       return observation;
     }
   }

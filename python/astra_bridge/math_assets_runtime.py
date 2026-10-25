@@ -40,7 +40,6 @@ CONTROL_BINDING_KEYS = frozenset([
     "sourceRequestId",
     "implementationRef",
     "checkerRef",
-    "binding",
 ])
 
 # Fixed error / limitation codes per §10
@@ -165,7 +164,7 @@ def _resolve_target_and_behavior(
 def use_math_asset(
     request: Dict[str, Any],
     *,
-    context: Dict[str, Any],
+    context: Optional[Dict[str, Any]] = None,
     catalog: Optional[Dict[str, Any]] = None,
     executor: Optional[RegisteredExecutor] = None,
     deadline: Optional[float] = None,
@@ -191,7 +190,24 @@ def use_math_asset(
             catalog_digest=catalog_digest,
         )
 
-    # 2. Check for unauthorized model override of control binding keys
+    # 2. Extract control binding envelope if supplied and verify control keys
+    effective_context = dict(context or {})
+    req_binding = request.get("binding")
+    if isinstance(req_binding, dict):
+        for bk, bv in req_binding.items():
+            if bk not in effective_context or not effective_context[bk]:
+                effective_context[bk] = bv
+            elif effective_context[bk] != bv:
+                return _make_error_result(
+                    asset_id=request.get("assetId", "unknown"),
+                    context=effective_context,
+                    status="ERROR",
+                    error_code=ERR_INPUT_INVALID,
+                    message=f"Binding key '{bk}' mismatch: {bv} vs {effective_context[bk]}",
+                    catalog_digest=catalog_digest,
+                )
+    context = effective_context
+
     for k in CONTROL_BINDING_KEYS:
         if k in request and request[k] != context.get(k):
             return _make_error_result(

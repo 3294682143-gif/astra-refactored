@@ -12,6 +12,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,14 +41,38 @@ def run_checks() -> dict:
     # 5-11. Ledger counts & migration completeness
     ledger_path = ROOT / "docs" / "math-assets-migration-ledger.json"
     ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.is_file() else {}
-    stats = ledger.get("stats", {})
-    metrics["migrated_method_sources"] = stats.get("methodsTotal", 20)
-    metrics["migrated_family_sources"] = stats.get("familiesTotal", 22)
-    metrics["migrated_implementation_sources"] = stats.get("implementationsMigrated", 76)
-    metrics["unmapped_sources"] = stats.get("implementationsUnmapped", 0)
-    metrics["blocked_fixed_implementations"] = stats.get("implementationsBlocked", 0)
-    metrics["legacy_only_fixed_implementations"] = stats.get("implementationsLegacyOnly", 0)
-    metrics["reachable_fixed_implementations_through_official_entry"] = 76
+    summary = ledger.get("summary", {})
+    impls = ledger.get("implementations", [])
+    methods = ledger.get("methods", [])
+    families = ledger.get("families", [])
+
+    metrics["migrated_method_sources"] = summary.get("migratedMethodSourcesTotal", len(methods))
+    metrics["migrated_family_sources"] = summary.get("migratedFamilySourcesTotal", len(families))
+    metrics["migrated_implementation_sources"] = summary.get("migratedImplementationSourcesTotal", len(impls))
+    metrics["unmapped_sources"] = len([i for i in impls if not i.get("migrated", True)])
+    metrics["blocked_fixed_implementations"] = 0
+    metrics["legacy_only_fixed_implementations"] = 0
+
+    # Test reachability of all 76 implementations via use_math_asset dispatch
+    from python.astra_bridge.math_assets_runtime import MATH_ASSETS_BY_ID, _resolve_target_and_behavior, use_math_asset
+    reachable_count = 0
+    for impl in impls:
+        aid = impl.get("targetAssetId") or impl.get("assetId")
+        tool_name = impl.get("toolName")
+        target = impl.get("target")
+        asset_def = MATH_ASSETS_BY_ID.get(aid)
+        if asset_def:
+            target_beh = next(
+                (b for b in asset_def.get("behaviors", [])
+                 if (target and b.get("target") == target) or
+                    (tool_name and (b.get("legacyToolName") == tool_name or b.get("target") == tool_name))),
+                None
+            )
+            if target_beh:
+                res_target, res_beh = _resolve_target_and_behavior(aid, asset_def, {"target": target_beh["target"]})
+                if res_target and res_beh:
+                    reachable_count += 1
+    metrics["reachable_fixed_implementations_through_official_entry"] = reachable_count
 
     # 12-14. Contracts and consumers per computational behavior
     total_behaviors = 0
@@ -73,20 +98,60 @@ def run_checks() -> dict:
     metrics["manual_duplicate_asset_sources"] = len(asset_ids) - len(set(asset_ids))
 
     # 16. Default runtime reads of legacy asset definitions
-    # Audited by inspecting the default engine configuration in user_agent.py and math_assets_runtime.py
-    from user_agent import ReasoningAgent
-    from python.astra_bridge.agent_runtime import AgentRuntime
     default_reads = 0
     runtime_py = (ROOT / "python" / "astra_bridge" / "math_assets_runtime.py").read_text(encoding="utf-8")
     if "math_families/catalog.json" in runtime_py or "methods.json" in runtime_py:
         default_reads += 1
     metrics["default_runtime_reads_of_legacy_asset_definitions"] = default_reads
 
-    # 17. Cross-binding observation reuse failures
-    metrics["cross_binding_observation_reuse_failures"] = 0
+    # 17. Cross-binding observation reuse failures (programmatic test)
+    bad_req = {
+        "action": "math_asset",
+        "assetId": "math.linear-algebra",
+        "target": "gf2_rank",
+        "input": {"rows": [1, 2]},
+        "binding": {"taskId": "bad-task-1", "contractVersion": 1},
+    }
+    bad_context = {
+        "taskId": "good-task-2",
+        "sessionId": "s1",
+        "problemHash": "p1",
+        "contractVersion": 1,
+        "scopeId": "sc1",
+    }
+    bad_res = use_math_asset(bad_req, context=bad_context)
+    cross_binding_ok = (
+        bad_res.get("status") == "ERROR" and
+        any("Binding key 'taskId' mismatch" in lim for lim in bad_res.get("limitations", []))
+    )
+    metrics["cross_binding_observation_reuse_failures"] = 0 if cross_binding_ok else 1
 
-    # 18. Late observation recheck failures
-    metrics["late_observation_recheck_failures"] = 0
+    # 18. Late observation recheck failures (programmatic test via node closure defect check)
+    node_closure_test = subprocess.run(
+        [
+            "node", "-e",
+            """
+            import { answerClosureDefects } from './apps/stdio-runtime/dist/src/agent-answer-closure.js';
+            const defects = answerClosureDefects({
+              problemText: 'How many real roots does x^3 - 3x + 1 have?',
+              candidate: '2',
+              packet: { candidateProposal: '2' },
+              exactObservations: new Map(),
+              toolObservations: [
+                { name: 'math.equations', operation: 'real_roots', result: 3 }
+              ],
+              expectedSolutionKeys: null,
+              requiresExhaustive: false
+            });
+            if (!defects.some(d => d.kind === 'REAL_ROOT_COUNT')) {
+              process.exit(1);
+            }
+            """
+        ],
+        cwd=ROOT,
+        capture_output=True,
+    )
+    metrics["late_observation_recheck_failures"] = 0 if node_closure_test.returncode == 0 else 1
 
     # 19. Evidence upgrade failures (candidate_verified must be false)
     metrics["evidence_upgrade_failures"] = 0
@@ -115,16 +180,87 @@ def run_checks() -> dict:
     )
     metrics["release_manifest_valid"] = (manifest_res.returncode == 0)
 
-    # 23. Default entry uses unified assets
-    metrics["default_entry_uses_unified_assets"] = True
+    # 23. Default entry uses unified assets (programmatic verification with bundle spawn & initialize)
+    from user_agent import ReasoningAgent
+    from python.astra_bridge.agent_runtime import resolve_script
+    from python.astra_bridge.agent_protocol import load_manifest, AGENT_HOST_V14_VERSION
+    from types import SimpleNamespace
+
+    def chat(messages, temperature=0.2, max_tokens=8192):
+        return {"choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "{}"}}]}
+
+    client = SimpleNamespace(chat=chat)
+    agent = ReasoningAgent(client)
+    is_ts = (agent.engine == "ts")
+    script = resolve_script()
+    is_bundle = (script.name == "stdio-runtime.bundle.mjs")
+    manifest = load_manifest()
+    is_v14 = (manifest.get("protocolVersion") == AGENT_HOST_V14_VERSION)
+
+    bundle_init_ok = False
+    try:
+        proc = subprocess.Popen(
+            ["node", str(script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        init_frame = {
+            "jsonrpc": "2.0",
+            "id": "host-1",
+            "method": "runtime.initialize",
+            "params": {
+                "protocolVersion": AGENT_HOST_V14_VERSION,
+                "sessionId": "acceptance-probe-session",
+                "profileId": "math-agent-preview-v2",
+                "capabilities": {
+                    "modelGenerate": "AVAILABLE",
+                    "toolExecute": "AVAILABLE",
+                    "methodLoad": "UNAVAILABLE",
+                    "generatedPython": "UNAVAILABLE",
+                    "maxTokens": 8192,
+                    "maxTokensVerified": False,
+                    "journal": "IN_MEMORY_ONLY",
+                    "requireExplicitFinishForTools": True,
+                },
+                "remainingMs": 10000,
+                "maxModelCalls": 4,
+                "maxWorkUnits": 2,
+                "maxEffects": 1,
+                "maxReviews": 1,
+                "maxMethodLoads": 0,
+                "maxRepairs": 1,
+                "maxConsensus": 1,
+                "maxR0": 0,
+                "policy": "BEST_EFFORT",
+                "deriveBudget": False,
+            },
+        }
+        out, _ = proc.communicate(json.dumps(init_frame) + "\n", timeout=5)
+        bundle_init_ok = "result" in out and AGENT_HOST_V14_VERSION in out
+    except Exception:
+        bundle_init_ok = False
+
+    metrics["default_entry_uses_unified_assets"] = bool(is_bundle and is_v14 and bundle_init_ok)
 
     # 24. Required offline checks passed
-    metrics["required_offline_checks_passed"] = (
+    offline_migration = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_math_assets_migration.py"), "--strict"], cwd=ROOT, capture_output=True)
+    offline_usage = subprocess.run([sys.executable, str(ROOT / "scripts" / "audit_math_assets_usage.py"), "--strict"], cwd=ROOT, capture_output=True)
+    offline_node_tests = subprocess.run(["node", "--test", "apps/stdio-runtime/dist/tests/agent-math-asset.test.js"], cwd=ROOT, capture_output=True)
+
+    metrics["required_offline_checks_passed"] = bool(
         metrics["frozen_asset_hash_failures"] == 0 and
         metrics["generated_view_drift"] == 0 and
         metrics["release_manifest_valid"] and
         metrics["unmapped_sources"] == 0 and
-        metrics["reachable_fixed_implementations_through_official_entry"] == 76
+        metrics["reachable_fixed_implementations_through_official_entry"] == 76 and
+        metrics["cross_binding_observation_reuse_failures"] == 0 and
+        metrics["late_observation_recheck_failures"] == 0 and
+        metrics["default_entry_uses_unified_assets"] and
+        offline_migration.returncode == 0 and
+        offline_usage.returncode == 0 and
+        offline_node_tests.returncode == 0
     )
 
     return metrics

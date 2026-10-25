@@ -79,6 +79,7 @@ export type P3Action =
   | {
       readonly action: "math_asset";
       readonly assetId: string;
+      readonly target?: string;
       readonly input: Readonly<Record<string, unknown>>;
       readonly scope?: string;
     }

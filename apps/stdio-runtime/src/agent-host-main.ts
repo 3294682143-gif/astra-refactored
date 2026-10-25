@@ -50,7 +50,13 @@ function loadManifest(): AgentHostAnyManifest {
   return validateAgentHostManifest(raw);
 }
 
+let started = false;
+
 export function startAgentHost(startedAt: number = performance.now()): void {
+  if (started) {
+    return;
+  }
+  started = true;
   const manifest = loadManifest();
   const codec: HostChannelCodec<AgentHostMethod> = {
     parse: (bytes: Uint8Array) => parseAgentHostFrame(bytes, manifest as any),
@@ -70,4 +76,15 @@ export function startAgentHost(startedAt: number = performance.now()): void {
     fail: (error: unknown) => channel.fail(error),
   });
   channel.start((message: JsonRpcMessage) => flow.handle(message));
+}
+
+// Auto-start when executed directly as script or with --agent-loop
+const scriptArg = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
+if (
+  scriptArg.endsWith("agent-host-main.js") ||
+  scriptArg.endsWith("agent-host-main.ts") ||
+  scriptArg.endsWith("stdio-runtime.bundle.mjs") ||
+  process.argv.includes("--agent-loop")
+) {
+  startAgentHost();
 }

@@ -1605,6 +1605,7 @@ function parseAgentHostFrame(bytes, manifest) {
 }
 
 // packages/protocol/dist/src/generated/math-assets.js
+var MATH_ASSET_CATALOG_DIGEST = "f95ca322b2bdbe8791f3f35bd687e28a707de18f8411e819500215ca93baee9c";
 var MATH_ASSETS = [
   {
     "assetId": "math.equations",
@@ -4635,10 +4636,18 @@ function parseTool(value) {
   });
 }
 function parseMathAsset(value) {
-  if (!exactKeys(value, ["action", "assetId", "input"]) && !exactKeys(value, ["action", "assetId", "input", "scope"])) {
+  const allowed = ["action", "assetId", "input"];
+  const optional = ["target", "scope"];
+  const keys2 = Object.keys(value);
+  const hasRequired = allowed.every((k) => keys2.includes(k));
+  const allAllowed = keys2.every((k) => allowed.includes(k) || optional.includes(k));
+  if (!hasRequired || !allAllowed) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (typeof value.assetId !== "string" || value.assetId.trim().length === 0 || value.assetId.length > 64) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  if (value.target !== void 0 && (typeof value.target !== "string" || value.target.trim().length === 0 || value.target.length > 64)) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (!isPlainObject6(value.input)) {
@@ -4648,10 +4657,12 @@ function parseMathAsset(value) {
   if (inputBytes > MAX_ARGS_BYTES) {
     fail(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
+  const target = typeof value.target === "string" ? boundedString(value.target, 64) : void 0;
   const scope = typeof value.scope === "string" ? boundedString(value.scope, MAX_SCOPE_CHARS) : void 0;
   return p2Snapshot({
     action: "math_asset",
     assetId: value.assetId,
+    ...target !== void 0 ? { target } : {},
     input: value.input,
     ...scope !== void 0 ? { scope } : {}
   });
@@ -5633,13 +5644,13 @@ var AgentSession = class {
     if (typeof clock !== "function") {
       fail5(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
-    let started;
+    let started2;
     try {
-      started = clock();
+      started2 = clock();
     } catch {
       fail5(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
-    if (typeof started !== "number" || !Number.isFinite(started)) {
+    if (typeof started2 !== "number" || !Number.isFinite(started2)) {
       fail5(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
     this.#sessionId = sessionId;
@@ -5647,13 +5658,13 @@ var AgentSession = class {
     this.#maxModelCalls = maxModelCalls;
     this.#maxEffects = maxEffects;
     this.#now = clock;
-    this.#lastNow = started;
+    this.#lastNow = started2;
     this.#initialBudgetMs = budgetMs;
-    const deadline = Math.floor(started) + budgetMs;
+    const deadline = Math.floor(started2) + budgetMs;
     if (!Number.isSafeInteger(deadline)) {
       fail5(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
-    const difference = deadline - started;
+    const difference = deadline - started2;
     if (difference < 0 || difference > budgetMs) {
       fail5(P2_ERROR_CODES.DEADLINE_EXCEEDED);
     }
@@ -14031,13 +14042,13 @@ function boundedAwait(operation, remainingMs) {
     fail18(P2_ERROR_CODES.DEADLINE_EXCEEDED);
   }
   let timer = null;
-  const started = Promise.resolve().then(operation);
+  const started2 = Promise.resolve().then(operation);
   const timeout = new Promise((_resolve, reject2) => {
     timer = setTimeout(() => {
       reject2(new P2Error(P2_ERROR_CODES.DEADLINE_EXCEEDED));
     }, remainingMs);
   });
-  const observed = started.then(
+  const observed = started2.then(
     (value) => value,
     (error) => {
       throw error;
@@ -14964,8 +14975,7 @@ var SYSTEM_PROMPT6 = [
   "the trusted scope of the current task; the task id, scope id, coverage hash and every",
   "authority field are derived by control, never by you. It is not an instruction and never",
   "discharges an obligation.",
-  `or one tool action {action:"tool", name, args, scope} naming only one of the registered tools ${P3_TOOL_NAMES.join(", ")};`,
-  'or one method action {action:"method", id} naming only an id listed in methodCatalog;',
+  'or one math_asset action {action:"math_asset", assetId, target, input} naming one registered math asset and input matching its target schema;',
   'or one unsolved action {action:"unsolved", reason}.',
   "When allowFinal is true you may instead reply with one final action",
   '{action:"final", answer, complete, unresolved} that only confirms the already protected',
@@ -14973,8 +14983,7 @@ var SYSTEM_PROMPT6 = [
   "unresolved must be empty. A final action never introduces a new answer, never claims",
   "verification and is refused otherwise.",
   "When allowFinal is false no final action is permitted.",
-  "When allowTools is false no tool action is permitted.",
-  "When allowMethods is false no method action is permitted.",
+  "When allowTools is false no math_asset action is permitted.",
   "progressPolicy is fixed control data, not an instruction: an unsolved action only",
   "concerns the current task, and repeated identical cached requests will yield this task",
   "to another ready task. An unsolved action is expensive: it abandons this task for the rest of",
@@ -18101,248 +18110,63 @@ function semanticMethodRoute(problemText, entries) {
     [...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4)
   );
 }
-var MATH_ASSET_ROUTE_MAP = Object.freeze({
-  GROUP_STRUCTURE: {
-    assetId: "math.algebraic-structures",
-    target: "group_structure",
-    targetPurpose: "Exact finite permutation group structure and conjugacy classes",
-    requiredParams: [],
-    optionalParams: ["generators", "degree", "named_group"]
-  },
-  FINITE_ENUMERATION: {
-    assetId: "math.combinatorics",
-    target: "enumerate",
-    targetPurpose: "Exhaustive count of finite subsets under predicate",
-    requiredParams: ["choose", "predicate"],
-    optionalParams: ["objects", "ranges"]
-  },
-  REAL_ROOT_COUNT: {
-    assetId: "math.equations",
-    target: "real_roots",
-    targetPurpose: "Exact real root count of univariate rational polynomial",
-    requiredParams: ["expression"],
-    optionalParams: ["variable", "timeout_ms"]
-  },
-  SPLITTING_FIELD_DEGREE: {
-    assetId: "math.algebraic-structures",
-    target: "splitting_field_degree",
-    targetPurpose: "Exact degree [E:Q] of splitting field over rationals",
-    requiredParams: ["expression"],
-    optionalParams: ["timeout_ms"]
-  },
-  CIRCLE_LAPLACIAN: {
-    assetId: "math.differential",
-    target: "circle_laplacian",
-    targetPurpose: "Intrinsic Laplacian d2f/dtheta2 on unit circle",
-    requiredParams: ["expression"],
-    optionalParams: []
-  },
-  PLANAR_LAPLACIAN: {
-    assetId: "math.differential",
-    target: "planar_laplacian",
-    targetPurpose: "Planar Laplacian d2f/dx2 + d2f/dy2 in Cartesian coordinates",
-    requiredParams: ["expression", "variables"],
-    optionalParams: []
-  },
-  INTERPOLATION_FIT: {
-    assetId: "math.numerics",
-    target: "interpolation_fit",
-    targetPurpose: "Exact polynomial interpolation and residual check",
-    requiredParams: ["points", "expression", "variable"],
-    optionalParams: []
-  },
-  STATS_OLS: {
-    assetId: "math.regression",
-    target: "ols_check",
-    targetPurpose: "Exact OLS linear regression coefficients and residuals",
-    requiredParams: ["data"],
-    optionalParams: ["claimed"]
-  },
-  EXACT_MAXIMAL_MINORS: {
-    assetId: "math.linear-algebra",
-    target: "maximal_minors",
-    targetPurpose: "Maximal minors and characteristic polynomial",
-    requiredParams: ["matrix", "variable"],
-    optionalParams: []
-  },
-  EXACT_FACTOR_OVER_EXTENSION: {
-    assetId: "math.algebraic-structures",
-    target: "factor_over_extension",
-    targetPurpose: "Polynomial factorization over explicit algebraic extensions",
-    requiredParams: ["expression", "variable", "minimal_polynomials"],
-    optionalParams: []
-  },
-  EXACT_DENSITY_CHECK: {
-    assetId: "math.probability",
-    target: "density_check",
-    targetPurpose: "Density normalization and non-negativity check",
-    requiredParams: ["expression", "variable", "lower", "upper"],
-    optionalParams: ["density"]
-  },
-  EXACT_TRIG_REDUCE: {
-    assetId: "math.differential",
-    target: "trig_reduce",
-    targetPurpose: "Trigonometric expression reduction and Fourier coefficients",
-    requiredParams: ["expression", "variable"],
-    optionalParams: []
-  },
-  EXACT_LIMIT: {
-    assetId: "math.limits",
-    target: "limit",
-    targetPurpose: "Exact limit computation",
-    requiredParams: ["expression", "variable", "point"],
-    optionalParams: ["direction"]
-  },
-  EXACT_DEFINITE_INTEGRAL: {
-    assetId: "math.integration",
-    target: "definite_integral",
-    targetPurpose: "Exact definite integral",
-    requiredParams: ["expression", "variable", "lower", "upper"],
-    optionalParams: []
-  },
-  EXACT_SIMPLIFY: {
-    assetId: "math.equations",
-    target: "simplify",
-    targetPurpose: "Exact algebraic expression simplification",
-    requiredParams: ["expression"],
-    optionalParams: ["variable"]
-  },
-  POLYNOMIAL_EXPAND_COEFFICIENTS: {
-    assetId: "math.generating-functions",
-    target: "expand_coefficients",
-    targetPurpose: "Exact rational polynomial coefficient table",
-    requiredParams: ["expression", "variables", "parameters"],
-    optionalParams: []
-  },
-  LINEAR_SYSTEM_SOLUTION_SET: {
-    assetId: "math.linear-algebra",
-    target: "solution_set",
-    targetPurpose: "Exact linear system solution set",
-    requiredParams: ["matrix", "rhs", "variables", "domain"],
-    optionalParams: []
-  },
-  SOLVE_QUADRATIC_DIOPHANTINE: {
-    assetId: "math.diophantine",
-    target: "quadratic_diophantine",
-    targetPurpose: "Exact integer solutions of quadratic Diophantine equation",
-    requiredParams: ["a", "b", "c", "d", "e", "f"],
-    optionalParams: ["y_bound"]
-  },
-  SYMBOLIC_DIOPHANTINE: {
-    assetId: "math.diophantine",
-    target: "symbolic_diophantine",
-    targetPurpose: "Symbolic bivariate Diophantine equation solver",
-    requiredParams: ["lhs"],
-    optionalParams: ["rhs", "variables", "timeout_ms"]
-  },
-  SYSTEM_OF_EXPRESSIONS: {
-    assetId: "math.equations",
-    target: "solve_system",
-    targetPurpose: "Nonlinear polynomial system solution count",
-    requiredParams: ["expressions", "variables"],
-    optionalParams: ["timeout_ms", "n_starts", "seed"]
-  },
-  POLYNOMIAL_FUNCTION_CHECK: {
-    assetId: "math.equations",
-    target: "function_identity",
-    targetPurpose: "Polynomial functional identity verification",
-    requiredParams: ["equation", "function", "argument", "variables", "expression"],
-    optionalParams: []
-  },
-  GF2_NULLSPACE: {
-    assetId: "math.linear-algebra",
-    target: "gf2_nullspace",
-    targetPurpose: "Exact kernel basis over GF(2)",
-    requiredParams: ["rows", "width"],
-    optionalParams: []
-  },
-  GF2_RANK: {
-    assetId: "math.linear-algebra",
-    target: "gf2_rank",
-    targetPurpose: "Exact rank of binary matrix over GF(2)",
-    requiredParams: ["rows"],
-    optionalParams: []
-  },
-  TRANSITION_COUNT: {
-    assetId: "math.finite-states",
-    target: "transition_count",
-    targetPurpose: "Count of paths of fixed length in state transition graph",
-    requiredParams: ["length", "num_states", "transitions"],
-    optionalParams: ["starts", "ends"]
-  },
-  INDEPENDENCE_POLYNOMIAL_CHAIN: {
-    assetId: "math.finite-states",
-    target: "independence_polynomial",
-    targetPurpose: "Independence polynomial of path graph P_n",
-    requiredParams: ["n"],
-    optionalParams: []
-  },
-  COUNT_BY_DIGIT_PROPERTY: {
-    assetId: "math.finite-states",
-    target: "digit_property_count",
-    targetPurpose: "Count of integers with digits from restricted set",
-    requiredParams: ["digit_set", "max_digits"],
-    optionalParams: ["modulus", "residue", "include_zero"]
-  },
-  ROOK_NUMBERS: {
-    assetId: "math.combinatorics",
-    target: "rook_numbers",
-    targetPurpose: "Rook numbers for chessboard with forbidden positions",
-    requiredParams: ["n", "forbidden"],
-    optionalParams: []
-  },
-  COUNT_AVOIDING_PERMUTATIONS: {
-    assetId: "math.combinatorics",
-    target: "avoiding_permutations",
-    targetPurpose: "Permutations avoiding forbidden board positions",
-    requiredParams: ["n", "forbidden"],
-    optionalParams: []
-  },
-  MARKOV_EXPECTED_STEPS: {
-    assetId: "math.probability",
-    target: "markov_expected_steps",
-    targetPurpose: "Expected hitting time in absorbing Markov chain",
-    requiredParams: ["transition", "start", "targets"],
-    optionalParams: []
-  },
-  COVER_TIME_COMPLETE_GRAPH: {
-    assetId: "math.probability",
-    target: "cover_time",
-    targetPurpose: "Expected cover time of random walk on complete graph K_n",
-    requiredParams: ["num_vertices"],
-    optionalParams: []
-  },
-  FINITE_DIFFERENCE_DERIVATIVE: {
-    assetId: "math.numerics",
-    target: "finite_difference",
-    targetPurpose: "Numerical derivative via finite differences",
-    requiredParams: ["f", "x", "h"],
-    optionalParams: ["method", "order"]
-  },
-  RICHARDSON_EXTRAPOLATE: {
-    assetId: "math.numerics",
-    target: "richardson_extrapolate",
-    targetPurpose: "Richardson extrapolation for numerical derivative",
-    requiredParams: ["f", "x", "h"],
-    optionalParams: ["method", "order"]
-  }
+var MATH_ASSET_ROUTE_TARGETS = Object.freeze({
+  GROUP_STRUCTURE: { assetId: "math.algebraic-structures", target: "group_structure" },
+  FINITE_ENUMERATION: { assetId: "math.combinatorics", target: "enumerate" },
+  REAL_ROOT_COUNT: { assetId: "math.equations", target: "real_roots" },
+  SPLITTING_FIELD_DEGREE: { assetId: "math.algebraic-structures", target: "splitting_field_degree" },
+  CIRCLE_LAPLACIAN: { assetId: "math.differential", target: "circle_laplacian" },
+  PLANAR_LAPLACIAN: { assetId: "math.differential", target: "planar_laplacian" },
+  INTERPOLATION_FIT: { assetId: "math.numerics", target: "interpolation_fit" },
+  STATS_OLS: { assetId: "math.regression", target: "ols_check" },
+  MAXIMAL_MINORS: { assetId: "math.linear-algebra", target: "maximal_minors" },
+  DENSITY_CHECK: { assetId: "math.probability", target: "density_check" },
+  GF2_RANK: { assetId: "math.linear-algebra", target: "gf2_rank" },
+  GF2_NULLSPACE: { assetId: "math.linear-algebra", target: "gf2_nullspace" },
+  SOLUTION_SET: { assetId: "math.linear-algebra", target: "solution_set" },
+  INDEPENDENCE_POLYNOMIAL: { assetId: "math.finite-states", target: "independence_polynomial" },
+  DIGIT_PROPERTY_COUNT: { assetId: "math.finite-states", target: "digit_property_count" },
+  AVOIDING_PERMUTATIONS: { assetId: "math.combinatorics", target: "avoiding_permutations" },
+  COVER_TIME_COMPLETE_GRAPH: { assetId: "math.probability", target: "cover_time" },
+  FINITE_DIFFERENCE_DERIVATIVE: { assetId: "math.numerics", target: "finite_difference" },
+  RICHARDSON_EXTRAPOLATE: { assetId: "math.numerics", target: "richardson_extrapolate" }
 });
+var MATH_ASSET_ROUTE_MAP = Object.freeze(
+  Object.fromEntries(
+    Object.entries(MATH_ASSET_ROUTE_TARGETS).map(([k, v]) => {
+      const asset = MATH_ASSET_BY_ID.get(v.assetId);
+      const beh = asset?.behaviors.find((b) => b.target === v.target);
+      return [
+        k,
+        {
+          assetId: v.assetId,
+          target: v.target,
+          targetPurpose: beh?.declaredScope ?? "",
+          requiredParams: beh?.requiredParams ?? [],
+          optionalParams: beh?.optionalParams ?? []
+        }
+      ];
+    })
+  )
+);
 function semanticMathAssetRoute(problemText) {
   const toolRoute = semanticToolRoute(problemText);
   if (!toolRoute) {
     return null;
   }
-  const entry = MATH_ASSET_ROUTE_MAP[toolRoute.id];
+  const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
   if (!entry) {
     return null;
   }
+  const asset = MATH_ASSET_BY_ID.get(entry.assetId);
+  const behavior = asset?.behaviors.find((b) => b.target === entry.target);
   return {
     id: toolRoute.id,
     assetId: entry.assetId,
     target: entry.target,
-    targetPurpose: entry.targetPurpose,
-    requiredParams: entry.requiredParams,
-    optionalParams: entry.optionalParams,
+    targetPurpose: behavior?.declaredScope ?? "",
+    requiredParams: behavior?.requiredParams ?? [],
+    optionalParams: behavior?.optionalParams ?? [],
     argsTemplate: toolRoute.argsTemplate
   };
 }
@@ -18702,27 +18526,45 @@ function explicitDegree(candidate) {
   return match === null ? null : Number(match[1]);
 }
 var TOOL_NAME_ALIASES = Object.freeze({
-  real_root_count_expr: ["real_root_count"],
-  splitting_field_degree_expr: ["splitting_field_degree"],
-  linear_system_solution_set: ["solution_set"],
-  independence_polynomial_chain: ["independence_polynomial"],
-  count_by_digit_property: ["digit_property_count"],
-  count_avoiding_permutations: ["avoiding_permutations"],
-  cover_time_complete_graph: ["cover_time"],
-  finite_difference_derivative: ["finite_difference"],
-  richardson_extrapolate: ["richardson_extrapolate"]
+  real_root_count_expr: ["real_root_count", "real_roots", "math.equations", "math.algebra"],
+  real_roots: ["real_root_count_expr", "real_root_count", "math.equations"],
+  splitting_field_degree_expr: ["splitting_field_degree", "splitting_field", "math.algebraic-structures"],
+  splitting_field_degree: ["splitting_field_degree_expr", "splitting_field", "math.algebraic-structures"],
+  linear_system_solution_set: ["solution_set", "solve_system", "math.linear-algebra"],
+  solution_set: ["linear_system_solution_set", "solve_system", "math.linear-algebra"],
+  independence_polynomial_chain: ["independence_polynomial", "math.finite-states"],
+  independence_polynomial: ["independence_polynomial_chain", "math.finite-states"],
+  count_by_digit_property: ["digit_property_count", "math.finite-states"],
+  digit_property_count: ["count_by_digit_property", "math.finite-states"],
+  count_avoiding_permutations: ["avoiding_permutations", "math.combinatorics"],
+  avoiding_permutations: ["count_avoiding_permutations", "math.combinatorics"],
+  cover_time_complete_graph: ["cover_time", "math.probability"],
+  cover_time: ["cover_time_complete_graph", "math.probability"],
+  finite_difference_derivative: ["finite_difference", "math.numerics"],
+  finite_difference: ["finite_difference_derivative", "math.numerics"],
+  richardson_extrapolate: ["richardson_extrapolate", "math.numerics"],
+  gf2_rank: ["gf2_rank", "rank", "math.linear-algebra"],
+  gf2_nullspace: ["gf2_nullspace", "nullspace", "math.linear-algebra"],
+  finite_group_structure: ["group_structure", "finite_group_structure", "math.algebraic-structures"],
+  group_structure: ["finite_group_structure", "group_structure", "math.algebraic-structures"],
+  stats_ols_check: ["ols_check", "stats_ols_check", "math.regression"],
+  ols_check: ["stats_ols_check", "ols_check", "math.regression"],
+  interpolation_fit_check: ["interpolation_fit", "interpolation_fit_check", "math.numerics"],
+  interpolation_fit: ["interpolation_fit_check", "interpolation_fit", "math.numerics"],
+  polynomial_function_check: ["function_identity", "polynomial_function_check", "math.equations"],
+  function_identity: ["polynomial_function_check", "function_identity", "math.equations"],
+  polynomial_invariant_check: ["polynomial_invariant", "polynomial_invariant_check", "math.invariants"],
+  polynomial_invariant: ["polynomial_invariant_check", "polynomial_invariant", "math.invariants"]
 });
 function lastObservation(observations, name) {
   if (!Array.isArray(observations)) return null;
   const aliases = TOOL_NAME_ALIASES[name] ?? [];
+  const targetNames = /* @__PURE__ */ new Set([name, ...aliases]);
   for (let index = observations.length - 1; index >= 0; index -= 1) {
     const observation = observations[index];
     if (observation === void 0 || observation === null) continue;
-    if (observation.name === name) return observation;
-    if (typeof observation.operation === "string" && (observation.operation === name || aliases.includes(observation.operation))) {
-      return observation;
-    }
-    if (typeof observation.name === "string" && (aliases.includes(observation.name) || observation.name.startsWith("math.") && aliases.some((a) => observation.operation === a))) {
+    if (targetNames.has(observation.name)) return observation;
+    if (typeof observation.operation === "string" && targetNames.has(observation.operation)) {
       return observation;
     }
   }
@@ -21380,6 +21222,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   let catalog = null;
   let methodAssets = [];
   const mathAssetObservations = [];
+  const assetGuidanceNotes = [];
   let stop = "NO_CANDIDATE";
   let target = null;
   let protectedOrigin = null;
@@ -21919,6 +21762,27 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           }
           methodToolCoPromptCardId = null;
         }
+        if (assetGuidanceNotes.length > 0) {
+          const guidanceStr = assetGuidanceNotes.map((g) => `
+
+[MATH ASSET GUIDANCE: ${g.assetId}]
+${g.guidance.join("\n")}`).join("");
+          if (!context.messages[0].content.includes(guidanceStr)) {
+            const messages = [
+              {
+                role: "system",
+                content: context.messages[0].content + guidanceStr
+              },
+              context.messages[1]
+            ];
+            context = {
+              ...context,
+              messages,
+              contextHash: p4Hash(JSON.stringify(messages)),
+              contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+            };
+          }
+        }
         let outcome = await calls.model({
           task: running,
           phase: "WORK",
@@ -21988,11 +21852,19 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             stop = "CONTROL_REJECTED";
             break;
           }
+          if (root.effectCalls() >= totalEffectCapacity || toolEffects >= opts.maxEffects) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          const reservedOrdinal = root.effectCalls() + 1;
+          const effectId = `effect-${reservedOrdinal}`;
+          const reservedEffect = root.reserveEffect(effectId);
           let mathAssetResult;
           try {
             mathAssetResult = await captured.mathAsset.execute({
               action: "math_asset",
               assetId: action.assetId,
+              ...action.target ? { target: action.target } : {},
               input: action.input,
               binding: {
                 taskId: running.taskId,
@@ -22003,10 +21875,30 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               }
             });
           } catch {
+            root.settleEffect(reservedEffect, "ERROR");
             stop = "CONTROL_REJECTED";
             break;
           }
+          const isComplete = mathAssetResult.status === "COMPLETE" || mathAssetResult.status === "SUCCESS";
+          root.settleEffect(reservedEffect, isComplete ? "COMPLETE" : "ERROR");
           toolEffects += 1;
+          if (mathAssetResult.catalogDigest && mathAssetResult.catalogDigest !== MATH_ASSET_CATALOG_DIGEST) {
+            stop = "CONTROL_REJECTED";
+            break;
+          }
+          if (mathAssetResult.binding) {
+            const b = mathAssetResult.binding;
+            if (b.taskId !== running.taskId || b.contractVersion !== contract.contractVersion || b.goalId && b.goalId !== running.goalId || b.scopeId && b.scopeId !== running.scopeId) {
+              stop = "CONTROL_REJECTED";
+              break;
+            }
+          }
+          if (Array.isArray(mathAssetResult.guidance) && mathAssetResult.guidance.length > 0) {
+            assetGuidanceNotes.push({
+              assetId: mathAssetResult.assetId,
+              guidance: mathAssetResult.guidance
+            });
+          }
           sessionLog.append("TOOL_OBSERVATION", {
             toolName: `math_asset:${mathAssetResult.assetId}`,
             assetId: mathAssetResult.assetId,
@@ -22017,9 +21909,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           for (const obs of mathAssetResult.observations) {
             mathAssetObservations.push(obs);
             const obsStr = JSON.stringify({ result: obs.value, operation: obs.quantity, target: obs.quantity });
-            const effectId = `effect-${observations.length + 1}`;
+            const effectId2 = `effect-${observations.length + 1}`;
             observations.push({
-              effectId,
+              effectId: effectId2,
               binding: {
                 sessionId: session,
                 problemHash,
@@ -23818,6 +23710,7 @@ var AgentHostFlow = class {
   exploreAvailable = false;
   mathAssetAvailable = false;
   mathAssetCalls = 0;
+  effectCalls = 0;
   solveStarted = false;
   stopSent = false;
   catalogRead = false;
@@ -24158,11 +24051,15 @@ var AgentHostFlow = class {
     if (this.pending !== null) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
+    if (this.options !== null && this.effectCalls >= this.options.maxEffects) {
+      return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
+    }
     if (this.io.remainingMs() <= MIN_REMAINING_MS10) {
       return Promise.reject(new Error(ERROR_CODES.FIELD_VALUE));
     }
     const id4 = `node-math-asset-${this.mathAssetCalls + 1}`;
     this.mathAssetCalls += 1;
+    this.effectCalls += 1;
     return new Promise((resolve, reject2) => {
       this.pending = {
         id: id4,
@@ -24182,6 +24079,7 @@ var AgentHostFlow = class {
               request: {
                 action: "math_asset",
                 assetId: request.assetId,
+                ...request.target ? { target: request.target } : {},
                 input: request.input,
                 binding: request.binding
               }
@@ -24199,6 +24097,11 @@ var AgentHostFlow = class {
     agentHostPayload(this.manifest, "math_asset.execute", "result", result, this.sessionId ?? void 0);
     const mathResult = result["result"];
     if (!isPlainObject23(mathResult)) {
+      this.pending = null;
+      pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
+      return;
+    }
+    if (mathResult["catalogDigest"] !== MATH_ASSET_CATALOG_DIGEST) {
       this.pending = null;
       pending.reject(new Error(ERROR_CODES.FIELD_VALUE));
       return;
@@ -24412,7 +24315,12 @@ function loadManifest() {
   }
   return validateAgentHostManifest(raw);
 }
+var started = false;
 function startAgentHost(startedAt = performance.now()) {
+  if (started) {
+    return;
+  }
+  started = true;
   const manifest = loadManifest();
   const codec = {
     parse: (bytes) => parseAgentHostFrame(bytes, manifest),
@@ -24431,6 +24339,10 @@ function startAgentHost(startedAt = performance.now()) {
     fail: (error) => channel.fail(error)
   });
   channel.start((message) => flow.handle(message));
+}
+var scriptArg = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
+if (scriptArg.endsWith("agent-host-main.js") || scriptArg.endsWith("agent-host-main.ts") || scriptArg.endsWith("stdio-runtime.bundle.mjs") || process.argv.includes("--agent-loop")) {
+  startAgentHost();
 }
 export {
   startAgentHost

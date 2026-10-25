@@ -81,6 +81,7 @@ export interface MathAssetResult {
 export interface MathAssetPortRequest {
   readonly action: "math_asset";
   readonly assetId: string;
+  readonly target?: string;
   readonly input: Readonly<Record<string, unknown>>;
   readonly binding: MathAssetBinding;
 }
