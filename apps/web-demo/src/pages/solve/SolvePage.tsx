@@ -6,11 +6,15 @@ import { StatusBadge, type StatusKind } from "@/components/StatusBadge";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import {
   createRun,
+  fetchCapabilities,
   fetchRun,
+  fetchRuntimeInfo,
   readTerminalFacts,
   resolveTraceLevel,
   type ApiResult,
+  type CapabilitiesResponse,
   type RunSummaryItem,
+  type RuntimeInfoResponse,
   type TraceLevel,
 } from "@/api/client.ts";
 import { describeStopReason } from "@/domain/stopReasonView.ts";
@@ -102,8 +106,11 @@ interface PostMeta {
 
 export function SolvePage() {
   const [problem, setProblem] = useState(SAMPLE_PROBLEMS[0]!.text);
-  const [maxModelCalls, setMaxModelCalls] = useState(24);
-  const [maxMethodLoads, setMaxMethodLoads] = useState<0 | 1>(1);
+  const [maxModelCalls, setMaxModelCalls] = useState(8);
+  const [maxEffects, setMaxEffects] = useState<0 | 1 | 2>(1);
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResponse | null>(null);
+  const defaultsAppliedRef = useRef(false);
   const [isRunning, setIsRunning] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   /** 真实失败态文本（请求失败 / 事件流中断）。绝不回落演示数据。 */
@@ -136,6 +143,28 @@ export function SolvePage() {
     return cleanupStreams;
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    fetchCapabilities().then((res) => {
+      if (!alive || !res.ok) return;
+      setCapabilities(res.data);
+      if (!defaultsAppliedRef.current) {
+        const budget = res.data.default_budget ?? {};
+        if (typeof budget["max_model_calls"] === "number") setMaxModelCalls(budget["max_model_calls"]);
+        if (budget["max_effects"] === 0 || budget["max_effects"] === 1 || budget["max_effects"] === 2) {
+          setMaxEffects(budget["max_effects"]);
+        }
+        defaultsAppliedRef.current = true;
+      }
+    });
+    fetchRuntimeInfo().then((res) => {
+      if (alive && res.ok) setRuntimeInfo(res.data);
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const handleApplyEvent = (ev: RunEventEnvelope) => {
     const kind = getEventKind(ev);
     if (kind === "FINAL" || kind === "RESULT" || kind === "error") {
@@ -159,14 +188,16 @@ export function SolvePage() {
 
     // 幂等键由「题目 + 预算配置」确定性推导：同题同配置重复提交会被后端识别为重放（HTTP 200），
     // 不再新起执行；界面据 httpStatus / idempotent_replay 明确区分呈现。
-    const idempotencyKey = stableIdempotencyKey(problem, maxModelCalls, maxMethodLoads);
+    const idempotencyKey = stableIdempotencyKey(problem, maxModelCalls, maxEffects);
 
     // 真实请求：失败即显示真实错误态，绝不回落演示 / 样例数据。
     const created = await createRun(
       {
         problem,
+        engine: "ts",
         max_model_calls: maxModelCalls,
-        max_method_loads: maxMethodLoads,
+        max_effects: maxEffects,
+        max_method_loads: 0,
       },
       idempotencyKey,
     );
@@ -290,6 +321,11 @@ export function SolvePage() {
           <p style={{ margin: 0, fontSize: "13px", color: "var(--color-ink-soft)" }}>
             支持 Markdown 与 LaTeX 公式输入，驱动 M1 契约、M2 准入、M3 调度、M4 评审与 M5 审计单循环。
           </p>
+          {runtimeInfo && !runtimeInfo.solverConfigured ? (
+            <p style={{ margin: "6px 0 0", fontSize: "12px", color: "var(--color-state-unsolved)" }}>
+              服务端未配置正式 solver：请求会明确返回未执行状态，不会自动回退演示数据。
+            </p>
+          ) : null}
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
@@ -373,43 +409,32 @@ export function SolvePage() {
 
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--color-ink-soft)", marginBottom: "6px" }}>
-                  方法卡准入开关 (max_method_loads)
+                  数学资产调用额度 (max_effects)
                 </label>
                 <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
-                  <button
-                    type="button"
-                    onClick={() => setMaxMethodLoads(1)}
-                    style={{
-                      flex: 1,
-                      padding: "6px 0",
-                      borderRadius: "6px",
-                      border: `1px solid ${maxMethodLoads === 1 ? "var(--color-brand)" : "var(--color-line)"}`,
-                      backgroundColor: maxMethodLoads === 1 ? "var(--color-brand-tint)" : "#ffffff",
-                      color: maxMethodLoads === 1 ? "var(--color-brand)" : "var(--color-ink-soft)",
-                      fontWeight: 500,
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    启用准入 (1)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMaxMethodLoads(0)}
-                    style={{
-                      flex: 1,
-                      padding: "6px 0",
-                      borderRadius: "6px",
-                      border: `1px solid ${maxMethodLoads === 0 ? "var(--color-brand)" : "var(--color-line)"}`,
-                      backgroundColor: maxMethodLoads === 0 ? "var(--color-brand-tint)" : "#ffffff",
-                      color: maxMethodLoads === 0 ? "var(--color-brand)" : "var(--color-ink-soft)",
-                      fontWeight: 500,
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    禁用准入 (0)
-                  </button>
+                  {([0, 1, 2] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setMaxEffects(value)}
+                      style={{
+                        flex: 1,
+                        padding: "6px 0",
+                        borderRadius: "6px",
+                        border: `1px solid ${maxEffects === value ? "var(--color-brand)" : "var(--color-line)"}`,
+                        backgroundColor: maxEffects === value ? "var(--color-brand-tint)" : "#ffffff",
+                        color: maxEffects === value ? "var(--color-brand)" : "var(--color-ink-soft)",
+                        fontWeight: 500,
+                        fontSize: "12px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {value} 次
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: "10px", color: "var(--color-ink-mute)", marginTop: "4px" }}>
+                  max_method_loads 固定为 0；调用额度只计真实数学资产/工具效果。
                 </div>
               </div>
             </div>
@@ -506,6 +531,9 @@ export function SolvePage() {
               <br />
               started: {postMeta.started === null ? "未知" : String(postMeta.started)} · terminal（响应时是否已终态）:
               {postMeta.terminal === null ? " 未知" : ` ${String(postMeta.terminal)}`}
+              <br />
+              本次生效配置：engine=ts · max_model_calls={maxModelCalls} · max_effects={maxEffects} · max_method_loads=0
+              {capabilities ? `（服务端默认 max_model_calls=${String(capabilities.default_budget?.["max_model_calls"] ?? "未知")}）` : ""}
             </div>
           ) : null}
 
@@ -593,6 +621,8 @@ export function SolvePage() {
                 }
               />
 
+              <RunFacts summary={runRecord && runRecord.ok ? runRecord.data.summary ?? null : null} />
+
               <div style={{ display: "flex", gap: "12px" }}>
                 <Link
                   to={`/runs/${currentRunId ?? ""}`}
@@ -679,6 +709,37 @@ export function SolvePage() {
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function metricValue(metrics: Record<string, unknown>, key: string): string {
+  const value = metrics[key];
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value;
+  return "未知";
+}
+
+function RunFacts(props: { summary: Record<string, unknown> | null }) {
+  const summary = props.summary ?? {};
+  const metrics = (summary["metrics"] && typeof summary["metrics"] === "object"
+    ? summary["metrics"] as Record<string, unknown>
+    : {});
+  const unknownUsage = metrics["reported_tokens"] == null;
+  const rows: Array<[string, string]> = [
+    ["executed", summary["executed"] === true ? "true" : summary["executed"] === false ? "false" : "未知"],
+    ["childReaped", summary["childReaped"] === true ? "true" : summary["childReaped"] === false ? "false" : "未知"],
+    ["tool_effect_calls", metricValue(metrics, "tool_effect_calls")],
+    ["logical_model_calls", metricValue(metrics, "logical_model_calls")],
+    ["reported_tokens", unknownUsage ? "未知（不是 0）" : metricValue(metrics, "reported_tokens")],
+    ["remote_outcome_unknown", metrics["remote_outcome_unknown"] === true ? "true" : metrics["remote_outcome_unknown"] === false ? "false" : "未知"],
+  ];
+  return (
+    <div style={{ borderRadius: "10px", border: "1px solid var(--color-line)", backgroundColor: "var(--color-surface-muted)", padding: "12px 14px", fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.8 }}>
+      <div style={{ fontWeight: 600, color: "var(--color-brand-deep)", marginBottom: "4px" }}>运行事实（来自 BFF 落盘 summary）</div>
+      {rows.map(([key, value]) => (
+        <div key={key}><code>{key}</code>: {value}</div>
+      ))}
     </div>
   );
 }

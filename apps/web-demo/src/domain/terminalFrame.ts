@@ -96,9 +96,9 @@ export function isNotExecuted(frame: TerminalFrame | null): boolean {
 export function stableIdempotencyKey(
   problem: string,
   maxModelCalls: number,
-  maxMethodLoads: 0 | 1,
+  maxEffects: 0 | 1 | 2,
 ): string {
-  const bytes = new TextEncoder().encode(`${problem}\u0000${maxModelCalls}\u0000${maxMethodLoads}`);
+  const bytes = new TextEncoder().encode(`${problem}\u0000${maxModelCalls}\u0000${maxEffects}`);
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (const b of bytes) {

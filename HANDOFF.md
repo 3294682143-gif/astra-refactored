@@ -1992,3 +1992,23 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   5. 模型顺利交付 `deliveryStatus: "COMPLETE"` 候选，正常生成 `status: "candidate"`。
   6. 严格断言证据等级不越权升级 (`candidate_verified: False`)，工具调用计数准确 (`tool_effect_calls: 1`)。
 - **终验状态**: 统一数学资产架构全生命周期闭环终验正式完成。
+
+---
+
+## 20 2026-10-25 Web 前端与统一数学资产整合
+
+- 独立 worktree：`/home/ma-user/work/Astra /astra-refactored-web-unified`
+- 整合分支：`feat/web-unified-math-integration`
+- 来源：前端 `67f306a`，数学统一 `263923a`，共同祖先 `eb36a5ac`；原分支未写入。
+- 合并提交：`923f619`（`.gitignore`、`README.md`、`tests/conftest.py` 语义合并）。
+- Web/BFF 接入：`RunRequestDto` 单一路径（默认预算 8/4/1/1/0/0/0/0）；`SolverAdapter` 调用正式
+  `ReasoningAgent(client=...).solve(...)`；统一资产目录 `/api/math-assets`、单项详情与
+  `/api/runtime-info`；SSE 使用 Host observer 的真实阶段事件并落盘 L2。
+- 页面：资产页统一为“数学资产”；求解页移除方法卡开关，改为 `max_effects`；结果页保留
+  metrics/childReaped/executed/未知 token 的真实语义。
+- 构建：`tsc -b`、esbuild bundle、release manifest、Web static manifest
+  (`scripts/sync_web_release_manifest.py`) 与 Web Vite 构建同步。
+- 验收：核心 82/82、BFF 82/82、Web 单元/BFF/失败/流式 49 项、headless Chrome 页面 smoke
+  全部通过；详细命令与输出见 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`。
+- 本次真实外部模型评测**未执行**；82 项测试只替代远端模型响应，不能当作数学正确率。
+- `candidate_verified` 仍恒为 `False`；浏览器不直连 provider，不绕过 Host。

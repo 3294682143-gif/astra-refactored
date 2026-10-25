@@ -44,6 +44,11 @@ export interface CapabilitiesResponse {
   max_concurrent_runs?: number;
   supports_cancellation?: boolean;
   cancellation_supported?: boolean;
+  supported_engines?: string[];
+  default_budget?: Record<string, unknown>;
+  protocol_version?: string | null;
+  catalog_version?: string | null;
+  catalog_digest?: string | null;
   limits?: Record<string, unknown>;
   execution?: {
     max_concurrent_runs?: number;
@@ -101,6 +106,59 @@ export interface ReplayPayload {
   /** 存档中是否真的存在 events 字段（缺失时为空数组，不伪造）。 */
   hasEventsField: boolean;
   details: Record<string, unknown>;
+}
+
+export interface MathAssetSummaryItem {
+  readonly assetId: string;
+  readonly name: string;
+  readonly version: string;
+  readonly summary: string;
+  readonly behaviorCount: number;
+  readonly targets: readonly string[];
+  readonly guidanceOnly: boolean;
+}
+
+export interface MathAssetsResponse {
+  readonly schemaVersion: string;
+  readonly catalogVersion: string;
+  readonly catalogDigest: string;
+  readonly assetCount: number;
+  readonly computationBehaviorCount: number;
+  readonly guidanceOnlyCount: number;
+  readonly assets: readonly MathAssetSummaryItem[];
+}
+
+export interface MathAssetBehavior {
+  readonly target: string;
+  readonly declaredScope: string;
+  readonly requiredParams: readonly string[];
+  readonly optionalParams: readonly string[];
+  readonly resultType: string;
+  readonly evidenceCeiling: string;
+}
+
+export interface MathAssetDetail extends MathAssetSummaryItem {
+  readonly instructions: {
+    readonly conditions: readonly string[];
+    readonly procedure: readonly string[];
+    readonly misuse: readonly string[];
+    readonly verificationBoundary: string;
+  };
+  readonly behaviors: readonly MathAssetBehavior[];
+  readonly examples?: Record<string, unknown>;
+  readonly inputSchema?: Record<string, unknown> | null;
+}
+
+export interface RuntimeInfoResponse {
+  readonly service: string;
+  readonly protocolVersion: string;
+  readonly catalogAvailable: boolean;
+  readonly catalogError: string | null;
+  readonly catalogVersion: string | null;
+  readonly catalogDigest: string | null;
+  readonly assetCount: number | null;
+  readonly computationBehaviorCount: number | null;
+  readonly solverConfigured: boolean;
 }
 
 export interface CreateRunResponse {
@@ -232,6 +290,18 @@ export function fetchRun(runId: string): Promise<ApiResult<RunSummaryItem>> {
   return requestJson<RunSummaryItem>(`/api/runs/${encodeURIComponent(runId)}`);
 }
 
+export function fetchMathAssets(): Promise<ApiResult<MathAssetsResponse>> {
+  return requestJson<MathAssetsResponse>("/api/math-assets");
+}
+
+export function fetchMathAsset(assetId: string): Promise<ApiResult<MathAssetDetail>> {
+  return requestJson<MathAssetDetail>(`/api/math-assets/${encodeURIComponent(assetId)}`);
+}
+
+export function fetchRuntimeInfo(): Promise<ApiResult<RuntimeInfoResponse>> {
+  return requestJson<RuntimeInfoResponse>("/api/runtime-info");
+}
+
 export function fetchAssets(runId?: string): Promise<ApiResult<AssetsResponse>> {
   const qs = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
   return requestJson<AssetsResponse>(`/api/assets${qs}`);
@@ -245,9 +315,18 @@ export function fetchAssets(runId?: string): Promise<ApiResult<AssetsResponse>> 
 export function createRun(
   body: {
     problem: string;
-    max_model_calls: number;
-    max_method_loads: 0 | 1;
-    engine?: string;
+    max_model_calls?: number;
+    max_work_units?: number;
+    max_effects?: number;
+    max_reviews?: number;
+    max_method_loads?: 0;
+    max_repairs?: number;
+    max_consensus?: number;
+    max_r0?: 0 | 1;
+    problem_seconds?: number;
+    policy?: "BEST_EFFORT" | "STRICT";
+    metadata?: Record<string, unknown>;
+    engine?: "ts";
   },
   idempotencyKey?: string,
 ): Promise<ApiResult<CreateRunResponse>> {

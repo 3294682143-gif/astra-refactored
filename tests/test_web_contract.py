@@ -16,12 +16,13 @@ from python.astra_web.contracts.mapping import classify_stop_reason, label_zh
 def test_run_request_dto_valid():
     req = RunRequestDto(
         problem="证明质数有无穷多个",
-        max_model_calls=24,
-        max_method_loads=1,
         policy="BEST_EFFORT",
     )
-    assert req.max_model_calls == 24
-    assert req.max_method_loads == 1
+    assert req.max_model_calls == 8
+    assert req.max_work_units == 4
+    assert req.max_effects == 1
+    assert req.max_method_loads == 0
+    assert req.engine == "ts"
 
 
 def test_run_request_dto_rejects_bool_and_invalid_loads():
@@ -29,9 +30,23 @@ def test_run_request_dto_rejects_bool_and_invalid_loads():
     with pytest.raises(ValidationError):
         RunRequestDto(problem="test", max_method_loads=True)  # type: ignore
 
-    # 2 is forbidden (only 0 or 1 allowed)
+    # The Web entry fixes method loads at 0.
     with pytest.raises(ValidationError):
-        RunRequestDto(problem="test", max_method_loads=2)  # type: ignore
+        RunRequestDto(problem="test", max_method_loads=1)  # type: ignore
+
+    # Every integer field rejects bool smuggling.
+    with pytest.raises(ValidationError):
+        RunRequestDto(problem="test", max_effects=True)  # type: ignore
+
+    # Unknown top-level control fields are rejected.
+    with pytest.raises(ValidationError):
+        RunRequestDto(problem="test", provider_url="http://evil")  # type: ignore
+
+    # Metadata cannot smuggle a provider/key/control field or NaN.
+    with pytest.raises(ValidationError):
+        RunRequestDto(problem="test", metadata={"api_key": "x"})
+    with pytest.raises(ValidationError):
+        RunRequestDto(problem="test", metadata={"x": float("nan")})
 
 
 def test_solve_result_dto_invariants():

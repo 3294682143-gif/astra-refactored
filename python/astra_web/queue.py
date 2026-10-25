@@ -33,7 +33,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
+from pydantic import ValidationError as PydanticValidationError
+
 from .archive import atomic_write_json
+from .config import DEFAULT_BUDGET, default_budget
+from .contracts.dto import RunRequestDto
 from .contracts.enums import StopReason
 from .contracts.mapping import classify_stop_reason, classify_terminal_kind
 from .storage import NON_TERMINAL_STATUSES, DuplicateRunError, Store, is_valid_run_id
@@ -51,43 +55,32 @@ class ValidationError(ValueError):
 
 
 def validate_run_request(body: Any) -> Dict[str, Any]:
-    """校验求解请求体字段合规性。"""
+    """Validate through the same DTO used by the HTTP layer."""
     if not isinstance(body, dict):
         raise ValidationError("request body must be a JSON object")
+    try:
+        return RunRequestDto.model_validate(body).model_dump()
+    except PydanticValidationError as exc:
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(part) for part in first.get("loc", ()))
+        message = first.get("msg", "invalid request")
+        raise ValidationError(f"{loc}: {message}") from exc
 
-    problem = body.get("problem")
-    if not isinstance(problem, str) or not problem.strip():
-        raise ValidationError("'problem' must be a non-empty string")
 
-    # 严格校验 max_method_loads ∈ {0, 1}（且禁止用 bool 冒充）
-    max_method_loads = body.get("max_method_loads", 1)
-    if isinstance(max_method_loads, bool) or max_method_loads not in (0, 1):
-        raise ValidationError("'max_method_loads' must be exactly 0 or 1 (boolean is forbidden)")
+def request_fingerprint(request: Mapping[str, Any]) -> str:
+    """Stable fingerprint of the normalized request, excluding the idempotency key."""
+    payload = {k: v for k, v in request.items() if k != "idempotency_key"}
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-    max_model_calls = body.get("max_model_calls", 24)
-    if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or max_model_calls <= 0:
-        raise ValidationError("'max_model_calls' must be a positive integer")
 
-    engine = body.get("engine", "ts")
-    idempotency_key = body.get("idempotency_key")
-
-    return {
-        "problem": problem.strip(),
-        "max_method_loads": max_method_loads,
-        "max_model_calls": max_model_calls,
-        "engine": engine,
-        "idempotency_key": idempotency_key,
-    }
+class IdempotencyConflict(ValueError):
+    """Same idempotency key with different request content."""
 
 
 @dataclass(frozen=True)
 class SolveOutcome:
-    """真实求解链交回的终态结果，或显式的“未执行”声明。
-
-    ``executed=False`` 表示本次运行**没有**执行任何求解链，因此**没有真实结果**；
-    此时 ``final_response`` 按官方契约取 ``"Unsolved."`` 并保留 ``stopReason``。
-    ``events`` 只允许装载真实观测到的事件信封（含真实 ``sourceKind``）。
-    """
+    """真实求解链交回的终态结果，或显式的“未执行”声明。"""
     stop_reason: StopReason
     final_response: str = UNSOLVED_RESPONSE
     reason: str = ""
@@ -95,27 +88,33 @@ class SolveOutcome:
     executed: bool = True
     events: Tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     metrics: Optional[Mapping[str, Any]] = None
+    child_reaped: Optional[bool] = None
+    trace: Tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    session_id: str = ""
+    finish_reason: Optional[str] = None
+    elapsed_ms: Optional[int] = None
+    result: Optional[Mapping[str, Any]] = None
 
     @classmethod
     def not_executed(cls, reason: str) -> "SolveOutcome":
-        """未接线真实求解入口时的显式未执行态（不返回任何演示数据）。"""
         return cls(
             stop_reason=StopReason.ERROR,
             final_response=UNSOLVED_RESPONSE,
             reason=reason,
             code=CODE_SOLVER_NOT_CONFIGURED,
             executed=False,
+            child_reaped=None,
         )
 
     @classmethod
     def system_failure(cls, reason: str, *, code: str = CODE_SOLVER_FAILED) -> "SolveOutcome":
-        """系统级失败（启动失败/进程异常/内部错误），映射为 system-failure。"""
         return cls(
             stop_reason=StopReason.ERROR,
             final_response=UNSOLVED_RESPONSE,
             reason=reason,
             code=code,
             executed=True,
+            child_reaped=None,
         )
 
 
@@ -186,36 +185,73 @@ class ExecutionManager:
         return f"run-{uuid.uuid4().hex[:12]}"
 
     # ----------------------------------------------------------------- 写入
+    @staticmethod
+    def _normalized_request(
+        problem: Optional[str],
+        request: Optional[Mapping[str, Any]],
+        *,
+        max_model_calls: int,
+        max_method_loads: int,
+        engine: str,
+        idempotency_key: Optional[str],
+    ) -> Dict[str, Any]:
+        if request is not None:
+            normalized = dict(request)
+        else:
+            normalized = default_budget()
+            normalized.update(
+                {
+                    "problem": problem or "",
+                    "engine": engine,
+                    "metadata": {},
+                    "idempotency_key": idempotency_key,
+                    "max_model_calls": max_model_calls,
+                    "max_method_loads": max_method_loads,
+                }
+            )
+        if not isinstance(normalized.get("problem"), str) or not normalized["problem"].strip():
+            raise ValidationError("'problem' must be a non-empty string")
+        normalized["problem"] = normalized["problem"].strip()
+        normalized.setdefault("engine", "ts")
+        normalized.setdefault("metadata", {})
+        normalized.setdefault("idempotency_key", idempotency_key)
+        return normalized
+
     def prepare_run(
         self,
-        problem: str,
+        problem: Optional[str] = None,
         *,
-        max_model_calls: int = 24,
-        max_method_loads: int = 1,
+        request: Optional[Mapping[str, Any]] = None,
+        max_model_calls: int = int(DEFAULT_BUDGET["max_model_calls"]),
+        max_method_loads: int = int(DEFAULT_BUDGET["max_method_loads"]),
         engine: str = "ts",
         run_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> str:
-        """同步注册一次运行（不启动执行；可在纯同步测试环境直接使用）。
-
-        幂等且不覆盖：若目标 run_id 已存在（运行中或终态），直接返回该 id，
-        **绝不改写**既有记录。
-        """
-        actual = self.derive_run_id(run_id=run_id, idempotency_key=idempotency_key)
-
+        """同步注册一次运行（不启动执行；可在纯同步测试环境直接使用）。"""
+        normalized = self._normalized_request(
+            problem,
+            request,
+            max_model_calls=max_model_calls,
+            max_method_loads=max_method_loads,
+            engine=engine,
+            idempotency_key=idempotency_key,
+        )
+        actual = self.derive_run_id(
+            run_id=run_id,
+            idempotency_key=normalized.get("idempotency_key"),
+        )
         if actual in self._active_runs or self.store.has_run(actual):
             return actual
-
+        normalized["requestFingerprint"] = request_fingerprint(normalized)
         created_at = time.time()
         initial_summary = {
-            "problem": problem,
-            "engine": engine,
+            **normalized,
             "status": "running",
             "candidate_verified": False,
-            "max_model_calls": max_model_calls,
-            "max_method_loads": max_method_loads,
+            "executed": False,
+            "childReaped": None,
         }
-
         try:
             self.store.save_run(
                 {
@@ -223,55 +259,77 @@ class ExecutionManager:
                     "created_at": created_at,
                     "source": "worker",
                     "status": "running",
-                    "scenario": problem[:40],
+                    "scenario": normalized["problem"][:40],
                     "model": None,
                     "seed": None,
                     "duration_s": 0.0,
                     "summary_json": json.dumps(initial_summary, ensure_ascii=False),
                     "l2_path": None,
                     "l3_path": None,
-                    "tags": f"engine:{engine}",
+                    "tags": f"engine:{normalized['engine']}",
                     "checksum": None,
                 },
                 overwrite=False,
             )
         except DuplicateRunError:
-            # 竞态：已被并发写入，保持既有记录不变
             return actual
-
         self._active_runs[actual] = {
+            **normalized,
             "run_id": actual,
-            "problem": problem,
-            "engine": engine,
             "created_at": created_at,
             "status": "running",
-            "max_model_calls": max_model_calls,
-            "max_method_loads": max_method_loads,
         }
         self._history_events.setdefault(actual, [])
         self._subscribers.setdefault(actual, [])
         return actual
 
+    @staticmethod
+    def _existing_summary(existing: Mapping[str, Any]) -> Dict[str, Any]:
+        summary = existing.get("summary")
+        if isinstance(summary, Mapping):
+            return dict(summary)
+        raw = existing.get("summary_json")
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                return dict(parsed) if isinstance(parsed, Mapping) else {}
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
     async def enqueue_run(
         self,
-        problem: str,
+        problem: Optional[str] = None,
         *,
-        max_model_calls: int = 24,
-        max_method_loads: int = 1,
+        request: Optional[Mapping[str, Any]] = None,
+        max_model_calls: int = int(DEFAULT_BUDGET["max_model_calls"]),
+        max_method_loads: int = int(DEFAULT_BUDGET["max_method_loads"]),
         engine: str = "ts",
         run_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """注册并异步启动执行任务。
-
-        返回 ``{run_id, status, started, idempotent_replay, terminal}``。
-        同一幂等键重复提交：**不再次启动执行**，返回同一 runId 与既有状态。
-        """
-        actual = self.derive_run_id(run_id=run_id, idempotency_key=idempotency_key)
-
+        """注册并异步启动执行任务；同一幂等键只执行一次。"""
+        normalized = self._normalized_request(
+            problem,
+            request,
+            max_model_calls=max_model_calls,
+            max_method_loads=max_method_loads,
+            engine=engine,
+            idempotency_key=idempotency_key,
+        )
+        actual = self.derive_run_id(
+            run_id=run_id,
+            idempotency_key=normalized.get("idempotency_key"),
+        )
         existing = self.store.get_run(actual)
         if existing is not None:
-            logger.info("idempotent replay for %s (existing status=%s)", actual, existing["status"])
+            previous = self._existing_summary(existing)
+            previous_fingerprint = previous.get("requestFingerprint")
+            current_fingerprint = request_fingerprint(normalized)
+            if previous_fingerprint and previous_fingerprint != current_fingerprint:
+                raise IdempotencyConflict(
+                    "same idempotency key was already used with different request content"
+                )
             return {
                 "run_id": actual,
                 "status": existing["status"],
@@ -279,14 +337,7 @@ class ExecutionManager:
                 "idempotent_replay": True,
                 "terminal": existing["status"] not in NON_TERMINAL_STATUSES,
             }
-
-        actual = self.prepare_run(
-            problem,
-            max_model_calls=max_model_calls,
-            max_method_loads=max_method_loads,
-            engine=engine,
-            run_id=actual,
-        )
+        actual = self.prepare_run(request=normalized, run_id=actual)
         self._schedule(actual)
         return {
             "run_id": actual,
@@ -328,8 +379,13 @@ class ExecutionManager:
         self._inflight += 1
         self._max_observed_concurrency = max(self._max_observed_concurrency, self._inflight)
         started = time.time()
+        loop = asyncio.get_running_loop()
+
+        def event_sink(event: Mapping[str, Any]) -> None:
+            loop.call_soon_threadsafe(self.append_event_sync, run_id, dict(event))
+
         try:
-            outcome = await self._invoke_solver(info)
+            outcome = await self._invoke_solver(info, event_sink=event_sink)
         except Exception as exc:  # 求解链抛出 → 系统级失败（绝不静默降级）
             logger.error("solver raised for %s: %s", run_id, exc)
             outcome = SolveOutcome.system_failure(
@@ -348,19 +404,29 @@ class ExecutionManager:
             self._active_runs.pop(run_id, None)
             self._notify_close(run_id)
 
-    async def _invoke_solver(self, info: Mapping[str, Any]) -> SolveOutcome:
+    async def _invoke_solver(
+        self,
+        info: Mapping[str, Any],
+        *,
+        event_sink: Optional[Callable[[Mapping[str, Any]], None]] = None,
+    ) -> SolveOutcome:
         if self._solver is None:
             return SolveOutcome.not_executed(
                 "BFF 未接线真实求解入口，本次运行未执行任何求解；"
                 "无真实结果，故返回显式未执行态（不提供演示数据冒充）"
             )
         request = {
-            "run_id": info["run_id"],
-            "problem": info["problem"],
-            "engine": info["engine"],
-            "max_model_calls": info["max_model_calls"],
-            "max_method_loads": info["max_method_loads"],
+            key: info[key]
+            for key in (
+                "run_id", "problem", "engine", "metadata", "idempotency_key",
+                "max_model_calls", "max_work_units", "max_effects",
+                "max_reviews", "max_method_loads", "max_repairs",
+                "max_consensus", "max_r0", "problem_seconds", "policy",
+            )
+            if key in info
         }
+        if event_sink is not None:
+            request["_event_sink"] = event_sink
         raw = await asyncio.to_thread(self._solver, request)
         return self._coerce_outcome(raw)
 
@@ -381,6 +447,18 @@ class ExecutionManager:
         events = raw.get("events") or ()
         if not isinstance(events, (list, tuple)):
             raise TypeError("solver 'events' must be a list of envelopes")
+        metrics = raw.get("metrics")
+        if metrics is not None and not isinstance(metrics, Mapping):
+            metrics = None
+        trace = raw.get("trace") or ()
+        if not isinstance(trace, (list, tuple)):
+            trace = ()
+        child_reaped = raw.get("childReaped")
+        if child_reaped is not None and not isinstance(child_reaped, bool):
+            child_reaped = None
+        elapsed_ms = raw.get("elapsedMs")
+        if isinstance(elapsed_ms, bool) or not isinstance(elapsed_ms, int):
+            elapsed_ms = None
         return SolveOutcome(
             stop_reason=stop_reason,
             final_response=final_response,
@@ -388,6 +466,13 @@ class ExecutionManager:
             code=raw.get("code"),
             executed=bool(raw.get("executed", True)),
             events=tuple(events),
+            metrics=dict(metrics) if metrics is not None else None,
+            child_reaped=child_reaped,
+            trace=tuple(dict(row) for row in trace if isinstance(row, Mapping)),
+            session_id=str(raw.get("sessionId") or ""),
+            finish_reason=str(raw["finishReason"]) if raw.get("finishReason") is not None else None,
+            elapsed_ms=elapsed_ms,
+            result=dict(raw),
         )
 
     # ----------------------------------------------------------- 终态与落盘
@@ -396,7 +481,9 @@ class ExecutionManager:
         status = classify_stop_reason(outcome.stop_reason).value
         terminal_kind = classify_terminal_kind(outcome.stop_reason)
 
+        raw = dict(outcome.result or {})
         summary = {
+            "runId": run_id,
             "engine": info["engine"],
             "status": status,
             "final_response": outcome.final_response,
@@ -406,18 +493,40 @@ class ExecutionManager:
             "reason": outcome.reason,
             "code": outcome.code,
             "executed": outcome.executed,
-            "childReaped": True,
-            "elapsedMs": int(duration_s * 1000),
+            "childReaped": outcome.child_reaped,
+            "elapsedMs": outcome.elapsed_ms if outcome.elapsed_ms is not None else int(duration_s * 1000),
+            "sessionId": outcome.session_id or str(raw.get("sessionId") or ""),
+            "finishReason": outcome.finish_reason,
+            "strictAcceptance": raw.get("strictAcceptance", "NOT_PERFORMED"),
+            "mode": raw.get("mode", "TS_PREVIEW"),
+            "targetEnvironment": raw.get("targetEnvironment", "TARGET_UNVERIFIED"),
+            "unresolvedObligations": list(raw.get("unresolvedObligations") or []),
+            "carrier": raw.get("carrier", ""),
+            "trace": [dict(row) for row in outcome.trace],
+            "requestFingerprint": info.get("requestFingerprint"),
         }
+        for key in (
+            "problem", "metadata", "max_model_calls", "max_work_units",
+            "max_effects", "max_reviews", "max_method_loads", "max_repairs",
+            "max_consensus", "max_r0", "problem_seconds", "policy",
+        ):
+            if key in info:
+                summary[key] = info[key]
         if outcome.metrics is not None:
             summary["metrics"] = dict(outcome.metrics)
 
+        # Real-time observer events are already in the per-run history. Append
+        # any final events supplied by the solver, then persist the same ordered
+        # history used by SSE; no event is fabricated during finalization.
+        for event in outcome.events:
+            self.append_event_sync(run_id, dict(event))
+        history = list(self._history_events.get(run_id, []))
         l2_rel: Optional[str] = None
-        if outcome.events:
+        if history:
             l2_rel = f"runs/{run_id}/details.json"
             atomic_write_json(
                 self.store.safe_join(l2_rel),
-                {"events": [dict(ev) for ev in outcome.events], "summary": summary},
+                {"events": history, "summary": summary},
             )
 
         record = {
@@ -438,21 +547,24 @@ class ExecutionManager:
         if not self.store.save_run_terminal(record):
             logger.warning("terminal record for %s already exists; kept immutable", run_id)
 
-        # 只有真实观测到的事件才进入历史并广播（不做任何补齐/合成）
-        for event in outcome.events:
-            self.append_event_sync(run_id, dict(event))
-
     # ------------------------------------------------------------- 事件流
     def append_event_sync(self, run_id: str, event: Dict[str, Any]) -> None:
-        """同步追加单条事件至内存历史并分发。"""
+        """同步追加单条真实事件并分发；只补齐传输信封字段。"""
         if run_id not in self._history_events:
             self._history_events[run_id] = []
-        self._history_events[run_id].append(event)
+        history = self._history_events[run_id]
+        row = dict(event)
+        row.setdefault("runId", run_id)
+        row.setdefault("seq", len(history) + 1)
+        row.setdefault("at", int(time.time() * 1000))
+        row.setdefault("sourceKind", "observed_archive")
+        row.setdefault("detailLevel", "partial_observed")
+        history.append(row)
 
         queues = self._subscribers.get(run_id, [])
         for q in list(queues):
             try:
-                q.put_nowait(event)
+                q.put_nowait(row)
             except Exception:  # 订阅者队列已满/已关闭：不影响主流程
                 pass
 

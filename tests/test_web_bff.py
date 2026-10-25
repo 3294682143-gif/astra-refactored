@@ -281,22 +281,29 @@ def test_validate_run_request():
     valid = validate_run_request({
         "problem": "证明质数有无穷多个",
         "max_model_calls": 20,
-        "max_method_loads": 1,
+        "max_method_loads": 0,
     })
     assert valid["problem"] == "证明质数有无穷多个"
-    assert valid["max_method_loads"] == 1
+    assert valid["max_method_loads"] == 0
+    assert valid["max_effects"] == 1
 
     # 允许 0
     valid0 = validate_run_request({"problem": "test", "max_method_loads": 0})
     assert valid0["max_method_loads"] == 0
 
-    # 严禁使用布尔型冒充数字 1
-    with pytest.raises(ValidationError, match="boolean is forbidden"):
+    # 严禁使用布尔型冒充数字
+    with pytest.raises(ValidationError, match="must be an integer"):
         validate_run_request({"problem": "test", "max_method_loads": True})
 
-    # 严禁超出 {0, 1}
-    with pytest.raises(ValidationError, match="exactly 0 or 1"):
-        validate_run_request({"problem": "test", "max_method_loads": 2})
+    # Web 入口固定 method loads = 0
+    with pytest.raises(ValidationError, match="less than or equal to 0"):
+        validate_run_request({"problem": "test", "max_method_loads": 1})
+
+    # 未知顶层控制字段与 NaN metadata 都被拒绝
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        validate_run_request({"problem": "test", "provider_url": "http://evil"})
+    with pytest.raises(ValidationError, match="NaN"):
+        validate_run_request({"problem": "test", "metadata": {"x": float("nan")}})
 
     # 严禁空问题
     with pytest.raises(ValidationError, match="non-empty string"):
@@ -501,14 +508,22 @@ def test_idempotent_key_starts_execution_once(temp_store: Store):
         assert first["started"] is True
         assert await manager.wait_idle(10.0)
         second = await manager.enqueue_run(problem="同键重放", engine="ts", idempotency_key="idem-replay")
-        third = await manager.enqueue_run(problem="换了题面但同键", engine="ts", idempotency_key="idem-replay")
+        from python.astra_web.queue import IdempotencyConflict
+        try:
+            await manager.enqueue_run(
+                problem="换了题面但同键", engine="ts", idempotency_key="idem-replay"
+            )
+        except IdempotencyConflict:
+            third = "conflict"
+        else:
+            third = "unexpected"
         assert await manager.wait_idle(10.0)
         return first, second, third
 
     first, second, third = asyncio.run(duplicate_after_terminal())
-    assert first["run_id"] == second["run_id"] == third["run_id"]
+    assert first["run_id"] == second["run_id"]
     assert second["idempotent_replay"] is True and second["started"] is False
-    assert third["started"] is False
+    assert third == "conflict"
     assert second["status"] == "unsolved"   # 既有状态原样返回
     assert second["terminal"] is True
     assert calls == [a["run_id"], first["run_id"]]  # 仍只各启动一次
@@ -801,3 +816,47 @@ def test_json_responses_declare_utf8_charset(temp_store: Store):
     assert err.status_code == 404
     assert "charset=utf-8" in err.headers.get("content-type", "").lower()
     assert json.loads(err.body.decode("utf-8")) == {"detail": "run not found"}
+
+def test_create_run_reaches_real_solver_and_preserves_metrics(temp_store: Store):
+    from python.astra_web.solver_adapter import SolverAdapter
+    from tests.web_math_helpers import MathAssetScriptedClient
+
+    def client_factory():
+        return MathAssetScriptedClient(
+            "math.linear-algebra", "gf2_rank", {"rows": [1, 2]}
+        )
+
+    app = create_app(
+        data_root=temp_store.root,
+        mount_static=False,
+        solver=SolverAdapter(client_factory=client_factory),
+    )
+    body = {
+        "problem": "求 GF(2) 上矩阵的秩",
+        "engine": "ts",
+        "metadata": {"source": "web-test"},
+        "max_effects": 1,
+        "max_method_loads": 0,
+    }
+
+    async def submit():
+        response = await create_run(_make_json_request(app, "/api/runs", body))
+        run_id = json.loads(response.body.decode("utf-8"))["run_id"]
+        assert await app.state.execution_manager.wait_idle(20.0)
+        detail = get_run(_make_dummy_request(
+            app, path=f"/api/runs/{run_id}", path_params={"run_id": run_id}
+        ))
+        return response, json.loads(detail.body.decode("utf-8"))
+
+    response, detail = asyncio.run(submit())
+    assert response.status_code == 201
+    summary = detail["summary"]
+    assert summary["status"] == "candidate"
+    assert summary["candidate_verified"] is False
+    assert summary["executed"] is True
+    assert summary["childReaped"] is True
+    assert summary["metrics"]["tool_effect_calls"] == 1
+    assert "gf2_rank" in summary["metrics"]["tool_names"]
+    assert summary["sessionId"]
+    assert summary["trace"]
+    assert summary["max_method_loads"] == 0

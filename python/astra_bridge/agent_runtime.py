@@ -426,6 +426,7 @@ class AgentRuntime:
         mode="platform",
         python_sandbox_profile=None,
         generated_python_gate=None,
+        observer=None,
     ):
         if not _is_int(max_model_calls) or not 0 <= max_model_calls <= 256:
             raise ValueError("invalid max_model_calls")
@@ -485,6 +486,7 @@ class AgentRuntime:
         # default instance, which carries no approved profile and can only
         # refuse; an approved gate is injected explicitly, never discovered.
         self.generated_python_gate = generated_python_gate
+        self.observer = observer if callable(observer) else None
         self._solve_lock = threading.Lock()
         self.last_journal = None
         # Defect 3: the real immutable SessionLog events and the real accumulated
@@ -702,6 +704,7 @@ class AgentRuntime:
             manifest, session_id, deadline, problem, problem_hash, host_options,
             self.client, python_sandbox_profile=self.python_sandbox_profile,
             generated_python_gate=self.generated_python_gate,
+            observer=self.observer,
         )
         proc = None
         reaped = False

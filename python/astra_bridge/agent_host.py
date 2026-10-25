@@ -280,7 +280,7 @@ class AgentHost(_Host):
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
                  options, client, *, python_sandbox_profile=None,
-                 generated_python_gate=None):
+                 generated_python_gate=None, observer=None):
         if manifest.get("protocolVersion") != AGENT_HOST_VERSION:
             _fail()
         super().__init__(manifest, session_id, None, deadline)
@@ -341,6 +341,9 @@ class AgentHost(_Host):
         self.problem = problem
         self.problem_hash = problem_hash
         self.client = client
+        # Optional read-only progress observer. It receives only bounded
+        # control facts (phase/status/ids), never model text or observations.
+        self.observer = observer if callable(observer) else None
         # Stage D: an optional, already-accepted WASI profile. ``None`` means no
         # sandbox and no file I/O, so the default Host path is byte-identical.
         self.python_sandbox_profile = _resolve_python_sandbox_profile(
@@ -539,6 +542,15 @@ class AgentHost(_Host):
             elif kind == "REPAIR" and data.get("accepted") is True:
                 proposal = candidate
         return proposal
+
+    def _emit(self, kind, payload):
+        if self.observer is None:
+            return
+        try:
+            self.observer({"kind": kind, "payload": dict(payload)})
+        except Exception:
+            # A telemetry sink can never change the mathematical run.
+            pass
 
     def _last_model(self):
         if self.last_model_id is None:
@@ -799,6 +811,14 @@ class AgentHost(_Host):
             effect_entries.append(effect_entry)
 
         receipts_list = [entry["receipt"] for entry in effect_entries]
+        self._emit("effect_returned", {
+            "effectId": effect_id,
+            "action": "math_asset",
+            "name": asset_identity,
+            "status": result.get("status"),
+            "source": "PROGRAM_OBSERVATION",
+            "checkResult": "UNKNOWN",
+        })
         self.send(
             self.proc,
             {
@@ -1067,6 +1087,12 @@ class AgentHost(_Host):
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail("DEADLINE_EXCEEDED")
         deadline = min(self.deadline, time.monotonic() + request["remainingMs"] / 1000.0)
+        self._emit("model_dispatched", {
+            "requestId": request_id,
+            "phase": request["phase"],
+            "modelCalls": self.model_requests,
+            "remainingMs": self.remaining_ms(),
+        })
         result = self.client.generate(copy.deepcopy(request), deadline)
         if not isinstance(result, dict):
             _fail()
@@ -1097,6 +1123,13 @@ class AgentHost(_Host):
             self.stopped = True
         if transport == "UNKNOWN":
             self.client.blocked = True
+        self._emit("model_returned", {
+            "requestId": request_id,
+            "phase": request["phase"],
+            "transportStatus": transport,
+            "modelCalls": self.model_requests,
+            "remainingMs": self.remaining_ms(),
+        })
         self.callback_done = False
         self.send(
             self.proc,
@@ -1235,6 +1268,14 @@ class AgentHost(_Host):
         if checked["status"] == "UNKNOWN":
             self.stopped = True
             self.client.blocked = True
+        self._emit("effect_returned", {
+            "effectId": checked.get("effectId"),
+            "action": expected_kind,
+            "name": action.get("name") or action.get("id"),
+            "status": checked.get("status"),
+            "source": checked.get("source"),
+            "checkResult": checked.get("checkResult"),
+        })
         self.callback_done = False
         self.send(
             self.proc,

@@ -97,7 +97,7 @@ export function RunDetailPage() {
     { key: "contract", label: "2.1 目标契约 (M1)", icon: ShieldCheck },
     { key: "graph", label: "2.2 任务图 (M3)", icon: GitFork },
     { key: "timeline", label: "2.3 事件时间线", icon: ListOrdered },
-    { key: "tools", label: "2.4 工具与方法卡", icon: Wrench },
+    { key: "tools", label: "2.4 数学资产观测", icon: Wrench },
     { key: "review", label: "2.5 评审与修复", icon: FileSearch },
     { key: "metrics", label: "2.6 预算与指标", icon: BarChart2 },
     { key: "raw", label: "2.7 原始数据", icon: Code2 },
@@ -441,7 +441,7 @@ export function RunDetailPage() {
         {activeTab === "tools" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--color-brand-deep)" }}>
-              工具与方法调用卡 ({state.toolCalls.length})
+              数学资产调用卡 ({state.toolCalls.length})
             </h4>
             {state.toolCalls.length === 0 ? (
               <PanelEmptyState

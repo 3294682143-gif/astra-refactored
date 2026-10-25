@@ -1,7 +1,7 @@
 {
   "properties": {
     "schema_version": {
-      "default": "1.0.0",
+      "default": "1.1.0",
       "title": "Schema Version",
       "type": "string"
     },
@@ -23,7 +23,7 @@
       "type": "integer"
     },
     "supports_cancellation": {
-      "default": true,
+      "default": false,
       "title": "Supports Cancellation",
       "type": "boolean"
     },
@@ -31,10 +31,46 @@
       "additionalProperties": true,
       "title": "Default Budget",
       "type": "object"
+    },
+    "protocol_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Protocol Version"
+    },
+    "catalog_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalog Version"
+    },
+    "catalog_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalog Digest"
     }
   },
   "title": "CapabilitiesDto",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "x-contract-version": "1.0.0"
+  "x-contract-version": "1.1.0"
 }

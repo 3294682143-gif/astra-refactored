@@ -32,19 +32,23 @@ export interface ErrorDto {
 }
 
 export interface MetricsDto {
-  readonly client_method_calls: number;
+  readonly client_method_calls: number | null;
   readonly logical_model_calls: number | null;
-  readonly effect_calls: number;
-  readonly review_calls: number;
-  readonly catalog_calls: number;
-  readonly method_loads: number;
-  readonly asset_calls: number;
+  readonly effect_calls: number | null;
+  readonly review_calls: number | null;
+  readonly catalog_calls: number | null;
+  readonly method_loads: number | null;
+  readonly asset_calls: number | null;
+  readonly tool_effect_calls: number | null;
+  readonly method_effect_calls: number | null;
   readonly work_units: number | null;
-  readonly frames: number;
-  readonly remote_outcome_unknown: boolean;
+  readonly frames: number | null;
+  readonly remote_outcome_unknown: boolean | null;
   readonly known_http_attempts: number | null;
   readonly reported_tokens: number | null;
-  readonly unknown_usage_requests: number;
+  readonly unknown_usage_requests: number | null;
+  readonly tool_names: readonly string[] | null;
+  readonly method_ids: readonly string[] | null;
 }
 
 export interface TraceRowDto {
@@ -57,8 +61,10 @@ export interface TraceRowDto {
 }
 
 export interface SolveResultDto {
-  readonly engine: "ts" | "lite" | "legacy" | string;
+  readonly run_id?: string;
+  readonly engine: "ts" | string;
   readonly status: "candidate" | "unsolved" | string;
+  readonly executed?: boolean;
   readonly final_response: string;
   readonly candidate_verified: false;
   readonly strictAcceptance: "NOT_PERFORMED" | "PASSED" | "FAILED" | string;
@@ -70,11 +76,14 @@ export interface SolveResultDto {
   readonly carrier: string;
   readonly sessionId: string;
   readonly trace: readonly TraceRowDto[];
-  readonly metrics: MetricsDto;
+  readonly metrics: MetricsDto | null;
   readonly finishReason?: string | null;
-  readonly childReaped: boolean;
-  readonly elapsedMs: number;
+  readonly childReaped: boolean | null;
+  readonly elapsedMs: number | null;
   readonly code?: string | null;
+  readonly protocolVersion?: string | null;
+  readonly catalogVersion?: string | null;
+  readonly catalogDigest?: string | null;
 }
 
 export interface RunEventEnvelope<T = Record<string, unknown>> {
@@ -89,13 +98,14 @@ export interface RunEventEnvelope<T = Record<string, unknown>> {
 
 export interface RunRequestDto {
   readonly problem: string;
-  readonly engine?: "ts" | "lite" | "legacy";
+  readonly engine?: "ts";
   readonly metadata?: Record<string, unknown>;
+  readonly idempotency_key?: string;
   readonly max_model_calls?: number;
   readonly max_work_units?: number;
   readonly max_effects?: number;
   readonly max_reviews?: number;
-  readonly max_method_loads?: 0 | 1;
+  readonly max_method_loads?: 0;
   readonly max_repairs?: number;
   readonly max_consensus?: number;
   readonly max_r0?: 0 | 1;
@@ -110,4 +120,7 @@ export interface CapabilitiesDto {
   readonly max_concurrent_runs: number;
   readonly supports_cancellation: boolean;
   readonly default_budget: Record<string, unknown>;
+  readonly protocol_version?: string | null;
+  readonly catalog_version?: string | null;
+  readonly catalog_digest?: string | null;
 }

@@ -803,3 +803,19 @@ git push -u origin HEAD:refs/heads/feat/web-unified-math-integration
 - 基线原分支均未在本轮写入；所有改动只进入整合 worktree。
 - 环境：Node `v24.7.0`、pnpm `11.7.0`、Python `3.10.6`；Starlette/Pydantic/Uvicorn/HTTPX/Pytest/SymPy 可导入。
 - 合并冲突：`.gitignore`、`README.md`、`tests/conftest.py`，按本方案语义合并；未使用整树 ours/theirs。
+
+## 19 执行状态（I1–I9）
+
+| 阶段 | 状态 | 证据 |
+|---|---|---|
+| I1 合并 | 完成 | 合并提交 `923f619`；两个来源均可用 `merge-base --is-ancestor` 验证。 |
+| I2 Web 契约 | 完成 | `RunRequestDto` 单一路径；默认预算 8/4/1/1/0/0/0/0；schema `--out/--check`。 |
+| I3 正式求解入口 | 完成 | `SolverAdapter` 注入 `ReasoningAgent`；真实 Node/Host/`use_math_asset` BFF 用例通过。 |
+| I4 资产目录 | 完成 | `/api/math-assets`、单项详情、`/api/runtime-info`；26 项 / 82 行为 / 4 仅指导。 |
+| I5 事件与回放 | 完成 | 真实 Host observer 事件、SSE Last-Event-ID、L2 落盘与去重测试。 |
+| I6 页面 | 完成 | 资产页统一为数学资产；求解页改为 `max_effects`，方法卡开关移除。 |
+| I7 发布清单 | 完成 | schema 生成检查、release manifest、Web 静态清单同步检查。 |
+| I8 验收 | 完成 | 核心 82/82、BFF 82/82、Web 单元/BFF/失败/流式用例通过。 |
+| I9 交付 | 进行中 | 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`、HANDOFF 与新分支 commit/push。 |
+
+> 说明：82 项测试只替代远端模型响应；Node、Host、统一数学资产执行器与 BFF 均为正式代码。`candidate_verified` 始终为 `False`。

@@ -57,5 +57,5 @@
   "title": "ErrorDto",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "x-contract-version": "1.0.0"
+  "x-contract-version": "1.1.0"
 }

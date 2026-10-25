@@ -39,7 +39,18 @@ mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("image/svg+xml", ".svg")
 mimetypes.add_type("image/x-icon", ".ico")
 
-from .queue import ExecutionManager
+from pydantic import ValidationError
+
+from .config import DEFAULT_BUDGET, WEB_ENGINES, default_budget
+from .contracts.dto import CapabilitiesDto, RunRequestDto
+from .math_assets_catalog import (
+    CatalogUnavailable,
+    detail_payload as math_asset_detail,
+    runtime_info as math_runtime_info,
+    summary_payload as math_asset_summary,
+)
+from .queue import ExecutionManager, IdempotencyConflict
+from .solver_adapter import build_solver_from_env
 from .storage import PathTraversalError, Store
 
 class JSONResponseUTF8(JSONResponse):
@@ -122,6 +133,12 @@ def health(request: Request) -> JSONResponse:
 
 def capabilities(request: Request) -> JSONResponse:
     manager: ExecutionManager = request.app.state.execution_manager
+    caps = CapabilitiesDto(
+        supported_engines=list(WEB_ENGINES),
+        supports_cancellation=False,
+        default_budget=default_budget(),
+        protocol_version="1.4-unified-math-assets",
+    )
     return JSONResponseUTF8({
         "service": SERVICE_NAME,
         "version": SERVICE_VERSION,
@@ -130,11 +147,14 @@ def capabilities(request: Request) -> JSONResponse:
         "sse_streaming": True,
         "cancellation_supported": False,
         "model_invoked": False,
-        "schema_version": 1,
+        **caps.model_dump(),
         "execution": manager.stats(),
         "routes": [
             "/api/health",
             "/api/capabilities",
+            "/api/runtime-info",
+            "/api/math-assets",
+            "/api/math-assets/{assetId}",
             "/api/runs",
             "/api/runs/{run_id}",
             "/api/runs/{run_id}/events",
@@ -147,7 +167,7 @@ def capabilities(request: Request) -> JSONResponse:
             "L3": "binary/text artifacts on disk",
         },
         "limits": {
-            "max_method_loads_allowed": [0, 1],
+            "max_method_loads_allowed": [0],
         },
     })
 
@@ -171,30 +191,28 @@ async def create_run(request: Request) -> JSONResponse:
     except Exception:
         raise HTTPException(status_code=400, detail="invalid JSON body")
 
-    problem = body.get("problem")
-    if not isinstance(problem, str) or not problem.strip():
-        raise HTTPException(status_code=422, detail="'problem' must be a non-empty string")
+    try:
+        dto = RunRequestDto.model_validate(body)
+    except ValidationError as exc:
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(part) for part in first.get("loc", ()))
+        raise HTTPException(
+            status_code=422,
+            detail=(loc + ": " if loc else "") + str(first.get("msg", "invalid request")),
+        ) from exc
 
-    # 校验 max_method_loads ∈ {0, 1}（且禁止用 bool 冒充）
-    max_method_loads = body.get("max_method_loads", 1)
-    if isinstance(max_method_loads, bool) or max_method_loads not in (0, 1):
-        raise HTTPException(status_code=422, detail="'max_method_loads' must be exactly 0 or 1")
-
-    max_model_calls = body.get("max_model_calls", 24)
-    if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or max_model_calls <= 0:
-        raise HTTPException(status_code=422, detail="'max_model_calls' must be a positive integer")
-
-    engine = body.get("engine", "ts")
-    idempotency_key = request.headers.get("Idempotency-Key") or body.get("idempotency_key")
+    header_key = request.headers.get("Idempotency-Key")
+    if header_key and dto.idempotency_key and header_key != dto.idempotency_key:
+        raise HTTPException(status_code=422, detail="conflicting Idempotency-Key values")
+    idempotency_key = header_key or dto.idempotency_key
+    normalized = dto.model_dump()
+    normalized["idempotency_key"] = idempotency_key
 
     manager: ExecutionManager = request.app.state.execution_manager
-    result = await manager.enqueue_run(
-        problem=problem.strip(),
-        max_model_calls=max_model_calls,
-        max_method_loads=max_method_loads,
-        engine=engine,
-        idempotency_key=idempotency_key,
-    )
+    try:
+        result = await manager.enqueue_run(request=normalized)
+    except IdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # 幂等重放：同一幂等键不会二次启动执行，返回同一 runId 与既有状态（200）；
     # 首次受理返回 201。绝不因重试而重复派发。
@@ -328,7 +346,31 @@ def get_replay(request: Request) -> JSONResponse:
     })
 
 
+def list_math_assets(request: Request) -> JSONResponse:
+    try:
+        return JSONResponseUTF8(math_asset_summary())
+    except CatalogUnavailable as exc:
+        return JSONResponseUTF8({"error": "CATALOG_UNAVAILABLE", "detail": str(exc)}, status_code=503)
+
+
+def get_math_asset(request: Request) -> JSONResponse:
+    asset_id = request.path_params["asset_id"]
+    try:
+        detail = math_asset_detail(asset_id)
+    except CatalogUnavailable as exc:
+        return JSONResponseUTF8({"error": "CATALOG_UNAVAILABLE", "detail": str(exc)}, status_code=503)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="math asset not found")
+    return JSONResponseUTF8(detail)
+
+
+def get_runtime_info(request: Request) -> JSONResponse:
+    manager: ExecutionManager = request.app.state.execution_manager
+    return JSONResponseUTF8(math_runtime_info(manager.solver_configured))
+
+
 def list_assets(request: Request) -> JSONResponse:
+    """Run artifacts only; this is not the canonical math-asset catalog."""
     store: Store = request.app.state.store
     run_id = request.query_params.get("run_id")
     limit = int(request.query_params.get("limit", 100))
@@ -399,13 +441,14 @@ def create_app(
     data_root: str | os.PathLike[str] | None = None,
     web_dist: str | os.PathLike[str] | None = None,
     mount_static: bool = True,
+    solver: Any = None,
 ) -> Starlette:
     default_data_root = REPO_ROOT / "var" / "astra"
     default_web_dist = REPO_ROOT / "apps" / "web-demo" / "dist"
 
     store_root = Path(data_root) if data_root else _env_path("ASTRA_DATA_ROOT", str(default_data_root))
     store = Store(store_root)
-    execution_manager = ExecutionManager(store)
+    execution_manager = ExecutionManager(store, solver=solver)
 
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
@@ -415,6 +458,9 @@ def create_app(
         Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),
         Route("/api/runs/{run_id}/events", sse_events, methods=["GET"]),
+        Route("/api/runtime-info", get_runtime_info, methods=["GET"]),
+        Route("/api/math-assets", list_math_assets, methods=["GET"]),
+        Route("/api/math-assets/{asset_id:path}", get_math_asset, methods=["GET"]),
         Route("/api/replays", list_replays, methods=["GET"]),
         Route("/api/replays/{run_id}", get_replay, methods=["GET"]),
         Route("/api/assets", list_assets, methods=["GET"]),
@@ -444,6 +490,6 @@ def create_app(
 
 
 try:
-    app = create_app()
+    app = create_app(solver=build_solver_from_env())
 except Exception:
     app = None

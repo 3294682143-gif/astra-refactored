@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "12eb2b66d71a3e0adfb4cd956ad71eeefdd0d62b",
-    "tree": "b1c771c215b1ec5a726b77d237efe69c8bfb8782"
+    "commit": "923f6191b0308c9fa92d981894e2af4bb226aee7",
+    "tree": "6effad705a558b87e339cc7684f2668abb360300"
   },
   "js": [
     {
@@ -81,6 +81,7 @@
     }
   },
   "mathFamilyFiles": {
+    "math_families/README.md": "f844ff638fd0bfd68e4550b041e2481bb7d3b9e037095f433c7cef6c1a53de90",
     "math_families/__init__.py": "ad595bb25250cc402c3580d1b1c715c38ab5db03564be44e1a535f92dd9c6d98",
     "math_families/bridge/__init__.py": "b4607d526883e233bd019c0b7958c918331aa789fbd3df567c1d36cb8955e444",
     "math_families/bridge/computation.py": "6f20940c7ebb606ad9f8b1568238f9f74b3c3de340013daedf07fd13ddff040b",
@@ -120,7 +121,6 @@
     "math_families/families/symbolic_algebra.py": "b1d9b994332c5af84e35ed385fb28320490de9cc981d530b1847ac8444de3727",
     "math_families/families/symbolic_calculus.py": "7269ecbf2dbfddc6ac05601aafc9924ab4df6a48785898795d038d62d77bcc69",
     "math_families/families/transfer_matrix.py": "6443652b5c28a7ce33e4340247046a94456fc18937596663633030ccb64cc6e9",
-    "math_families/README.md": "f844ff638fd0bfd68e4550b041e2481bb7d3b9e037095f433c7cef6c1a53de90",
     "math_families/skills/algorithm_simulation.md": "106b9ed06498ee110030f0542178e7f2eed61e702aaf41ba9d019b0130948180",
     "math_families/skills/classical_geometry_compute.md": "bdeeee550be751a3dc494ac19dd8115a1309e25e2358b5305bdec2b0c3631420",
     "math_families/skills/combinatorial_geometry.md": "e02b8e3fedb4a133dc4a443ca735cf326f9c7cfb9abbc7d79188681b2338f39d",
