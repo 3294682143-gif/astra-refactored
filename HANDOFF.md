@@ -2059,3 +2059,19 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   在写派发记录前调用它，并在 worker 内区分「证明未发送」与「发送后未知」；返回契约新增
   `dispatchState`，Host 只对真正发出的请求封锁客户端。预算记账仍在 Host，端口不返还逻辑预算。
 - 仍**未执行**真实外部模型端到端评测；`candidate_verified` 恒为 `False`。
+
+---
+
+## 23 2026-10-25 四类边界回归测试补强（V4）
+
+复核通过 46 项前端逻辑测试、恢复测试函数与 8 项资产/协议/发布检查，四类边界亦用定向探针复现，
+但要求先把回归测试补齐再更新终验结论。本轮只改整合分支：
+
+- 新增 `tests/test_web_review_regressions.py`：R1（PID 复用）/ R2（终态落盘窗口）/
+  R3（请求配对）/ R4（未发送贯通）四组共 14 项，全部不依赖 Node、Starlette、httpx 或浏览器。
+- 新增 `tests/web_review/probe_restart_recovery.py`：pytest-free 探针，输出
+  `{"R1":…,"R2":…,"R3":…,"R4":…,"all_passed":…}`，便于在缺依赖环境独立复跑。
+- `scripts/report_web_math_integration.py`：`web-unit-bff` 门禁纳入新测试文件；报告新增
+  「可离线复跑的最小门禁子集」一节，明确哪些命令在缺 Node/浏览器时仍可独立判定。
+- 复核环境缺 Node/浏览器时，全量 BFF、82 项端到端与浏览器结果**不作为**其独立复跑结论——
+  这一点在验收报告的边界说明里已经写明。

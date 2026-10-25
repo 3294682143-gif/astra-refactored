@@ -852,3 +852,26 @@ git push -u origin HEAD:refs/heads/feat/web-unified-math-integration
 
 > 预算语义未被擅自放宽：端口只回答「是否已经在发送前被拒绝」，逻辑预算仍由 Host 记账；
 > 恢复路径同样不改红线，`candidate_verified` 恒为 `False`。
+
+## 22 四类边界回归测试（V4）
+
+复核要求「补齐这四类回归测试后再更新终验结论」。本轮把 R1–R4 抽成**独立、可单跑、最小依赖**
+的回归资产，并给出不依赖 Node / 浏览器 / Starlette 的复跑方式：
+
+| 类别 | 回归用例 | pytest-free 探针 |
+|---|---|---|
+| R1 PID 复用 | `tests/test_web_review_regressions.py::TestR1ProcessIdentity`（回收 pid、重启换 boot、同实例受保护、兄弟 manager 非属主） | `tests/web_review/probe_restart_recovery.py` → `R1` |
+| R2 终态落盘窗口 | `TestR2TerminalCommitWindow`（崩溃窗口补提交、事件/存档/数据库三方一致、无证据时 fail-closed） | 同上 → `R2` |
+| R3 请求配对 | `TestR3RequestPairing`（已配对不算未知、`UNKNOWN`/悬空保持未知、混合请求只标未决那条） | 同上 → `R3` |
+| R4 未发送贯通 | `TestR4NotDispatched`（准入拒绝、`NOT_DISPATCHED` 不封锁、Host 视角不置未知、发送后失败仍为未知） | 同上 → `R4` |
+
+复跑方式（均不需要 Node / 浏览器）：
+
+```bash
+python3 -m pytest -q tests/test_web_review_regressions.py          # 14 项
+python3 -m pytest -q -k "R2 or R4" tests/test_web_review_regressions.py
+python3 tests/web_review/probe_restart_recovery.py .               # JSON，all_passed 即结论
+```
+
+> 探针与被测树隔离：只在私有临时数据根内构造运行记录，不写实现文件、不触碰运行中的 BFF。
+> 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md` 同步新增「可离线复跑的最小门禁子集」一节。
