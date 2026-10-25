@@ -1,0 +1,24 @@
+{
+  "name": "@astra/web-contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zygos Web Contract: browser-safe DTO types, JSON schemas, and status mappings without Node built-in dependencies.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./schema/*": "./schema/*"
+  },
+  "files": [
+    "src",
+    "schema",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  }
+}

@@ -1,180 +1,126 @@
-# 进化外脑智能体
+# Zygos
 
-**面向 Intern-S1 的可审计数学推理智能体运行时**
+**ZY · 天轭**
 
-> 赛题：**XH-202627 基于 Intern-S1 的数学智能体设计与推理创新**
-> 发榜单位：上海人工智能实验室 ｜ 赛道：2026 年度中国青年科技创新「揭榜挂帅」擂台赛 · 学生赛道
-> 推报学校：湖北工业大学 ｜ 报名表登记作品名称：进化外脑数学智能体
+**Axiom-Guided Math Agent → General Agent Runtime**
 
-进化外脑智能体把**题目目标、工作任务、候选答案、评审依据、调用预算**放进同一条可追踪的执行链：
-问题被拆成带来源的义务与任务，产物带版本与依赖，工具与方法卡的每次调用都留回执，
-候选答案在明确门控下才能替换或交付。求解过程因此可回放、可审计、可复现。
+目标契约驱动 · 证据约束 · 有界调度 · 可逆修复
 
-[赛题理解](#赛题理解与我们的应答) · [系统架构](#系统架构) · [关键机制](#关键机制) ·
-[快速开始](#快速开始) · [输出契约](#输出契约) · [仓库结构](#仓库结构) · [合规与提交材料](#合规与提交材料) · [已知限制与路线图](#已知限制与路线图)
+Zygos 是一个从数学推理场景出发的 Agent 运行时项目。它把问题目标、工作任务、候选答案、评审依据和调用预算放进同一条执行链，让求解过程能够追踪来源、保留历史，并在明确约束下继续或收口。
 
-> **状态**：开发预览版。默认引擎为统一 TypeScript AgentLoop，已通过本地全部回归；
-> 真实模型下的正确率与稳定性仍在推进，当前不发布成绩口径。
-> 本文所有数字均标注协议与出处，未标注出处的数字不作为成绩。
+**Zygos MathAgent** 是首个领域实现。当前工作围绕数学问题理解、动态任务组织、工具与方法调用、过程评审和候选修复展开；通用 Agent Runtime 是演进方向，其他领域能力尚未验收。项目原名 **Astra**，旧名称继续用于现有技术入口、兼容标识和迁移历史。
 
----
+> **当前为开发预览版本。** 本分支已使用统一 TS AgentLoop 作为 Python 官方入口的默认引擎，仍有分发、能力接入和真实环境验收工作。`engine="ts"` 表示默认实现路径，不表示已通过正式发布验收。L1 与 L2 当前均未完成。
 
-## 赛题理解与我们的应答
+[源码快速开始](#源码快速开始) · [接入与配置](#接入与配置) · [结果语义](#结果语义) · [开发与验证](#开发与验证) · [文档索引](#文档索引)
 
-赛题要求智能体具备五项能力，我们的实现位置如下：
+## 为什么做 Zygos
 
-| 赛题要求 | 我们的应答 | 落点 |
+数学求解需要同时处理答案、论证、适用条件和解集完整性。一次工具调用成功，或者模型认为自己的答案正确，都不足以完成这些要求。
+
+Zygos 围绕四个原则组织运行过程：
+
+- **目标契约驱动**：保留原始题目，显式记录目标、范围、假设和待完成义务，让任务调度围绕同一个问题展开。
+- **证据约束**：产物、检查与挑战绑定具体任务、范围和版本；局部检查的结论只在其支持范围内使用。
+- **有界调度**：模型请求、工具效果、方法加载、评审和修复共享根预算与截止时间；新增任务不产生新的配额。
+- **可逆修复**：保留父候选与历史产物，候选替换经过明确门控，依赖发生变化时使相应下游产物失效。
+
+这里的“可逆”指保留版本、来源和替换关系，便于审计与恢复，不代表所有外部操作都有撤销能力。
+
+## 当前能力与边界
+
+| 方向 | 当前实现 | 尚待完成的条件 |
 | --- | --- | --- |
-| 理解自然语言数学问题 | 题目文本 → 目标契约：识别目标类型、参数分支、待完成义务，保留原题不改写 | `packages/math-contract` |
-| 自主规划思路、求解并输出结果 | 有界任务图 + 依赖产物：按义务生成任务，允许动态派生子任务与重做，按预算调度 | `apps/stdio-runtime/src/agent-loop.ts`、`packages/math-contract` |
-| 以启发式方式解释推理过程 | 每个工作产物都携带 claim / derivation / 机制声明 / 依赖，评审与最终输出可回溯到具体产物 | `packages/math-workunit`、`packages/math-review` |
-| 在多类型数学问题中表现稳健 | 通用方法卡 + 精确工具 + 语义路由；失败走有界修复而不是静默重试 | `mathagent/resources/general_v11`、`mathagent/resources/tool-registry.json` |
-| 结构化 JSON 输出 | 单条 `solve()` 返回固定字段的结果对象，含状态、停止原因、指标与事件轨迹 | `user_agent.ReasoningAgent.solve` |
+| 统一执行入口 | `user_agent.ReasoningAgent` 默认进入 TS AgentLoop；Python Host 管理注入 client、协议与子进程 | 官方目标环境的 Node、子进程与资源限制验收 |
+| 动态数学工作流 | 有界任务与路线、依赖产物、版本更新、失效传播及进度收口 | 真实模型下的数学效果与同预算对照 |
+| 方法卡 | 20 张通用数学方法卡保留为迁移来源与内部兼容知识；公开实体统一为“数学资产”，不再作为独立用户入口 | 默认加载开关仍为 0；历史 20 张卡只出现在迁移说明中 |
+| 评审与修复 | 有界 R0、R2、挑战、范围化检查及候选修复路径 | R0、修复默认关闭；整题严格数学验收未执行 |
+| 数学资产 | 唯一规范 [`math-assets.json`](mathagent/resources/math-assets.json)：**26 项资产、82 项计算行为**；统一动作 `use_math_asset`，Host Protocol **v1.4** | Web/BFF 目录、事件与页面接入按 `docs/WEB_MATH_INTEGRATION_PLAN.md` 验收；`candidate_verified` 始终为 False |
+| 运行底座 | 事件日志、上下文投影与回放、请求责任、截断屏障、受控 checkpoint/resume | 目标环境验收与完整迁移结案 |
+| 分发 | 仓库内提供预编译 Node bundle、schema 和构建清单；wheel 已包含 TS 运行链路并在本地 clean-venv 冒烟通过 | 正式目标环境的 Node/子进程验收（B2）仍未完成 |
+| 交互展示 | 现有 `apps/web-demo` 前端与 `python/astra_web` BFF 源码；求解页与正式入口的整合按整合计划继续 | 浏览器全链路、SSE 恢复与页面验收尚未完成 |
 
-**初赛**（单智能体）：组委会提供 112 道覆盖偏微分方程、复分析、拓扑学、运筹学等 18 个子领域的题目，
-要求完成全部推理并输出结构化 JSON 与日志。
+本地回归、资产哈希、模型准确率、目标环境验收和正式发布是不同层面的证据。当前状态与未决项见 [GATEBOARD](docs/GATEBOARD.md) 和 [RELEASE_BLOCKERS](docs/RELEASE_BLOCKERS.md)。
 
-**总决赛**（多智能体协作与场景创新）：在初赛方案上扩展可交互 Demo，并可选
-「超长程推理 / 自动识别题型并路由到不同 solver agent / 引入过程校验智能体」等方向。
+## 架构
 
-**评分构成**：答案正确性 60%（线性计分）、推理策略与系统设计 10%、展示质量 20%、创新性与可扩展性 10%。
-其中"答案正确性"按 `正确率 × 60` 计；**因接口异常、格式错误、未按要求输出 JSON 导致无法判分的题目视为未通过**——
-这条规则直接决定了本项目的设计重心：先保证**稳定可判分**，再谈正确率。
-
-## 设计原则
-
-- **目标契约驱动**：显式记录目标、范围、假设与待完成义务，所有调度围绕同一个原题展开，不让某一轮的自由发挥改写题目。
-- **证据约束**：产物、检查、挑战都绑定具体任务、范围与版本；局部检查只在其支持范围内被引用，工具回执是"观察"而不是"证明"。
-- **有界调度**：模型请求、工具效果、方法卡加载、评审与修复共享同一份根预算与截止时间，新增任务不会凭空产生配额。
-- **可逆修复**：保留父候选与历史产物，候选替换经过门控，依赖变更时使下游产物失效，便于回退与审计。
-- **不伪造**：无法归类或无法完成的调用来回 `unsolved` 并留下原因码，不用猜测填空。
-
-## 系统架构
-
-官方调用接口保持不变：
+官方调用接口保持为：
 
 ```python
-from user_agent import ReasoningAgent
-
-result = ReasoningAgent(client=client).solve(problem, metadata)   # 默认 engine="ts"
+user_agent.ReasoningAgent(client=client).solve(problem, metadata)
 ```
 
-Python Host 启动一个 Node stdio 运行时，由统一的 `runAgentLoop` 调度 M1—M5；
-模型访问始终经过调用方注入的公共 client，不内置任何凭据。
+Python Host 启动一个 Node stdio 运行时，由统一的 `runAgentLoop` 调度 M1—M5。模型访问始终经过调用方注入的公共 client；CLI 或未来界面也应复用这条运行链。
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ 调用方（评测平台 / Notebook / 未来的 Web Demo）               │
-│   注入 client  ·  传入 problem  ·  读取结构化 result          │
-└───────────────────────────┬──────────────────────────────────┘
-                            │
-┌───────────────────────────▼──────────────────────────────────┐
-│ Python Host  python/astra_bridge                              │
-│  公共 client 适配 · 协议校验 · 子进程生命周期 · 工具与资产准入  │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ JSON-RPC over stdio
-┌───────────────────────────▼──────────────────────────────────┐
-│ TS AgentLoop  apps/stdio-runtime/src/agent-loop.ts            │
-│  M1 目标契约 → M2 调用准入 → M3 工作单元 → M4 评审 → M5 审计   │
-│  WORK / CONSENSUS / R0 / R2 / R4 / REPAIR 共用一条根会话      │
-└───────────────────────────┬──────────────────────────────────┘
-                            │
-        ┌───────────────────┴───────────────────┐
-        ▼                                       ▼
-  精确工具（exact_check_expr、         方法卡（20 张通用数学方法卡，
-  bounded_enumeration、矩阵/线代/      按需加载正文到后续 WORK 上下文）
-  多项式族工具）
-```
-
-| 层 / 模块 | 代码位置 | 主要职责 |
+| 层 / 模块 | 当前代码位置 | 主要职责 |
 | --- | --- | --- |
-| 官方入口 | [`user_agent.py`](user_agent.py) | 保持 `ReasoningAgent` / `solve` 接口，显式选择引擎 |
-| Python Host | [`python/astra_bridge`](python/astra_bridge) | client 适配、协议校验、子进程生命周期、工具与资产准入 |
-| TS 组合根 | [`apps/stdio-runtime/src/agent-loop.ts`](apps/stdio-runtime/src/agent-loop.ts) | 在同一根会话中组织任务、WORK、评审、修复与最终选择 |
-| M1 目标契约 | [`packages/math-contract`](packages/math-contract) | 题目身份、目标、义务、任务与依赖账本 |
-| M2 调用准入 | [`packages/math-gateway`](packages/math-gateway) | 请求绑定、调用状态与调度准入 |
-| M3 工作单元 | [`packages/math-workunit`](packages/math-workunit) | 构建上下文，接收版本化工作产物与依赖 |
-| M4 过程评审 | [`packages/math-review`](packages/math-review) | 计划与候选评审、问题与挑战记录 |
-| M5 数学审计 | [`packages/math-audit`](packages/math-audit) | 检查依据适用范围、修复替换条件与最终输出策略 |
-| 运行时核心 | [`packages/runtime-core`](packages/runtime-core) | 根预算、事件、上下文投影与运行生命周期 |
-| 协议与 schema | [`packages/protocol`](packages/protocol) | 跨模块类型、Host 协议、JSON Schema |
-| 数学资产 | [`mathagent`](mathagent)、[`math_families`](math_families) | 方法卡、受信算法、检查器、工具注册表 |
+| 官方入口 | [user_agent.py](user_agent.py) | 保持 `ReasoningAgent` / `solve` 接口，选择明确的引擎 |
+| Python Host | [python/astra_bridge](python/astra_bridge) | 公共 client 适配、协议校验、子进程生命周期、工具与资产准入 |
+| TS 组合根 | [apps/stdio-runtime/src/agent-loop.ts](apps/stdio-runtime/src/agent-loop.ts) | 在同一根会话中组织任务、WORK、评审、修复及最终选择 |
+| M1 · 目标契约 | [packages/math-contract](packages/math-contract) | 题目身份、目标、义务、任务及依赖账本 |
+| M2 · 调用准入 | [packages/math-gateway](packages/math-gateway) | 请求绑定、调用状态与调度准入 |
+| M3 · 工作单元 | [packages/math-workunit](packages/math-workunit) | 构建上下文，接收版本化工作产物与依赖 |
+| M4 · 过程评审 | [packages/math-review](packages/math-review) | 计划与候选评审、问题与挑战记录 |
+| M5 · 数学审计 | [packages/math-audit](packages/math-audit) | 检查依据的适用范围、修复替换条件和最终输出策略 |
+| Runtime Core | [packages/runtime-core](packages/runtime-core) | 根预算、事件、上下文投影和运行生命周期 |
+| 协议 | [packages/protocol](packages/protocol) | 跨模块类型、Host 协议与 schema |
+| 数学领域资产 | [mathagent](mathagent)、[math_families](math_families) | 方法知识、受信算法、检查器及保留的 Python 实现 |
+| Web 观测控制台 | [apps/web-demo](apps/web-demo) ([完整说明](apps/web-demo/README.md)) | 挑战杯可观测驾驶舱、7 标签审计详情与确定性时间胶囊回放 |
+| Web BFF 服务 | [python/astra_web](python/astra_web) | Starlette 只读与实时 BFF，数据归档索引、静态托管与 SSE 广播通道 |
+| Web 共享契约 | [packages/web-contract](packages/web-contract) | 前后端强类型 DTO、JSON Schema 与代码生成映射 |
 
-## 关键机制
+一次求解的主要控制关系如下。分支是否触发还取决于配置、预算和实际收到的证据：
 
-### 1. 结构化输出与可判分性（对应 60% 客观分的前置条件）
+```mermaid
+flowchart TD
+    Q["原始数学问题"] --> C["目标契约与待完成义务"]
+    C --> W["按共享预算调度 WORK"]
+    W --> G{"评审与候选门控"}
+    G -->|"有据挑战且预算允许"| R["修复子候选，保留父版本"]
+    R --> G
+    G -->|"存在可交付候选"| O["按输出策略返回结果"]
+    G -->|"无法交付"| U["返回 Unsolved"]
+```
 
-一次 `solve()` 返回固定字段：
+R0 是计划阶段的有界评审，R2 面向实际候选；S1 / S2 / S3 分别承担问题与检查范围对应、局部修复关系和最终候选选择。模型评审是意见，工具回执是观察，两者都不能自动把整题升级为“数学已验证”。
 
-| 字段 | 含义 |
-| --- | --- |
-| `status` | `candidate` / `unsolved` |
-| `final_response` | 候选答案原文（`unsolved` 时为 `Unsolved.`） |
-| `stopReason` / `reason` | 停止原因与归因（如 `REVIEWS_COMPLETE`、`NO_CANDIDATE`、`BUDGET_EXHAUSTED`） |
-| `code` | 失败码（仅在出错时出现，如 `FIELD_VALUE`、`CHILD_FAILED`） |
-| `candidate_verified` | 恒为 `false`：候选**从不**被声称已完成数学验证 |
-| `trace` | 有界事件轨迹（`MODEL` / `EFFECT` / `CONTROL` 三类，附状态码） |
-| `metrics` | 调用、效果、评审、方法卡、工作单元、token 等计数 |
-| `childReaped` | 子进程是否被回收（用于判定是否存在僵尸运行） |
-| `elapsedMs` / `sessionId` / `engine` / `mode` | 运行标识与耗时 |
-
-字段集合由 Host 侧严格校验，格式不符会被拒绝而不是被静默修复——这与赛题"格式错误判为未通过"的规则一致。
-
-### 2. 工具与方法卡：两条互补的能力来源
-
-- **精确工具**（`mathagent/resources/tool-registry.json`，73 项注册）：符号化简、三角归约、极大子式、
-  扩域因式分解、定积分、极限、密度归一化、有限对象穷举、线性方程组解集等。
-  TS 侧当前可调用的白名单为 4 项，其余仍在接线中（见[已知限制](#已知限制与路线图)）。
-- **通用方法卡**（`mathagent/resources/general_v11`，20 张）：定义域与等价变换、证明与反例、
-  不变量与极端原理、生成函数、代数结构归约、拓扑局部—整体、统计推断、回归诊断、数值近似等。
-  卡是"决策表 + 必产出对象"的格式，按需加载正文到后续工作上下文，加载有完整性校验与次数上限。
-
-### 3. 过程校验与有界修复
-
-- **R0**：计划阶段的有界评审（默认关闭）；**R2/R4**：面向候选的评审与再评审；
-- **CERT1 证书**：模型可输出 `CERT1|CHECK/OPTIONS/VERDICT/FINAL` 机器可读行，
-  证书候选优先于相关审计的多数票；
-- **修复**：评审提出有据挑战后，允许有界修复子候选，父候选保留可回退；依赖变更时下游产物失效；
-- **截断屏障**：非 `COMPLETE` 的模型回复不产生工具动作、不产生产物、不产生候选。
-
-### 4. 预算与安全边界
-
-- 模型请求、工具效果、方法卡加载、评审、修复共享同一根预算与截止时间，超限即收口；
-- 一切身份字段（会话、题面哈希、契约版本、任务、目标、范围、路由、请求号）由 Host 侧**可信绑定**覆盖，
-  模型写错这些字段不会导致整题作废，也不会获得越权；
-- 数学字段（claim、derivation、依赖、候选）严格校验，未声明的假设、外来依赖、空论证一律拒绝；
-- 运行在进程组隔离中，超时后有界回收子进程，`childReaped` 参与结果判定。
-
-## 快速开始
+## 源码快速开始
 
 ### 环境要求
 
 | 依赖 | 要求 |
 | --- | --- |
-| Python | `>=3.10`（见 [pyproject.toml](pyproject.toml)） |
-| Node.js | 开发配置锁定 `24.7.0`；运行 TS 引擎需要 Node |
-| Python 依赖 | SymPy、NumPy、SciPy、Requests（见 [requirements.txt](requirements.txt)） |
-| 构建工具 | pnpm / TypeScript（仅修改 TS 时需要） |
-| 模型 client | 由调用方注入；本仓库不内置凭据 |
+| Python | `>=3.10`，见 [pyproject.toml](pyproject.toml) |
+| Node.js | 仓库开发配置锁定 `24.7.0`，运行 TS 引擎需要 Node |
+| Python 运行依赖 | SymPy、NumPy、SciPy、Requests，范围见 [requirements.txt](requirements.txt) |
+| pnpm / TypeScript | 修改、构建 TS 时使用；当前声明为 pnpm `11.7.0`、TypeScript `6.0.3` |
+| 公共 client | 真实求解时由平台或调用方注入；离线检查可使用模拟 client |
 
-仓库自带预编译 Node bundle，求解时不需要运行 npm / pnpm / tsc。
+使用仓库已经提供的 bundle 时，不需要在求解时运行 npm、pnpm 或 tsc。目标比赛平台是否允许相应 Node 与子进程能力，仍需单独验证。
 
-### 获取并校验
+### 获取并准备源码
+
+以下命令面向 Bash / POSIX shell，从当前开发分支开始：
 
 ```bash
 git clone --branch feat/v4-dynamic-workflows https://github.com/3294682143-gif/astra-refactored.git
 cd astra-refactored
 
-python -m venv .venv && . .venv/bin/activate
+python -m venv .venv
+. .venv/bin/activate
 python -m pip install -r requirements.txt
 
 node --version
-python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json   # 期望输出 VERIFY_OK
+python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
 ```
 
-`VERIFY_OK` 只证明发布清单中的文件哈希与源码祖先关系一致，**不**证明数学能力。
+清单检查成功时输出 `VERIFY_OK`。它校验记录的文件哈希和源码祖先关系，不调用模型，也不证明数学答案正确。浅克隆缺少清单引用的祖先提交时，需要先补齐对应 Git 历史。
 
-### 离线入口冒烟（不访问模型服务）
+`pip install .` 生成的 wheel 已包含 `python/astra_bridge`、预编译 bundle、schema 和协议资源；本地 clean-venv、源码目录外的 `engine="ts"` 冒烟已通过。正式目标环境的 Node/子进程验收仍需单独完成（B2）。
+
+### 离线入口冒烟
+
+安装上述 Python 依赖后，可用以下模拟 client 检查 Python → Node → 结构化返回的路径。它主动报告未解，不访问模型服务，不用于测量解题能力：
 
 ```bash
 python - <<'PY'
@@ -183,135 +129,330 @@ from user_agent import ReasoningAgent
 
 class OfflineClient:
     def chat(self, messages, temperature=0.2, max_tokens=8192):
-        return {"choices": [{"index": 0, "finish_reason": "stop",
-                "message": {"role": "assistant",
-                            "content": json.dumps({"action": "unsolved", "reason": "offline smoke test"})}}]}
+        return {
+            "choices": [{
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps({
+                        "action": "unsolved",
+                        "reason": "offline smoke test",
+                    }),
+                },
+            }],
+        }
 
 result = ReasoningAgent(client=OfflineClient()).solve("Compute 2+2", {})
-assert result["engine"] == "ts" and result["status"] == "unsolved" and result["childReaped"] is True
+assert result["engine"] == "ts"
+assert result["status"] == "unsolved"
+assert result["childReaped"] is True
+assert "code" not in result, result
 print(json.dumps(result, ensure_ascii=False, indent=2))
 PY
 ```
 
-### 接入真实模型
+真实模型调用、工具执行和数学正确性应分别使用后续测试与评测流程验证。
+
+## 接入与配置
+
+### 官方接口与引擎
 
 ```python
 from user_agent import ReasoningAgent
 
-class MyClient:
-    """实现同步 chat(messages, temperature, max_tokens)，返回 OpenAI 兼容信封。"""
-    def chat(self, messages, temperature=0.2, max_tokens=8192):
-        ...  # 调用 Intern-S1 API，返回 {"choices":[...]}，含 finish_reason
-
-agent = ReasoningAgent(client=MyClient())      # 默认 engine="ts"
-result = agent.solve(problem_text, {"source": "evaluation"})
-print(result["status"], result["final_response"])
+def solve_with_client(client, problem: str, metadata=None):
+    agent = ReasoningAgent(client=client)  # 默认 engine="ts"
+    return agent.solve(problem, metadata)
 ```
 
-`engine` 可选 `ts`（默认，统一 AgentLoop）、`lite`（实验性轻量 typed-action）、`legacy`（保留的 Python Controller）。
-未知引擎与不支持的参数会被拒绝，TS 路径失败时不会静默降级。
+`client` 由外部提供。`problem` 是非空题目字符串；当前 TS 入口最多接收 8192 个 Unicode 码点。`metadata` 保留为官方兼容参数，不把标准答案或题号当作求解依据。
 
-## 输出契约
+| 引擎参数 | 当前含义 |
+| --- | --- |
+| `engine="ts"` | **默认**。通过 Python Host 运行统一 TS AgentLoop |
+| `engine="lite"` | 显式选择实验性轻量 typed-action 路径 |
+| `engine="legacy"` | 显式选择保留的原 Python Controller 路径 |
 
-- **只输出结构化结果**：`solve()` 返回字典，评测脚本按 `status` / `final_response` / `metrics` / `trace` 判分与复核。
-- **不泄露题目与凭据**：结果中不包含原题文本、标准答案或 API 凭据；`trace` 只含受控的 id 与状态码。
-- **未解有明确原因**：`unsolved` 必须带 `stopReason`（如 `NO_CANDIDATE`、`DEADLINE_EXCEEDED`、`TRANSPORT_STOP`），
-  便于区分"数学不会"与"系统故障"。
-- **可回放**：同一题目 + 同一 client 行为可用 `resume_checkpoint` 复盘。
+未知引擎和不支持的参数会被拒绝。TS 入口失败时返回明确错误或未解结果，不会静默切换到其他引擎。不同引擎的可选参数并不通用。
 
-## 仓库结构
+### 公共 client 契约
 
-```
-astra-refactored/
-├── user_agent.py                 # 官方入口：ReasoningAgent.solve
-├── python/astra_bridge/          # Python Host：client 适配、协议、子进程、准入
-├── apps/stdio-runtime/           # TS 组合根：runAgentLoop 与 Host 协议实现
-├── packages/
-│   ├── protocol/                 # 跨模块类型、Host 协议、JSON Schema、工具白名单
-│   ├── runtime-core/             # 根预算、事件、上下文投影、计划目录
-│   ├── math-contract/            # M1 目标契约与任务/义务账本
-│   ├── math-gateway/             # M2 调用准入
-│   ├── math-workunit/            # M3 工作单元与产物接收
-│   ├── math-review/              # M4 评审
-│   └── math-audit/               # M5 审计与最终输出策略
-├── mathagent/                    # 数学资产：方法卡、工具注册表、算法与检查器
-├── math_families/                # 数学族实现（精确检查、有限枚举等）
-├── release/                      # 预编译 bundle、schema、构建清单
-├── scripts/                      # 构建与校验脚本
-├── docs/                         # 设计、门禁、评测与审计文档
-└── tests/                        # Python 回归与端到端用例
+当前 TS Host 使用同步公共方法：
+
+```python
+client.chat(
+    messages=messages,
+    temperature=0.2,
+    max_tokens=8192,
+)
 ```
 
-### 开发与验证
+client 适配层需要保留公开的响应正文和完成信号。典型响应形状为：
+
+```python
+{
+    "choices": [{
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+            "role": "assistant",
+            "content": "...由当前阶段要求的结构化响应文本...",
+        },
+    }],
+    "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 50,
+        "total_tokens": 150,
+    },
+}
+```
+
+上述数值仅示意字段形状。`usage` 缺失时成本保持未知。`stop` / `end_turn` 表示明确结束；`length` 表示截断；裸字符串或缺少 `finish_reason` 的响应被保守处理为完成状态未知。模型需要遵守运行时发出的阶段协议，普通文本答案不能替代有效的工作产物。
+
+Host 不从环境中读取模型密钥，也不另建模型请求通道。真实 client 的字段、限流、输出能力和完成语义应按 [REAL_API_CAPABILITIES](docs/REAL_API_CAPABILITIES.md) 验证。
+
+### TS 参数与默认值
+
+下面列出当前 `AgentRuntime` 的主要构造参数。范围是实现允许的上界，**不是官方比赛额度**。
+
+| Python 参数 | 默认值 | 允许范围 / 含义 |
+| --- | --- | --- |
+| `max_model_calls` | `8` | `0..256`，根会话模型调用上限 |
+| `max_work_units` | `4` | `1..64`，工作单元上限 |
+| `max_effects` | `1` | `0..2`，工具执行与方法加载共享的效果额度 |
+| `max_reviews` | `1` | `0..1`，R2 评审额度 |
+| `max_method_loads` | `0` | `0..1`，方法卡加载额度 |
+| `max_repairs` | `0` | `0..1`，候选修复额度 |
+| `max_r0` | `0` | `0..1`，R0 计划评审额度 |
+| `problem_seconds` | `600` | `0 < 值 <= 3600`，单题根截止时间，包含启动与收口 |
+| `policy` | `"BEST_EFFORT"` | `"BEST_EFFORT"` 或 `"STRICT"` |
+| `derive_budget` | `False` | 是否启用内部任务预算推导；只能在 Host 根上限内分配，不会扩大上限 |
+| `node` | `"node"` | 受信的 Node 可执行文件名或路径 |
+| `mode` | `"platform"` | `"platform"`、`"local"` 或 `"shared_public"` |
+
+配置定义见 [agent_runtime.py](python/astra_bridge/agent_runtime.py)，跨进程约束见 [agent-host-v13.schema.json](packages/protocol/schema/agent-host-v13.schema.json)。
+
+默认配置是保守预览 profile：**方法卡、R0 和修复均关闭**。如需测试方法卡加载，可显式构造：
+
+```python
+def create_method_enabled_agent(client):
+    return ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_method_loads=1,
+    )
+```
+
+R0 与修复分别通过 `max_r0=1`、`max_repairs=1` 启用。`max_repairs=1` 还允许在 WorkPacket 形状被控制 schema 拒绝后做一次同一任务的 schema-repair 回合；默认 0 保持 fail-closed。开启开关只授予调用额度；实际触发还需要满足任务状态、后续工作与评审预留、证据和剩余时间条件。方法加载与工具执行共用 `max_effects`，每题无需强制加载卡片。
+
+真实运行应在已确定的预算内配置全部参数。开发默认的 600 秒只是为了给真实模型留出完成时间，不代表官方额度。固定对照实验配置见 [RUN_CONFIG_LOCK](docs/RUN_CONFIG_LOCK.md)，它与默认预览 profile 分开管理。
+
+## 结果语义
+
+`solve` 返回可 JSON 序列化的字典。以下是候选结果的字段节选，示意值不代表评测成绩：
+
+```json
+{
+  "engine": "ts",
+  "status": "candidate",
+  "final_response": "4",
+  "candidate_verified": false,
+  "strictAcceptance": "NOT_PERFORMED",
+  "mode": "TS_PREVIEW",
+  "targetEnvironment": "TARGET_UNVERIFIED"
+}
+```
+
+| 字段 | 解释 |
+| --- | --- |
+| `final_response` | 对外交付的答案或未解文本；TS 未解结果使用 `"Unsolved."` |
+| `status` | `candidate` 或 `unsolved`，表示是否交付候选 |
+| `candidate_verified` | 当前 TS 入口固定为 `false`，不宣称整题已完成严格数学验证 |
+| `strictAcceptance` | 当前为 `NOT_PERFORMED` |
+| `stopReason` / `reason` | 调度停止与候选选择原因；错误路径还可能包含固定 `code` |
+| `unresolvedObligations` | 仍未解决的数学义务 |
+| `trace` | 脱敏控制事件，用于查看状态变化与来源；不是完整证明文本 |
+| `metrics` | 实际 client 调用、逻辑调用、效果、评审、方法加载及已知 / 未知用量等指标 |
+| `finishReason` | 公共响应的完成信号 |
+| `childReaped` | 子进程清理状态；不表示远端模型请求已取消 |
+
+`BEST_EFFORT` 可以交付符合来源与输出条件、但仍未严格验证的候选。`STRICT` 会保留其验证要求；当前 TS 入口不提供整题验证成功状态，使用 STRICT 可能得到未解结果。
+
+数学检查需要分别判断“给出的值都是根”“全部根已找全”“符合原式定义域”。检查通过、失败和无法判断必须区分；超出支持范围的表达式或完整性问题不能因工具正常返回而视为通过。
+
+`REVISED_CANDIDATE` 表示候选经过修复门控后被替换，仍不等于 `candidate_verified=true`。面向用户的解答与论证来自实际交付内容，不应将控制 trace 或模型自评展示为数学证明。
+
+## 数学资源与工具
+
+### 通用方法卡
+
+[general_v11](mathagent/resources/general_v11) 保留 **20 张通用数学方法卡**，权威目录为 [methods.json](mathagent/resources/general_v11/data/methods.json)。它们提供方法选择、前提检查和证明组织建议，例如 `domain-equivalence`、`proof-counterexamples`。
+
+当前已有 `method.catalog → method.load → WORK` 接线。目录提供 ID 与元数据，加载时按注册 ID 读取正文并校验哈希，正文进入后续工作上下文。卡片属于建议性知识，不是标准答案或已经证明的数学前提。
+
+新增 Host 资产组的代码标识是 **`methodCards`**，按 `methods.json` 中的 ID、路径与正文哈希寻址。这个注册组与 `mathFamilies` 独立，不要求方法卡与算法族一一对应。`asset.scoped` 的资产描述符也不等同于 `method.load` 的正文加载回执。
+
+### 统一数学资产与检查器
+
+唯一权威目录是 [`mathagent/resources/math-assets.json`](mathagent/resources/math-assets.json)，公开实体统一称为“数学资产”，资产内部以 `target` 选择计算行为。当前规范包含 **26 项资产、82 项计算行为**，其中 `math.proof`、`math.recurrence`、`math.topology`、`math.statistics` 仅提供指导。历史 20 张方法卡、22 个数学族条目与 76 项实现映射只作为迁移来源，不再构成面向用户的第二套资产目录。
+
+| 资源 | 当前盘点 | 含义 |
+| --- | ---: | --- |
+| `mathagent/resources/math-assets.json` | 26 项资产 / 82 项行为 | 唯一规范目录 |
+| `docs/math-assets-migration-ledger.json` | 76 项历史映射 | 旧方法卡/数学族到资产行为的迁移账本 |
+| `math_families/` | 60 个文件 | Python、Markdown、JSON 文件总数，不是资产数量 |
+
+数学族包括符号代数、符号微积分、数位 DP、转移矩阵、计数、数论结构、几何计算等，具体参数与支持范围见 [catalog](math_families/catalog.json) 和 [math_families README](math_families/README.md)。
+
+当前 Host 可对注册资产做范围化、版本化和完整性检查；`scoped_asset_call` 返回描述符，本身不执行算法。算法文件保留、注册成功和哈希通过不能直接证明统一 TS 主流程已经调用算法并消费结果。完整接入仍按 [迁移审计](docs/MIGRATION_AUDIT.md) 与 [能力矩阵](docs/CAPABILITY_MATRIX.csv) 验收。
+
+### 当前通用动作工具
+
+TS / lite 的通用工具动作入口当前限定为：
+
+| 工具名 | 作用 |
+| --- | --- |
+| `polynomial_expand_coefficients` | 在有界输入上展开多项式并返回系数 |
+| `linear_system_solution_set` | 在声明的域与精确输入范围内求线性系统解集 |
+| `exact_check_expr` | 有界符号检查：三角化简、极大子式、代数扩域因式分解、定积分、极限、密度归一化 |
+| `bounded_enumeration` | 对显式有限对象表或笛卡尔积做穷举 k-子集计数 |
+
+这些工具经过已有注册执行器的输入验证、隔离、截止时间与审计路径。工具结果是范围化程序观察，不能自动证明原题全部义务。
+
+## 运行控制与恢复
+
+一次求解使用同一个根截止时间和预算。新增任务、方法请求、重做或修复不刷新它们；相同请求的缓存复用也不建立新会话额度。
+
+运行时区分请求意图、准入、派发、本地返回和远端终态。超时或缺少完成信号可能留下 `OUTCOME_UNKNOWN`：停止本地等待不等于远端已停止，运行时不会自动重放未知结果的请求。
+
+TS 公开 `solve` 接受 `resume_checkpoint` 参数。当前受控恢复用于 `local` / `shared_public` 模式，校验题目、契约、事件序列、上下文及已用预算；已完成工作不应重跑，预算只能延续或收紧。checkpoint 导出仍位于内部 `AgentRuntime.export_checkpoint`，尚未封装为稳定的顶层导出命令。
+
+恢复行为与拒绝案例见 [checkpoint/resume 测试](tests/e2e/test_ts_g7_checkpoint_resume.py)，运行底座说明见 [G4_RUNTIME_HARDENING](docs/G4_RUNTIME_HARDENING.md)。
+
+### 执行边界
+
+- 问题、方法卡和工具输出作为数据处理，不能扩大模型或工具权限。
+- 受信固定算法与模型生成代码使用不同执行路径。
+- 模型生成 Python 需要单独配置、在实际安装路径验收的 WASI profile。
+- 本仓库不附带 WASI 二进制或已获平台认可的安装 profile；缺失时拒绝相应能力，不回退到宿主 Python。
+- 本机 sandbox 测试、安装可复现性和比赛平台许可分别记录。
+
+WASI 相关说明见 [generated_python_wasi.md](docs/generated_python_wasi.md) 和 [INSTALL.md](INSTALL.md)。其中的历史安装步骤需要结合当前仓库资源与平台条件核对。
+
+## 开发与验证
+
+### 构建与离线回归
+
+先按 [package.json](package.json) 和 [pnpm-lock.yaml](pnpm-lock.yaml) 准备对应工具链与依赖。锁定依赖已在缓存中时，可从仓库根目录执行：
 
 ```bash
+python -m pip install -r requirements-dev.txt
+pnpm install --offline --frozen-lockfile --ignore-scripts
+
 node node_modules/typescript/bin/tsc -b
-node node_modules/esbuild/bin/esbuild apps/stdio-runtime/dist/src/main.js \
-  --bundle --platform=node --format=esm --outfile=release/stdio-runtime.bundle.mjs --log-level=warning
-python3 scripts/build_release_manifest.py
-python3 scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
 node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js
-python3 -m pytest -q
-git diff --check
+
+python -m pytest -q
 ```
 
-当前基线（提交 `59e8aca`）：`tsc -b` 通过、Node **334/334**、Python **718 passed / 24 skipped**、
-manifest `VERIFY_OK`、`git diff --check` 干净、仓库内无凭据。
+离线安装若因缺少缓存而失败，应先在授权环境补齐锁定依赖，再继续构建。安装未成功时，不依赖脚本自动安装或更换版本。
 
-## 合规与提交材料
+### 源码入口与预编译入口
 
-- **提交清单**：技术方案文档（PDF）、日志与结果文件（JSON）、展示视频（≤10 分钟，决赛）、
-  系统介绍 PPT（决赛）、源代码或 Notebook（建议开源）；
-  打包为 `.zip`，命名为 **推报单位-申报人姓名-作品名称-联系电话**。
-- **禁止项**：严禁人工逐题干预作答、赛后补填结果、伪造日志、使用未经允许的外部闭源服务代答。
-  本项目所有结果均由智能体自动产生，日志与事件轨迹可复核；不接收、不内置标准答案或针对题目的专用题卡。
-- **凭据**：仓库不包含任何 API 密钥；真实评测时由环境变量注入（`INTERN_API_KEY` / `INTERN_ENDPOINT`），
-  日志与结果中不写入密钥。
-- **团队**：湖北工业大学推报，学生团队（含跨学院成员）与指导教师按报名表登记信息为准；
-  联系方式通过赛事官方渠道，不在仓库中公开个人信息。
+Python Host 默认启动 [release/stdio-runtime.bundle.mjs](release/stdio-runtime.bundle.mjs)，并使用相应协议资源。修改 TS 源码、运行 `tsc -b` 后，默认 bundle 不会自动随之更新。
 
-## 已知限制与路线图
+开发时可显式选择工作区编译入口：
 
-**已知限制（均有实测数据支撑）**
+```bash
+ASTRA_STDIO_RUNTIME=dev python -m pytest -q tests/e2e/test_ts_entry.py
+```
 
-| 限制 | 现状 | 影响 |
+该入口依赖已构建的 `dist` 与工作区依赖链接。发布前须重新构建并验收实际 bundle、对应 schema 和清单，再使用默认入口完成验证。`build_release_manifest.py` 只生成或验证清单，不负责重新编译或打包。
+
+### 重点验证入口
+
+| 验证范围 | 文件 / 命令 |
+| --- | --- |
+| 预编译文件与资产清单 | `python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json` |
+| Python → Host → Node 入口及拒绝行为 | [test_ts_entry.py](tests/e2e/test_ts_entry.py)、[test_ts_entry_safety.py](tests/e2e/test_ts_entry_safety.py) |
+| 方法卡实际加载与 WORK 消费 | [test_ts_methods.py](tests/e2e/test_ts_methods.py)、[test_ts_methods_safety.py](tests/e2e/test_ts_methods_safety.py) |
+| 独立 `methodCards` 注册与范围化寻址 | [test_g7_methodcards.py](tests/bridge/test_g7_methodcards.py) |
+| 数学解集验收边界 | [agent-semantics-solutions.test.ts](apps/stdio-runtime/tests/agent-semantics-solutions.test.ts) |
+| 有据修复公开入口 | [test_ts_g3_flagship.py](tests/e2e/test_ts_g3_flagship.py) |
+| 预编译 bundle 运行 | [test_ts_g6_release.py](tests/e2e/test_ts_g6_release.py) |
+| checkpoint/resume | [test_ts_g7_checkpoint_resume.py](tests/e2e/test_ts_g7_checkpoint_resume.py) |
+
+离线 E2E 中可使用模拟模型响应，同时运行真实 Host、Node 子进程和部分受信工具。这证明对应工程行为，不提供真实模型准确率结论。WASI 等必要测试的跳过也不计作验收通过。
+
+## 赛题目标与发布路线
+
+本项目面向 **XH-202627《基于 Intern-S1 的数学智能体设计与推理创新》**。赛题要求包括自然语言数学理解、自主求解、推理解释与结构化 JSON；决赛进一步要求多智能体协作与可交互 Web / Notebook Demo。
+
+赛题文件指定 **Intern-S1 API**。仓库中已有 S2 相关适配、开发记录与对照评测契约，两者需要分开说明；具体参赛模型与使用方式以正式规则和平台确认为准，开发中的 API 冒烟不代表完成了官方 client 或比赛环境验收。
+
+当前路线分为两个验收层次：
+
+| 层次 | 目标 | 当前状态 |
 | --- | --- | --- |
-| TS 侧工具白名单只有 4 项 | 注册 73 项、Python 侧实现 11 项 | 圆周 Laplacian、分裂域次数、根的个数等题目**无工具可调** |
-| 工具命中率低 | 100 题中仅 17 题真正调用工具 | 绝大多数题目靠模型心算，边界题结果不稳定 |
-| 语义路由只覆盖 6 类题型 | 行列式 / 扩域 / 密度 / PDE / 极限 / 有限计数 | 大量题型完全没有触发路由 |
-| 强制轮是提示而非门禁 | 模型可直接提交工作包跳过工具 | 路由命中后仍可能不调工具 |
-| 方法卡与工具共享 effect 预算 | `max_effects=2`，其中 1 个常被方法卡占用 | 工具机会只剩 1 次 |
-| 共识投票按原文比对 | `1/2` 与 `\frac12` 视为不同候选 | 多次采样都对也无法形成多数 |
-| 单次抽样波动大 | 三次盲跑极差 14 分 | 单次成绩不可作为结论 |
+| L1 | 比赛可用的完整 MathAgent | `NOT_COMPLETE` |
+| L2 | 冻结 RC2 能力的全量等价与迁移结案 | `NOT_COMPLETE` |
 
-**路线图**
+后续工作包括：
 
-1. **可观测性**：在 `metrics` 中记录方法卡 id、工具名与 operation、路由漏斗（命中→强制→服从→结果被消费）。
-2. **路由与门禁**：语义路由表扩容；强制轮改为协议门禁（未按要求调用则再发一轮，有界一次）；
-   方法卡加载不再计入 effect 预算；所有工具结果进入闭合检查。
-3. **闭合检查**：选项覆盖（多选逐项）、次数守恒、密度归一化、解集完备性四类确定性诊断强制生效。
-4. **稳定性验收**：同协议 3 次盲跑，目标单次 ≥88、三次极差 ≤3、稳定正确率 ≥92%。
-5. **决赛能力**：可交互 Demo（Notebook/Web）、题型自动识别与 solver 路由、过程校验智能体的协作编排。
+1. 完成统一数学资产在 Web/BFF 的目录、事件、页面和全行为验收（见 `docs/WEB_MATH_INTEGRATION_PLAN.md`）。
+2. 完成真实分发包与源码目录外安装运行验证。
+3. 完成官方注入 client、目标环境、必要 sandbox 与冻结题集同预算对照。
+4. 完成交互 Demo 与多智能体协作展示的独立验收。
+5. 进入集中命名迁移，按实际通过的发布门槛交付 Zygos 正式版本。
+
+真实数学对照使用冻结题集、基线、预算与裁判，分别记录准确率、由对变错 / 由错变对、未解、缺分支、修复保留、截断、耗时及已知 / 未知成本。当前没有可据此发布的完整真实模型对照结论，见 [MATH_AB_REPORT](docs/MATH_AB_REPORT.md)。
+
+迁移台账按源文件记录状态，其关闭比例不等于功能完成率或数学题正确率。
+
+## 品牌与技术命名
+
+正式品牌已经确定为 **Zygos（ZY，天轭）**；“天秤之轭”为中文品牌释义。
+
+当前处于 **阶段 A：品牌统一与内部整合**。为保持运行与历史追溯，技术名称暂按现有实现使用：
+
+| 对象 | 当前可用标识 | 阶段 B 目标 |
+| --- | --- | --- |
+| 仓库 | `astra-refactored` | `zygos` |
+| TypeScript 包 | `@astra/*` | `@zygos/*` |
+| Runtime 核心包 | `@astra/runtime-core` | `@zygos/runtime-core` |
+| Python 宿主 | `mathagent`、`python.astra_bridge` | `zygos` |
+| 官方兼容入口 | `user_agent.ReasoningAgent` | 保持兼容 |
+| 引擎 | `engine="ts"` | `engine="zygos"`，保留 `ts` 兼容别名 |
+| 环境变量 | 现有 `ASTRA_*` | `ZYGOS_*` |
+| CLI | 尚无正式 CLI | `zy` |
+
+阶段 B 在运行链、真实 API、回归与分发验证满足进入条件后集中执行。目标命名空间、仓库名与分发权限尚需实际核验；Python 导入名和 PyPI 分发项目名分别确认。
+
+因此，当前安装与运行说明仍使用实际存在的名称，`zy`、`engine="zygos"`、`pip install zygos` 与 `@zygos/*` 尚未作为可用入口交付。命名契约与兼容策略见 [NAMING](docs/NAMING.md)、[RENAME_MIGRATION](docs/RENAME_MIGRATION.md) 和 [ADR-011](docs/adr/ADR-011-zygos-brand-and-two-phase-migration.md)。
 
 ## 文档索引
 
 | 阅读目的 | 文档 |
 | --- | --- |
-| 当前门槛与阻断项 | [GATEBOARD](docs/GATEBOARD.md)、[RELEASE_BLOCKERS](docs/RELEASE_BLOCKERS.md) |
-| 交接与执行记录 | [HANDOFF](HANDOFF.md)、[DEEP_LOOP_STATUS](docs/DEEP_LOOP_STATUS.md) |
-| 逐题评测与审计 | [ITEM_REVIEW_V3_20261021](docs/ITEM_REVIEW_V3_20261021.md)、[ITEM_AUDIT_20261022](docs/ITEM_AUDIT_20261022.md)、[MATH_AB_REPORT](docs/MATH_AB_REPORT.md) |
-| 主循环设计与 Host 接入 | [UNIFIED_TS_AGENT_LOOP](docs/UNIFIED_TS_AGENT_LOOP.md)、[TS_ENGINE_ENTRY](docs/TS_ENGINE_ENTRY.md)、[P2_HOST_BRIDGE](docs/P2_HOST_BRIDGE.md) |
+| 当前门槛与发布阻断 | [GATEBOARD](docs/GATEBOARD.md)、[RELEASE_BLOCKERS](docs/RELEASE_BLOCKERS.md) |
+| 品牌、命名和迁移策略 | [NAMING](docs/NAMING.md)、[RENAME_MIGRATION](docs/RENAME_MIGRATION.md) |
+| 主循环设计与 Host 接入历史 | [UNIFIED_TS_AGENT_LOOP](docs/UNIFIED_TS_AGENT_LOOP.md)、[TS_ENGINE_ENTRY](docs/TS_ENGINE_ENTRY.md) |
 | 动态任务、依赖与产物版本 | [G2_DYNAMIC_ROUTES](docs/G2_DYNAMIC_ROUTES.md)、[G2_DEPENDENT_CHAIN](docs/G2_DEPENDENT_CHAIN.md)、[G2_ARTIFACT_REDO](docs/G2_ARTIFACT_REDO.md) |
-| 方法卡与有据修复 | [G2_METHOD_BRIDGE](docs/G2_METHOD_BRIDGE.md)、[P4_EVIDENCE_REVISION](docs/P4_EVIDENCE_REVISION.md) |
-| 运行时加固 | [G4_RUNTIME_HARDENING](docs/G4_RUNTIME_HARDENING.md) |
-| 安装 | [INSTALL](INSTALL.md) |
+| 方法加载与有据修复 | [G2_METHOD_BRIDGE](docs/G2_METHOD_BRIDGE.md)、[P4_EVIDENCE_REVISION](docs/P4_EVIDENCE_REVISION.md) |
+| 运行时机制 | [G4_RUNTIME_HARDENING](docs/G4_RUNTIME_HARDENING.md) |
+| 源码身份与迁移证据 | [SOURCE_LOCK](docs/SOURCE_LOCK.md)、[MIGRATION_AUDIT](docs/MIGRATION_AUDIT.md)、[MIGRATION_MATRIX](docs/MIGRATION_MATRIX.csv)、[CAPABILITY_MATRIX](docs/CAPABILITY_MATRIX.csv) |
+| 模型接口与对照评测 | [REAL_API_CAPABILITIES](docs/REAL_API_CAPABILITIES.md)、[RUN_CONFIG_LOCK](docs/RUN_CONFIG_LOCK.md)、[MATH_AB_REPORT](docs/MATH_AB_REPORT.md) |
+| 安装与可选 WASI | [INSTALL](INSTALL.md)、[generated_python_wasi](docs/generated_python_wasi.md) |
+| 原 Python 架构来源 | [python-full-rc2-frozen 分支](https://github.com/3294682143-gif/astra-refactored/tree/python-full-rc2-frozen) |
 | 贡献约定 | [AGENTS.md](AGENTS.md) |
 
-## 致谢
+P0—P4 与部分接入文档保留了当时的默认值和阶段限制，适合追溯实现过程。当前入口以 [user_agent.py](user_agent.py)、配置以 [AgentRuntime](python/astra_bridge/agent_runtime.py) 和实际清单为准，阶段变更参照对应 ADR。
 
-- **Intern-S1**：上海人工智能实验室的科学多模态大模型，本项目的求解能力来自其 API。
-- **lagent**：官方数学智能体基线框架，本项目早期实现参考了其组织方式。
-- 赛事组织方与指导老师提供的题目集、评测口径与技术支持。
+## 贡献与使用说明
 
-本仓库当前未提供项目级 `LICENSE` 文件，公开源码本身不构成额外许可声明；
-第三方依赖与来源材料按各自许可与署名要求处理。
+提交变更前请阅读 [AGENTS.md](AGENTS.md)。保持官方接口、注入式模型访问、根预算、未知请求责任和执行隔离；保留冻结基线与来源证据，并记录实际运行的检查及其结果。
+
+仓库不接收凭据、个人安装配置、私有运行日志、标准答案或针对评测题制作的题卡。
+
+当前仓库未提供项目级 `LICENSE` 文件，公开源码本身不构成额外的许可声明；第三方依赖与来源材料按各自许可和署名要求处理。
