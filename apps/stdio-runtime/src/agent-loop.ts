@@ -4352,7 +4352,7 @@ export async function runAgentLoop(
     methodLoads,
     stopReason: stop,
     unresolvedObligations,
-  }) as AgentLoopSummary;
+  }, true) as AgentLoopSummary;
   const privateState = p2Snapshot({
     contract: ledger.snapshot(),
     events: ledger.eventsSnapshot(),
@@ -4376,6 +4376,6 @@ export async function runAgentLoop(
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
     sessionLog: sessionLog.snapshot(),
-  });
-  return p2Snapshot({ summary, privateState }) as AgentLoopResult;
+  }, true);
+  return p2Snapshot({ summary, privateState }, true) as AgentLoopResult;
 }

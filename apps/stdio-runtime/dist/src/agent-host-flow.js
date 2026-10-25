@@ -401,10 +401,10 @@ export class AgentHostFlow {
             result: {
                 protocolVersion: this.manifest.protocolVersion,
                 sessionId,
-                summary: p2Snapshot(summary),
+                summary: p2Snapshot(summary, true),
                 candidateRequestId,
-                trace: p2Snapshot(result.privateState.session.events),
-                sessionLog: p2Snapshot(sessionLog),
+                trace: p2Snapshot(result.privateState.session.events, true),
+                sessionLog: p2Snapshot(sessionLog, true),
             },
         }, "session.solve");
     }

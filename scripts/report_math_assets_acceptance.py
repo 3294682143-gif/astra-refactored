@@ -69,15 +69,20 @@ def run_checks() -> dict:
         "scopeId": "scope-acceptance",
     }
     executed_impls = set()
+    executed_cases_with_obs = 0
+    total_cases_count = 0
     for b_idx in range(6):
         mod = importlib.import_module(f"tests.math_assets.test_math_assets_w{b_idx}")
         cases = getattr(mod, f"W{b_idx}_CASES", [])
         for aid, tgt, inp in cases:
+            total_cases_count += 1
             res = use_math_asset(
                 {"action": "math_asset", "assetId": aid, "target": tgt, "input": inp},
                 context=base_context,
                 deadline=time.monotonic() + 5.0,
             )
+            if res.get("status") == "COMPLETE" and len(res.get("observations", [])) > 0:
+                executed_cases_with_obs += 1
             if res.get("status") == "COMPLETE":
                 for impl in impls:
                     if impl.get("targetAssetId") == aid:
@@ -87,6 +92,7 @@ def run_checks() -> dict:
                             if b.get("target") == tgt and (b.get("legacyToolName") == tn or b.get("target") == tn):
                                 executed_impls.add(impl.get("number"))
     metrics["reachable_fixed_implementations_through_official_entry"] = len(executed_impls)
+    all_82_executed_ok = (total_cases_count == 82 and executed_cases_with_obs == 82)
 
     # 12-14. Contracts and consumers per computational behavior
     total_behaviors = 0
@@ -342,7 +348,196 @@ def run_checks() -> dict:
         and metrics_color.get("tool_names") == ["constraint_propagation_2coloring"]
         and turn_color_received_obs
     )
-    metrics["evidence_upgrade_failures"] = 0 if (closed_loop_valid and color_loop_valid) else 1
+
+    # Float input closed loop verification (e.g. Finite Difference)
+    turn_float_in_loop = 0
+    turn_float_in_received_obs = False
+
+    def chat_float_in_loop(messages, **kw):
+        nonlocal turn_float_in_loop, turn_float_in_received_obs
+        turn_float_in_loop += 1
+        body = json.loads(messages[1]["content"])
+        schema = body.get("stage") or body.get("schemaVersion")
+        if schema in ("R2", "R4"):
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "schemaVersion": "p4-review-v1",
+                            "requestId": body.get("requestId", f"model-{turn_float_in_loop}"),
+                            "target": body["target"],
+                            "targetHash": body.get("targetHash", ""),
+                            "stage": schema,
+                            "conclusion": "NO_ISSUE",
+                            "reviewCoverage": [row["obligationId"] for row in body.get("obligations", [])],
+                            "issues": [],
+                        }),
+                    },
+                }]
+            }
+
+        if turn_float_in_loop == 1:
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "action": "math_asset",
+                            "assetId": "math.numerics",
+                            "target": "finite_difference",
+                            "input": {"f": "x**2", "x": 1.0, "h": 0.001},
+                        }),
+                    },
+                }]
+            }
+        else:
+            obs = body.get("toolObservations", [])
+            if obs and any("finite_difference" in str(o) for o in obs):
+                turn_float_in_received_obs = True
+            packet = {
+                "schemaVersion": "p2a-work-v1",
+                "sessionId": body["sessionId"],
+                "problemHash": body["problemHash"],
+                "contractVersion": body["contractVersion"],
+                "taskId": body["task"]["taskId"],
+                "goalId": body["task"]["goalId"],
+                "scopeId": body["task"]["scopeId"],
+                "routeId": body["route"]["routeId"],
+                "sourceRequestId": body["sourceRequestId"],
+                "claim": "Derivative estimate is 2.0",
+                "derivation": "Finite difference calculation",
+                "assumptions": [],
+                "dependencies": [
+                    {"artifactId": ref["artifactId"], "artifactVersion": ref["artifactVersion"]}
+                    for ref in body["task"].get("inputArtifactRefs", [])
+                ],
+                "pendingObligations": [],
+                "suggestedChecks": [],
+                "deliveryStatus": "COMPLETE",
+                "candidateProposal": "Derivative estimate is 2.0",
+            }
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": json.dumps(packet)},
+                }]
+            }
+
+    client_float_in = SimpleNamespace(chat=chat_float_in_loop)
+    agent_float_in = ReasoningAgent(client_float_in, problem_seconds=15)
+    solve_float_in = agent_float_in.solve("Compute finite difference.")
+    metrics_float_in = solve_float_in.get("metrics", {})
+    float_input_loop_valid = bool(
+        solve_float_in.get("status") == "candidate"
+        and solve_float_in.get("final_response") == "Derivative estimate is 2.0"
+        and solve_float_in.get("candidate_verified") is False
+        and metrics_float_in.get("tool_effect_calls") == 1
+        and metrics_float_in.get("tool_names") == ["finite_difference"]
+        and turn_float_in_received_obs
+    )
+
+    # Integer input, float output closed loop verification (e.g. Markov expected steps)
+    turn_float_out_loop = 0
+    turn_float_out_received_obs = False
+
+    def chat_float_out_loop(messages, **kw):
+        nonlocal turn_float_out_loop, turn_float_out_received_obs
+        turn_float_out_loop += 1
+        body = json.loads(messages[1]["content"])
+        schema = body.get("stage") or body.get("schemaVersion")
+        if schema in ("R2", "R4"):
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "schemaVersion": "p4-review-v1",
+                            "requestId": body.get("requestId", f"model-{turn_float_out_loop}"),
+                            "target": body["target"],
+                            "targetHash": body.get("targetHash", ""),
+                            "stage": schema,
+                            "conclusion": "NO_ISSUE",
+                            "reviewCoverage": [row["obligationId"] for row in body.get("obligations", [])],
+                            "issues": [],
+                        }),
+                    },
+                }]
+            }
+
+        if turn_float_out_loop == 1:
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "action": "math_asset",
+                            "assetId": "math.probability",
+                            "target": "markov_expected_steps",
+                            "input": {"transition": [[0, 1, 0], [0, 0, 1], [0, 0, 1]], "start": 0, "targets": [2]},
+                        }),
+                    },
+                }]
+            }
+        else:
+            obs = body.get("toolObservations", [])
+            if obs and any("markov_expected_steps" in str(o) for o in obs):
+                turn_float_out_received_obs = True
+            packet = {
+                "schemaVersion": "p2a-work-v1",
+                "sessionId": body["sessionId"],
+                "problemHash": body["problemHash"],
+                "contractVersion": body["contractVersion"],
+                "taskId": body["task"]["taskId"],
+                "goalId": body["task"]["goalId"],
+                "scopeId": body["task"]["scopeId"],
+                "routeId": body["route"]["routeId"],
+                "sourceRequestId": body["sourceRequestId"],
+                "claim": "The expected steps is 2.0",
+                "derivation": "Markov chain expected steps calculation",
+                "assumptions": [],
+                "dependencies": [
+                    {"artifactId": ref["artifactId"], "artifactVersion": ref["artifactVersion"]}
+                    for ref in body["task"].get("inputArtifactRefs", [])
+                ],
+                "pendingObligations": [],
+                "suggestedChecks": [],
+                "deliveryStatus": "COMPLETE",
+                "candidateProposal": "The expected steps is 2.0",
+            }
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": json.dumps(packet)},
+                }]
+            }
+
+    client_float_out = SimpleNamespace(chat=chat_float_out_loop)
+    agent_float_out = ReasoningAgent(client_float_out, problem_seconds=15)
+    solve_float_out = agent_float_out.solve("Compute Markov expected steps.")
+    metrics_float_out = solve_float_out.get("metrics", {})
+    float_output_loop_valid = bool(
+        solve_float_out.get("status") == "candidate"
+        and solve_float_out.get("final_response") == "The expected steps is 2.0"
+        and solve_float_out.get("candidate_verified") is False
+        and metrics_float_out.get("tool_effect_calls") == 1
+        and metrics_float_out.get("tool_names") == ["markov_expected_steps"]
+        and turn_float_out_received_obs
+    )
+
+    metrics["evidence_upgrade_failures"] = (
+        0 if (closed_loop_valid and color_loop_valid and float_input_loop_valid and float_output_loop_valid) else 1
+    )
 
     # 20. Frozen asset hash failures
     frozen_res = subprocess.run(
@@ -474,6 +669,7 @@ console.log('PARSED_82_OK');
         metrics["evidence_upgrade_failures"] == 0 and
         metrics["default_entry_uses_unified_assets"] and
         all_82_parsed_ok and
+        all_82_executed_ok and
         offline_migration.returncode == 0 and
         offline_usage.returncode == 0 and
         offline_node_math.returncode == 0 and

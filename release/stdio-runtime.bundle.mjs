@@ -24040,7 +24040,7 @@ ${g.guidance.join("\n")}`).join("");
     methodLoads,
     stopReason: stop,
     unresolvedObligations
-  });
+  }, true);
   const privateState = p2Snapshot({
     contract: ledger.snapshot(),
     events: ledger.eventsSnapshot(),
@@ -24064,8 +24064,8 @@ ${g.guidance.join("\n")}`).join("");
     readyTasks: ledger.readyTasks(),
     progressEvents: progress.snapshot(),
     sessionLog: sessionLog.snapshot()
-  });
-  return p2Snapshot({ summary, privateState });
+  }, true);
+  return p2Snapshot({ summary, privateState }, true);
 }
 var MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, MAX_EXPLORATION_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
@@ -24481,10 +24481,10 @@ var init_agent_host_flow = __esm({
           result: {
             protocolVersion: this.manifest.protocolVersion,
             sessionId,
-            summary: p2Snapshot(summary),
+            summary: p2Snapshot(summary, true),
             candidateRequestId,
-            trace: p2Snapshot(result.privateState.session.events),
-            sessionLog: p2Snapshot(sessionLog)
+            trace: p2Snapshot(result.privateState.session.events, true),
+            sessionLog: p2Snapshot(sessionLog, true)
           }
         }, "session.solve");
       }
