@@ -753,7 +753,13 @@ class ExecutionManager:
                     anonymous_pending += 1
             elif kind == "model_returned":
                 status = body.get("transportStatus")
-                settled = status in {"COMPLETE", "TRUNCATED", "ERROR"}
+                # The Host records whether the request actually left the process:
+                # a NOT_DISPATCHED return proves nothing was sent, so it settles
+                # the entry instead of keeping it as an unknown remote outcome.
+                dispatch_state = body.get("dispatchState")
+                settled = status in {"COMPLETE", "TRUNCATED", "ERROR"} or (
+                    dispatch_state == "NOT_DISPATCHED"
+                )
                 if isinstance(request_id, str):
                     if settled:
                         pending.pop(request_id, None)

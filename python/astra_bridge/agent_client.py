@@ -408,6 +408,10 @@ class AgentClient:
                 with self._lock:
                     if self.blocked or time.monotonic() >= deadline - _SETTLE_SECONDS:
                         return
+                    # The call is registered *at dispatch*: a request that entered
+                    # the client and then timed out is still a dispatched call, so
+                    # a late reply can never rewrite the delivered counts.
+                    self.calls += 1
                 try:
                     value = self._chat(
                         messages=copy.deepcopy(messages),
@@ -415,19 +419,21 @@ class AgentClient:
                         max_tokens=_MAX_TOKENS,
                     )
                 except _NOT_DISPATCHED_ERRORS as exc:
-                    # The client proves no byte left this process: never count it
-                    # as a dispatched call and never inherit an unknown outcome.
+                    # The only state that proves no byte left this process: undo
+                    # the dispatch registration (nothing was dispatched) and let
+                    # the caller record NOT_DISPATCHED instead of an unknown
+                    # remote outcome. This is accurate counting, not a budget
+                    # refund: logical budget stays with the Host.
                     if not _is_not_dispatched(exc):
+                        box["error"] = True
                         raise
+                    with self._lock:
+                        self.calls = max(0, self.calls - 1)
                     box["not_sent"] = True
                 except BaseException:  # noqa: BLE001 - fixed code only, never text
                     box["error"] = True
-                    with self._lock:
-                        self.calls += 1
                 else:
                     box["value"] = value
-                    with self._lock:
-                        self.calls += 1
             except BaseException:  # noqa: BLE001 - fixed code only, never text
                 box["error"] = True
             finally:

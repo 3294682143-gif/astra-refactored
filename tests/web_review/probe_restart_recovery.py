@@ -197,7 +197,38 @@ def probe_r4() -> dict:
     client = AgentClient(port)
     result = client.generate(_minimal_request(), time.monotonic() + 5.0)
     sent = result.get("dispatchState") == "DISPATCHED"
+
+    # R4b：把「Host 事件形状」的未发送请求持久化，再做一次重启恢复。
+    root = _root("r4")
+    manager = _start(root, "probe-r4-restart")
+    manager.append_event_sync(
+        "probe-r4-restart",
+        {
+            "kind": "model_dispatched",
+            "payload": {"requestId": "model-1", "phase": "WORK", "modelCalls": 0, "remainingMs": 600000},
+        },
+    )
+    manager.append_event_sync(
+        "probe-r4-restart",
+        {
+            "kind": "model_returned",
+            "payload": {
+                "requestId": "model-1",
+                "phase": "WORK",
+                "transportStatus": result.get("transportStatus"),
+                "dispatchState": result.get("dispatchState"),
+                "modelCalls": 1,
+                "remainingMs": 599000,
+            },
+        },
+    )
+    _rewrite(root, "probe-r4-restart", ownerPid=DEAD_PID)
+    survivor = ExecutionManager(Store(root), solver=None)
+    survivor.recover_orphan_runs()
+    after_restart = survivor.store.get_run("probe-r4-restart")["summary"]["metrics"]["remote_outcome_unknown"]
+
     return {
+        "after_restart_unknown": after_restart,
         "admitted_before": admitted,
         "admitted_after": refused,
         "dispatchState": result.get("dispatchState"),
@@ -214,6 +245,7 @@ def probe_r4() -> dict:
             and client.calls == 0
             and sent is False
             and connector.last_transport_summary == {}
+            and after_restart is False
         ),
     }
 

@@ -324,21 +324,91 @@ class TestR4NotDispatched:
         assert client.calls == 0
         assert [row["state"] for row in client.snapshot()] == ["NOT_DISPATCHED"]
 
-    def test_r4_host_does_not_treat_unsent_as_unknown_remote_outcome(self, monkeypatch):
-        """Host 视角：未派发请求不置 blocked，但仍算作一次逻辑模型调用。"""
+    def test_r4_dispatch_state_survives_host_event_and_restart(self, tmp_path):
+        """派发状态必须贯穿 Host 事件、持久化与重启恢复。
+
+        Host 对未派发请求发出 ``model_returned`` 时带上 ``dispatchState``；
+        恢复判定据此把该请求视为「已结清」，而不是又一次变成远端未知。
+        """
+        manager = _manager(tmp_path)
+        run_id = _start_run(manager, "run-r4-restart")
+        # 与 Host observer 实际下发的事件逐字段一致。
+        manager.append_event_sync(
+            run_id,
+            {
+                "kind": "model_dispatched",
+                "payload": {"requestId": "model-1", "phase": "WORK", "modelCalls": 0, "remainingMs": 600000},
+            },
+        )
+        manager.append_event_sync(
+            run_id,
+            {
+                "kind": "model_returned",
+                "payload": {
+                    "requestId": "model-1",
+                    "phase": "WORK",
+                    "transportStatus": "UNKNOWN",
+                    "dispatchState": "NOT_DISPATCHED",
+                    "modelCalls": 1,
+                    "remainingMs": 599000,
+                },
+            },
+        )
+        assert ExecutionManager.remote_outcome_unknown(manager.get_history_events(run_id)) is False
+
+        _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID)
+        survivor = ExecutionManager(Store(tmp_path), solver=None)
+        assert survivor.recover_orphan_runs() == [run_id]
+        assert survivor.store.get_run(run_id)["summary"]["metrics"]["remote_outcome_unknown"] is False
+
+    def test_r4_legacy_event_without_dispatch_state_still_counts_as_unknown(self, tmp_path):
+        """旧存档没有 dispatchState：UNKNOWN 传输仍按未决处理（不擅自放宽）。"""
+        manager = _manager(tmp_path)
+        run_id = _start_run(manager, "run-r4-legacy")
+        manager.append_event_sync(run_id, {"kind": "model_dispatched", "payload": {"requestId": "m1"}})
+        manager.append_event_sync(
+            run_id, {"kind": "model_returned", "payload": {"requestId": "m1", "transportStatus": "UNKNOWN"}}
+        )
+        _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID)
+
+        survivor = ExecutionManager(Store(tmp_path), solver=None)
+        survivor.recover_orphan_runs()
+        assert survivor.store.get_run(run_id)["summary"]["metrics"]["remote_outcome_unknown"] is True
+
+    def test_r4_timed_out_call_is_still_counted_as_dispatched(self):
+        """超时未返回的调用必须计为一次派发（迟到结果不得改写已交付计数）。"""
+        import threading
+        import time as _time
+
         from python.astra_bridge.agent_client import AgentClient
 
-        port, connector, now = self._port(remaining=0.2)
-        now["t"] = 5.0
-        client = AgentClient(port)
-        result = client.generate(_minimal_request(), time.monotonic() + 5.0)
+        class SlowPort:
+            def __init__(self):
+                self.calls = 0
+                self.release = threading.Event()
 
-        # 与 Host 的判定等价：只有 sent 的 UNKNOWN 才封锁。
-        sent = result["dispatchState"] == "DISPATCHED"
-        blocked = result["transportStatus"] == "UNKNOWN" and sent
-        assert blocked is False
-        assert client.calls == 0
-        assert connector.last_transport_summary == {}
+            def may_dispatch(self):
+                return True
+
+            def chat(self, *, messages, temperature, max_tokens):
+                self.calls += 1
+                self.release.wait(2.0)  # replies long after the deadline
+                return {"choices": [{"index": 0, "finish_reason": "stop",
+                                     "message": {"role": "assistant", "content": "late"}}]}
+
+        port = SlowPort()
+        client = AgentClient(port)
+        started = _time.monotonic()
+        result = client.generate(_minimal_request(), _time.monotonic() + 0.3)
+        elapsed = _time.monotonic() - started
+
+        assert elapsed < 1.0, "the deadline must not wait for the late reply"
+        assert result["dispatchState"] == "DISPATCHED"
+        assert result["transportStatus"] == "UNKNOWN"
+        assert client.calls == 1, "a dispatched call is counted at dispatch time"
+        assert client.blocked is True
+        assert client.snapshot()[-1]["state"] == "OUTCOME_UNKNOWN"
+        port.release.set()
 
     def test_r4_transport_error_after_send_is_still_unknown(self):
         """对照：真正发出去之后失败，必须仍然是远端未知并封锁客户端。"""

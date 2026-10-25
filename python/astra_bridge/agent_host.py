@@ -1138,6 +1138,10 @@ class AgentHost(_Host):
             "requestId": request_id,
             "phase": request["phase"],
             "transportStatus": transport,
+            # ``dispatchState`` travels with the event: persistence and restart
+            # recovery must be able to tell "provably not sent" from "sent and
+            # unknown" without re-deriving it from a transport status alone.
+            "dispatchState": dispatch_state,
             "modelCalls": self.model_requests,
             "remainingMs": self.remaining_ms(),
         })

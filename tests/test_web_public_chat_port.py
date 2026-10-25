@@ -185,12 +185,14 @@ def test_exhausted_budget_is_reported_as_not_dispatched(monkeypatch):
     assert port.may_dispatch() is False
 
     solver = SolverAdapter(client_factory=lambda: port)
+    events: list[dict] = []
     result = solver(
         {
             "run_id": "run-budget-refused-1",
             "problem": _problem(),
             "engine": "ts",
             "metadata": {},
+            "_event_sink": lambda event: events.append(dict(event)),
             **default_budget(),
         }
     )
@@ -204,6 +206,84 @@ def test_exhausted_budget_is_reported_as_not_dispatched(monkeypatch):
     assert metrics["unknown_usage_requests"] == 0
     assert result["status"] != "candidate"
     assert result["candidate_verified"] is False
+
+    # The real Host still emits the real observer events: a dispatch plus a return
+    # that *carries the dispatch state*, so persistence and restart recovery can
+    # tell "never sent" from "sent and unknown".
+    kinds = [row.get("kind") for row in events]
+    assert "model_dispatched" in kinds and "model_returned" in kinds
+    returned = [row for row in events if row.get("kind") == "model_returned"]
+    assert returned, "the Host must still report the return of this request"
+    assert returned[-1]["payload"]["dispatchState"] == "NOT_DISPATCHED"
+    assert returned[-1]["payload"]["transportStatus"] == "UNKNOWN"
+
+
+def test_host_events_of_an_unsent_request_stay_resolved_after_restart(monkeypatch, tmp_path):
+    """Host 真实事件 → 持久化 → 重启恢复：未发送请求不得变回远端未知。"""
+    import json as _json
+
+    from python.astra_web.queue import ExecutionManager
+    from python.astra_web.storage import Store
+
+    brain = MathAssetScriptedClient(ASSET_ID, TARGET, INPUT)
+    transport = install_fake_provider(monkeypatch, brain, ENDPOINT)
+    now = {"t": 0.0}
+    port = PublicChatPort(_connector(), request_seconds=0.2, clock=lambda: now["t"])
+    now["t"] = 5.0
+
+    solver = SolverAdapter(client_factory=lambda: port)
+    events: list[dict] = []
+    solver(
+        {
+            "run_id": "run-host-events-1",
+            "problem": _problem(),
+            "engine": "ts",
+            "metadata": {},
+            "_event_sink": lambda event: events.append(dict(event)),
+            **default_budget(),
+        }
+    )
+    assert transport.requests == [], "nothing may reach the provider"
+    assert any(row.get("kind") == "model_returned" for row in events)
+
+    # Persist exactly the events the Host produced, then simulate a restart.
+    manager = ExecutionManager(Store(tmp_path), solver=None)
+    run_id = manager.prepare_run(
+        problem=_problem(),
+        request={"problem": _problem(), "engine": "ts", "metadata": {}},
+        run_id="run-host-events-1",
+    )
+    for event in events:
+        manager.append_event_sync(run_id, event)
+
+    store = Store(tmp_path)
+    run = store.get_run(run_id)
+    summary = dict(run["summary"])
+    summary["ownerPid"] = 999_999  # the owning process is gone
+    store.save_run(
+        {
+            "run_id": run_id,
+            "created_at": run.get("created_at"),
+            "source": run.get("source"),
+            "status": run.get("status"),
+            "scenario": run.get("scenario"),
+            "model": run.get("model"),
+            "seed": run.get("seed"),
+            "duration_s": run.get("duration_s"),
+            "summary_json": _json.dumps(summary, ensure_ascii=False),
+            "l2_path": run.get("l2_path"),
+            "l3_path": run.get("l3_path"),
+            "tags": ",".join(run.get("tags") or []),
+            "checksum": run.get("checksum"),
+        },
+        overwrite=True,
+    )
+
+    survivor = ExecutionManager(Store(tmp_path), solver=None)
+    assert survivor.recover_orphan_runs() == [run_id]
+    recovered = survivor.store.get_run(run_id)["summary"]
+    assert recovered["metrics"]["remote_outcome_unknown"] is False
+    assert recovered["candidate_verified"] is False
 
 
 def test_not_dispatched_is_journalled_but_never_blocks_the_client():

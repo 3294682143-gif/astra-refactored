@@ -2075,3 +2075,19 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   「可离线复跑的最小门禁子集」一节，明确哪些命令在缺 Node/浏览器时仍可独立判定。
 - 复核环境缺 Node/浏览器时，全量 BFF、82 项端到端与浏览器结果**不作为**其独立复跑结论——
   这一点在验收报告的边界说明里已经写明。
+
+---
+
+## 24 2026-10-25 计数回归与未发送状态贯通修复（V5）
+
+- **P1 计数回归**：上一轮把 `AgentClient.calls += 1` 挪到调用返回之后，导致「已进入客户端但超时未返回」
+  被计为 0 次派发。现在恢复**派发即计数**，仅对 `RequestNotDispatched`（唯一能证明未发送的信号）
+  回滚那一次登记；迟到结果永不改写已交付计数。既有的
+  `tests/e2e/test_ts_entry_safety.py`（超时要求 `client_method_calls == 1`）已纳入 `web-unit-bff` 门禁，
+  并新增 R4 用例直接断言超时场景 `calls == 1`、`blocked == True`、终态 `OUTCOME_UNKNOWN`。
+- **P2 未发送状态贯通**：`dispatchState` 现在贯穿 `AgentClient` 返回 → Host `model_returned` 事件 →
+  事件持久化 → 重启恢复判定。`dispatchState=NOT_DISPATCHED` 的请求视为已结清，不再变成远端未知；
+  缺少该字段的旧存档保持原有未决语义（不擅自放宽）。新增真实 Host 事件驱动的恢复用例
+  `test_host_events_of_an_unsent_request_stay_resolved_after_restart`（HTTP 调用 0 次 → 恢复后
+  `remote_outcome_unknown=False`），pytest-free 探针同步输出 `R4.after_restart_unknown`。
+- 仍**未执行**真实外部模型端到端评测；`candidate_verified` 恒为 `False`。

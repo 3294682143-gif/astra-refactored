@@ -875,3 +875,16 @@ python3 tests/web_review/probe_restart_recovery.py .               # JSON，all_
 
 > 探针与被测树隔离：只在私有临时数据根内构造运行记录，不写实现文件、不触碰运行中的 BFF。
 > 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md` 同步新增「可离线复跑的最小门禁子集」一节。
+
+## 23 第二轮收口修复（V5）
+
+复核确认 R1–R3 已修复、R4 即时结果正确，但指出改动引入了一处计数回归，以及 R4 在重启恢复链上丢失状态。
+
+| 缺陷 | 级别 | 根因 | 修复 | 证据 |
+|---|---|---|---|---|
+| 超时调用的计数回归 | P1 | 为区分「未发送」把 `self.calls += 1` 挪到客户端返回之后；请求已进入客户端但超过截止时间时，正式入口给出 `client_method_calls=0 / logical_model_calls=1 / remote_outcome_unknown=true`，迟到线程返回后才补记 | 恢复**派发即计数**：worker 在进入客户端前登记 `calls`；只有 `RequestNotDispatched`（唯一能证明未发送的信号）回滚这一次登记；迟到结果永远不改写已交付计数 | `tests/e2e/test_ts_entry_safety.py::test_model_timeout_is_unknown_and_not_retried`（要求 `client_method_calls == 1`）已纳入 `web-unit-bff` 门禁；新增 `TestR4NotDispatched::test_r4_timed_out_call_is_still_counted_as_dispatched` |
+| 未发送状态未贯穿重启恢复 | P2 | Host 的 `model_returned` 事件不带派发状态；恢复按 `transportStatus=UNKNOWN` 判定，未发送请求重启后又变成远端未知 | `dispatchState` 从 `AgentClient` 返回 → Host 事件 payload → 事件持久化 → `remote_outcome_unknown()` 判定：`dispatchState=NOT_DISPATCHED` 视为已结清；不带该字段的旧存档仍按未决处理（不擅自放宽） | 真实 `ReasoningAgent → Host → Node` 链路：`test_host_events_of_an_unsent_request_stay_resolved_after_restart`（断言 HTTP 调用 0 次、事件带 `dispatchState=NOT_DISPATCHED`、恢复后 `remote_outcome_unknown=False`）；探针 `probe_restart_recovery.py` 的 `R4.after_restart_unknown=false` |
+
+验收门禁随之更新：`web-unit-bff` 纳入 `tests/e2e/test_ts_entry_safety.py`（超时安全），
+`tests/test_web_public_chat_port.py` 现覆盖「Host 真实事件 → 重启恢复」整链，
+`tests/test_web_review_regressions.py` 扩到 16 项（含派发即计数与 `dispatchState` 恢复）。

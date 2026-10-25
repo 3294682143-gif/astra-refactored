@@ -111,7 +111,9 @@ def main(argv=None) -> int:
                           "tests/test_web_restart_recovery.py",
                           "tests/test_web_review_regressions.py",
                           "tests/e2e/test_web_math_failure_paths.py",
-                          "tests/e2e/test_web_math_streaming.py"], ROOT),
+                          "tests/e2e/test_web_math_streaming.py",
+                          # 超时安全：派发即计数、迟到结果不得改写已交付计数
+                          "tests/e2e/test_ts_entry_safety.py"], ROOT),
         ("bff-82", [py, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/e2e/test_web_math_assets_82_e2e.py"], ROOT),
         ("core-82", [py, "tests/e2e/test_ts_math_assets_82_e2e.py"], ROOT),
     ]
@@ -179,7 +181,7 @@ def main(argv=None) -> int:
         "python3 -m pytest -q tests/test_web_review_regressions.py",
         "# 同一组边界的 pytest-free 探针（输出 JSON，all_passed 即结论）",
         "python3 tests/web_review/probe_restart_recovery.py .",
-        "# 恢复与生产客户端回归",
+        "# 恢复与生产客户端回归（含 Host 真实事件 → 重启恢复链路）",
         "python3 -m pytest -q tests/test_web_restart_recovery.py tests/test_web_public_chat_port.py",
         "# 资产 / 协议 / 发布清单",
         "python3 scripts/build_math_assets.py --check",
