@@ -2012,3 +2012,5 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   全部通过；详细命令与输出见 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`。
 - 本次真实外部模型评测**未执行**；82 项测试只替代远端模型响应，不能当作数学正确率。
 - `candidate_verified` 仍恒为 `False`；浏览器不直连 provider，不绕过 Host。
+- 后续待办：分支推送后在远端发起 PR 合入目标分支；接入真实 `ASTRA_S2_API_KEY` 做一次外部模型端到端
+  评测（本次未执行）；GitHub 凭据请在使用后轮换。

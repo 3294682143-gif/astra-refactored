@@ -815,7 +815,7 @@ git push -u origin HEAD:refs/heads/feat/web-unified-math-integration
 | I5 事件与回放 | 完成 | 真实 Host observer 事件、SSE Last-Event-ID、L2 落盘与去重测试。 |
 | I6 页面 | 完成 | 资产页统一为数学资产；求解页改为 `max_effects`，方法卡开关移除。 |
 | I7 发布清单 | 完成 | schema 生成检查、release manifest、Web 静态清单同步检查。 |
-| I8 验收 | 完成 | 核心 82/82、BFF 82/82、Web 单元/BFF/失败/流式用例通过。 |
-| I9 交付 | 进行中 | 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`、HANDOFF 与新分支 commit/push。 |
+| I8 验收 | 完成 | 核心 82/82、BFF 82/82、Web 单元/BFF/失败/流式 49 项、headless Chrome smoke 通过。 |
+| I9 交付 | 完成 | 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`、HANDOFF、新分支提交并推送；原分支未改动。 |
 
 > 说明：82 项测试只替代远端模型响应；Node、Host、统一数学资产执行器与 BFF 均为正式代码。`candidate_verified` 始终为 `False`。
