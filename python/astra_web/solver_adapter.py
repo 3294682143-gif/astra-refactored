@@ -7,6 +7,7 @@ Python Host and unified ``use_math_asset`` executor remain the real ones.
 """
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Any, Callable, Mapping, Optional
 
@@ -26,17 +27,45 @@ _BUDGET_KEYS = (
 )
 
 
+def _accepts_budget(factory: Callable[..., Any]) -> bool:
+    """Report whether ``factory`` wants the per-run budget mapping."""
+    try:
+        signature = inspect.signature(factory)
+    except (TypeError, ValueError):  # builtins / C callables: assume zero-arg
+        return False
+    positional = 0
+    for parameter in signature.parameters.values():
+        if parameter.kind in (
+            parameter.POSITIONAL_ONLY,
+            parameter.POSITIONAL_OR_KEYWORD,
+            parameter.VAR_POSITIONAL,
+        ):
+            positional += 1
+        elif parameter.kind is parameter.KEYWORD_ONLY and parameter.default is parameter.empty:
+            return True
+    return positional > 0
+
+
 class SolverAdapter:
     """Callable solver port used by ``ExecutionManager``."""
 
     def __init__(
         self,
         *,
-        client_factory: Callable[[], Any],
+        client_factory: Callable[..., Any],
         agent_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._client_factory = client_factory
         self._agent_factory = agent_factory
+        # A production factory needs the per-run budgets (the transport deadline
+        # follows ``problem_seconds``); test fixtures usually need no arguments.
+        # Both shapes are accepted explicitly instead of guessing at call time.
+        self._factory_takes_budget = _accepts_budget(client_factory)
+
+    def _build_client(self, budgets: Mapping[str, Any]) -> Any:
+        if self._factory_takes_budget:
+            return self._client_factory(dict(budgets))
+        return self._client_factory()
 
     def _agent_class(self) -> Callable[..., Any]:
         if self._agent_factory is not None:
@@ -53,7 +82,7 @@ class SolverAdapter:
             key: request.get(key, DEFAULT_BUDGET[key])
             for key in _BUDGET_KEYS
         }
-        client = self._client_factory()
+        client = self._build_client(budgets)
         observer = request.get("_event_sink")
         agent_kwargs = dict(budgets)
         if callable(observer):
@@ -89,14 +118,25 @@ def build_solver_from_env() -> Optional[SolverAdapter]:
     if not api_key or not endpoint:
         return None
 
-    def _factory() -> Any:
-        from mathagent.user_client import UserSuppliedS2Client
+    def _factory(budgets: Mapping[str, Any] | None = None) -> Any:
+        """Build one explicit connector for one run.
 
-        return UserSuppliedS2Client(
+        The connector is bound to the formal ``chat`` contract through
+        ``PublicChatPort``: without that port the first dispatch raises
+        ``TypeError`` (the user-supplied connector needs the frozen S2 settings,
+        a bounded timeout and a cancellation event) and the Host would block the
+        client for the rest of the process.
+        """
+        from mathagent.user_client import UserSuppliedS2Client
+        from python.astra_bridge.public_chat_port import PublicChatPort
+
+        connector = UserSuppliedS2Client(
             api_key=api_key,
             endpoint=endpoint,
             model=model,
         )
+        seconds = (budgets or {}).get("problem_seconds", DEFAULT_BUDGET["problem_seconds"])
+        return PublicChatPort(connector, request_seconds=seconds)
 
     return SolverAdapter(client_factory=_factory)
 

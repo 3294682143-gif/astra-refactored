@@ -29,6 +29,7 @@ import {
 } from "@/api/client.ts";
 import { describeStopReason } from "@/domain/stopReasonView.ts";
 import { getEventKind, getEventPayload } from "@/domain/reduceRun.ts";
+import { parseTerminalFrame, toTerminalEnvelope } from "@/domain/terminalFrame.ts";
 
 export function RunReplayPage() {
   const { runId } = useParams();
@@ -54,12 +55,23 @@ export function RunReplayPage() {
     });
 
     if (activeRunId) {
-      fetchReplay(activeRunId).then((res) => {
-        setReplay(res);
-        ctrl.loadEvents(res.ok ? res.data.events : [], true);
-      });
-      fetchRun(activeRunId).then((res) => {
-        setRunRecord(res);
+      // 事件流与权威运行记录并行读取：旧存档可能只把终态放在 summary 里
+      // （本次整合前落盘的运行即是如此），此时必须用真实终态收口回放，
+      // 而不是让界面停在 idle / resultSeen=false。
+      Promise.all([fetchReplay(activeRunId), fetchRun(activeRunId)]).then(([eventsRes, runRes]) => {
+        setReplay(eventsRes);
+        setRunRecord(runRes);
+        const events = eventsRes.ok ? [...eventsRes.data.events] : [];
+        const hasTerminalEvent = events.some((ev) => {
+          const kind = getEventKind(ev as never);
+          return kind === "RESULT" || kind === "FINAL";
+        });
+        if (!hasTerminalEvent && runRes.ok) {
+          const facts = readTerminalFacts(runRes.data);
+          const frame = parseTerminalFrame(facts as unknown);
+          if (frame) events.push(toTerminalEnvelope(frame, activeRunId));
+        }
+        ctrl.loadEvents(events, true);
       });
     }
 

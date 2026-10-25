@@ -442,6 +442,7 @@ def create_app(
     web_dist: str | os.PathLike[str] | None = None,
     mount_static: bool = True,
     solver: Any = None,
+    recover_orphans: bool = True,
 ) -> Starlette:
     default_data_root = REPO_ROOT / "var" / "astra"
     default_web_dist = REPO_ROOT / "apps" / "web-demo" / "dist"
@@ -449,6 +450,13 @@ def create_app(
     store_root = Path(data_root) if data_root else _env_path("ASTRA_DATA_ROOT", str(default_data_root))
     store = Store(store_root)
     execution_manager = ExecutionManager(store, solver=solver)
+    if recover_orphans:
+        # A previous process may have died mid-run. Those runs keep their real
+        # events and are closed honestly instead of showing a phantom "running".
+        try:
+            execution_manager.recover_orphan_runs()
+        except Exception as exc:  # 恢复失败不得阻止服务启动
+            logger.warning("restart recovery failed: %s", exc)
 
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),

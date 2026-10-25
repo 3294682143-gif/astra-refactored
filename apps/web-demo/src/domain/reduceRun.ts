@@ -135,6 +135,11 @@ export const KNOWN_EVENT_KINDS: ReadonlySet<string> = new Set<string>([
   "FINAL",
   "RESULT",
 
+  // 真实 Host 观测事件（python/astra_bridge/agent_host.py 的 observer 原样下发）
+  "model_dispatched",
+  "model_returned",
+  "effect_returned",
+
   // Web / Runner 标准事件
   "run.started",
   "run.finished",
@@ -596,6 +601,91 @@ function applyKnownEvent(state: RunViewState, ev: RunEventEnvelope): RunViewStat
             seq: ev.seq,
             level: status === "candidate" ? "info" : "error",
             message: `Run finished with stopReason=${stopReason ?? "MISSING"}${declaredStop ? "" : " (derived from declared status)"} -> status=${status}; final_response=${finalResponseMissing ? "MISSING (not fabricated)" : "present"}; candidate_verified=false`,
+            at: ev.at ?? ev.ts,
+          },
+        ],
+      };
+    }
+
+    // ---------------------- 真实 Host 观测事件 ----------------------
+    // 这三类事件由 Host 的 observer 在真实发生的那一刻发出，BFF 只补信封字段，
+    // 因此它们既不是演示数据也不是推测：派发/返回/观测各算一条真实事实。
+    case "model_dispatched": {
+      const requestId = str("requestId") ?? `model-${ev.seq}`;
+      const phase = str("phase") ?? "WORK";
+      const modelCalls = num("modelCalls");
+      return {
+        ...state,
+        status: TERMINAL_STATUSES.includes(state.status) ? state.status : "running",
+        steps: upsertStep(state.steps, {
+          stepId: `model:${requestId}`,
+          name: `模型调用 ${requestId} (${phase})`,
+          status: "running",
+          startedAt: ev.at ?? ev.ts,
+        }),
+        logs: [
+          ...state.logs,
+          {
+            seq: ev.seq,
+            level: "info",
+            message: `Model dispatched ${requestId} (phase=${phase}${modelCalls !== undefined ? `, call #${modelCalls}` : ""})`,
+            at: ev.at ?? ev.ts,
+          },
+        ],
+      };
+    }
+
+    case "model_returned": {
+      const requestId = str("requestId") ?? `model-${ev.seq}`;
+      const transportStatus = str("transportStatus") ?? "UNKNOWN";
+      const ok = transportStatus === "COMPLETE";
+      return {
+        ...state,
+        status: TERMINAL_STATUSES.includes(state.status) ? state.status : "running",
+        steps: upsertStep(state.steps, {
+          stepId: `model:${requestId}`,
+          status: ok ? "finished" : "error",
+          finishedAt: ev.at ?? ev.ts,
+          detail: `transportStatus=${transportStatus}`,
+        }),
+        logs: [
+          ...state.logs,
+          {
+            seq: ev.seq,
+            level: ok ? "info" : "error",
+            message: `Model returned ${requestId}: transportStatus=${transportStatus}`,
+            at: ev.at ?? ev.ts,
+          },
+        ],
+      };
+    }
+
+    case "effect_returned": {
+      const effectId = str("effectId") ?? `effect-${ev.seq}`;
+      const name = str("name") ?? str("action") ?? "effect";
+      const checkResult = str("checkResult") ?? "UNKNOWN";
+      const call: ToolCallView = {
+        id: effectId,
+        name,
+        args: p.action,
+        output: { status: str("status") ?? null, source: str("source") ?? null, checkResult },
+        status: checkResult === "FAILED" ? "error" : "done",
+      };
+      const existing = state.toolCalls.findIndex((row) => row.id === effectId);
+      const toolCalls =
+        existing < 0
+          ? [...state.toolCalls, call]
+          : state.toolCalls.map((row, i) => (i === existing ? { ...row, ...call } : row));
+      return {
+        ...state,
+        status: TERMINAL_STATUSES.includes(state.status) ? state.status : "running",
+        toolCalls,
+        logs: [
+          ...state.logs,
+          {
+            seq: ev.seq,
+            level: "info",
+            message: `Effect returned ${effectId} (${name}): status=${str("status") ?? "UNKNOWN"}, checkResult=${checkResult}`,
             at: ev.at ?? ev.ts,
           },
         ],

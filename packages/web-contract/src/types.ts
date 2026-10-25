@@ -86,6 +86,45 @@ export interface SolveResultDto {
   readonly catalogDigest?: string | null;
 }
 
+/**
+ * 真实 Host 观测事件名（`python/astra_bridge/agent_host.py` 的 observer 原样下发，
+ * BFF 只补传输信封字段，不改名、不合成）。
+ *
+ * 前端必须按这些真实名字监听；只监听旧的 `MODEL_REQUEST` / `TOOL_OBSERVATION`
+ * 会让整条真实事件流落入 unknownEvents，界面永远停在 idle。
+ */
+export type ObserverEventKind =
+  | "model_dispatched"
+  | "model_returned"
+  | "effect_returned";
+
+/** `model_dispatched`：Host 在真正派发一次模型请求的那一刻发出。 */
+export interface ModelDispatchedPayload {
+  readonly requestId: string;
+  readonly phase: string;
+  readonly modelCalls: number;
+  readonly remainingMs: number;
+}
+
+/** `model_returned`：Host 收到该次请求的传输结果（COMPLETE / TRUNCATED / UNKNOWN ...）。 */
+export interface ModelReturnedPayload {
+  readonly requestId: string;
+  readonly phase: string;
+  readonly transportStatus: string;
+  readonly modelCalls: number;
+  readonly remainingMs: number;
+}
+
+/** `effect_returned`：一次真实 effect（统一数学资产 / 工具）调用返回观测。 */
+export interface EffectReturnedPayload {
+  readonly effectId: string | null;
+  readonly action: string;
+  readonly name: string | null;
+  readonly status: string | null;
+  readonly source: string | null;
+  readonly checkResult: string | null;
+}
+
 export interface RunEventEnvelope<T = Record<string, unknown>> {
   readonly runId: string;
   readonly seq: number;

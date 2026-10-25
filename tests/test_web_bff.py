@@ -384,8 +384,17 @@ def test_no_real_solver_returns_explicit_not_executed_state(temp_store: Store):
         assert summary["executed"] is False
         assert summary["code"] == "SOLVER_NOT_CONFIGURED"
 
-        # 不得生成任何伪造事件（尤其不得把演示数据标为 official_result）
-        assert manager.get_history_events(rid) == []
+        # 不得生成任何伪造进展事件；唯一允许存在的是权威终态 RESULT，
+        # 它的内容与运行记录逐字段一致（不是演示数据、不是推测的进展）。
+        history = manager.get_history_events(rid)
+        assert [ev["kind"] for ev in history] == ["RESULT"]
+        terminal = history[0]
+        assert terminal["sourceKind"] == "official_result"
+        assert terminal["payload"]["status"] == summary["status"]
+        assert terminal["payload"]["stopReason"] == summary["stopReason"]
+        assert terminal["payload"]["final_response"] == summary["final_response"]
+        assert terminal["payload"]["executed"] is False
+        assert terminal["payload"]["candidate_verified"] is False
 
     # 不得内置答案表：两个不同题目都不得吐出任何"固定答案"文本
     blob = json.dumps([temp_store.get_run(r1["run_id"])["summary"],
@@ -406,11 +415,21 @@ def test_events_never_fabricated_official_result(temp_store: Store):
 
     r = asyncio.run(scenario())
     history = manager.get_history_events(r["run_id"])
-    assert history == []
-    assert all(ev.get("sourceKind") != "official_result" for ev in history)
+    # 唯一的事件必须是权威终态本身：不得伪造任何中间进展事件。
+    assert [ev.get("kind") for ev in history] == ["RESULT"]
+    assert all(
+        ev.get("sourceKind") == "official_result" for ev in history
+    ), "only the authoritative terminal record may claim official_result"
+    assert history[0]["payload"]["executed"] is False
+    assert history[0]["payload"]["candidate_verified"] is False
 
-    # L2 存档不得凭空存在（没有真实事件就没有详细存档）
-    assert temp_store.get_run(r["run_id"])["l2_path"] is None
+    # L2 存档只承载这条真实终态事件，不含任何编造的进展。
+    run = temp_store.get_run(r["run_id"])
+    archive = json.loads(
+        (temp_store.safe_join(run["l2_path"])).read_text(encoding="utf-8")
+    )
+    assert [ev["kind"] for ev in archive["events"]] == ["RESULT"]
+    assert archive["summary"]["final_response"] == "Unsolved."
 
 
 def test_terminal_kind_mapping_covers_four_buckets():
@@ -726,7 +745,7 @@ def test_create_run_response_is_idempotent_and_never_fabricates(temp_store: Stor
     assert stored["summary"]["final_response"] == "Unsolved."
     assert stored["summary"]["executed"] is False
     assert stored["summary"]["code"] == "SOLVER_NOT_CONFIGURED"
-    assert manager.get_history_events(first_body["run_id"]) == []
+    assert [ev["kind"] for ev in manager.get_history_events(first_body["run_id"])] == ["RESULT"]
     assert manager.stats()["started_total"] == 1
 
 def test_store_refuses_to_clobber_terminal_run_without_explicit_optin(temp_store: Store):

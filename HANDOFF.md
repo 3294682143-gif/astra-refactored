@@ -2014,3 +2014,28 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - `candidate_verified` 仍恒为 `False`；浏览器不直连 provider，不绕过 Host。
 - 后续待办：分支推送后在远端发起 PR 合入目标分支；接入真实 `ASTRA_S2_API_KEY` 做一次外部模型端到端
   评测（本次未执行）；GitHub 凭据请在使用后轮换。
+
+---
+
+## 21 2026-10-25 独立复核 5 项缺陷修复（V2）
+
+复核结论是「合并正确，但不能判定整合全部完成」，本轮在同一整合分支修复并补齐验收。
+
+- **P0 生产客户端装配**：`build_solver_from_env` 曾把 `UserSuppliedS2Client` 直连 `AgentClient`
+  （后者只传三参），首次派发即 `TypeError` → `UNKNOWN` → 客户端被封锁，配真实凭据也无法工作。
+  现由 `python/astra_bridge/public_chat_port.py::PublicChatPort` 承担适配：绑定正式三参契约、
+  代供冻结 S2 设置、按运行剩余预算收窄传输超时、预算耗尽时发送前抛 `RequestNotDispatched`。
+  测试为「真实连接器 + 仅 `requests.post` 被替换」的整链求解，脚本客户端接受 `**kwargs` 再也盖不住它。
+- **P1 真实事件接入**：契约新增 `ObserverEventKind`；reducer 支持 `model_dispatched /
+  model_returned / effect_returned`；求解页按真实事件名监听并有实时活动面板；`onerror` 不再关闭
+  EventSource（仅在 `readyState===CLOSED` 收口），保留 Last-Event-ID 重连、显示重连横幅与可审计次数。
+- **P1 回放终态**：终态收口落一条真实 `RESULT` 事件；旧存档（只有 summary）由回放页用权威 summary 收口。
+- **P1 重启恢复**：事件产生即追加 `runs/{id}/events.jsonl`，`get_history_events` 支持 JSONL 回落；
+  启动时 `recover_orphan_runs()` 把遗留运行收口为 `TRANSPORT_STOP / HOST_RESTARTED`，按是否真的派发过
+  记录 `remote_outcome_unknown`，并按 `ownerPid + ownerToken + 进程启动时间` 判定归属——注意 Node Host
+  派生的 multiprocessing 子进程会重新 import BFF 模块，没有归属判定就会误收口父进程正在跑的运行。
+- **P1 验收范围**：`scripts/web_browser_smoke.py` 改为 CDP 真实交互：提交求解 → 真实 Host 事件上屏 →
+  运行中注入 SSE 掉线 → 自动重连 → 交付候选 → 事件不重复 → 打开回放页还原答案（`23/23 PASS`）。
+  新增 `scripts/web_cdp.py`、`scripts/web_demo_server.py`；reporter 增加 `web-logic-tests`（46 项）。
+- 红线不变：`candidate_verified` 恒为 `False`；恢复路径只产出系统级失败终态，不冒充候选。
+- 仍**未执行**真实外部模型端到端评测；浏览器验收里的模型答案由脚本模型给出，其余全为正式代码路径。

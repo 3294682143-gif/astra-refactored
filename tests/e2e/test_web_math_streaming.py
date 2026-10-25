@@ -48,7 +48,12 @@ def test_real_events_reach_subscriber_and_replay_without_recompute(tmp_path):
     assert history == again == list(history)
     assert [row["seq"] for row in history] == list(range(1, len(history) + 1))
     assert all(row["runId"] == run_id for row in history)
-    assert all(row["sourceKind"] == "observed_archive" for row in history)
+    # 观测事件一律 observed_archive；只有最后那条权威终态允许 official_result。
+    assert all(
+        row["sourceKind"] == "observed_archive" for row in history[:-1]
+    )
+    assert history[-1]["kind"] == "RESULT"
+    assert history[-1]["sourceKind"] == "official_result"
     assert any(row["kind"] == "effect_returned" for row in history)
     assert run is not None and run["l2_path"]
     l2 = json.loads(manager.store.safe_join(run["l2_path"]).read_text(encoding="utf-8"))

@@ -819,3 +819,21 @@ git push -u origin HEAD:refs/heads/feat/web-unified-math-integration
 | I9 交付 | 完成 | 验收报告 `docs/WEB_MATH_INTEGRATION_ACCEPTANCE.md`、HANDOFF、新分支提交并推送；原分支未改动。 |
 
 > 说明：82 项测试只替代远端模型响应；Node、Host、统一数学资产执行器与 BFF 均为正式代码。`candidate_verified` 始终为 `False`。
+
+## 20 独立复核修复轮（V2）
+
+2026-10-25 对 `841f357` 的独立复核（远端核对 + 8 项资产/协议/清单检查 + 38 项前端逻辑测试）
+判定「分支合并正确，但不能判定整合全部完成」，并给出 5 项缺陷。本轮在同一条整合分支逐项修复，
+原分支 `前端设计`（`67f306a`）与 `feat/unified-math-assets`（`263923a`）继续保持不动。
+
+| 缺陷 | 级别 | 根因 | 修复 | 证据 |
+|---|---|---|---|---|
+| 生产客户端与正式调用接口不兼容 | P0 | `build_solver_from_env` 直接把 `UserSuppliedS2Client` 交给 `AgentClient`，而后者只传 `messages/temperature/max_tokens`，连接器还需要 `thinking_mode/stream/timeout/cancellation` → `TypeError` → `transportStatus=UNKNOWN` → 客户端被封锁 | 新增 `python/astra_bridge/public_chat_port.py`：`PublicChatPort` 绑定正式三参契约，代供冻结 S2 设置与按运行剩余预算收窄的传输超时；预算耗尽时在发送前抛 `RequestNotDispatched`；`SolverAdapter` 支持「工厂接收每运行预算」 | `tests/test_web_public_chat_port.py`（6 项）：裸连接器仍拒绝三参调用；**仅替换 `requests.post`** 的整链求解 `client_method_calls == POST 次数`、`remote_outcome_unknown=False`、`tool_effect_calls=1` |
+| 真实事件未接入前端消费 | P1 | 页面只监听 `MODEL_REQUEST/TOOL_OBSERVATION`，reducer 不认识 `model_dispatched/model_returned/effect_returned`，全部落入 `unknownEvents`；`onerror` 直接关闭 EventSource 破坏自动重连 | `web-contract` 新增 `ObserverEventKind` 与载荷类型；`reduceRun` 三个真实事件分支（步骤、effect 观测、日志）；`SolvePage` 监听真实事件名、新增实时活动面板；`onerror` 仅在 `readyState===CLOSED` 时收口，否则保留 Last-Event-ID 重连并显示重连横幅与可审计重连次数 | `apps/web-demo/src/domain/__tests__/observerEvents.test.ts`（8 项）；浏览器验收 23 项含 `reconnect_counter` / `reconnect_no_duplicate_events` |
+| 已完成候选无法正确回放 | P1 | 终态只写进 `summary`，存档事件里没有终态事件，回放控制器只加载 `events` → 回放停在 `idle` | 终态收口时落一条真实 `RESULT` 事件（`sourceKind=official_result`，字段与运行记录逐字段一致）；回放页在旧存档无终态事件时用权威 summary 收口 | `tests/web_math_helpers` 相关 BFF/流式用例；`observerEvents.test.ts` 的「旧存档只有 summary 终态」用例；浏览器验收 `replay_terminal_answer` / `replay_shows_candidate` |
+| 运行中事件与状态缺少重启恢复 | P1 | 事件只追加到内存，终态才写盘；新 manager 认为遗留运行不活跃 → 事件丢失、状态永远 `running` | 事件产生即追加 `runs/{id}/events.jsonl`；`get_history_events` 增加 JSONL 回落；启动时 `recover_orphan_runs()` 把遗留运行收口为 `TRANSPORT_STOP / HOST_RESTARTED`，并按「是否真的派发过」记录 `remote_outcome_unknown`；归属判定 `ownerPid + ownerToken + 进程启动时间`，活着的属主永不被收口 | `tests/test_web_restart_recovery.py`（7 项，含「活着的属主不被收口」「无派发不谎称远端未知」） |
+| 验收范围不足以支持「全部完成」 | P1 | 浏览器冒烟只渲染两页、检查标题与 `26/82` 文本，没有提交求解、消费真实事件、断线重连或验证回放 | 重写 `scripts/web_browser_smoke.py`：CDP 真实交互（点击求解 → 真实 Host 事件出现在页面 → 运行中注入 SSE 掉线 → 自动重连 → 交付候选 → 事件不重复 → 打开回放页还原答案）；新增 `scripts/web_cdp.py`、`scripts/web_demo_server.py`（真实 `PublicChatPort` + 脚本模型 + 掉线注入） | 浏览器验收 `23/23 PASS` + `BROWSER_SMOKE_PASS`；reporter 新增 `web-logic-tests` 门禁（46 项 Node 逻辑测试） |
+
+> 新增的恢复路径不改变红线：`candidate_verified` 恒为 `False`；遗留运行一律收口为系统级失败，
+> 既不冒充 candidate，也不把「未派发的调用」说成远端未知。多进程（Node Host 派生的 spawn 子进程）
+> 会重新 import BFF 模块，因此归属判定是必需的——否则子进程会把父进程正在跑的运行误收口。

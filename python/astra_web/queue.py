@@ -28,6 +28,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -43,6 +44,11 @@ from .contracts.mapping import classify_stop_reason, classify_terminal_kind
 from .storage import NON_TERMINAL_STATUSES, DuplicateRunError, Store, is_valid_run_id
 
 logger = logging.getLogger("astra_web.queue")
+
+# Import time ≈ BFF process start. A legacy record (no owner identity) may only be
+# recovered when it predates this process, so a concurrent sibling can never be
+# closed by mistake.
+_PROCESS_STARTED_AT = time.time()
 
 MAX_CONCURRENT_RUNS = 1
 UNSOLVED_RESPONSE = "Unsolved."
@@ -142,6 +148,10 @@ class ExecutionManager:
         self._max_observed_concurrency = 0
         self._started_total = 0
         self._completed_total = 0
+        self._recovered_runs: List[str] = []
+        # Per-manager token: two managers can share one process, so the pid alone
+        # cannot tell "my run" from "another manager's run".
+        self._owner_token = uuid.uuid4().hex
 
     # ------------------------------------------------------------- 可观测性
     @property
@@ -159,6 +169,7 @@ class ExecutionManager:
             "started_total": self._started_total,
             "completed_total": self._completed_total,
             "max_observed_concurrency": self._max_observed_concurrency,
+            "recovered_runs": len(self._recovered_runs),
             "solver_configured": self.solver_configured,
             "fabricated_events": False,
         }
@@ -251,6 +262,11 @@ class ExecutionManager:
             "candidate_verified": False,
             "executed": False,
             "childReaped": None,
+            # Ownership is recorded so restart recovery can tell a真 orphan from a
+            # run that another live process (or a spawned helper that re-imports
+            # this module) is still working on.
+            "ownerPid": os.getpid(),
+            "ownerToken": self._owner_token,
         }
         try:
             self.store.save_run(
@@ -520,6 +536,10 @@ class ExecutionManager:
         # history used by SSE; no event is fabricated during finalization.
         for event in outcome.events:
             self.append_event_sync(run_id, dict(event))
+        # The authoritative terminal record is a real event, not an inference:
+        # replay and detail views must be able to close the run without a second,
+        # separately-shaped summary document.
+        self.append_terminal_event(run_id, summary)
         history = list(self._history_events.get(run_id, []))
         l2_rel: Optional[str] = None
         if history:
@@ -547,9 +567,249 @@ class ExecutionManager:
         if not self.store.save_run_terminal(record):
             logger.warning("terminal record for %s already exists; kept immutable", run_id)
 
+    # --------------------------------------------------------- 重启恢复
+    def recover_orphan_runs(self) -> List[str]:
+        """收口上一个进程遗留的非终态运行。
+
+        运行中途退出时，worker 线程、调用线程与责任记录都会消失，但已观测事件
+        已经增量落盘。这里把这些运行如实收口为 **系统级失败 + 远端结果未知**：
+
+        * 绝不改写为 candidate / solved，也不推测数学结论；
+        * 若历史里出现过真实模型派发，则明确记录 ``remote_outcome_unknown=True``，
+          保留未决请求责任，而不是把它当作“从未发生”；
+        * 终态与事件都以真实记录落盘，回放与详情页因此可以完整收口。
+        """
+        recovered: List[str] = []
+        try:
+            records = self.store.list_runs(limit=500)
+        except Exception as exc:
+            logger.warning("failed to scan runs for restart recovery: %s", exc)
+            return recovered
+
+        for record in records:
+            run_id = record.get("run_id")
+            if not isinstance(run_id, str) or not is_valid_run_id(run_id):
+                continue
+            if record.get("status") not in NON_TERMINAL_STATUSES:
+                continue
+            if run_id in self._active_runs:
+                continue
+            if not self._owner_is_gone(record):
+                # Another live process still owns this run (a spawned helper that
+                # re-imports this module, or a second BFF sharing the data root).
+                # Closing it here would fabricate an outcome for a live run.
+                continue
+            try:
+                if self._recover_one(record):
+                    recovered.append(run_id)
+            except Exception as exc:
+                logger.error("failed to recover orphan run %s: %s", run_id, exc)
+        self._recovered_runs = list(recovered)
+        if recovered:
+            logger.warning(
+                "recovered %d run(s) left non-terminal by a previous process "
+                "(pid=%s, root=%s): %s",
+                len(recovered),
+                os.getpid(),
+                self.store.root,
+                ", ".join(recovered),
+            )
+        return recovered
+
+    @staticmethod
+    def _pid_alive(pid: Any) -> bool:
+        if type(pid) is not int or pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:  # exists, owned by another user
+            return True
+        except OSError:
+            return False
+        return True
+
+    def _owner_is_gone(self, record: Mapping[str, Any]) -> bool:
+        """A run may only be recovered when its owner can no longer finish it."""
+        summary = self._existing_summary(record)
+        owner = summary.get("ownerPid")
+        if type(owner) is int and owner > 0:
+            if owner != os.getpid():
+                return not self._pid_alive(owner)
+            # Same process: only this very manager may reclaim its own run. A
+            # sibling manager (or a spawned helper that re-imports this module)
+            # must never close a run it does not own.
+            return summary.get("ownerToken") == self._owner_token
+        # Legacy record without ownership: only trust records older than this
+        # process, so a concurrent sibling can never be closed by mistake.
+        created_at = record.get("created_at")
+        if isinstance(created_at, (int, float)):
+            return float(created_at) < _PROCESS_STARTED_AT
+        return False
+
+    def _recover_one(self, record: Mapping[str, Any]) -> bool:
+        run_id = str(record["run_id"])
+        summary = self._existing_summary(record)
+        events = self.get_history_events(run_id)
+        dispatched = any(
+            str(row.get("kind")) in {"model_dispatched", "MODEL_REQUEST"}
+            for row in events
+        )
+        kind = classify_terminal_kind(StopReason.TRANSPORT_STOP)
+        metrics = summary.get("metrics")
+        metrics = dict(metrics) if isinstance(metrics, Mapping) else {}
+        metrics["remote_outcome_unknown"] = True if dispatched else False
+        created_at = record.get("created_at")
+        elapsed_ms = None
+        if isinstance(created_at, (int, float)):
+            elapsed_ms = int(max(0.0, time.time() - float(created_at)) * 1000)
+
+        recovered_summary = {
+            **summary,
+            "runId": run_id,
+            "status": classify_stop_reason(StopReason.TRANSPORT_STOP).value,
+            "stopReason": StopReason.TRANSPORT_STOP.value,
+            "terminalKind": kind.value if kind is not None else None,
+            "reason": (
+                "BFF 进程在运行中途重启：本次运行的 worker 已不存在，"
+                "未取得终态事实，按系统级失败收口并保留未决请求责任"
+            ),
+            "code": "HOST_RESTARTED",
+            "final_response": summary.get("final_response") or UNSOLVED_RESPONSE,
+            "executed": False,
+            "candidate_verified": False,  # 红线不可破坏
+            "childReaped": None,
+            "elapsedMs": elapsed_ms,
+            "metrics": metrics,
+        }
+
+        # 先写一条真实的系统级事件，再写权威终态 RESULT 事件：两者都来自本次
+        # 恢复动作本身，且都在事件流里可见，不是对结果的推测。
+        self.append_event_sync(
+            run_id,
+            {
+                "kind": "error",
+                "sourceKind": "observed_archive",
+                "detailLevel": "partial_observed",
+                "payload": {
+                    "code": "HOST_RESTARTED",
+                    "message": recovered_summary["reason"],
+                    "remoteOutcomeUnknown": metrics["remote_outcome_unknown"],
+                    "eventsBeforeRestart": len(events),
+                },
+            },
+        )
+        self.append_terminal_event(run_id, recovered_summary)
+
+        history = list(self._history_events.get(run_id, []))
+        l2_rel = f"runs/{run_id}/details.json"
+        try:
+            atomic_write_json(
+                self.store.safe_join(l2_rel),
+                {"events": history, "summary": recovered_summary},
+            )
+        except Exception as exc:
+            logger.warning("failed to persist recovered archive for %s: %s", run_id, exc)
+            l2_rel = record.get("l2_path")
+
+        saved = self.store.save_run_terminal(
+            {
+                "run_id": run_id,
+                "created_at": record.get("created_at") or time.time(),
+                "source": record.get("source") or "worker",
+                "status": recovered_summary["status"],
+                "scenario": record.get("scenario"),
+                "model": record.get("model"),
+                "seed": record.get("seed"),
+                "duration_s": record.get("duration_s") or 0.0,
+                "summary_json": json.dumps(recovered_summary, ensure_ascii=False),
+                "l2_path": l2_rel,
+                "l3_path": record.get("l3_path"),
+                "tags": f"engine:{summary.get('engine', 'ts')},terminal:{recovered_summary['status']},recovered:restart",
+                "checksum": record.get("checksum"),
+            }
+        )
+        return bool(saved)
+
     # ------------------------------------------------------------- 事件流
+    def append_terminal_event(
+        self, run_id: str, summary: Mapping[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """把权威终态记录写成一条真实 RESULT 事件（同一 run 只写一次）。"""
+        if any(
+            str(row.get("kind")) == "RESULT"
+            for row in self._history_events.get(run_id, [])
+        ):
+            return None
+        event = {
+            "kind": "RESULT",
+            "sourceKind": "official_result",
+            "detailLevel": "partial_observed",
+            "payload": {
+                "status": summary.get("status"),
+                "stopReason": summary.get("stopReason"),
+                "terminalKind": summary.get("terminalKind"),
+                "final_response": summary.get("final_response"),
+                "reason": summary.get("reason"),
+                "code": summary.get("code"),
+                "executed": summary.get("executed"),
+                "childReaped": summary.get("childReaped"),
+                "candidate_verified": False,
+                "elapsedMs": summary.get("elapsedMs"),
+                "sessionId": summary.get("sessionId"),
+            },
+        }
+        self.append_event_sync(run_id, event)
+        return event
+
+    @staticmethod
+    def events_relpath(run_id: str) -> str:
+        """运行事件的增量落盘路径（append-only JSON Lines）。"""
+        return f"runs/{run_id}/events.jsonl"
+
+    def _append_event_line(self, run_id: str, row: Mapping[str, Any]) -> None:
+        """把单条事件立即追加到磁盘；失败只记日志，绝不改写数学结果。"""
+        try:
+            path = self.store.safe_join(self.events_relpath(run_id))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(dict(row), ensure_ascii=False) + "\n")
+        except Exception as exc:  # 落盘故障不能改变运行语义
+            logger.warning("failed to append event for %s: %s", run_id, exc)
+
+    def _read_persisted_events(self, run_id: str) -> List[Dict[str, Any]]:
+        """读取增量落盘的事件（进程重启后内存历史为空时的唯一真实来源）。"""
+        try:
+            path = self.store.safe_join(self.events_relpath(run_id))
+        except Exception:
+            return []
+        if not path.is_file():
+            return []
+        rows: List[Dict[str, Any]] = []
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, Mapping):
+                    rows.append(dict(parsed))
+        except Exception as exc:
+            logger.warning("failed to read persisted events for %s: %s", run_id, exc)
+            return []
+        rows.sort(key=lambda row: row.get("seq", 0) if type(row.get("seq")) is int else 0)
+        return rows
+
     def append_event_sync(self, run_id: str, event: Dict[str, Any]) -> None:
-        """同步追加单条真实事件并分发；只补齐传输信封字段。"""
+        """同步追加单条真实事件并分发；只补齐传输信封字段。
+
+        事件在产生的**当下**就追加到 ``runs/{run_id}/events.jsonl``：进程在运行
+        中途退出时，已观测到的事件不会随内存一起消失。
+        """
         if run_id not in self._history_events:
             self._history_events[run_id] = []
         history = self._history_events[run_id]
@@ -560,6 +820,7 @@ class ExecutionManager:
         row.setdefault("sourceKind", "observed_archive")
         row.setdefault("detailLevel", "partial_observed")
         history.append(row)
+        self._append_event_line(run_id, row)
 
         queues = self._subscribers.get(run_id, [])
         for q in list(queues):
@@ -618,4 +879,10 @@ class ExecutionManager:
             except Exception as e:
                 logger.warning("failed to read l2 events for %s: %s", run_id, e)
 
+        # 最后回落到增量落盘的 JSONL：即使进程在运行中途退出、终态收口从未发生，
+        # 已观测事件仍然可读（并被继续下发），不会被当作“零事件”。
+        persisted = self._read_persisted_events(run_id)
+        if persisted:
+            self._history_events[run_id] = list(persisted)
+            return list(persisted)
         return []

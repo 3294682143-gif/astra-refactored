@@ -131,6 +131,10 @@ export function SolvePage() {
   const eventSourceRef = useRef<EventSource | null>(null);
   /** 是否已收到 FINAL / RESULT 终态事件（用于区分「流正常收口」与「流中断」）。 */
   const terminalSeenRef = useRef(false);
+  /** SSE 断线后浏览器是否正在自动重连（真实连接状态，非推测）。 */
+  const [reconnecting, setReconnecting] = useState(false);
+  /** 真实发生过的断线重连次数（由 EventSource 的 error 事件累加，可审计）。 */
+  const [reconnectCount, setReconnectCount] = useState(0);
 
   const cleanupStreams = () => {
     if (eventSourceRef.current) {
@@ -185,6 +189,8 @@ export function SolvePage() {
     setCurrentRunId(newRunId);
     setState(createInitialRunViewState(newRunId));
     setIsRunning(true);
+    setReconnecting(false);
+    setReconnectCount(0);
 
     // 幂等键由「题目 + 预算配置」确定性推导：同题同配置重复提交会被后端识别为重放（HTTP 200），
     // 不再新起执行；界面据 httpStatus / idempotent_replay 明确区分呈现。
@@ -224,7 +230,12 @@ export function SolvePage() {
     const es = new EventSource(`/api/runs/${encodeURIComponent(activeId)}/events`);
     eventSourceRef.current = es;
 
+    // 真实事件名来自 Host observer（BFF 不改名）。旧的 MODEL_REQUEST /
+    // TOOL_OBSERVATION 监听保留，但真实链路的进展必须由这三个名字驱动。
     const kinds = [
+      "model_dispatched",
+      "model_returned",
+      "effect_returned",
       "SESSION_INIT",
       "CONTRACT",
       "TASK_STARTED",
@@ -235,6 +246,7 @@ export function SolvePage() {
       "REVIEW_CHALLENGE",
       "FINAL",
       "RESULT",
+      "error",
     ];
 
     kinds.forEach((k) => {
@@ -270,14 +282,26 @@ export function SolvePage() {
       });
     });
 
+    // EventSource 自己在 CONNECTING 状态会自动带 Last-Event-ID 重连；
+    // 只有真正 CLOSED（浏览器放弃、或我们主动 close）才收口。
     es.onerror = () => {
-      cleanupStreams();
-      setIsRunning(false);
-      if (!terminalSeenRef.current) {
+      if (terminalSeenRef.current) return;
+      if (es.readyState === EventSource.CLOSED) {
+        cleanupStreams();
+        setIsRunning(false);
+        setReconnecting(false);
         setFailure(
-          "事件流中断：SSE 连接错误或服务端提前关闭，且未收到任何终态事实。未回落演示数据。",
+          "事件流已关闭：连接错误后浏览器不再重试，且未收到任何终态事实。未回落演示数据。",
         );
+        return;
       }
+      // 仍在重连：保持监听并如实呈现「正在重连」，不提前宣布失败。
+      setReconnecting(true);
+      setReconnectCount((n) => n + 1);
+    };
+
+    es.onopen = () => {
+      setReconnecting(false);
     };
   };
 
@@ -513,6 +537,40 @@ export function SolvePage() {
             </div>
           ) : null}
 
+          {reconnecting && isRunning ? (
+            <div
+              style={{
+                borderRadius: "var(--radius-card)",
+                border: "1px solid #fde68a",
+                backgroundColor: "#fffbeb",
+                color: "#92400e",
+                padding: "14px 18px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px",
+                fontSize: "12px",
+                lineHeight: 1.6,
+              }}
+            >
+              <Activity size={16} style={{ marginTop: "1px", flexShrink: 0 }} />
+              <span>事件流连接中断，浏览器正在按 Last-Event-ID 自动重连；未收到终态事实前不会推测结论。</span>
+            </div>
+          ) : null}
+
+          {reconnectCount > 0 ? (
+            <div
+              data-testid="reconnect-count"
+              style={{
+                fontSize: "11px",
+                color: "var(--color-ink-soft)",
+                borderLeft: "3px solid var(--color-brand)",
+                paddingLeft: "8px",
+              }}
+            >
+              事件流重连 {reconnectCount} 次（Last-Event-ID 续传，不重复计数）
+            </div>
+          ) : null}
+
           {postMeta ? (
             <div
               style={{
@@ -558,6 +616,37 @@ export function SolvePage() {
               </div>
             </div>
           )}
+
+          {state.steps.length > 0 || state.toolCalls.length > 0 ? (
+            <div
+              data-testid="live-activity"
+              style={{
+                borderRadius: "var(--radius-card)",
+                border: "1px solid var(--color-line)",
+                backgroundColor: "var(--color-surface-muted)",
+                padding: "14px 18px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                fontSize: "12px",
+                color: "var(--color-ink-soft)",
+              }}
+            >
+              <div style={{ fontWeight: 600, color: "var(--color-brand-deep)" }}>实时执行活动（真实事件）</div>
+              {state.steps.map((step) => (
+                <div key={`step-${step.stepId}`} data-testid="live-step">
+                  模型调用 · {step.name ?? step.stepId} ·{" "}
+                  <code data-testid={`live-step-status-${step.stepId}`}>{step.status}</code>
+                  {step.detail ? `（${step.detail}）` : ""}
+                </div>
+              ))}
+              {state.toolCalls.map((call) => (
+                <div key={`call-${call.id}`} data-testid="live-effect">
+                  effect 观测 · <code>{call.name}</code> · {call.id} · 状态 {call.status}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {notExecuted ? (
             <div

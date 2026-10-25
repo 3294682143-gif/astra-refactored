@@ -311,3 +311,15 @@ python -m uvicorn python.astra_web.app:app --host 127.0.0.1 --port 8000
 
 ---
 *挑战杯 · 书生赛道 XH-202627 · 进化外脑数学智能体项目组 保留所有权利。*
+
+## 浏览器验收（真实交互）
+
+`scripts/web_browser_smoke.py` 通过 DevTools 协议驱动真实 Chrome：提交求解、消费 Host 真实事件
+（`model_dispatched` / `model_returned` / `effect_returned`）、运行中注入一次 SSE 掉线并等待
+Last-Event-ID 自动重连、确认候选交付后打开回放页还原结论文本。模型答案由
+`scripts/web_demo_server.py` 的脚本模型给出，BFF/Host/Node/统一数学资产执行器均为正式代码。
+
+```bash
+node --test apps/web-demo/src/domain/__tests__/*.test.ts   # 纯逻辑（含真实事件归约）
+python3 scripts/web_browser_smoke.py                       # 浏览器真实交互验收
+```
