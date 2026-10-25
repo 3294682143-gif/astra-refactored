@@ -289,13 +289,20 @@ npx vite build
 
 ```bash
 # 进入工程根目录
-cd C:\Users\y\OneDrive\Desktop\挑战杯\复赛\astra-refactored
+cd /path/to/astra-refactored
 
-# 一键启动 Uvicorn BFF 服务器（同时挂载静态页面）
+# 可选：服务端注入正式 public client；不要把这些值放进浏览器请求
+export ASTRA_S2_API_KEY="<server-side secret>"
+export ASTRA_S2_ENDPOINT="https://chat.intern-ai.org.cn/api/v1/chat/completions"
+export ASTRA_S2_MODEL="Intern-S2-Preview-397B"
+
+# 先构建 Web 与发布 bundle，再启动 Uvicorn BFF（同时挂载静态页面）
+(cd apps/web-demo && ./node_modules/.bin/vite build)
 python -m uvicorn python.astra_web.app:app --host 127.0.0.1 --port 8000
 ```
 
-打开浏览器访问：**`http://127.0.0.1:8000`** 即可。
+打开浏览器访问：**`http://127.0.0.1:8000`** 即可。未设置服务端 client 环境变量时，`POST /api/runs`
+会明确返回 `SOLVER_NOT_CONFIGURED` 且 `executed=false`，不会静默回退演示数据。
 
 ### Windows 生产运行安全提示
 1. **ES Module MIME 类型保护**：后端已内置 `mimetypes.add_type("application/javascript", ".js")`，杜绝 Windows 注册表将 `.js` 误判为 `text/plain` 导致的浏览器严格检查拦截。
