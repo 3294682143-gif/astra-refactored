@@ -2,7 +2,12 @@
 
 > 本文件写给**新上下文的执行者**。只记录本会话已核实的事实与下一步动作。
 > 不要相信任何"已完成/已提分"的叙述，除非重新跑出证据。
-> **状态（2026-10-24 最新）：** v5 Stage 1–5 已落地（§18）：精确观测闭环、有限群子群普查、
+> **状态（2026-10-25 数学资产统一终验完成，§19）：**
+> 1. **全量 82 项行为正式入口闭环 100% 达成**：82 组数学资产计算行为逐项通过 `ReasoningAgent.solve` 参数化端到端测试（`tests/e2e/test_ts_math_assets_82_e2e.py`，82/82 passed in 87s），完整贯通 **Python 正式入口 → Node stdio-runtime → Python Host → use_math_asset 执行 → 观测进入下一轮模型上下文 → 交付 candidate 候选 → 证据等级严格受限（candidate_verified=False）**。
+> 2. **主链与阻断问题已全部清零**：Python `math` 导入已修复，Node 最终状态快照浮点支持生效，发布包启动、输入 binding、根预算、方法知识回传、LF 字节一致性等问题全部闭环。
+> 3. **全套门禁全绿**：TS 编译 0 错误、Node **537/537 passed**、Python 数学资产测试 **170/170 passed**、82 项行为 E2E **82/82 passed**、发布清单与历史冻结哈希 100% 校验通过、机器判定 24 项指标全部 PASS（`docs/MATH_ASSETS_ACCEPTANCE.md`）。终验正式完成。
+>
+> **状态（2026-10-24 历史）：** v5 Stage 1–5 已落地（§18）：精确观测闭环、有限群子群普查、
 >   WASI explore 提示、路由扩展与全量门禁；Node **535/535**、Python **1122 passed / 24 skipped**。
 >   真实 API 12 题：**10/12 candidate**，#4 已从只选 `D` 修成 `B,D`；#35 仍未修好
 >   （late `MAXIMAL_MINORS` observation 未进入闭合），详见 §18.6–§18.7。
@@ -1975,3 +1980,15 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - View synchronization: **100% BYTE-IDENTICAL** (`python scripts/build_math_assets.py --check`)
 - Migration completeness: **100% COMPLETE** (`python scripts/check_math_assets_migration.py --strict`)
 - Release manifest: **100% VALID** (`python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json`)
+
+### 19.3 全量 82 项数学计算行为官方正式入口端到端闭环验收
+- **测试套件**: `tests/e2e/test_ts_math_assets_82_e2e.py`
+- **执行结果**: **82/82 PASSED (100.0%)**，耗时 87 秒。
+- **全链路闭环核验内容**:
+  1. 经由官方入口 `ReasoningAgent.solve()` 启动真实 Node 发布包 (`release/stdio-runtime.bundle.mjs`) 与 Python Host。
+  2. 模型发出标准 `math_asset` 请求，经跨进程协议到达 Python Host 并由 `use_math_asset` 实际执行。
+  3. 执行观测与收据可靠写入 Host effects 并传回 TS 运行时。
+  4. 观测完整进入下一轮模型输入上下文 (`toolObservations`) 并被模型消费。
+  5. 模型顺利交付 `deliveryStatus: "COMPLETE"` 候选，正常生成 `status: "candidate"`。
+  6. 严格断言证据等级不越权升级 (`candidate_verified: False`)，工具调用计数准确 (`tool_effect_calls: 1`)。
+- **终验状态**: 统一数学资产架构全生命周期闭环终验正式完成。

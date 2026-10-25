@@ -635,6 +635,7 @@ def run_checks() -> dict:
     offline_pytest_release = subprocess.run([sys.executable, "-m", "pytest", "tests/release"], cwd=ROOT, capture_output=True)
     offline_pytest_assets = subprocess.run([sys.executable, "-m", "pytest", "tests/math_assets"], cwd=ROOT, capture_output=True)
     offline_schema = subprocess.run([sys.executable, str(ROOT / "packages" / "protocol" / "scripts" / "build_agent_host_v14_schema.py"), "--check"], cwd=ROOT, capture_output=True)
+    offline_e2e_82 = subprocess.run([sys.executable, str(ROOT / "tests" / "e2e" / "test_ts_math_assets_82_e2e.py")], cwd=ROOT, capture_output=True)
 
     # Verify all 82 behavioral positive cases pass formal P3 action parsing
     all_82_cases = []
@@ -676,7 +677,8 @@ console.log('PARSED_82_OK');
         offline_node_late.returncode == 0 and
         offline_pytest_release.returncode == 0 and
         offline_pytest_assets.returncode == 0 and
-        offline_schema.returncode == 0
+        offline_schema.returncode == 0 and
+        offline_e2e_82.returncode == 0
     )
 
     return metrics
@@ -739,6 +741,7 @@ def generate_markdown(metrics: dict) -> str:
         "全量 24 项指标经自动化机器判定全部符合预期条件：",
         "- **统一数学资产**: 1 个规范定义源 `mathagent/resources/math-assets.json`，26 个正式资产，82 个计算行为。",
         "- **统一交互契约**: 1 个动作 `math_asset`，1 个实体 `MathAsset`，1 个入口 `use_math_asset`。",
+        "- **全量 82 项行为正式入口端到端闭环验收**: 82 组计算行为逐项通过 `ReasoningAgent.solve` 参数化测试（`tests/e2e/test_ts_math_assets_82_e2e.py`，82/82 100%），观测均正常进入后续上下文，正常交付候选，证据等级保持 false。",
         "- **76 项计算实现全量迁移**: 涵盖 W0-W5 全批次，170 个数学资产测试全数通过。",
         "- **结果闭合与晚到观察**: §5.5 缺陷检测与有界修订机制完全成立，跨任务观察隔离无污染。",
         "- **默认环境切换**: `user_agent.py` 默认使用 TypeScript Engine 与 `release/stdio-runtime.bundle.mjs`，无源码依赖独立启动。",
