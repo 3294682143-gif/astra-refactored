@@ -2091,3 +2091,19 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   `test_host_events_of_an_unsent_request_stay_resolved_after_restart`（HTTP 调用 0 次 → 恢复后
   `remote_outcome_unknown=False`），pytest-free 探针同步输出 `R4.after_restart_unknown`。
 - 仍**未执行**真实外部模型端到端评测；`candidate_verified` 恒为 `False`。
+
+---
+
+## 25 2026-10-25 100 题真实模型实跑与逐题语义复核（分支 `bd98a87`）
+
+- 输入与运行器与历史基线完全一致：`/home/ma-user/work/input/test0.txt`（sha256 `d9899510…`）、
+  `official_judge_emulator/run_judge.py`、`item_concurrency=4`、真实 Intern-S2 HTTPS 客户端。
+- 机器口径：100/100 完成，**70/100 交付候选**、1226 次调用、9,532,989 token、
+  `remote_outcome_unknown=0`、`unknown_usage_requests=0`、`degraded=false`；
+  停止原因 `REVIEWS_COMPLETE 67 / CONTROL_REJECTED 22 / ERROR 8 / REVIEW_STOP 3`。
+- 语义复核口径：**正确 58 / 部分正确 7 / 错误 3 / 存疑 2 / 未交付 30**；已交付候选内正确率 58/70 = 83%。
+  本地 `ReferenceJudge` 只给 18/100（格式敏感），不能当数学正确率引用。
+- 待查项（不是已定位缺陷）：本树候选率 70%，低于整合前 `2265dff` 记录的 97%；
+  5 题 A/B 显示整合树在 3 次调用内 `CONTROL_REJECTED`、整合前树能到候选，样本小且两树宿主版本不同，
+  只能列为待查，未归因。使用统一数学资产的 78 题里 70 题交付候选（90%）。
+- 逐题明细与证据：`docs/WEB_100_ITEM_SEMANTIC_REVIEW.md`，原始报告 `/tmp/astra-full100-bd98a87`。
