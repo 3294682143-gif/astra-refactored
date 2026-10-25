@@ -357,7 +357,7 @@ def progress_events(history, effects=None):
             reason = "UNSOLVED"
         elif _partial_packet(history, request_id, body, session_id, problem_hash):
             reason = "PARTIAL"
-        elif isinstance(action, dict) and action.get("action") in ("tool", "method"):
+        elif isinstance(action, dict) and action.get("action") in ("tool", "method", "math_asset"):
             try:
                 key = effect_key(action)
             except (ProbeError, ProtocolError):

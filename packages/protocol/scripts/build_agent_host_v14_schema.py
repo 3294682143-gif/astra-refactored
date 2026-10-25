@@ -84,6 +84,11 @@ def _build_math_asset_execute_method():
                             "minLength": 1,
                             "maxLength": 64,
                         },
+                        "target": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                        },
                         "input": {
                             "type": "object",
                         },
@@ -330,16 +335,34 @@ def build(base: dict) -> dict:
 
 
 def main() -> int:
+    check_mode = "--check" in sys.argv
     root = Path(__file__).resolve().parents[3]
     schema_dir = root / "packages" / "protocol" / "schema"
+    release_dir = root / "release" / "schema"
     base_path = schema_dir / "agent-host-v13.schema.json"
     if not base_path.is_file():
         _fail("BASE_FILE_MISSING")
     base = json.loads(base_path.read_text(encoding="utf-8"))
     manifest = build(base)
+    generated_text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
     out_path = schema_dir / "agent-host-v14.schema.json"
-    out_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Generated {out_path} ({len(json.dumps(manifest))} bytes)")
+    release_path = release_dir / "agent-host-v14.schema.json"
+
+    if check_mode:
+        for p in (out_path, release_path):
+            if not p.is_file():
+                sys.stderr.write(f"ERROR: Schema file missing: {p}\n")
+                return 1
+            if json.loads(p.read_text(encoding="utf-8")) != manifest:
+                sys.stderr.write(f"ERROR: Schema drift detected in {p}\n")
+                return 1
+        print("CHECK_OK: agent-host-v14 schema matches committed files")
+        return 0
+
+    out_path.write_text(generated_text, encoding="utf-8")
+    if release_dir.is_dir():
+        release_path.write_text(generated_text, encoding="utf-8")
+    print(f"Generated {out_path} and {release_path} ({len(json.dumps(manifest))} bytes)")
     return 0
 
 

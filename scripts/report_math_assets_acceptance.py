@@ -150,12 +150,106 @@ def run_checks() -> dict:
     metrics["late_observation_recheck_failures"] = 0 if node_late_obs_test.returncode == 0 else 1
 
     # 19. Evidence upgrade failures (candidate_verified must NEVER upgrade on program observation)
+    # Closed loop verification via official ReasoningAgent.solve:
+    # 1. Official ReasoningAgent.solve() initiates math_asset request.
+    # 2. Host executes and records in effects (tool_effect_calls == 1, tool_names == ['gf2_rank']).
+    # 3. Next model turn receives observation in context.
+    # 4. Final response delivers candidate normally ('The GF(2) rank is 2') with candidate_verified strictly False.
     from user_agent import ReasoningAgent
     from types import SimpleNamespace
-    client_probe = SimpleNamespace(chat=lambda msgs, **kw: {"choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "{}"}}]})
-    agent_probe = ReasoningAgent(client_probe, problem_seconds=5)
-    solve_probe = agent_probe.solve("Test question")
-    metrics["evidence_upgrade_failures"] = 0 if not solve_probe.get("candidate_verified", False) else 1
+
+    turn_closed_loop = 0
+    turn_2_received_obs = False
+
+    def chat_closed_loop(messages, **kw):
+        nonlocal turn_closed_loop, turn_2_received_obs
+        turn_closed_loop += 1
+        body = json.loads(messages[1]["content"])
+        schema = body.get("stage") or body.get("schemaVersion")
+        if schema in ("R2", "R4"):
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "schemaVersion": "p4-review-v1",
+                            "requestId": body.get("requestId", f"model-{turn_closed_loop}"),
+                            "target": body["target"],
+                            "targetHash": body.get("targetHash", ""),
+                            "stage": schema,
+                            "conclusion": "NO_ISSUE",
+                            "reviewCoverage": [row["obligationId"] for row in body.get("obligations", [])],
+                            "issues": [],
+                        }),
+                    },
+                }]
+            }
+
+        if turn_closed_loop == 1:
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "action": "math_asset",
+                            "assetId": "math.linear-algebra",
+                            "target": "gf2_rank",
+                            "input": {"rows": [1, 2]},
+                        }),
+                    },
+                }]
+            }
+        else:
+            obs = body.get("toolObservations", [])
+            if obs and any("gf2_rank" in str(o) for o in obs):
+                turn_2_received_obs = True
+            packet = {
+                "schemaVersion": "p2a-work-v1",
+                "sessionId": body["sessionId"],
+                "problemHash": body["problemHash"],
+                "contractVersion": body["contractVersion"],
+                "taskId": body["task"]["taskId"],
+                "goalId": body["task"]["goalId"],
+                "scopeId": body["task"]["scopeId"],
+                "routeId": body["route"]["routeId"],
+                "sourceRequestId": body["sourceRequestId"],
+                "claim": "The GF(2) rank is 2",
+                "derivation": "Exact verification yields 2",
+                "assumptions": [],
+                "dependencies": [
+                    {"artifactId": ref["artifactId"], "artifactVersion": ref["artifactVersion"]}
+                    for ref in body["task"].get("inputArtifactRefs", [])
+                ],
+                "pendingObligations": [],
+                "suggestedChecks": [],
+                "deliveryStatus": "COMPLETE",
+                "candidateProposal": "The GF(2) rank is 2",
+            }
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": json.dumps(packet)},
+                }]
+            }
+
+    client_probe = SimpleNamespace(chat=chat_closed_loop)
+    agent_probe = ReasoningAgent(client_probe, problem_seconds=15)
+    solve_probe = agent_probe.solve("Compute the GF(2) rank of the matrix.")
+    metrics_probe = solve_probe.get("metrics", {})
+    closed_loop_valid = bool(
+        solve_probe.get("status") == "candidate"
+        and solve_probe.get("final_response") == "The GF(2) rank is 2"
+        and solve_probe.get("candidate_verified") is False
+        and metrics_probe.get("tool_effect_calls") == 1
+        and metrics_probe.get("tool_names") == ["gf2_rank"]
+        and turn_2_received_obs
+    )
+    metrics["evidence_upgrade_failures"] = 0 if closed_loop_valid else 1
 
     # 20. Frozen asset hash failures
     frozen_res = subprocess.run(
@@ -252,6 +346,7 @@ def run_checks() -> dict:
     offline_node_late = subprocess.run(["node", "--test", "apps/stdio-runtime/dist/tests/agent-late-observation.test.js"], cwd=ROOT, capture_output=True)
     offline_pytest_release = subprocess.run([sys.executable, "-m", "pytest", "tests/release"], cwd=ROOT, capture_output=True)
     offline_pytest_assets = subprocess.run([sys.executable, "-m", "pytest", "tests/math_assets"], cwd=ROOT, capture_output=True)
+    offline_schema = subprocess.run([sys.executable, str(ROOT / "packages" / "protocol" / "scripts" / "build_agent_host_v14_schema.py"), "--check"], cwd=ROOT, capture_output=True)
 
     metrics["required_offline_checks_passed"] = bool(
         metrics["frozen_asset_hash_failures"] == 0 and
@@ -268,7 +363,8 @@ def run_checks() -> dict:
         offline_node_math.returncode == 0 and
         offline_node_late.returncode == 0 and
         offline_pytest_release.returncode == 0 and
-        offline_pytest_assets.returncode == 0
+        offline_pytest_assets.returncode == 0 and
+        offline_schema.returncode == 0
     )
 
     return metrics

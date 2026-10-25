@@ -257,6 +257,8 @@ def _funnel_metrics(host, session_log):
         elif action.get("action") == "explore":
             # Stage D+: an admitted exploration is one tool-kind effect.
             tool_effect_calls += 1
+        elif action.get("action") == "math_asset":
+            tool_effect_calls += 1
         elif action.get("action") == "method":
             method_effect_calls += 1
     tool_names = getattr(host, "tool_names", None)

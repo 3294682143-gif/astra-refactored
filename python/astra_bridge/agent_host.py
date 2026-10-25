@@ -685,14 +685,23 @@ class AgentHost(_Host):
             _fail("BUDGET")
         request = params["request"]
         binding = request.get("binding", {})
+        source_id = str(binding.get("sourceRequestId", self.last_model_id or frame_id))
+        for entry in self.effects:
+            if (
+                isinstance(entry, dict)
+                and isinstance(entry.get("request"), dict)
+                and isinstance(entry["request"].get("binding"), dict)
+                and entry["request"]["binding"].get("sourceRequestId") == source_id
+            ):
+                _fail()
         context = {
             "sessionId": self.session_id,
             "problemHash": self.problem_hash,
-            "contractVersion": binding.get("contractVersion", 1),
-            "taskId": binding.get("taskId", ""),
-            "goalId": binding.get("goalId", ""),
-            "scopeId": binding.get("scopeId", ""),
-            "sourceRequestId": binding.get("sourceRequestId", frame_id),
+            "contractVersion": int(binding.get("contractVersion", 1)),
+            "taskId": str(binding.get("taskId", "")),
+            "goalId": str(binding.get("goalId", "")),
+            "scopeId": str(binding.get("scopeId", "")),
+            "sourceRequestId": source_id,
         }
         deadline = time.monotonic() + (self.remaining_ms() / 1000.0)
         from .math_assets_runtime import use_math_asset
@@ -701,8 +710,61 @@ class AgentHost(_Host):
             context=context,
             deadline=deadline,
         )
+        effect_id = EFFECT_IDS[self.effect_calls]
         self.effect_calls += 1
         self.math_asset_calls = getattr(self, "math_asset_calls", 0) + 1
+        self.tool_effect_count += 1
+        asset_identity = request.get("target") or request.get("assetId")
+        if (
+            asset_identity
+            and asset_identity not in self.tool_names
+            and len(self.tool_names) < self.max_effects
+        ):
+            self.tool_names.append(asset_identity)
+
+        for obs in result.get("observations", []):
+            obs_dict = {
+                "result": obs.get("value"),
+                "operation": obs.get("quantity"),
+                "target": obs.get("quantity"),
+            }
+            obs_str = json.dumps(obs_dict, separators=(",", ":"), ensure_ascii=False)
+            obs_hash = hashlib.sha256(obs_str.encode("utf-8")).hexdigest()
+            receipt = {
+                "effectId": effect_id,
+                "binding": {
+                    "sessionId": self.session_id,
+                    "problemHash": self.problem_hash,
+                    "contractVersion": int(binding.get("contractVersion", 1)),
+                    "taskId": str(binding.get("taskId", "")),
+                    "scopeId": str(binding.get("scopeId", "")),
+                    "sourceRequestId": source_id,
+                },
+                "source": "PROGRAM_OBSERVATION",
+                "level": "PROVISIONAL",
+                "status": "COMPLETE" if result.get("status") in ("COMPLETE", "SUCCESS") else "ERROR",
+                "observation": obs_str,
+                "observationHash": obs_hash,
+                "checkResult": "UNKNOWN",
+            }
+            action_payload = {
+                "action": "math_asset",
+                "assetId": request.get("assetId"),
+                "input": copy.deepcopy(request.get("input", {})),
+            }
+            if "target" in request:
+                action_payload["target"] = request["target"]
+            effect_entry = {
+                "request": {
+                    "effectId": effect_id,
+                    "binding": copy.deepcopy(receipt["binding"]),
+                    "action": action_payload,
+                    "remainingMs": self.remaining_ms(),
+                },
+                "receipt": copy.deepcopy(receipt),
+            }
+            self.effects.append(effect_entry)
+
         self.send(
             self.proc,
             {
@@ -872,7 +934,10 @@ class AgentHost(_Host):
                 and isinstance(entry.get("request"), dict)
                 and isinstance(entry["request"].get("binding"), dict)
                 and entry["request"]["binding"].get("taskId") == task_id
-                and entry["request"].get("action", {}).get("action") == "tool"
+                and (
+                    entry["request"].get("action", {}).get("action") in ("tool", "math_asset")
+                    or entry.get("receipt", {}).get("source") == "PROGRAM_OBSERVATION"
+                )
                 for entry in self.effects
             )
             cached_method = any(

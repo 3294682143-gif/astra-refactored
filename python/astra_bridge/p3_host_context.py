@@ -12,7 +12,7 @@ import hashlib
 import json
 
 from .p0_probe import ProbeError
-from .p3_effect_contract import MAX_CODE_BYTES, TOOL_NAMES, validate_request
+from .p3_effect_contract import MAX_ARGS_BYTES, MAX_CODE_BYTES, TOOL_NAMES, validate_request
 from .p2_host_fixture import _parse_inner
 from .text_contract import js_nonempty
 
@@ -183,6 +183,37 @@ def parse_action(text, binding):
             }
         )
         return request["action"]
+    if kind == "math_asset":
+        allowed = {"action", "assetId", "input"}
+        optional = {"target", "scope"}
+        keys = set(value.keys())
+        if not allowed.issubset(keys) or not keys.issubset(allowed | optional):
+            _fail()
+        asset_id = value.get("assetId")
+        if not isinstance(asset_id, str) or not asset_id.strip() or len(asset_id) > 64:
+            _fail()
+        target = value.get("target")
+        if target is not None and (not isinstance(target, str) or not target.strip() or len(target) > 64):
+            _fail()
+        input_data = value.get("input")
+        if not isinstance(input_data, dict):
+            _fail()
+        try:
+            encoded = json.dumps(input_data, allow_nan=False, ensure_ascii=False, separators=(",", ":"))
+        except (ValueError, TypeError, RecursionError, OverflowError):
+            _fail()
+        if len(encoded.encode("utf-8")) > MAX_ARGS_BYTES:
+            _fail()
+        res = {
+            "action": "math_asset",
+            "assetId": asset_id,
+            "input": input_data,
+        }
+        if target is not None:
+            res["target"] = target
+        if "scope" in value:
+            res["scope"] = _text(value["scope"], _MAX_EXPLORE_SCOPE_CHARS)
+        return res
     if kind == "final":
         _exact_keys(value, ("action", "answer", "complete", "unresolved"))
         answer = _text(value["answer"], _MAX_ANSWER_CHARS)
@@ -249,6 +280,11 @@ def effect_key(action):
         if not isinstance(args, dict):
             _fail()
         identity = [name, args]
+    elif kind == "math_asset":
+        asset_id = action.get("assetId")
+        target = action.get("target")
+        input_data = action.get("input", {})
+        identity = ["math_asset", asset_id, target, input_data]
     else:
         _fail()
     try:

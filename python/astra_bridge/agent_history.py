@@ -427,7 +427,7 @@ def project_artifacts(history, session_id, problem_hash):
                             )
                         except (ProbeError, ProtocolError):
                             action = None
-                if isinstance(action, dict) and action.get("action") in ("tool", "method"):
+                if isinstance(action, dict) and action.get("action") in ("tool", "method", "math_asset"):
                     for draft_id in run_ids:
                         superseded_normal_ids.add(draft_id)
                     run_ids = []

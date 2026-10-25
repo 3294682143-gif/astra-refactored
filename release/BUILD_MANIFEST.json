@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "a5469007e788cb00d5d0f201308e1b61bc68b40d",
-    "tree": "0aa0d9cb121ededed2f75b94f96621eb518818a1"
+    "commit": "723985d43a24d5bf57aab73b973d04f625b2efa9",
+    "tree": "0d06acea3dbf70026e45c260381c9e9631fd7ab8"
   },
   "js": [
     {
@@ -15,13 +15,13 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "05b312f0a9a9ae1eaf4512c7b1a586c97eeec6b2419e9a1f1dac4591d13800a9",
-      "bytes": 218173
+      "sha256": "785fceea5905165cebacc8ab34d0038e597d936eb7718f18e31b36b899448fe8",
+      "bytes": 218888
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
-      "sha256": "2b30bc531d101eb227d5d2fa93b6bce9d5726c83ed6e4582fdf44dc1bac1d4ce",
-      "bytes": 28565
+      "sha256": "ff116dc605575185d8967215e2c1cb7ff98f17e6102b595958fd1ef6b75993ab",
+      "bytes": 28576
     }
   ],
   "assets": {
@@ -31,7 +31,7 @@
     },
     "protocolSchemaV14": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
-      "sha256": "80f3797579989da009303cfa0f8850d16dbd7781989018928f655c6dafe57d48"
+      "sha256": "1595a815f405adad01fb5385be515d199ccd932beb5dd6b25aabc63d029308e1"
     },
     "mathAssetsSchema": {
       "path": "packages/protocol/schema/math-assets.schema.json",
@@ -65,7 +65,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "98aa2d5b5b239bd2329a711b69f6d051596679c8e9b643161e727758428ad709"
+      "sha256": "8cb26e107e30e14f7e71e6d75b21b06f987cb6fc1fb7bf75e782bd50ddce2698"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
@@ -73,7 +73,7 @@
     },
     "bundleSchemaV14": {
       "path": "release/schema/agent-host-v14.schema.json",
-      "sha256": "80f3797579989da009303cfa0f8850d16dbd7781989018928f655c6dafe57d48"
+      "sha256": "1595a815f405adad01fb5385be515d199ccd932beb5dd6b25aabc63d029308e1"
     },
     "bundleMathAssetsSchema": {
       "path": "release/schema/math-assets.schema.json",

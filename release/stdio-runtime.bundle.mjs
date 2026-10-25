@@ -21915,8 +21915,8 @@ ${g.guidance.join("\n")}`).join("");
           for (const obs of mathAssetResult.observations) {
             mathAssetObservations.push(obs);
             const obsStr = JSON.stringify({ result: obs.value, operation: obs.quantity, target: obs.quantity });
-            const effectId2 = `effect-${observations.length + 1}`;
-            observations.push({
+            const effectId2 = reservedEffect;
+            const receipt = {
               effectId: effectId2,
               binding: {
                 sessionId: session,
@@ -21932,6 +21932,21 @@ ${g.guidance.join("\n")}`).join("");
               observation: obsStr,
               observationHash: p4Hash(obsStr),
               checkResult: "UNKNOWN"
+            };
+            observations.push(receipt);
+            calls.effects.push({
+              request: {
+                effectId: effectId2,
+                binding: receipt.binding,
+                action: {
+                  action: "math_asset",
+                  assetId: action.assetId,
+                  ...action.target ? { target: action.target } : {},
+                  input: action.input
+                },
+                remainingMs: root.remainingMs()
+              },
+              receipt
             });
             toolObservationViews.push({
               name: action.target || obs.quantity || action.assetId,
@@ -23983,7 +23998,7 @@ var AgentHostFlow = class {
         jsonrpc: "2.0",
         id: id4,
         result: {
-          protocolVersion: AGENT_HOST_VERSION,
+          protocolVersion: this.manifest.protocolVersion,
           sessionId,
           summary: p2Snapshot(summary),
           candidateRequestId,

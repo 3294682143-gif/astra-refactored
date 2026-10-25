@@ -399,7 +399,7 @@ export class AgentHostFlow {
             jsonrpc: "2.0",
             id,
             result: {
-                protocolVersion: AGENT_HOST_VERSION,
+                protocolVersion: this.manifest.protocolVersion,
                 sessionId,
                 summary: p2Snapshot(summary),
                 candidateRequestId,

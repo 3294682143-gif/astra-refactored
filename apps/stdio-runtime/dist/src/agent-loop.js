@@ -1782,8 +1782,8 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     for (const obs of mathAssetResult.observations) {
                         mathAssetObservations.push(obs);
                         const obsStr = JSON.stringify({ result: obs.value, operation: obs.quantity, target: obs.quantity });
-                        const effectId = `effect-${observations.length + 1}`;
-                        observations.push({
+                        const effectId = reservedEffect;
+                        const receipt = {
                             effectId,
                             binding: {
                                 sessionId: session,
@@ -1799,6 +1799,21 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             observation: obsStr,
                             observationHash: p4Hash(obsStr),
                             checkResult: "UNKNOWN",
+                        };
+                        observations.push(receipt);
+                        calls.effects.push({
+                            request: {
+                                effectId,
+                                binding: receipt.binding,
+                                action: {
+                                    action: "math_asset",
+                                    assetId: action.assetId,
+                                    ...(action.target ? { target: action.target } : {}),
+                                    input: action.input,
+                                },
+                                remainingMs: root.remainingMs(),
+                            },
+                            receipt,
                         });
                         toolObservationViews.push({
                             name: (action.target || obs.quantity || action.assetId),
