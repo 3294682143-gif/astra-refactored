@@ -323,10 +323,14 @@ def _is_number(value):
 
 
 def _is_scalar_literal(value):
-    """A JSON scalar admissible in ``enum``/``const``: null, string, bool, safe int."""
+    """A JSON scalar admissible in ``enum``/``const``: null, string, bool, safe int, finite float."""
     if value is None or isinstance(value, (str, bool)):
         return True
-    return _is_integer(value) and -LIMITS["maxSafeInteger"] <= value <= LIMITS["maxSafeInteger"]
+    if _is_integer(value):
+        return -LIMITS["maxSafeInteger"] <= value <= LIMITS["maxSafeInteger"]
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return False
 
 
 def _scalar_equals(value, literal):
@@ -335,6 +339,8 @@ def _scalar_equals(value, literal):
         return isinstance(value, bool) and value is literal
     if _is_integer(literal):
         return _is_integer(value) and value == literal
+    if isinstance(literal, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value == literal
     if isinstance(literal, str):
         return isinstance(value, str) and value == literal
     if literal is None:
@@ -534,6 +540,16 @@ def _parse_float(token):
     _fail("FLOAT_TOKEN")
 
 
+def _parse_finite_float(token):
+    try:
+        val = float(token)
+    except (ValueError, OverflowError):
+        _fail("FLOAT_TOKEN")
+    if not math.isfinite(val):
+        _fail("NON_FINITE_NUMBER")
+    return val
+
+
 def _parse_constant(token):
     _fail("NON_FINITE_NUMBER")
 
@@ -599,12 +615,14 @@ def parse_frame(data, manifest):
     text = decode_frame(data)
     _check_json_whitespace(text)
     _scan_depth(text)
+    allow_floats = isinstance(manifest, dict) and manifest.get("protocolVersion") == "1.4-unified-math-assets"
+    float_parser = _parse_finite_float if allow_floats else _parse_float
     try:
         raw = json.loads(
             text,
             object_pairs_hook=_object_pairs_hook,
             parse_int=_parse_int,
-            parse_float=_parse_float,
+            parse_float=float_parser,
             parse_constant=_parse_constant,
         )
     except ProtocolError:

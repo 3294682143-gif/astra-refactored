@@ -431,8 +431,22 @@ function main(): void {
 }
 
 const argv = process.argv;
+const scriptArg = argv[1] ? argv[1].replace(/\\/g, "/") : "";
+const isBundle = scriptArg.endsWith("stdio-runtime.bundle.mjs");
+
 if (argv.length === 2) {
-  main();
+  if (isBundle) {
+    import("./agent-host-main.js")
+      .then((module) => {
+        module.startAgentHost(STARTED_AT);
+      })
+      .catch(() => {
+        process.stderr.write(`${ERROR_CODES.FIELD_VALUE}\n`);
+        process.exit(1);
+      });
+  } else {
+    main();
+  }
 } else if (argv.length === 3 && argv[2] === "--agent-loop") {
   import("./agent-host-main.js")
     .then((module) => {

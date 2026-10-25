@@ -249,7 +249,100 @@ def run_checks() -> dict:
         and metrics_probe.get("tool_names") == ["gf2_rank"]
         and turn_2_received_obs
     )
-    metrics["evidence_upgrade_failures"] = 0 if closed_loop_valid else 1
+
+    # Structured observation closed loop verification (e.g. Graph 2-coloring)
+    turn_color_loop = 0
+    turn_color_received_obs = False
+
+    def chat_color_loop(messages, **kw):
+        nonlocal turn_color_loop, turn_color_received_obs
+        turn_color_loop += 1
+        body = json.loads(messages[1]["content"])
+        schema = body.get("stage") or body.get("schemaVersion")
+        if schema in ("R2", "R4"):
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "schemaVersion": "p4-review-v1",
+                            "requestId": body.get("requestId", f"model-{turn_color_loop}"),
+                            "target": body["target"],
+                            "targetHash": body.get("targetHash", ""),
+                            "stage": schema,
+                            "conclusion": "NO_ISSUE",
+                            "reviewCoverage": [row["obligationId"] for row in body.get("obligations", [])],
+                            "issues": [],
+                        }),
+                    },
+                }]
+            }
+
+        if turn_color_loop == 1:
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({
+                            "action": "math_asset",
+                            "assetId": "math.graphs",
+                            "target": "constraint_propagation_2coloring",
+                            "input": {"points": [2, 1, 0], "edges": [[2, 1], [1, 0]], "fixed": {"2": 0}},
+                        }),
+                    },
+                }]
+            }
+        else:
+            obs = body.get("toolObservations", [])
+            if obs and any("constraint_propagation_2coloring" in str(o) for o in obs):
+                turn_color_received_obs = True
+            packet = {
+                "schemaVersion": "p2a-work-v1",
+                "sessionId": body["sessionId"],
+                "problemHash": body["problemHash"],
+                "contractVersion": body["contractVersion"],
+                "taskId": body["task"]["taskId"],
+                "goalId": body["task"]["goalId"],
+                "scopeId": body["task"]["scopeId"],
+                "routeId": body["route"]["routeId"],
+                "sourceRequestId": body["sourceRequestId"],
+                "claim": "Valid coloring found",
+                "derivation": "Constraint propagation completed",
+                "assumptions": [],
+                "dependencies": [
+                    {"artifactId": ref["artifactId"], "artifactVersion": ref["artifactVersion"]}
+                    for ref in body["task"].get("inputArtifactRefs", [])
+                ],
+                "pendingObligations": [],
+                "suggestedChecks": [],
+                "deliveryStatus": "COMPLETE",
+                "candidateProposal": "Valid coloring found",
+            }
+            return {
+                "choices": [{
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": json.dumps(packet)},
+                }]
+            }
+
+    client_color = SimpleNamespace(chat=chat_color_loop)
+    agent_color = ReasoningAgent(client_color, problem_seconds=15)
+    solve_color = agent_color.solve("Check 2-coloring of the graph.")
+    metrics_color = solve_color.get("metrics", {})
+    color_loop_valid = bool(
+        solve_color.get("status") == "candidate"
+        and solve_color.get("final_response") == "Valid coloring found"
+        and solve_color.get("candidate_verified") is False
+        and metrics_color.get("tool_effect_calls") == 1
+        and metrics_color.get("tool_names") == ["constraint_propagation_2coloring"]
+        and turn_color_received_obs
+    )
+    metrics["evidence_upgrade_failures"] = 0 if (closed_loop_valid and color_loop_valid) else 1
 
     # 20. Frozen asset hash failures
     frozen_res = subprocess.run(
@@ -348,6 +441,28 @@ def run_checks() -> dict:
     offline_pytest_assets = subprocess.run([sys.executable, "-m", "pytest", "tests/math_assets"], cwd=ROOT, capture_output=True)
     offline_schema = subprocess.run([sys.executable, str(ROOT / "packages" / "protocol" / "scripts" / "build_agent_host_v14_schema.py"), "--check"], cwd=ROOT, capture_output=True)
 
+    # Verify all 82 behavioral positive cases pass formal P3 action parsing
+    all_82_cases = []
+    for b_idx in range(6):
+        mod = importlib.import_module(f"tests.math_assets.test_math_assets_w{b_idx}")
+        all_82_cases.extend(getattr(mod, f"W{b_idx}_CASES", []))
+
+    node_parse_res = subprocess.run(
+        ["node", "-e", f"""
+const {{ parseP3Action }} = require('./packages/math-gateway/dist/src/p3-parser.js');
+const cases = {json.dumps(all_82_cases)};
+for (const [aid, tgt, inp] of cases) {{
+    const act = {{ action: 'math_asset', assetId: aid, target: tgt, input: inp }};
+    parseP3Action(JSON.stringify(act));
+}}
+console.log('PARSED_82_OK');
+        """],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    all_82_parsed_ok = ("PARSED_82_OK" in node_parse_res.stdout)
+
     metrics["required_offline_checks_passed"] = bool(
         metrics["frozen_asset_hash_failures"] == 0 and
         metrics["generated_view_drift"] == 0 and
@@ -358,6 +473,7 @@ def run_checks() -> dict:
         metrics["late_observation_recheck_failures"] == 0 and
         metrics["evidence_upgrade_failures"] == 0 and
         metrics["default_entry_uses_unified_assets"] and
+        all_82_parsed_ok and
         offline_migration.returncode == 0 and
         offline_usage.returncode == 0 and
         offline_node_math.returncode == 0 and

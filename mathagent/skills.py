@@ -41,9 +41,25 @@ class SkillCatalog:
             root.joinpath("skill-mapping-manifest.json").read_text(encoding="utf-8")
         )["families"]
         self.by_id = {f["family_id"]: f for f in self.families}
-        self.tool_specs = json.loads(
-            root.joinpath("tool-registry.json").read_text(encoding="utf-8")
-        )["tools"]
+        math_assets_path = root.joinpath("math-assets.json")
+        if math_assets_path.is_file():
+            catalog = json.loads(math_assets_path.read_text(encoding="utf-8"))
+            self.tool_specs = {}
+            for asset in catalog.get("assets", []):
+                for beh in asset.get("behaviors", []):
+                    spec = {
+                        "required_params": list(beh.get("requiredParams", [])),
+                        "optional_params": list(beh.get("optionalParams", [])),
+                        "declared_scope": beh.get("declaredScope", asset.get("summary", "")),
+                        "asset_id": asset["assetId"],
+                        "target": beh["target"],
+                    }
+                    self.tool_specs[beh["target"]] = spec
+                    legacy_name = beh.get("legacyToolName")
+                    if legacy_name:
+                        self.tool_specs[legacy_name] = spec
+        else:
+            self.tool_specs = {}
 
     def metadata(self):
         from .computation_policy import capability_metadata

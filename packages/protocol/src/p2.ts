@@ -576,7 +576,7 @@ export function canonicalScope(scope: Scope): string {
  * is cloned per occurrence. Values outside JSON primitives — functions,
  * `Date`, non-finite or unsafe numbers — are rejected.
  */
-export function p2Snapshot<T>(value: T): T {
+export function p2Snapshot<T>(value: T, allowFiniteFloats = false): T {
   const seen = new Set<object>();
   const walk = (node: unknown, depth: number): unknown => {
     if (node === null) {
@@ -587,7 +587,10 @@ export function p2Snapshot<T>(value: T): T {
       return node;
     }
     if (kind === "number") {
-      if (!Number.isFinite(node) || !Number.isSafeInteger(node)) {
+      if (!Number.isFinite(node)) {
+        throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+      }
+      if (!allowFiniteFloats && !Number.isSafeInteger(node)) {
         throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
       }
       return node;

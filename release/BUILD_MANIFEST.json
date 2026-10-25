@@ -4,24 +4,24 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "723985d43a24d5bf57aab73b973d04f625b2efa9",
-    "tree": "0d06acea3dbf70026e45c260381c9e9631fd7ab8"
+    "commit": "bf92659e3439d1daeb11395324f54777d8a038c8",
+    "tree": "3d5990c6bd49671453f4790ade8b6d2e5be0bdaa"
   },
   "js": [
     {
       "path": "apps/stdio-runtime/dist/src/main.js",
-      "sha256": "506ad8eb38fb4c5b43b785be0f876d7ac357d133c2821958c2c0a757cb77d12b",
-      "bytes": 13125
+      "sha256": "8e9fcfe83e84d89e9d5575ac3424466d6a12c3f605af7ebf8c988230d53b6ff4",
+      "bytes": 13562
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "785fceea5905165cebacc8ab34d0038e597d936eb7718f18e31b36b899448fe8",
-      "bytes": 218888
+      "sha256": "4c4342c303c4cb059c50690f43a7db4533327f595e91acf7c9b317fb8a164e36",
+      "bytes": 219366
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
-      "sha256": "ff116dc605575185d8967215e2c1cb7ff98f17e6102b595958fd1ef6b75993ab",
-      "bytes": 28576
+      "sha256": "425757b80f178c0948fc19459920b39a4474d06723c55fab69c565e2e38f2bcc",
+      "bytes": 28751
     }
   ],
   "assets": {
@@ -31,7 +31,7 @@
     },
     "protocolSchemaV14": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
-      "sha256": "1595a815f405adad01fb5385be515d199ccd932beb5dd6b25aabc63d029308e1"
+      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
     },
     "mathAssetsSchema": {
       "path": "packages/protocol/schema/math-assets.schema.json",
@@ -65,7 +65,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "8cb26e107e30e14f7e71e6d75b21b06f987cb6fc1fb7bf75e782bd50ddce2698"
+      "sha256": "de0d0944d039f9f5df142ad8549500dea0473202463c10674c4e394f146e884a"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v13.schema.json",
@@ -73,7 +73,7 @@
     },
     "bundleSchemaV14": {
       "path": "release/schema/agent-host-v14.schema.json",
-      "sha256": "1595a815f405adad01fb5385be515d199ccd932beb5dd6b25aabc63d029308e1"
+      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
     },
     "bundleMathAssetsSchema": {
       "path": "release/schema/math-assets.schema.json",

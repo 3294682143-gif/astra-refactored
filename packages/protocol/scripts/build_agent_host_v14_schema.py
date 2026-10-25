@@ -52,7 +52,8 @@ def _replace_version(node):
             _replace_version(item)
 
 
-def _build_math_asset_execute_method():
+def _build_math_asset_execute_method(base: dict):
+    receipt_schema = copy.deepcopy(base["methods"]["tool.execute"]["result"]["properties"]["receipt"])
     return {
         "direction": "node-to-host",
         "kind": "request",
@@ -111,7 +112,7 @@ def _build_math_asset_execute_method():
         "result": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["protocolVersion", "sessionId", "result", "remainingMs"],
+            "required": ["protocolVersion", "sessionId", "result", "remainingMs", "receipts"],
             "properties": {
                 "protocolVersion": {
                     "type": "string",
@@ -126,6 +127,10 @@ def _build_math_asset_execute_method():
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 3600000,
+                },
+                "receipts": {
+                    "type": "array",
+                    "items": receipt_schema,
                 },
                 "result": {
                     "type": "object",
@@ -329,7 +334,7 @@ def build(base: dict) -> dict:
     }
 
     # math_asset.execute
-    manifest["methods"][MATH_ASSET_EXECUTE] = _build_math_asset_execute_method()
+    manifest["methods"][MATH_ASSET_EXECUTE] = _build_math_asset_execute_method(base)
 
     return manifest
 
@@ -345,6 +350,7 @@ def main() -> int:
     base = json.loads(base_path.read_text(encoding="utf-8"))
     manifest = build(base)
     generated_text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    generated_bytes = generated_text.replace("\r\n", "\n").encode("utf-8")
     out_path = schema_dir / "agent-host-v14.schema.json"
     release_path = release_dir / "agent-host-v14.schema.json"
 
@@ -353,15 +359,15 @@ def main() -> int:
             if not p.is_file():
                 sys.stderr.write(f"ERROR: Schema file missing: {p}\n")
                 return 1
-            if json.loads(p.read_text(encoding="utf-8")) != manifest:
+            if p.read_bytes() != generated_bytes:
                 sys.stderr.write(f"ERROR: Schema drift detected in {p}\n")
                 return 1
         print("CHECK_OK: agent-host-v14 schema matches committed files")
         return 0
 
-    out_path.write_text(generated_text, encoding="utf-8")
+    out_path.write_bytes(generated_bytes)
     if release_dir.is_dir():
-        release_path.write_text(generated_text, encoding="utf-8")
+        release_path.write_bytes(generated_bytes)
     print(f"Generated {out_path} and {release_path} ({len(json.dumps(manifest))} bytes)")
     return 0
 

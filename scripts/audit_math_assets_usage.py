@@ -47,6 +47,40 @@ def audit_usage(strict: bool = False) -> bool:
         if "general_v11/SOURCE.json" in content:
             violations.append("math_assets_runtime.py reads legacy SOURCE.json")
 
+    # 4. Check that importing input_contracts, tools, and runtime never reads tool-registry.json
+    import builtins
+    original_open = builtins.open
+    reads = []
+
+    def guarded_open(file, *args, **kwargs):
+        s = str(file)
+        if "tool-registry.json" in s:
+            reads.append(s)
+        return original_open(file, *args, **kwargs)
+
+    builtins.open = guarded_open
+    try:
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        if str(ROOT / "python") not in sys.path:
+            sys.path.insert(0, str(ROOT / "python"))
+        import importlib
+        if "mathagent.input_contracts" in sys.modules:
+            importlib.reload(sys.modules["mathagent.input_contracts"])
+        else:
+            import mathagent.input_contracts
+        if "mathagent.tools" in sys.modules:
+            importlib.reload(sys.modules["mathagent.tools"])
+        else:
+            import mathagent.tools
+        from mathagent.tools import RegisteredExecutor
+        _ = RegisteredExecutor()
+    finally:
+        builtins.open = original_open
+
+    if reads:
+        violations.append(f"Unauthorized reads of tool-registry.json detected during import/init: {reads}")
+
     if violations:
         print(f"FAILED: Found {len(violations)} asset usage violations:")
         for v in violations:

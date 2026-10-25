@@ -216,11 +216,7 @@ class RegisteredExecutor:
                         else:
                             self.registry[legacy_name] = spec
         else:
-            self.registry = json.loads(
-                files("mathagent")
-                .joinpath("resources/tool-registry.json")
-                .read_text(encoding="utf-8")
-            )["tools"]
+            self.registry = {}
 
     def execute(self, name, args, *, deadline, scope: str):
         if (

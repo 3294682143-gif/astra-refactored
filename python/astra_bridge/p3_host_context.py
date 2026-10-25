@@ -134,10 +134,12 @@ def parse_action(text, binding):
         _fail()
     if len(_utf8(text)) > _MAX_ACTION_BYTES:
         _fail()
-    value = _parse_inner(text)
+    value = _parse_inner(text, allow_floats=True)
     if not isinstance(value, dict):
         _fail()
     kind = value.get("action")
+    if kind != "math_asset":
+        _parse_inner(text, allow_floats=False)
     if kind == "tool":
         _exact_keys(value, ("action", "name", "args", "scope"))
         if value["name"] not in TOOL_NAMES:

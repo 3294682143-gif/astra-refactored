@@ -531,7 +531,9 @@ export class AgentHostFlow {
         const remainingMs = safeInt(result["remainingMs"], 0, MAX_REMAINING_MS);
         this.pending = null;
         this.io.tighten(remainingMs);
-        pending.resolve(p2Snapshot(mathResult));
+        const receipts = Array.isArray(result["receipts"]) ? result["receipts"] : undefined;
+        const resolved = receipts ? { ...mathResult, receipts } : mathResult;
+        pending.resolve(p2Snapshot(resolved, true));
     }
     callModel(request) {
         if (this.pending !== null) {

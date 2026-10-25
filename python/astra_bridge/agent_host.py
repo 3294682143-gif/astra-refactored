@@ -244,6 +244,37 @@ def _trace_id(kind, value):
     _fail()
 
 
+def _js_canonical(val):
+    if isinstance(val, dict):
+        def _is_index(k):
+            if isinstance(k, int) and not isinstance(k, bool):
+                return 0 <= k < 4294967295
+            if isinstance(k, str) and k.isdigit():
+                if len(k) > 1 and k.startswith("0"):
+                    return False
+                n = int(k)
+                return 0 <= n < 4294967295 and str(n) == k
+            return False
+
+        index_keys = []
+        string_keys = []
+        for k in val.keys():
+            if _is_index(k):
+                index_keys.append(k)
+            else:
+                string_keys.append(k)
+        index_keys.sort(key=lambda x: int(x))
+        canonical = {}
+        for k in index_keys:
+            canonical[str(k)] = _js_canonical(val[k])
+        for k in string_keys:
+            canonical[str(k)] = _js_canonical(val[k])
+        return canonical
+    elif isinstance(val, list):
+        return [_js_canonical(item) for item in val]
+    return val
+
+
 class AgentHost(_Host):
     """Host-side unified AgentLoop callback state machine."""
 
@@ -722,9 +753,10 @@ class AgentHost(_Host):
         ):
             self.tool_names.append(asset_identity)
 
+        effect_entries = []
         for obs in result.get("observations", []):
             obs_dict = {
-                "result": obs.get("value"),
+                "result": _js_canonical(obs.get("value")),
                 "operation": obs.get("quantity"),
                 "target": obs.get("quantity"),
             }
@@ -764,7 +796,9 @@ class AgentHost(_Host):
                 "receipt": copy.deepcopy(receipt),
             }
             self.effects.append(effect_entry)
+            effect_entries.append(effect_entry)
 
+        receipts_list = [entry["receipt"] for entry in effect_entries]
         self.send(
             self.proc,
             {
@@ -774,6 +808,7 @@ class AgentHost(_Host):
                     **self._common(),
                     "remainingMs": self.remaining_ms(),
                     "result": result,
+                    "receipts": receipts_list,
                 },
             },
             "math_asset.execute",

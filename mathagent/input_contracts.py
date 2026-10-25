@@ -11,11 +11,35 @@ from importlib.resources import files
 from .tool_contracts import CONTRACTS, InvalidToolInput, OutsideAuditScope
 
 VERSION = "registered-input-v1"
-_REGISTRY = json.loads(
-    files("mathagent")
-    .joinpath("resources/tool-registry.json")
-    .read_text(encoding="utf-8")
-)["tools"]
+
+
+def _load_required_params() -> dict[str, list[str]]:
+    try:
+        from astra_bridge.generated.math_assets import MATH_ASSETS
+        assets = MATH_ASSETS
+    except Exception:
+        catalog_path = files("mathagent").joinpath("resources/math-assets.json")
+        if catalog_path.is_file():
+            assets = json.loads(catalog_path.read_text(encoding="utf-8")).get("assets", [])
+        else:
+            assets = []
+    mapping: dict[str, list[str]] = {}
+    for a in assets:
+        for b in a.get("behaviors", []):
+            req = list(b.get("requiredParams", []))
+            target = b.get("target")
+            legacy = b.get("legacyToolName")
+            if target:
+                mapping[target] = req
+            if legacy:
+                if legacy == "exact_check_expr":
+                    mapping["exact_check_expr"] = ["operation"]
+                else:
+                    mapping[legacy] = req
+    return mapping
+
+
+_REQUIRED_PARAMS = _load_required_params()
 
 # Rules define a documented execution subset. The producer may support more;
 # inputs outside this subset are refused without fabricating a mathematical answer.
@@ -701,7 +725,7 @@ def validate_inputs(name, args):
         }
     if name not in SCHEMAS:
         raise InvalidToolInput("tool has no registered input contract")
-    _object(args, SCHEMAS[name], _REGISTRY[name]["required_params"])
+    _object(args, SCHEMAS[name], _REQUIRED_PARAMS.get(name, []))
     if "bounds" in args and (
         len(args["bounds"]) != len(args["variables"])
         or any(a >= b for a, b in args["bounds"])

@@ -118,13 +118,16 @@ function parseMathAsset(value: Record<string, unknown>): P3Action {
   }
   const target = typeof value.target === "string" ? boundedString(value.target, 64) : undefined;
   const scope = typeof value.scope === "string" ? boundedString(value.scope, MAX_SCOPE_CHARS) : undefined;
-  return p2Snapshot({
-    action: "math_asset",
-    assetId: value.assetId,
-    ...(target !== undefined ? { target } : {}),
-    input: value.input,
-    ...(scope !== undefined ? { scope } : {}),
-  }) as P3Action;
+  return p2Snapshot(
+    {
+      action: "math_asset",
+      assetId: value.assetId,
+      ...(target !== undefined ? { target } : {}),
+      input: value.input,
+      ...(scope !== undefined ? { scope } : {}),
+    },
+    true
+  ) as P3Action;
 }
 
 function parseMethod(value: Record<string, unknown>): P3Action {
@@ -220,9 +223,6 @@ export function parseP3Action(text: string): P3Action {
   if (!detectNonFiniteTokens(raw).ok) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  if (!detectUnsafeNumbers(raw).ok) {
-    fail(P2_ERROR_CODES.PACKET_SCHEMA);
-  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -233,6 +233,10 @@ export function parseP3Action(text: string): P3Action {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   if (!isPlainObject(parsed)) {
+    fail(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const isMathAsset = parsed.action === "math_asset";
+  if (!detectUnsafeNumbers(raw, isMathAsset).ok) {
     fail(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const action = parsed.action;

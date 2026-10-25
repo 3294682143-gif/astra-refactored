@@ -1779,11 +1779,19 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         resultHash: mathAssetResult.resultHash,
                         observationsCount: mathAssetResult.observations.length,
                     });
-                    for (const obs of mathAssetResult.observations) {
+                    const hostReceipts = Array.isArray(mathAssetResult.receipts)
+                        ? mathAssetResult.receipts
+                        : [];
+                    for (let i = 0; i < mathAssetResult.observations.length; i++) {
+                        const obs = mathAssetResult.observations[i];
+                        if (!obs) {
+                            continue;
+                        }
                         mathAssetObservations.push(obs);
                         const obsStr = JSON.stringify({ result: obs.value, operation: obs.quantity, target: obs.quantity });
                         const effectId = reservedEffect;
-                        const receipt = {
+                        const hostReceipt = hostReceipts[i];
+                        const receipt = (hostReceipt && hostReceipt.effectId) ? hostReceipt : {
                             effectId,
                             binding: {
                                 sessionId: session,
@@ -1803,7 +1811,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         observations.push(receipt);
                         calls.effects.push({
                             request: {
-                                effectId,
+                                effectId: receipt.effectId,
                                 binding: receipt.binding,
                                 action: {
                                     action: "math_asset",

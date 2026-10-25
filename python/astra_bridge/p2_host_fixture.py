@@ -15,6 +15,7 @@ from .p0_protocol import (
     ProtocolError,
     _object_pairs_hook,
     _parse_constant,
+    _parse_finite_float,
     _parse_float,
     _parse_int,
     _reject_surrogates,
@@ -73,15 +74,16 @@ def _canonical(messages):
     return json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
 
 
-def _parse_inner(text):
+def _parse_inner(text, allow_floats=False):
     """Parse the inner user JSON with the shared P0 strict helpers only."""
     try:
         _scan_depth(text)
+        float_parser = _parse_finite_float if allow_floats else _parse_float
         value = json.loads(
             text,
             object_pairs_hook=_object_pairs_hook,
             parse_int=_parse_int,
-            parse_float=_parse_float,
+            parse_float=float_parser,
             parse_constant=_parse_constant,
         )
         _reject_surrogates(value)

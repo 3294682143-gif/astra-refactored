@@ -472,8 +472,8 @@ export function detectDuplicateKeys(text: string): ParseResult<null> {
   return { ok: true, value: null };
 }
 
-/** Reject numeric literals that are not safe integers (no floats, no NaN/Infinity). */
-export function detectUnsafeNumbers(text: string): ParseResult<null> {
+/** Reject numeric literals that are not safe integers (no floats, no NaN/Infinity), unless allowFiniteFloats is enabled. */
+export function detectUnsafeNumbers(text: string, allowFiniteFloats = false): ParseResult<null> {
   const n = text.length;
   let i = 0;
   let inString = false;
@@ -507,12 +507,23 @@ export function detectUnsafeNumbers(text: string): ParseResult<null> {
         break;
       }
       const token = text.slice(i, j);
-      if (!/^-?(?:0|[1-9][0-9]*)$/.test(token)) {
-        return { ok: false, code: ERROR_CODES.FLOAT_TOKEN, detail: token };
-      }
-      const value = Number(token);
-      if (!Number.isSafeInteger(value)) {
-        return { ok: false, code: ERROR_CODES.UNSAFE_INTEGER, detail: token };
+      const isInteger = /^-?(?:0|[1-9][0-9]*)$/.test(token);
+      if (!isInteger) {
+        if (!allowFiniteFloats) {
+          return { ok: false, code: ERROR_CODES.FLOAT_TOKEN, detail: token };
+        }
+        if (!/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(token)) {
+          return { ok: false, code: ERROR_CODES.FLOAT_TOKEN, detail: token };
+        }
+        const val = Number(token);
+        if (!Number.isFinite(val)) {
+          return { ok: false, code: ERROR_CODES.NON_FINITE_NUMBER, detail: token };
+        }
+      } else {
+        const value = Number(token);
+        if (!Number.isSafeInteger(value)) {
+          return { ok: false, code: ERROR_CODES.UNSAFE_INTEGER, detail: token };
+        }
       }
       i = j;
       continue;
@@ -604,7 +615,8 @@ export function parseFrame(
   if (!nonFinite.ok) {
     return nonFinite;
   }
-  const nums = detectUnsafeNumbers(text);
+  const allowFloats = (manifest as { readonly protocolVersion?: string })?.protocolVersion === "1.4-unified-math-assets";
+  const nums = detectUnsafeNumbers(text, allowFloats);
   if (!nums.ok) {
     return nums;
   }

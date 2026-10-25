@@ -6,6 +6,7 @@
  */
 
 import type { EvidenceCeiling, MathAssetDefinition } from "./generated/math-assets.js";
+import type { P3EffectReceipt } from "./p3.js";
 
 export * from "./generated/math-assets.js";
 
@@ -76,6 +77,7 @@ export interface MathAssetResult {
   readonly usage: MathAssetUsage;
   readonly limitations: readonly string[];
   readonly resultHash: string;
+  readonly receipts?: readonly P3EffectReceipt[];
 }
 
 export interface MathAssetPortRequest {
