@@ -167,3 +167,89 @@ def test_budget_mapping_reaches_the_transport_deadline(monkeypatch):
     assert isinstance(client, PublicChatPort)
     assert client.request_seconds == 42.0
     assert installed == [42.0]
+
+
+def test_exhausted_budget_is_reported_as_not_dispatched(monkeypatch):
+    """A refused pre-dispatch must not look like an unknown remote outcome.
+
+    Regression for the reviewed P2 defect: the port refused before sending, yet
+    the formal layer still journalled DISPATCHED → OUTCOME_UNKNOWN and blocked the
+    client for the rest of the process.
+    """
+    brain = MathAssetScriptedClient(ASSET_ID, TARGET, INPUT)
+    transport = install_fake_provider(monkeypatch, brain, ENDPOINT)
+
+    now = {"t": 0.0}
+    port = PublicChatPort(_connector(), request_seconds=0.2, clock=lambda: now["t"])
+    now["t"] = 5.0  # the run budget is already spent when the model is asked
+    assert port.may_dispatch() is False
+
+    solver = SolverAdapter(client_factory=lambda: port)
+    result = solver(
+        {
+            "run_id": "run-budget-refused-1",
+            "problem": _problem(),
+            "engine": "ts",
+            "metadata": {},
+            **default_budget(),
+        }
+    )
+
+    # Nothing was ever sent, and nothing claims an unknown remote outcome.
+    assert transport.requests == []
+    assert port.calls == 0
+    metrics = result["metrics"]
+    assert metrics["client_method_calls"] == 0
+    assert metrics["remote_outcome_unknown"] is False
+    assert metrics["unknown_usage_requests"] == 0
+    assert result["status"] != "candidate"
+    assert result["candidate_verified"] is False
+
+
+def test_not_dispatched_is_journalled_but_never_blocks_the_client():
+    from python.astra_bridge.agent_client import AgentClient
+
+    class RefusingPort:
+        def __init__(self):
+            self.calls = 0
+
+        def may_dispatch(self):
+            return False
+
+        def chat(self, *, messages, temperature, max_tokens):  # pragma: no cover
+            raise AssertionError("a refused admission must never reach the transport")
+
+    port = RefusingPort()
+    client = AgentClient(port)
+    result = client.generate(_minimal_request(), __import__("time").monotonic() + 5.0)
+
+    assert result["dispatchState"] == "NOT_DISPATCHED"
+    assert client.blocked is False
+    assert client.calls == 0
+    assert [row["state"] for row in client.snapshot()] == ["NOT_DISPATCHED"]
+
+
+def _minimal_request():
+    """A request that satisfies the strict Host->client validator exactly."""
+    import hashlib
+    import json as _json
+
+    messages = [
+        {"role": "system", "content": "host"},
+        {"role": "user", "content": "{}"},
+    ]
+    serialized = _json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    encoded = serialized.encode("utf-8")
+    return {
+        "sessionId": "session-1",
+        "problemHash": "0" * 64,
+        "requestId": "model-1",
+        "phase": "WORK",
+        "taskId": "task-1",
+        "scopeId": "1" * 64,
+        "messages": messages,
+        "contextHash": hashlib.sha256(encoded).hexdigest(),
+        "contextBytes": len(encoded),
+        "remainingMs": 4000,
+        "maxTokens": 8192,
+    }

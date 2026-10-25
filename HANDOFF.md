@@ -2039,3 +2039,23 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   新增 `scripts/web_cdp.py`、`scripts/web_demo_server.py`；reporter 增加 `web-logic-tests`（46 项）。
 - 红线不变：`candidate_verified` 恒为 `False`；恢复路径只产出系统级失败终态，不冒充候选。
 - 仍**未执行**真实外部模型端到端评测；浏览器验收里的模型答案由脚本模型给出，其余全为正式代码路径。
+
+---
+
+## 22 2026-10-25 第二轮复核 4 项缺陷修复（V3）
+
+复核确认上一轮的 P0 客户端装配、真实事件、正常回放、JSONL 增量落盘与浏览器验收范围已修好，
+本轮补齐重启恢复的剩余缺口：
+
+- **进程实例身份（P1）**：`ownerPid` 会被内核复用，所以只判断 pid 存活会让遗留运行永远无法恢复。
+  现在记录 `ownerBootId` + `ownerStartTicks`（`/proc/<pid>/stat` 第 22 字段），恢复时要求实例身份一致；
+  boot 变化或 starttime 不同即视为原属主已死。同一 pid 下还要用 `ownerToken` 区分本进程内的不同 manager。
+- **终态落盘顺序（P1）**：`_finalize` 在提交数据库前先写 RESULT 事件与 `details.json`；该窗口崩溃后，
+  恢复逻辑原先会把已完成候选降级成 `error / Unsolved.`。现在恢复**先核对已持久化终态**，
+  有终态证据就按存档补齐数据库提交（`committedFromArchive=true`），没有才按遗留运行收口。
+- **远端未知的判定（P2）**：恢复时按 `requestId` 配对 `model_dispatched` / `model_returned`，
+  `COMPLETE/TRUNCATED/ERROR` 不再算未知，只有 `UNKNOWN` 与从未返回的请求保留未决责任。
+- **未发送 vs 发送后未知（P2）**：`PublicChatPort.may_dispatch()` 提供派发前准入；`AgentClient`
+  在写派发记录前调用它，并在 worker 内区分「证明未发送」与「发送后未知」；返回契约新增
+  `dispatchState`，Host 只对真正发出的请求封锁客户端。预算记账仍在 Host，端口不返还逻辑预算。
+- 仍**未执行**真实外部模型端到端评测；`candidate_verified` 恒为 `False`。

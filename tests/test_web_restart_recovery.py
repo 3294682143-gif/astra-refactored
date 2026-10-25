@@ -13,6 +13,7 @@ close a run that a live process is still working on.
 from __future__ import annotations
 
 import json
+import os
 
 from python.astra_web.queue import ExecutionManager
 from python.astra_web.storage import Store
@@ -85,16 +86,24 @@ def test_restart_keeps_events_and_closes_the_run_honestly(tmp_path):
     before.append_event_sync(
         run_id, {"kind": "model_dispatched", "payload": {"requestId": "model-1"}}
     )
+    # model-1 never returned: its remote outcome is genuinely unresolved.
+    before.append_event_sync(
+        run_id, {"kind": "model_dispatched", "payload": {"requestId": "model-2"}}
+    )
     before.append_event_sync(
         run_id,
-        {"kind": "model_returned", "payload": {"requestId": "model-1", "transportStatus": "COMPLETE"}},
+        {"kind": "model_returned", "payload": {"requestId": "model-2", "transportStatus": "COMPLETE"}},
     )
 
     # --- process restart: the owning process is gone, records survive on disk
     _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID)
     after = ExecutionManager(Store(tmp_path), solver=None)
     replayed = after.get_history_events(run_id)
-    assert [row["kind"] for row in replayed] == ["model_dispatched", "model_returned"]
+    assert [row["kind"] for row in replayed] == [
+        "model_dispatched",
+        "model_dispatched",
+        "model_returned",
+    ]
     assert after.is_active(run_id) is False
 
     recovered = after.recover_orphan_runs()
@@ -114,7 +123,7 @@ def test_restart_keeps_events_and_closes_the_run_honestly(tmp_path):
 
     events = after.get_history_events(run_id)
     kinds = [row["kind"] for row in events]
-    assert kinds[:2] == ["model_dispatched", "model_returned"]
+    assert kinds[:3] == ["model_dispatched", "model_dispatched", "model_returned"]
     assert "error" in kinds and kinds[-1] == "RESULT"
     terminal = events[-1]
     assert terminal["sourceKind"] == "official_result"
@@ -191,3 +200,136 @@ def test_a_legacy_record_younger_than_this_process_is_left_alone(tmp_path):
     intruder = ExecutionManager(Store(tmp_path), solver=None)
     assert intruder.recover_orphan_runs() == []
     assert intruder.store.get_run(run_id)["status"] == "running"
+
+
+def test_completed_requests_are_not_relabelled_as_unknown(tmp_path):
+    """A dispatch+COMPLETE pair has a known outcome; recovery must not call it unknown."""
+    before = _manager(tmp_path)
+    run_id = _start_run(before, run_id="run-restart-6")
+    before.append_event_sync(
+        run_id, {"kind": "model_dispatched", "payload": {"requestId": "model-1"}}
+    )
+    before.append_event_sync(
+        run_id,
+        {"kind": "model_returned", "payload": {"requestId": "model-1", "transportStatus": "COMPLETE"}},
+    )
+
+    _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID)
+    after = ExecutionManager(Store(tmp_path), solver=None)
+    assert after.recover_orphan_runs() == [run_id]
+
+    summary = after.store.get_run(run_id)["summary"]
+    assert summary["metrics"]["remote_outcome_unknown"] is False
+
+
+def test_unknown_returns_and_dangling_dispatches_stay_unknown(tmp_path):
+    """"UNKNOWN" returns and never-returned requests both keep the responsibility."""
+    cases = {
+        "run-unknown-1": [{"requestId": "model-1", "transportStatus": "UNKNOWN"}],
+        "run-unknown-2": [{"requestId": "model-1", "transportStatus": "TRUNCATED"}],
+    }
+    for run_id, returns in cases.items():
+        manager = _manager(tmp_path)
+        _start_run(manager, run_id=run_id)
+        manager.append_event_sync(
+            run_id, {"kind": "model_dispatched", "payload": {"requestId": "model-1"}}
+        )
+        for row in returns:
+            manager.append_event_sync(run_id, {"kind": "model_returned", "payload": row})
+        _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID)
+
+    after = ExecutionManager(Store(tmp_path), solver=None)
+    recovered = set(after.recover_orphan_runs())
+    assert recovered == {"run-unknown-1", "run-unknown-2"}
+    assert after.store.get_run("run-unknown-1")["summary"]["metrics"]["remote_outcome_unknown"] is True
+    # TRUNCATED is a *known* transport outcome (the provider answered, truncated).
+    assert after.store.get_run("run-unknown-2")["summary"]["metrics"]["remote_outcome_unknown"] is False
+
+
+def test_recycled_pid_does_not_block_recovery(tmp_path):
+    """A live pid wearing the dead owner's number must not keep a run hostage."""
+    owner = _manager(tmp_path)
+    run_id = _start_run(owner, run_id="run-pid-reuse-1")
+    owner.append_event_sync(run_id, {"kind": "model_dispatched", "payload": {"requestId": "m"}})
+
+    # The old owner is gone; the kernel handed its pid to another process (us).
+    _rewrite_summary(
+        tmp_path,
+        run_id,
+        ownerPid=os.getpid(),
+        ownerToken="previous-process-instance",
+        ownerStartTicks=1,          # not this process's start time
+        ownerBootId="00000000-dead-beef-0000-000000000000",
+    )
+
+    survivor = ExecutionManager(Store(tmp_path), solver=None)
+    assert survivor.recover_orphan_runs() == [run_id]
+    summary = survivor.store.get_run(run_id)["summary"]
+    assert summary["stopReason"] == "TRANSPORT_STOP"
+    assert summary["code"] == "HOST_RESTARTED"
+
+
+def test_live_same_boot_owner_with_matching_identity_is_protected(tmp_path):
+    """When the recorded identity really is a live process, nothing is recovered."""
+    owner = _manager(tmp_path)
+    run_id = _start_run(owner, run_id="run-live-owner-1")
+    run = owner.store.get_run(run_id)
+    recorded = dict(run["summary"])
+    assert recorded.get("ownerPid") == os.getpid()
+    assert recorded.get("ownerToken") == owner._owner_token
+
+    sibling = ExecutionManager(Store(tmp_path), solver=None)
+    assert sibling.recover_orphan_runs() == []
+    assert sibling.store.get_run(run_id)["status"] == "running"
+
+
+def test_crash_between_archive_and_database_keeps_the_candidate(tmp_path):
+    """Terminal evidence on disk wins: the database row is completed, not downgraded."""
+    manager = _manager(tmp_path)
+    run_id = _start_run(manager, run_id="run-crash-order-1")
+    manager.append_event_sync(
+        run_id, {"kind": "model_dispatched", "payload": {"requestId": "model-1"}}
+    )
+    terminal_summary = {
+        "runId": run_id,
+        "engine": "ts",
+        "status": "candidate",
+        "stopReason": "REVIEWS_COMPLETE",
+        "terminalKind": "REVIEWS_COMPLETE",
+        "final_response": "rank = 2",
+        "reason": "reviews complete",
+        "code": None,
+        "executed": True,
+        "candidate_verified": False,
+        "childReaped": True,
+        "elapsedMs": 1234,
+        "sessionId": "session-1",
+    }
+    # _finalize writes the RESULT event and details.json before the DB commit;
+    # simulate the crash exactly in that window.
+    manager.append_terminal_event(run_id, terminal_summary)
+    archive_rel = f"runs/{run_id}/details.json"
+    from python.astra_web.archive import atomic_write_json
+
+    atomic_write_json(
+        manager.store.safe_join(archive_rel),
+        {"events": manager.get_history_events(run_id), "summary": terminal_summary},
+    )
+    _rewrite_summary(tmp_path, run_id, ownerPid=DEAD_PID, l2_path=archive_rel)
+    assert manager.store.get_run(run_id)["status"] == "running"
+
+    after = ExecutionManager(Store(tmp_path), solver=None)
+    assert after.recover_orphan_runs() == [run_id]
+
+    run = after.store.get_run(run_id)
+    assert run["status"] == "candidate", "the archived terminal must be completed, not overwritten"
+    summary = run["summary"]
+    assert summary["stopReason"] == "REVIEWS_COMPLETE"
+    assert summary["final_response"] == "rank = 2"
+    assert summary["candidate_verified"] is False
+    assert summary["committedFromArchive"] is True
+    assert summary.get("code") != "HOST_RESTARTED"
+
+    events = after.get_history_events(run_id)
+    assert [row["kind"] for row in events] == ["model_dispatched", "RESULT"]
+    assert events[-1]["payload"]["status"] == "candidate"

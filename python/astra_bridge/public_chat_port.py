@@ -74,6 +74,16 @@ class PublicChatPort:
         """Remaining share of the run budget owned by this port."""
         return self.request_seconds - max(0.0, self._clock() - self._anchor)
 
+    def may_dispatch(self) -> bool:
+        """Pre-dispatch admission for the formal layer; no side effects.
+
+        ``AgentClient`` calls this *before* it records a dispatch, so a budget
+        that is already gone is reported as "nothing was sent" instead of being
+        mistaken for an unknown remote outcome. Budget accounting stays with the
+        caller: this port never refunds or discounts a logical call.
+        """
+        return self.remaining_seconds() >= _MIN_REQUEST_SECONDS
+
     # -- formal contract -------------------------------------------------
     def chat(self, *, messages, temperature, max_tokens):
         """One bounded generation for ``AgentClient``; never retried here."""
@@ -85,8 +95,8 @@ class PublicChatPort:
             raise ValueError("messages must be a non-empty list")
         timeout = self.remaining_seconds()
         if timeout < _MIN_REQUEST_SECONDS:
-            # Nothing was sent, so the caller may refund the logical call instead
-            # of inheriting an unknown remote outcome.
+            # Provably nothing was sent: the caller must record "not dispatched"
+            # rather than an unknown remote outcome (and owns any budget policy).
             raise RequestNotDispatched()
         cancellation = threading.Event()
         self.calls += 1

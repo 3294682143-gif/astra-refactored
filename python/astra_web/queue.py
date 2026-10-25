@@ -30,9 +30,10 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -41,9 +42,57 @@ from .config import DEFAULT_BUDGET, default_budget
 from .contracts.dto import RunRequestDto
 from .contracts.enums import StopReason
 from .contracts.mapping import classify_stop_reason, classify_terminal_kind
-from .storage import NON_TERMINAL_STATUSES, DuplicateRunError, Store, is_valid_run_id
+from .storage import (
+    NON_TERMINAL_STATUSES,
+    DuplicateRunError,
+    Store,
+    is_terminal_status,
+    is_valid_run_id,
+)
 
 logger = logging.getLogger("astra_web.queue")
+
+def _read_process_identity(pid: int) -> Optional[Dict[str, Any]]:
+    """Identity of one process *instance* (pids are reused, so pid alone lies).
+
+    ``boot_id`` changes on reboot and ``starttime`` (``/proc/<pid>/stat`` field 22)
+    changes on every fork, so the pair identifies one concrete process instance
+    even after the kernel recycles its pid.
+    """
+    if type(pid) is not int or pid <= 0:
+        return None
+    boot_id: Optional[str] = None
+    start_ticks: Optional[int] = None
+    proc = Path("/proc")
+    if proc.is_dir():
+        try:
+            boot_id = (proc / "sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+        except OSError:
+            boot_id = None
+        try:
+            raw = (proc / str(pid) / "stat").read_text(encoding="utf-8")
+            # ``comm`` may contain spaces/parentheses, so split after the last ')'.
+            fields = raw.rsplit(")", 1)[1].split()
+            start_ticks = int(fields[19])
+        except (OSError, IndexError, ValueError):
+            return None if boot_id is None else {
+                "pid": pid,
+                "bootId": boot_id,
+                "startTicks": None,
+            }
+    if boot_id is None and start_ticks is None:
+        return None
+    return {"pid": pid, "bootId": boot_id, "startTicks": start_ticks}
+
+
+def _own_process_identity() -> Dict[str, Any]:
+    identity = _read_process_identity(os.getpid()) or {"pid": os.getpid()}
+    return {
+        "ownerPid": identity.get("pid"),
+        "ownerBootId": identity.get("bootId"),
+        "ownerStartTicks": identity.get("startTicks"),
+    }
+
 
 # Import time ≈ BFF process start. A legacy record (no owner identity) may only be
 # recovered when it predates this process, so a concurrent sibling can never be
@@ -265,8 +314,8 @@ class ExecutionManager:
             # Ownership is recorded so restart recovery can tell a真 orphan from a
             # run that another live process (or a spawned helper that re-imports
             # this module) is still working on.
-            "ownerPid": os.getpid(),
             "ownerToken": self._owner_token,
+            **_own_process_identity(),
         }
         try:
             self.store.save_run(
@@ -631,16 +680,51 @@ class ExecutionManager:
         return True
 
     def _owner_is_gone(self, record: Mapping[str, Any]) -> bool:
-        """A run may only be recovered when its owner can no longer finish it."""
+        """A run may only be recovered when its owner can no longer finish it.
+
+        A live *pid* is not proof: the kernel recycles pids, so a brand-new
+        process can wear the dead owner's number. The recorded boot id and
+        kernel start time identify one process *instance*, and only that instance
+        keeps a run alive.
+        """
         summary = self._existing_summary(record)
         owner = summary.get("ownerPid")
         if type(owner) is int and owner > 0:
-            if owner != os.getpid():
-                return not self._pid_alive(owner)
-            # Same process: only this very manager may reclaim its own run. A
-            # sibling manager (or a spawned helper that re-imports this module)
-            # must never close a run it does not own.
-            return summary.get("ownerToken") == self._owner_token
+            if owner == os.getpid():
+                # This pid is mine *now*, but it may have belonged to the dead
+                # owner before the kernel recycled it. Instance identity decides.
+                me = _own_process_identity()
+                recorded_boot = summary.get("ownerBootId")
+                recorded_start = summary.get("ownerStartTicks")
+                if (
+                    isinstance(recorded_boot, str)
+                    and me.get("ownerBootId")
+                    and recorded_boot != me["ownerBootId"]
+                ):
+                    return True
+                if type(recorded_start) is int and type(me.get("ownerStartTicks")) is int:
+                    if recorded_start != me["ownerStartTicks"]:
+                        return True
+                # Genuinely this process: only this very manager may reclaim its
+                # own run. A sibling manager (or a spawned helper that re-imports
+                # this module) must never close a run it does not own.
+                return summary.get("ownerToken") == self._owner_token
+            if not self._pid_alive(owner):
+                return True
+            recorded_boot = summary.get("ownerBootId")
+            recorded_start = summary.get("ownerStartTicks")
+            live = _read_process_identity(owner)
+            if live is None:
+                # The pid exists but its identity cannot be read: assume it is
+                # still the owner and never close a live run.
+                return False
+            if isinstance(recorded_boot, str) and live.get("bootId"):
+                if recorded_boot != live["bootId"]:
+                    return True  # different boot: the owner is certainly gone
+            if type(recorded_start) is int and type(live.get("startTicks")) is int:
+                return live["startTicks"] != recorded_start  # pid was recycled
+            # No usable identity on record: stay conservative.
+            return False
         # Legacy record without ownership: only trust records older than this
         # process, so a concurrent sibling can never be closed by mistake.
         created_at = record.get("created_at")
@@ -648,18 +732,86 @@ class ExecutionManager:
             return float(created_at) < _PROCESS_STARTED_AT
         return False
 
+    @staticmethod
+    def remote_outcome_unknown(events: Sequence[Mapping[str, Any]]) -> bool:
+        """Pair every dispatch with its return; only truly unresolved calls count.
+
+        A request whose ``model_returned`` says COMPLETE/TRUNCATED/ERROR has a
+        known remote outcome, so a later crash must not relabel it as unknown.
+        """
+        pending: Dict[str, bool] = {}
+        anonymous_pending = 0
+        for row in events:
+            kind = str(row.get("kind"))
+            payload = row.get("payload")
+            body = payload if isinstance(payload, Mapping) else {}
+            request_id = body.get("requestId")
+            if kind in {"model_dispatched", "MODEL_REQUEST"}:
+                if isinstance(request_id, str):
+                    pending[request_id] = True
+                else:
+                    anonymous_pending += 1
+            elif kind == "model_returned":
+                status = body.get("transportStatus")
+                settled = status in {"COMPLETE", "TRUNCATED", "ERROR"}
+                if isinstance(request_id, str):
+                    if settled:
+                        pending.pop(request_id, None)
+                    else:
+                        pending[request_id] = True
+        return bool(pending) or anonymous_pending > 0
+
+    def _persisted_terminal(self, record: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        """Authoritative terminal record already on disk, if the crash left one.
+
+        ``_finalize`` appends the RESULT event and the ``details.json`` archive
+        *before* committing the database row. A crash in between must be finished
+        forward (commit the archived terminal), never rewritten as a system
+        failure that contradicts the archive.
+        """
+        run_id = str(record["run_id"])
+        candidates: List[Dict[str, Any]] = []
+        l2_path = record.get("l2_path") or f"runs/{run_id}/details.json"
+        for rel in {str(l2_path), f"runs/{run_id}/details.json"}:
+            try:
+                path = self.store.safe_join(rel)
+            except Exception:
+                continue
+            if not path.is_file():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            summary = payload.get("summary") if isinstance(payload, Mapping) else None
+            if isinstance(summary, Mapping):
+                candidates.append(dict(summary))
+        for row in self.get_history_events(run_id):
+            if str(row.get("kind")) != "RESULT":
+                continue
+            body = row.get("payload")
+            if isinstance(body, Mapping):
+                candidates.append(dict(body))
+        for candidate in candidates:
+            status = candidate.get("status")
+            stop_reason = candidate.get("stopReason") or candidate.get("stop_reason")
+            if isinstance(status, str) and is_terminal_status(status) and isinstance(stop_reason, str):
+                return candidate
+        return None
+
     def _recover_one(self, record: Mapping[str, Any]) -> bool:
         run_id = str(record["run_id"])
         summary = self._existing_summary(record)
         events = self.get_history_events(run_id)
-        dispatched = any(
-            str(row.get("kind")) in {"model_dispatched", "MODEL_REQUEST"}
-            for row in events
-        )
+        persisted = self._persisted_terminal(record)
+        if persisted is not None:
+            return self._commit_persisted_terminal(record, persisted, events)
+
+        unknown = self.remote_outcome_unknown(events)
         kind = classify_terminal_kind(StopReason.TRANSPORT_STOP)
         metrics = summary.get("metrics")
         metrics = dict(metrics) if isinstance(metrics, Mapping) else {}
-        metrics["remote_outcome_unknown"] = True if dispatched else False
+        metrics["remote_outcome_unknown"] = unknown
         created_at = record.get("created_at")
         elapsed_ms = None
         if isinstance(created_at, (int, float)):
@@ -730,6 +882,74 @@ class ExecutionManager:
                 "checksum": record.get("checksum"),
             }
         )
+        return bool(saved)
+
+    def _commit_persisted_terminal(
+        self,
+        record: Mapping[str, Any],
+        persisted: Mapping[str, Any],
+        events: Sequence[Mapping[str, Any]],
+    ) -> bool:
+        """Finish a crash that happened after the terminal evidence was written.
+
+        The archived terminal record wins: the database row is simply completed
+        from it, the archive is completed from the events, and no outcome is
+        invented or downgraded.
+        """
+        run_id = str(record["run_id"])
+        base = self._existing_summary(record)
+        finished = {
+            **base,
+            **{key: value for key, value in dict(persisted).items() if value is not None},
+            "runId": run_id,
+            "candidate_verified": False,  # 红线：候选永不被表述为已验证
+            "committedFromArchive": True,
+        }
+        kind = classify_terminal_kind(
+            StopReason(finished["stopReason"]) if finished.get("stopReason") in {r.value for r in StopReason} else StopReason.ERROR
+        )
+        finished.setdefault("terminalKind", kind.value if kind is not None else None)
+        finished.setdefault("executed", True)
+        finished.setdefault("childReaped", None)
+
+        self.append_terminal_event(run_id, finished)
+        history = list(self._history_events.get(run_id, []))
+        l2_rel = f"runs/{run_id}/details.json"
+        try:
+            atomic_write_json(
+                self.store.safe_join(l2_rel),
+                {"events": history, "summary": finished},
+            )
+        except Exception as exc:
+            logger.warning("failed to rewrite archive for %s: %s", run_id, exc)
+            l2_rel = record.get("l2_path") or l2_rel
+
+        saved = self.store.save_run_terminal(
+            {
+                "run_id": run_id,
+                "created_at": record.get("created_at") or time.time(),
+                "source": record.get("source") or "worker",
+                "status": finished["status"],
+                "scenario": record.get("scenario"),
+                "model": record.get("model"),
+                "seed": record.get("seed"),
+                "duration_s": record.get("duration_s") or 0.0,
+                "summary_json": json.dumps(finished, ensure_ascii=False),
+                "l2_path": l2_rel,
+                "l3_path": record.get("l3_path"),
+                "tags": (
+                    f"engine:{base.get('engine', 'ts')},"
+                    f"terminal:{finished['status']},recovered:terminal-from-archive"
+                ),
+                "checksum": record.get("checksum"),
+            }
+        )
+        if saved:
+            logger.warning(
+                "completed terminal row for %s from its persisted archive (%s)",
+                run_id,
+                finished["status"],
+            )
         return bool(saved)
 
     # ------------------------------------------------------------- 事件流

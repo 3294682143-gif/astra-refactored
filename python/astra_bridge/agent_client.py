@@ -308,6 +308,21 @@ def _remaining_ms(deadline):
     return left
 
 
+try:  # the only exception type that proves "no provider request was sent"
+    from mathagent.runtime.adapter import RequestNotDispatched as _RequestNotDispatched
+except Exception:  # pragma: no cover - import guard only
+    _RequestNotDispatched = None  # type: ignore[assignment]
+
+_NOT_DISPATCHED_ERRORS: tuple = (
+    (_RequestNotDispatched,) if _RequestNotDispatched is not None else ()
+)
+
+
+def _is_not_dispatched(exc: BaseException) -> bool:
+    """True only for the explicit "nothing was sent" signal."""
+    return _RequestNotDispatched is not None and isinstance(exc, _RequestNotDispatched)
+
+
 class AgentClient:
     """One injected public client bound once, with a private request journal.
 
@@ -323,6 +338,13 @@ class AgentClient:
         if not callable(chat):
             _fail()
         self._chat = chat
+        # Optional admission hook: a client that can *prove* nothing was sent may
+        # expose ``may_dispatch()``; it is consulted before any dispatch record is
+        # written, so budget exhaustion is never reported as an unknown outcome.
+        admission = getattr(client, "may_dispatch", None)
+        if admission is not None and not callable(admission):
+            _fail()
+        self._admit = admission
         self._lock = threading.Lock()
         self.calls = 0
         self.blocked = False
@@ -330,6 +352,13 @@ class AgentClient:
         self.records = []
 
     # -- public surface ---------------------------------------------------
+
+    def _admitted(self) -> bool:
+        """Ask the optional admission hook; a failing hook fails closed."""
+        try:
+            return bool(self._admit())
+        except BaseException:  # noqa: BLE001 - an unusable hook must not dispatch
+            return False
 
     def generate(self, request, deadline):
         """Dispatch at most one bounded public call for one Host request."""
@@ -353,6 +382,11 @@ class AgentClient:
                     request_id, session_id, request_hash, phase, deadline,
                     "NOT_DISPATCHED", "UNKNOWN", None, None, "UNKNOWN", None,
                 )
+            if self._admit is not None and not self._admitted():
+                return self._record(
+                    request_id, session_id, request_hash, phase, deadline,
+                    "NOT_DISPATCHED", "UNKNOWN", None, None, "UNKNOWN", None,
+                )
             self.busy = True
             self._record(
                 request_id, session_id, request_hash, phase, deadline,
@@ -366,7 +400,7 @@ class AgentClient:
                 request_id, session_id, request_hash, phase, deadline,
                 "DISPATCHED", None, None, None, None, None,
             )
-        box = {"done": False, "value": None, "error": False}
+        box = {"done": False, "value": None, "error": False, "not_sent": False}
         event = threading.Event()
 
         def worker():
@@ -374,12 +408,26 @@ class AgentClient:
                 with self._lock:
                     if self.blocked or time.monotonic() >= deadline - _SETTLE_SECONDS:
                         return
-                    self.calls += 1
-                box["value"] = self._chat(
-                    messages=copy.deepcopy(messages),
-                    temperature=_TEMPERATURE,
-                    max_tokens=_MAX_TOKENS,
-                )
+                try:
+                    value = self._chat(
+                        messages=copy.deepcopy(messages),
+                        temperature=_TEMPERATURE,
+                        max_tokens=_MAX_TOKENS,
+                    )
+                except _NOT_DISPATCHED_ERRORS as exc:
+                    # The client proves no byte left this process: never count it
+                    # as a dispatched call and never inherit an unknown outcome.
+                    if not _is_not_dispatched(exc):
+                        raise
+                    box["not_sent"] = True
+                except BaseException:  # noqa: BLE001 - fixed code only, never text
+                    box["error"] = True
+                    with self._lock:
+                        self.calls += 1
+                else:
+                    box["value"] = value
+                    with self._lock:
+                        self.calls += 1
             except BaseException:  # noqa: BLE001 - fixed code only, never text
                 box["error"] = True
             finally:
@@ -405,6 +453,13 @@ class AgentClient:
                     return self._record(
                         request_id, session_id, request_hash, phase, deadline,
                         "OUTCOME_UNKNOWN", "UNKNOWN", None, None, "UNKNOWN", None,
+                    )
+            if box["not_sent"]:
+                with self._lock:
+                    self.blocked = False
+                    return self._record(
+                        request_id, session_id, request_hash, phase, deadline,
+                        "NOT_DISPATCHED", "UNKNOWN", None, None, "UNKNOWN", None,
                     )
             if box["error"] or not box["done"]:
                 with self._lock:
@@ -479,4 +534,7 @@ class AgentClient:
             "transportStatus": transport if transport is not None else "UNKNOWN",
             "text": text if isinstance(text, str) else "",
             "remainingMs": _remaining_ms(deadline),
+            # ``NOT_DISPATCHED`` is the only state that proves no byte reached the
+            # provider; the Host must not turn it into an unknown remote outcome.
+            "dispatchState": "DISPATCHED" if state != "NOT_DISPATCHED" else "NOT_DISPATCHED",
         }

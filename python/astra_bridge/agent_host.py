@@ -394,6 +394,9 @@ class AgentHost(_Host):
                     _fail()
                 self.history[rid] = {"request": copy.deepcopy(req), "receipt": copy.deepcopy(receipt)}
         self.model_requests = 0
+        # Requests the client proved it never sent (budget precheck refused): the
+        # logical call is still accounted for, but no remote outcome is unknown.
+        self.not_dispatched_requests = 0
         self.effect_calls = 0
         # Effects are budgeted per kind: ``tool_effect_count`` is spent only by
         # tool actions, ``method_loads`` only by method-card loads, and
@@ -1096,10 +1099,14 @@ class AgentHost(_Host):
         result = self.client.generate(copy.deepcopy(request), deadline)
         if not isinstance(result, dict):
             _fail()
-        _exact_keys(result, ("transportStatus", "text", "remainingMs"))
+        _exact_keys(result, ("transportStatus", "text", "remainingMs", "dispatchState"))
         transport = result["transportStatus"]
         if transport not in ("COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"):
             _fail()
+        dispatch_state = result["dispatchState"]
+        if dispatch_state not in ("DISPATCHED", "NOT_DISPATCHED"):
+            _fail()
+        sent = dispatch_state == "DISPATCHED"
         text = result["text"]
         if not isinstance(text, str):
             _fail()
@@ -1121,8 +1128,12 @@ class AgentHost(_Host):
             self.consensus_calls += 1
         if transport != "COMPLETE":
             self.stopped = True
-        if transport == "UNKNOWN":
+        if transport == "UNKNOWN" and sent:
+            # Only a request that actually left this process can have an unknown
+            # remote outcome; a never-dispatched call proves nothing was sent.
             self.client.blocked = True
+        if not sent:
+            self.not_dispatched_requests += 1
         self._emit("model_returned", {
             "requestId": request_id,
             "phase": request["phase"],

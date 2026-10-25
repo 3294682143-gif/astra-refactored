@@ -837,3 +837,18 @@ git push -u origin HEAD:refs/heads/feat/web-unified-math-integration
 > 新增的恢复路径不改变红线：`candidate_verified` 恒为 `False`；遗留运行一律收口为系统级失败，
 > 既不冒充 candidate，也不把「未派发的调用」说成远端未知。多进程（Node Host 派生的 spawn 子进程）
 > 会重新 import BFF 模块，因此归属判定是必需的——否则子进程会把父进程正在跑的运行误收口。
+
+## 21 独立复核第二轮修复（V3）
+
+第二轮复核确认 P0 生产客户端、真实事件、正常回放、JSONL 增量落盘与浏览器验收范围均已修复，
+但指出重启恢复仍有 4 处可复现缺口。本轮继续在同一条整合分支修复，原分支保持不动。
+
+| 缺陷 | 级别 | 根因 | 修复 | 证据 |
+|---|---|---|---|---|
+| PID 复用后无法恢复旧运行 | P1 | `_owner_is_gone` 只判断 `os.kill(pid, 0)`：内核把死进程的 pid 分配给新进程后，遗留运行被永久认作「属主还活着」 | 记录进程**实例身份** `ownerBootId`（`/proc/sys/kernel/random/boot_id`）+ `ownerStartTicks`（`/proc/<pid>/stat` 第 22 字段）；恢复时要求实例身份一致才认为属主存活，boot 变化或 starttime 不等即判定原属主已死 | `tests/test_web_restart_recovery.py::test_recycled_pid_does_not_block_recovery` |
+| 终态落盘中途退出把候选降级 | P1 | `_finalize` 先写 RESULT 事件与 `details.json`，最后提交数据库；在该窗口崩溃后，恢复逻辑只按「遗留运行」收口为 `TRANSPORT_STOP / Unsolved.`，与存档里的 `REVIEWS_COMPLETE / rank = 2` 矛盾 | 恢复先核对已持久化终态（`details.json` 的 summary 或事件里的 RESULT）；存在终态证据时按存档**补齐数据库提交**（`committedFromArchive`），不再改写为系统级失败；反之才按遗留运行收口 | `test_crash_between_archive_and_database_keeps_the_candidate`（数据库最终为 `candidate`、`REVIEWS_COMPLETE`、`rank = 2`） |
+| 已完成请求仍被标成远端未知 | P2 | 恢复时只要出现过 `model_dispatched` 就把 `remote_outcome_unknown` 置真，忽略了同请求的 `model_returned` | `ExecutionManager.remote_outcome_unknown()` 按 `requestId` 配对：`COMPLETE/TRUNCATED/ERROR` 视为已知结局并从待决集合移除，`UNKNOWN` 与从未返回的保持待决 | `test_completed_requests_are_not_relabelled_as_unknown`、`test_unknown_returns_and_dangling_dispatches_stay_unknown` |
+| 「未发送」异常未贯通到调用层 | P2 | 端口在预算耗尽时抛 `RequestNotDispatched`，但 `AgentClient` 把所有异常统一记为 `DISPATCHED → OUTCOME_UNKNOWN` 并封锁客户端 | `PublicChatPort.may_dispatch()` 提供无副作用的派发前准入；`AgentClient` 在写任何派发记录前调用它，并在 worker 内区分「证明未发送」与「发送后未知」；返回契约新增 `dispatchState`，Host 仅对真正发出的请求置 `blocked`，未派发请求计入 `not_dispatched_requests`，`client_method_calls/unknown_usage_requests` 均不计入 | `test_exhausted_budget_is_reported_as_not_dispatched`（HTTP 调用 0 次、`remote_outcome_unknown=False`）、`test_not_dispatched_is_journalled_but_never_blocks_the_client` |
+
+> 预算语义未被擅自放宽：端口只回答「是否已经在发送前被拒绝」，逻辑预算仍由 Host 记账；
+> 恢复路径同样不改红线，`candidate_verified` 恒为 `False`。
