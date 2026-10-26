@@ -2132,7 +2132,7 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
    首轮上下文没有 `group_structure` 的参数约束；而 `MATH_ASSET_BY_ID`
    （含真实 `requiredParams`/`optionalParams`）在 `agent-loop.ts` 里已被 import 却未使用。
 
-### 26.2 本轮实施（工作树内，未提交）
+### 26.2 本轮实施（已提交，`df98cb2`）
 
 | 改动 | 文件 | 目的 |
 |---|---|---|
