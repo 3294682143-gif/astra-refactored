@@ -2227,6 +2227,8 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 
 ### 27.2 门禁（最终源码/产物）
 
+- 本轮提交：`bbd7f6f`（源码/测试/文档）、`f46384d`（v1.4 bundle + manifest）；
+  分支 `feat/web-unified-math-integration` 未推送远端。
 - `tsc -b`：0 errors
 - Node：**543/543 passed**
 - Python：**1561 passed / 24 skipped / 0 failed**（448s）
