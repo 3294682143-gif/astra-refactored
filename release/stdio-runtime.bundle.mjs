@@ -1652,9 +1652,6 @@ function validateManifest(raw, version, expected) {
 function validateAgentHostV14Manifest(raw) {
   return validateManifest(raw, AGENT_HOST_V14_VERSION, AGENT_HOST_V14_METHODS);
 }
-function validateAgentHostManifest(raw) {
-  return validateManifest(raw, AGENT_HOST_VERSION, AGENT_HOST_METHODS);
-}
 function agentHostPayload(manifest, method, side, value, sessionId) {
   const declared = manifest.methods;
   if (!Object.prototype.hasOwnProperty.call(declared, method))
@@ -21939,6 +21936,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       catalog = null;
     }
   }
+  let methodSelectionAttempted = false;
+  let enumerationAttempted = false;
+  let exactCheckAttempted = false;
+  let semanticToolAttempted = false;
+  let mathAssetAttempted = false;
+  let verdictClosureAttempted = false;
+  let densityClosureAttempted = false;
   try {
     while (workUnits < opts.maxWorkUnits && !root.stopped()) {
       if (callsLeft() <= reserve() || root.remainingMs() <= MIN_MS) {
@@ -21999,7 +22003,6 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       }
       let advanced = false;
       let yielded = false;
-      let methodSelectionAttempted = false;
       let methodToolCoPromptCardId = null;
       let forcedMethodSelection = false;
       let forcedMethodCandidates = [];
@@ -22008,27 +22011,25 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       let secondMethodOfferPending = false;
       let methodLoadRefusalNotice = null;
       let methodLoadRefusalUsed = false;
-      let enumerationAttempted = false;
       let forcedEnumerationSelection = false;
-      let exactCheckAttempted = false;
       let forcedExactCheckSelection = false;
       let forcedExactCheckOperation = null;
-      let semanticToolAttempted = false;
       let forcedSemanticToolSelection = false;
       let forcedSemanticToolRoute = null;
-      let mathAssetAttempted = false;
       let forcedMathAssetSelection = false;
       let forcedMathAssetRoute = null;
       let forcedRetryUsed = false;
       let forcedTurnFailedOpen = false;
-      let verdictClosureAttempted = false;
+      let forcedFallbackAnswerPending = false;
+      let forcedFallbackUsed = false;
       let forcedVerdictClosure = false;
-      let densityClosureAttempted = false;
       let forcedDensityClosure = false;
       let densityCheckFailure = null;
       let workRetries = 0;
       while (!root.stopped()) {
         forcedTurnFailedOpen = false;
+        const forceFinalTurn = forcedFallbackAnswerPending;
+        forcedFallbackAnswerPending = false;
         let secondMethodOfferShown = false;
         if (root.remainingMs() <= MIN_MS) {
           stop = "DEADLINE_EXCEEDED";
@@ -22383,6 +22384,21 @@ ${g.guidance.join("\n")}`).join("");
             };
           }
         }
+        if (forceFinalTurn) {
+          const messages = [
+            {
+              role: "system",
+              content: context.messages[0].content + "\n\nFINAL ANSWER REQUIRED. The previous forced method/tool turn did not produce an admissible action and its retry is spent. Do not call a tool, method or exploration now. Return exactly one complete p2a-work-v1 WorkPacket with the best-effort candidateProposal."
+            },
+            context.messages[1]
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+          };
+        }
         let outcome = await calls.model({
           task: running,
           phase: "WORK",
@@ -22413,11 +22429,17 @@ ${g.guidance.join("\n")}`).join("");
         } catch {
           action = null;
         }
+        if (forcedMathAssetSelection) {
+          forcedMathAssetSelection = false;
+          forcedMathAssetRoute = null;
+          forcedRetryUsed = false;
+        }
         const forcedRouteAtAction = forcedSemanticToolRoute;
         const forcedMethodAtAction = forcedMethodSelection;
         const obeyedRouteAtAction = forcedRouteAtAction !== null && action?.action === "tool" && action.name === forcedRouteAtAction.toolName && (forcedRouteAtAction.toolName !== "exact_check_expr" || typeof action.args["operation"] === "string" && action.args["operation"] === forcedRouteAtAction.operation);
         if (forcedMethodAtAction || forcedRouteAtAction !== null) {
-          const obeyedMethod = forcedMethodAtAction && action?.action === "method";
+          const obeyedMethodId = action?.action === "method" && typeof action.id === "string" ? action.id : null;
+          const obeyedMethod = forcedMethodAtAction && obeyedMethodId !== null && catalog !== null && catalog.entries.some((entry) => entry.id === obeyedMethodId);
           const obeyedTool = obeyedRouteAtAction;
           if (!obeyedMethod && !obeyedTool) {
             if (!forcedRetryUsed) {
@@ -22447,7 +22469,14 @@ ${g.guidance.join("\n")}`).join("");
           forcedMathAssetRoute = null;
           forcedRetryUsed = false;
         }
+        if (forceFinalTurn && action !== null && action.action !== "final" && action.action !== "unsolved") {
+          stop = "NO_CANDIDATE";
+          break;
+        }
         if (action !== null && action.action === "math_asset") {
+          forcedMathAssetSelection = false;
+          forcedMathAssetRoute = null;
+          forcedRetryUsed = false;
           if (captured.mathAsset === null || captured.mathAsset === void 0) {
             stop = "CONTROL_REJECTED";
             break;
@@ -22769,6 +22798,11 @@ ${g.guidance.join("\n")}`).join("");
               methodLoadRefusalNotice = "METHOD LOAD REFUSED. This optional second card is not admissible in the remaining budget. Use the loaded method bodies already in methodAssets and answer with exactly one complete WorkPacket now.";
               continue;
             }
+            if (forcedTurnFailedOpen && !forcedFallbackUsed && callsLeft() >= 1 + opts.maxReviews) {
+              forcedFallbackUsed = true;
+              forcedFallbackAnswerPending = true;
+              continue;
+            }
             stop = "CONTROL_REJECTED";
             break;
           }
@@ -22784,6 +22818,11 @@ ${g.guidance.join("\n")}`).join("");
               methodLoadRefusalUsed = true;
               secondMethodOfferPending = false;
               methodLoadRefusalNotice = "METHOD LOAD REFUSED by the Host quota. Use the loaded method bodies already in methodAssets and answer with exactly one complete WorkPacket now.";
+              continue;
+            }
+            if (forcedTurnFailedOpen && !forcedFallbackUsed && callsLeft() >= 1 + opts.maxReviews) {
+              forcedFallbackUsed = true;
+              forcedFallbackAnswerPending = true;
               continue;
             }
             stop = "CONTROL_REJECTED";
@@ -24898,22 +24937,14 @@ function manifestUrl() {
   if (existsSync(v14Sibling)) {
     return v14Sibling;
   }
-  const sibling = new URL("./schema/agent-host-v13.schema.json", import.meta.url);
-  if (existsSync(sibling)) {
-    return sibling;
-  }
-  try {
-    return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v14.schema.json"));
-  } catch {
-    return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v13.schema.json"));
-  }
+  return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v14.schema.json"));
 }
 function loadManifest() {
   const raw = JSON.parse(readFileSync(manifestUrl(), "utf8"));
-  if (raw["protocolVersion"] === "1.4-unified-math-assets") {
-    return validateAgentHostV14Manifest(raw);
+  if (raw["protocolVersion"] !== "1.4-unified-math-assets") {
+    throw new Error("VERSION_MISMATCH");
   }
-  return validateAgentHostManifest(raw);
+  return validateAgentHostV14Manifest(raw);
 }
 function startAgentHost(startedAt = performance.now()) {
   if (started) {

@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "9a7dd72c667b4806dabc927d81f8e5bdf2bf937c",
-    "tree": "9156067b00d5dd7755c46b659a9d33e232956be5"
+    "commit": "bbd7f6fbea7976b9dbbcdc2785e8d54167fa346a",
+    "tree": "62bfecaba8464621afe0df5e2d16e6fd2eaf4a8e"
   },
   "js": [
     {
@@ -15,23 +15,36 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "934c2768090a00af21e72c26955be5b404cf86868f2524b778b661b5dd49df22",
-      "bytes": 224073
+      "sha256": "28cf2ed5e63e8fa1d9ad4298d40309c02cb49ffd8a863e604843771ab14e8871",
+      "bytes": 228246
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
       "sha256": "3dddc6025deaea742281112dfeb50e29bf07ff2b1f9c4c65c798aa75ef0f6d50",
       "bytes": 28769
+    },
+    {
+      "path": "apps/stdio-runtime/dist/src/agent-host-main.js",
+      "sha256": "6bc2023b36c0956d9a415f874247bc405ade9ad983423f88d631a4abfcee9a6c",
+      "bytes": 2919
     }
   ],
   "assets": {
     "protocolSchema": {
-      "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+      "path": "packages/protocol/schema/agent-host-v14.schema.json",
+      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
     },
     "protocolSchemaV14": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
       "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+    },
+    "protocolLegacySchema": {
+      "path": "packages/protocol/schema/agent-host-v13.schema.json",
+      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+    },
+    "protocolLegacyManifestV12": {
+      "path": "packages/protocol/schema/agent-host.schema.json",
+      "sha256": "d21953e28965de0497f6dd186b716f388256dd4b95500351729a7dd7d9fe80dd"
     },
     "mathAssetsSchema": {
       "path": "packages/protocol/schema/math-assets.schema.json",
@@ -65,15 +78,23 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "469f8f3111c16746556aea74213469f3288a7cf56daff292cebf562f25d338ec"
+      "sha256": "8efeef7800f36f39c7b112c172a34d5fabccd2f8007dc2a9bd94b648f572f5a0"
     },
     "bundleSchema": {
-      "path": "release/schema/agent-host-v13.schema.json",
-      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+      "path": "release/schema/agent-host-v14.schema.json",
+      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
     },
     "bundleSchemaV14": {
       "path": "release/schema/agent-host-v14.schema.json",
       "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+    },
+    "bundleLegacySchema": {
+      "path": "release/schema/agent-host-v13.schema.json",
+      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+    },
+    "bundleLegacyManifestV12": {
+      "path": "release/schema/agent-host.schema.json",
+      "sha256": "d21953e28965de0497f6dd186b716f388256dd4b95500351729a7dd7d9fe80dd"
     },
     "bundleMathAssetsSchema": {
       "path": "release/schema/math-assets.schema.json",
