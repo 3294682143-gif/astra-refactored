@@ -1,8 +1,8 @@
 # Web 与统一数学资产整合验收报告
 
-- 生成时间（epoch）：`1792930682`
-- Git HEAD：`dfbe5efaa758ca69d31fd0f653d8070bb5d3dc47`
-- 工作树有未提交改动：`False`
+- 生成时间（epoch）：`1793031333`
+- Git HEAD：`3b123a6241580e7c2b1344f11c27e3575c0d5b77`
+- 工作树有未提交改动：`True`
 - Python：`3.10.6`；平台：`Linux-5.10.0-182.0.0.95.r3450_282.hce2.x86_64-x86_64-with-glibc2.35`
 - 规范目录：26 项资产 / 82 项行为 / 4 项仅指导
 - catalogVersion：`1.0.0`
@@ -12,19 +12,19 @@
 | 门禁 | 状态 | 退出码 | 耗时(s) |
 |---|---|---:|---:|
 | `math-assets-generated-check` | PASS | 0 | 0.05 |
-| `protocol-v14-check` | PASS | 0 | 0.04 |
-| `release-manifest-verify` | PASS | 0 | 0.05 |
-| `web-schema-check` | PASS | 0 | 0.2 |
+| `protocol-v14-check` | PASS | 0 | 0.05 |
+| `release-manifest-verify` | PASS | 0 | 0.06 |
+| `web-schema-check` | PASS | 0 | 0.19 |
 | `web-manifest-check` | PASS | 0 | 0.04 |
 | `tsc` | PASS | 0 | 0.12 |
-| `node-tests` | PASS | 0 | 8.53 |
-| `web-logic-tests` | PASS | 0 | 0.29 |
-| `web-typecheck` | PASS | 0 | 3.05 |
-| `web-build` | PASS | 0 | 3.09 |
-| `browser-smoke` | PASS | 0 | 9.5 |
-| `web-unit-bff` | PASS | 0 | 12.38 |
-| `bff-82` | PASS | 0 | 80.39 |
-| `core-82` | PASS | 0 | 79.96 |
+| `node-tests` | PASS | 0 | 8.52 |
+| `web-logic-tests` | PASS | 0 | 0.27 |
+| `web-typecheck` | PASS | 0 | 2.97 |
+| `web-build` | PASS | 0 | 3.2 |
+| `browser-smoke` | PASS | 0 | 9.73 |
+| `web-unit-bff` | PASS | 0 | 11.89 |
+| `bff-82` | PASS | 0 | 79.78 |
+| `core-82` | PASS | 0 | 80.5 |
 
 ## 命令与输出尾部
 
@@ -55,7 +55,7 @@ CHECK_OK: agent-host-v14 schema matches committed files
 - 状态：`PASS`，退出码：`0`
 
 ```text
-VERIFY_OK {"js": 3, "assets": 9, "bundle": 4, "commit": "923f6191b0308c9fa92d981894e2af4bb226aee7"}
+VERIFY_OK {"js": 4, "assets": 11, "bundle": 6, "commit": "3b123a6241580e7c2b1344f11c27e3575c0d5b77"}
 ```
 
 ### web-schema-check
@@ -90,70 +90,70 @@ WEB_MANIFEST_OK /home/ma-user/work/Astra /astra-refactored-web-unified/apps/web-
 
 ### node-tests
 
-- 命令：`node --test /home/ma-user/work/Astra /astra-refactored-web-unified/packages/protocol/dist/tests/p0.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/packages/protocol/dist/tests/p1.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-certificate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-closure-loop.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-closure.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-key.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-asset-port.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-dependency.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-effect-budget.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-exploration.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-final.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-forced-turn.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-guard.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-ipc-exact.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-late-observation.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-g3.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-r0.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-session.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-math-asset.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-method-tool-coprompt.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-method.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-progress.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-revision.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-route-method-fusion.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-semantics-solutions.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-session-log.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-stop-guard.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-tool-input-constraints.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-tool-routes.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-workflow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p1-modules.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-a2.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-fixture.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-gateway.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-host-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-ledger.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-methods.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-multipart.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-parameter.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-scope-coverage.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-template-fallback.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-validation.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-workunit.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-fixture.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-host-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-host-methods.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-aggregate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-gate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-preflight.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-input.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-report.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-session.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-review.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-revision-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-revision.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-gate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-input.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-repair.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-review-audit.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-revise.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-s1.test.js`
+- 命令：`node --test /home/ma-user/work/Astra /astra-refactored-web-unified/packages/protocol/dist/tests/p0.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/packages/protocol/dist/tests/p1.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-certificate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-closure-loop.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-closure.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-answer-key.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-asset-port.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-dependency.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-effect-budget.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-effect-ordinal.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-exploration.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-final.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-forced-turn.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-guard.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-ipc-exact.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-late-observation.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-g3.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-r0.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop-session.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-loop.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-math-asset.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-method-tool-coprompt.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-method.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-progress.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-revision.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-route-method-fusion.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-semantics-solutions.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-session-log.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-stop-guard.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-tool-input-constraints.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-tool-routes.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/agent-workflow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p1-modules.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-a2.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-fixture.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-gateway.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-host-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-ledger.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-methods.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-multipart.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-parameter.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-scope-coverage.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-template-fallback.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-validation.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p2-workunit.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-fixture.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-host-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p3-host-methods.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-mapping.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-aggregate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-gate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-preflight.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-input.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-report.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck-session.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-recheck.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-review.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-revision-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-r0-revision.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-boundaries.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-flow.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-gate.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck-input.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-recheck.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-repair.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-review-audit.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-revise.test.js /home/ma-user/work/Astra /astra-refactored-web-unified/apps/stdio-runtime/dist/tests/p4-s1.test.js`
 - 工作目录：`/home/ma-user/work/Astra /astra-refactored-web-unified`
 - 状态：`PASS`，退出码：`0`
 
 ```text
-lock callback (47.216946ms)
-✔ S2 non-COMPLETE, late and unknown outcomes keep the raw text and never refute (21.779474ms)
-✔ P4 repair fixture composes M1..M5 under one root budget and keeps the parent protected (41.947522ms)
-✔ P4 repair fixture caps, review outcomes and a rewound clock never retry or replace the parent (142.499156ms)
-✔ p4Target guards reject malformed inputs without mutating the artifact (44.300121ms)
-✔ p4Target rejects a self-added scope assumption and a boolean version (12.455392ms)
-✔ a real multi-codepoint quote is accepted while malformed reports are rejected (48.381963ms)
-✔ strict JSON guards reject duplicate keys, floats, unsafe numbers, lone surrogates and depth (25.907366ms)
-✔ review session enforces the cap, the 26/25ms boundary and atomic replay rejection (18.067596ms)
-✔ two reports with the same step and kind but different rationale merge into one challenge (9.634447ms)
-✔ a duplicated issue inside one report is deduplicated and the context excludes private fields (6.725123ms)
-✔ invalid, unknown, truncated, error, blank and late settlements keep the raw text and block new admits (15.691112ms)
-✔ a legal UNKNOWN report stays PROVISIONAL and markStale never refutes (9.416859ms)
-✔ the candidate gate protects the first candidate and never replaces it (13.489267ms)
-✔ two NO_ISSUE reviews never verify, PASS or satisfy anything (11.490881ms)
-✔ S3 strict, stale and forged review cannot upgrade (43.948169ms)
-✔ P4 fixture composes five modules under one budget (85.715742ms)
-✔ flagship: a grounded {1} -> {0,1} revision replaces the protected candidate (58.214321ms)
-✔ refusal keeps the parent candidate and records REVISE_REJECTED (40.93347ms)
-✔ a stale challenge or a forged child binding is refused (23.062542ms)
-✔ the revision path is the only sanctioned replacement of a protected candidate (25.8884ms)
-✔ multi-counterexample: a revision covering every challenged gap is accepted (11.401801ms)
-✔ multi-counterexample: a partial repair that leaves a proven gap fails closed (14.34511ms)
-✔ real registered operators produce diagnostic evidence that never supports an obligation (976.090482ms)
-✔ error, unknown and late outcomes never produce evidence and never retry (12.446431ms)
-✔ precheck accepts S1 evidence produced on a deep model ordinal (4.074823ms)
-✔ precheck reports structural reasons without promoting anything (8.691788ms)
-✔ admission enforces the cap, the 26/25ms boundary and single-flight (10.566743ms)
-✔ forged receipts are rejected and leave the last record DISPATCHED (4.70548ms)
-✔ shared corpus: envelope parseFrame (3.723914ms)
-✔ null const is a legal scalar literal (0.212923ms)
-✔ invalid utf8 bytes rejected (0.234255ms)
-✔ frame byte boundary 65536 ok / 65537 too large (0.595848ms)
-✔ depth 24 ok / 25 rejected inside a legal envelope (0.419453ms)
-✔ astral id 128 ok / 129 rejected (0.844618ms)
-✔ escaped duplicate key and prototype-named extra keys rejected (0.430091ms)
-✔ unsupported schema keyword is a hard failure (0.219743ms)
-✔ failure null id ok, request null id rejected (0.387386ms)
-✔ manifest wrong direction and limits rejected (0.900738ms)
-✔ maxTokens verified true rejected (0.284359ms)
-✔ payload extra field and session binding (0.268065ms)
-✔ classifyMethod allowlist and rejected set (0.166679ms)
-✔ present-but-null schema keywords are rejected, not treated as absent (0.240194ms)
-✔ invalid bounds and unsupported scalar forms are rejected (0.283578ms)
-✔ integer type rejects unsafe value and bool never equals 0 (0.287323ms)
-✔ the shipped P1 manifest validates (2.36663ms)
-✔ manifest drift is rejected (0.829094ms)
-✔ initialize params reject wrong mode, extra field and out-of-range budgets (1.410825ms)
-✔ solve result rejects a verified candidate and a performed acceptance (0.926526ms)
-✔ a zero remainingMs receipt is syntactically valid (0.683464ms)
-✔ parseP1Frame reuses the strict envelope checks (1.994424ms)
-ℹ tests 540
+m a clock callback (23.614966ms)
+✔ S2 non-COMPLETE, late and unknown outcomes keep the raw text and never refute (25.470616ms)
+✔ P4 repair fixture composes M1..M5 under one root budget and keeps the parent protected (41.834132ms)
+✔ P4 repair fixture caps, review outcomes and a rewound clock never retry or replace the parent (129.545389ms)
+✔ p4Target guards reject malformed inputs without mutating the artifact (29.942238ms)
+✔ p4Target rejects a self-added scope assumption and a boolean version (15.674792ms)
+✔ a real multi-codepoint quote is accepted while malformed reports are rejected (39.867768ms)
+✔ strict JSON guards reject duplicate keys, floats, unsafe numbers, lone surrogates and depth (14.358054ms)
+✔ review session enforces the cap, the 26/25ms boundary and atomic replay rejection (8.146097ms)
+✔ two reports with the same step and kind but different rationale merge into one challenge (8.130294ms)
+✔ a duplicated issue inside one report is deduplicated and the context excludes private fields (6.23031ms)
+✔ invalid, unknown, truncated, error, blank and late settlements keep the raw text and block new admits (14.38766ms)
+✔ a legal UNKNOWN report stays PROVISIONAL and markStale never refutes (12.875981ms)
+✔ the candidate gate protects the first candidate and never replaces it (14.081442ms)
+✔ two NO_ISSUE reviews never verify, PASS or satisfy anything (10.199431ms)
+✔ S3 strict, stale and forged review cannot upgrade (31.025082ms)
+✔ P4 fixture composes five modules under one budget (82.202265ms)
+✔ flagship: a grounded {1} -> {0,1} revision replaces the protected candidate (42.596692ms)
+✔ refusal keeps the parent candidate and records REVISE_REJECTED (33.760468ms)
+✔ a stale challenge or a forged child binding is refused (19.711934ms)
+✔ the revision path is the only sanctioned replacement of a protected candidate (16.299896ms)
+✔ multi-counterexample: a revision covering every challenged gap is accepted (8.387998ms)
+✔ multi-counterexample: a partial repair that leaves a proven gap fails closed (10.623777ms)
+✔ real registered operators produce diagnostic evidence that never supports an obligation (970.408173ms)
+✔ error, unknown and late outcomes never produce evidence and never retry (12.171245ms)
+✔ precheck accepts S1 evidence produced on a deep model ordinal (3.6992ms)
+✔ precheck reports structural reasons without promoting anything (6.9421ms)
+✔ admission enforces the cap, the 26/25ms boundary and single-flight (6.766103ms)
+✔ forged receipts are rejected and leave the last record DISPATCHED (4.458225ms)
+✔ shared corpus: envelope parseFrame (5.300418ms)
+✔ null const is a legal scalar literal (0.27536ms)
+✔ invalid utf8 bytes rejected (0.294428ms)
+✔ frame byte boundary 65536 ok / 65537 too large (0.868453ms)
+✔ depth 24 ok / 25 rejected inside a legal envelope (0.483946ms)
+✔ astral id 128 ok / 129 rejected (0.837219ms)
+✔ escaped duplicate key and prototype-named extra keys rejected (1.399952ms)
+✔ unsupported schema keyword is a hard failure (0.235839ms)
+✔ failure null id ok, request null id rejected (0.490134ms)
+✔ manifest wrong direction and limits rejected (1.2876ms)
+✔ maxTokens verified true rejected (0.417157ms)
+✔ payload extra field and session binding (0.338316ms)
+✔ classifyMethod allowlist and rejected set (0.232772ms)
+✔ present-but-null schema keywords are rejected, not treated as absent (0.301941ms)
+✔ invalid bounds and unsupported scalar forms are rejected (0.342697ms)
+✔ integer type rejects unsafe value and bool never equals 0 (1.20832ms)
+✔ the shipped P1 manifest validates (2.733248ms)
+✔ manifest drift is rejected (0.881822ms)
+✔ initialize params reject wrong mode, extra field and out-of-range budgets (1.630986ms)
+✔ solve result rejects a verified candidate and a performed acceptance (1.191752ms)
+✔ a zero remainingMs receipt is syntactically valid (2.110764ms)
+✔ parseP1Frame reuses the strict envelope checks (2.074214ms)
+ℹ tests 543
 ℹ suites 0
-ℹ pass 540
+ℹ pass 543
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 8490.55689
+ℹ duration_ms 8481.429491
 ```
 
 ### web-logic-tests
@@ -164,69 +164,69 @@ lock callback (47.216946ms)
 
 ```text
 ▶ 真实 Host 观测事件接入
-  ✔ 三个真实事件名都是已知事件，不再落入 unknownEvents (8.61296ms)
-  ✔ model_dispatched 把状态推进到 running 并登记步骤 (0.510131ms)
-  ✔ model_returned 收口对应步骤并保留 transportStatus (0.374128ms)
-  ✔ 非 COMPLETE 返回被记为错误，但仍由真实终态事件决定最终状态 (0.390264ms)
-  ✔ effect_returned 登记真实 effect 观测 (0.460993ms)
-  ✔ 同一条 effect 重复返回只更新，不重复追加 (0.314226ms)
-  ✔ 完整真实序列给出候选与结论文本，且 candidateVerified 恒为 false (0.938894ms)
-  ✔ 旧存档只有 summary 终态时也能收口回放（复核缺陷 #3） (0.62177ms)
-✔ 真实 Host 观测事件接入 (14.168292ms)
+  ✔ 三个真实事件名都是已知事件，不再落入 unknownEvents (3.422937ms)
+  ✔ model_dispatched 把状态推进到 running 并登记步骤 (0.349612ms)
+  ✔ model_returned 收口对应步骤并保留 transportStatus (0.283753ms)
+  ✔ 非 COMPLETE 返回被记为错误，但仍由真实终态事件决定最终状态 (0.316715ms)
+  ✔ effect_returned 登记真实 effect 观测 (0.405806ms)
+  ✔ 同一条 effect 重复返回只更新，不重复追加 (0.269429ms)
+  ✔ 完整真实序列给出候选与结论文本，且 candidateVerified 恒为 false (0.283772ms)
+  ✔ 旧存档只有 summary 终态时也能收口回放（复核缺陷 #3） (0.559833ms)
+✔ 真实 Host 观测事件接入 (7.532002ms)
 ▶ reduceRun 纯函数与核心契约
-  ✔ 初始状态满足红线约束：candidateVerified 恒为 false (1.290642ms)
-  ✔ 接收 FINAL/RESULT 事件后，candidateVerified 仍严格为 false (1.30008ms)
-  ✔ 幂等性：同 seq 同 payload 自动去重并返回相同引用 (0.5201ms)
-  ✔ 冲突检测：同 seq 不同 payload 记录 conflict 且不破坏原事件 (0.379827ms)
-  ✔ 乱序容错：乱序到达的事件按 seq 自动升序排列 (0.989409ms)
-  ✔ 未知事件安全隔离并标记 degraded 与 capabilityGaps (0.403181ms)
-  ✔ 逐条归约结果严格等价于批量归约结果 (reduceRun vs reduceRunAll) (0.402421ms)
-✔ reduceRun 纯函数与核心契约 (7.008848ms)
+  ✔ 初始状态满足红线约束：candidateVerified 恒为 false (1.349559ms)
+  ✔ 接收 FINAL/RESULT 事件后，candidateVerified 仍严格为 false (1.320196ms)
+  ✔ 幂等性：同 seq 同 payload 自动去重并返回相同引用 (0.473235ms)
+  ✔ 冲突检测：同 seq 不同 payload 记录 conflict 且不破坏原事件 (0.452865ms)
+  ✔ 乱序容错：乱序到达的事件按 seq 自动升序排列 (0.927088ms)
+  ✔ 未知事件安全隔离并标记 degraded 与 capabilityGaps (0.351934ms)
+  ✔ 逐条归约结果严格等价于批量归约结果 (reduceRun vs reduceRunAll) (0.382403ms)
+✔ reduceRun 纯函数与核心契约 (7.110711ms)
 ▶ PlaybackController 回放时钟与快照一致性
-  ✔ 支持加载事件流并自动就绪末帧 (0.811082ms)
-  ✔ 单步后退、单步前进与任意游标跳转 (0.52122ms)
-  ✔ 新事件到达时，历史游标保持不变（不强跳末帧） (0.468321ms)
-  ✔ 快照恢复状态与从头完整归约状态完全等价 (0.91964ms)
-✔ PlaybackController 回放时钟与快照一致性 (3.120834ms)
+  ✔ 支持加载事件流并自动就绪末帧 (0.812293ms)
+  ✔ 单步后退、单步前进与任意游标跳转 (0.595814ms)
+  ✔ 新事件到达时，历史游标保持不变（不强跳末帧） (0.515587ms)
+  ✔ 快照恢复状态与从头完整归约状态完全等价 (1.259021ms)
+✔ PlaybackController 回放时钟与快照一致性 (3.565298ms)
 ▶ 实测验证：Astra 真实 session-sample.json 回放
-  ✔ 回放 11 条真实 Astra 事件日志，达到 candidate 终态且验证标记为 false (0.78645ms)
-✔ 实测验证：Astra 真实 session-sample.json 回放 (0.8764ms)
+  ✔ 回放 11 条真实 Astra 事件日志，达到 candidate 终态且验证标记为 false (1.092276ms)
+✔ 实测验证：Astra 真实 session-sample.json 回放 (1.219901ms)
 ▶ 终态语义分类（与 candidate 严格可区分）
-  ✔ REVIEWS_COMPLETE 才归为 candidate 交付 (2.053981ms)
-  ✔ 超时类终止码归为 timeout (0.154752ms)
-  ✔ 运行时启动 / 子进程失败归为 failed (0.163909ms)
-  ✔ 取消归为 cancelled (0.202723ms)
-  ✔ 传输与字段校验故障归为 error (0.220378ms)
-  ✔ 数学未解与预算耗尽归为 unsolved（不得显示为 candidate） (0.169051ms)
-  ✔ 未注册终止码与缺失终止码归为 unknown（不回落 candidate） (0.132031ms)
-  ✔ FINAL 事件携带 TIMEOUT 时不产生 candidate 终态 (1.287373ms)
-  ✔ run.finished 不冲淡已判定的失败 / 超时终态 (0.33077ms)
-✔ 终态语义分类（与 candidate 严格可区分） (6.244837ms)
+  ✔ REVIEWS_COMPLETE 才归为 candidate 交付 (1.389975ms)
+  ✔ 超时类终止码归为 timeout (0.222505ms)
+  ✔ 运行时启动 / 子进程失败归为 failed (0.236242ms)
+  ✔ 取消归为 cancelled (0.206599ms)
+  ✔ 传输与字段校验故障归为 error (0.289477ms)
+  ✔ 数学未解与预算耗尽归为 unsolved（不得显示为 candidate） (0.221601ms)
+  ✔ 未注册终止码与缺失终止码归为 unknown（不回落 candidate） (0.186306ms)
+  ✔ FINAL 事件携带 TIMEOUT 时不产生 candidate 终态 (1.363688ms)
+  ✔ run.finished 不冲淡已判定的失败 / 超时终态 (0.353856ms)
+✔ 终态语义分类（与 candidate 严格可区分） (7.703806ms)
 ▶ final_response 诚实性
-  ✔ 携带 final_response 时如实记录，且不声称形式化确认 (0.441217ms)
-  ✔ 缺失 final_response 时标记缺失，不填充结论文本 (0.216693ms)
-  ✔ 空白 final_response 视为缺失（不把空格当结论） (0.236863ms)
-  ✔ 无 stopReason 且无声明 status 的 FINAL：终态为 unknown 而非 candidate (0.286914ms)
-  ✔ 真实 Astra 信封（只有 status 字段）按其声明还原为候选终态 (0.230591ms)
-✔ final_response 诚实性 (1.830311ms)
+  ✔ 携带 final_response 时如实记录，且不声称形式化确认 (0.501706ms)
+  ✔ 缺失 final_response 时标记缺失，不填充结论文本 (0.208855ms)
+  ✔ 空白 final_response 视为缺失（不把空格当结论） (0.239099ms)
+  ✔ 无 stopReason 且无声明 status 的 FINAL：终态为 unknown 而非 candidate (0.293693ms)
+  ✔ 真实 Astra 信封（只有 status 字段）按其声明还原为候选终态 (0.338333ms)
+✔ final_response 诚实性 (1.986365ms)
 ▶ SSE 关闭帧终态解析（V2 护栏）
-  ✔ 解析后端真实关闭帧的全部终态字段 (1.41716ms)
-  ✔ 非法 JSON / 空对象 / 非对象一律返回 null（不凭空造终态） (0.300729ms)
-  ✔ 关闭帧经归约后落到 error 终态，绝不显示为 candidate (1.529353ms)
-  ✔ 终态信封使用固定序号基址并保留字段名映射 (0.272883ms)
-  ✔ 未执行态（executed=false）的 final_response 仍可读但不构成候选 (0.342756ms)
-✔ SSE 关闭帧终态解析（V2 护栏） (5.612764ms)
+  ✔ 解析后端真实关闭帧的全部终态字段 (1.119514ms)
+  ✔ 非法 JSON / 空对象 / 非对象一律返回 null（不凭空造终态） (0.216762ms)
+  ✔ 关闭帧经归约后落到 error 终态，绝不显示为 candidate (1.014037ms)
+  ✔ 终态信封使用固定序号基址并保留字段名映射 (0.198474ms)
+  ✔ 未执行态（executed=false）的 final_response 仍可读但不构成候选 (0.232784ms)
+✔ SSE 关闭帧终态解析（V2 护栏） (4.055265ms)
 ▶ 数据级别判定（detail_level 权威优先）
-  ✔ detail_level 权威值优先于存档路径推导 (0.422905ms)
-  ✔ detail_level 缺失或非法时才回退到真实存档路径 (0.386875ms)
-  ✔ 记录不存在时为 UNKNOWN，不冒充 L2 / L3 (0.224173ms)
-  ✔ 真实无存档的运行（detail_level=L1、无 l2/l3）判为 L1 (0.219562ms)
-✔ 数据级别判定（detail_level 权威优先） (1.689835ms)
+  ✔ detail_level 权威值优先于存档路径推导 (0.311966ms)
+  ✔ detail_level 缺失或非法时才回退到真实存档路径 (0.238277ms)
+  ✔ 记录不存在时为 UNKNOWN，不冒充 L2 / L3 (0.169391ms)
+  ✔ 真实无存档的运行（detail_level=L1、无 l2/l3）判为 L1 (0.166469ms)
+✔ 数据级别判定（detail_level 权威优先） (1.193511ms)
 ▶ 幂等键稳定性（④ 护栏）
-  ✔ 同题同配置产生相同键（可触发后端 200 重放） (1.059405ms)
-  ✔ 题目或配置不同则键不同 (0.218493ms)
-  ✔ 键为 ASCII 安全（可直接作为 HTTP 头值） (2.596705ms)
-✔ 幂等键稳定性（④ 护栏） (4.101917ms)
+  ✔ 同题同配置产生相同键（可触发后端 200 重放） (0.351019ms)
+  ✔ 题目或配置不同则键不同 (0.159822ms)
+  ✔ 键为 ASCII 安全（可直接作为 HTTP 头值） (0.338436ms)
+✔ 幂等键稳定性（④ 护栏） (1.026965ms)
 ℹ tests 46
 ℹ suites 9
 ℹ pass 46
@@ -234,7 +234,7 @@ lock callback (47.216946ms)
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 250.413023
+ℹ duration_ms 226.218988
 ```
 
 ### web-typecheck
@@ -262,7 +262,7 @@ computing gzip size...
 dist/index.html                   0.74 kB │ gzip:   0.48 kB
 dist/assets/index-nBDfw1hw.css    1.17 kB │ gzip:   0.58 kB
 dist/assets/index-BpXDXjnu.js   443.18 kB │ gzip: 132.43 kB │ map: 1,951.62 kB
-✓ built in 2.83s
+✓ built in 2.92s
 ```
 
 ### browser-smoke
@@ -306,7 +306,7 @@ BROWSER_SMOKE_PASS
 
 ```text
 ......................................................................................................                                                   [100%]
-102 passed in 11.91s
+102 passed in 11.44s
 ```
 
 ### bff-82
@@ -317,7 +317,7 @@ BROWSER_SMOKE_PASS
 
 ```text
 ..................................................................................                                                                       [100%]
-82 passed in 79.95s (0:01:19)
+82 passed in 79.35s (0:01:19)
 ```
 
 ### core-82
@@ -327,39 +327,39 @@ BROWSER_SMOKE_PASS
 - 状态：`PASS`，退出码：`0`
 
 ```text
-earch       | YES  | candidate | False | 1.00  | PASS |
-| 51  | math.lattices              | count_lattice_hexagons           | YES  | candidate | False | 0.91  | PASS |
-| 52  | math.lattices              | hexagon_lattice_points           | YES  | candidate | False | 0.91  | PASS |
-| 53  | math.lattices              | lattice_points_in_polygon        | YES  | candidate | False | 0.98  | PASS |
+earch       | YES  | candidate | False | 0.92  | PASS |
+| 51  | math.lattices              | count_lattice_hexagons           | YES  | candidate | False | 0.95  | PASS |
+| 52  | math.lattices              | hexagon_lattice_points           | YES  | candidate | False | 0.97  | PASS |
+| 53  | math.lattices              | lattice_points_in_polygon        | YES  | candidate | False | 0.94  | PASS |
 | 54  | math.finite-states         | deletion_divisible_largest       | YES  | candidate | False | 0.91  | PASS |
-| 55  | math.finite-states         | digit_sum_window                 | YES  | candidate | False | 0.96  | PASS |
-| 56  | math.finite-states         | hamiltonian_paths_grid           | YES  | candidate | False | 0.94  | PASS |
-| 57  | math.games                 | deck_game_outcome                | YES  | candidate | False | 0.94  | PASS |
-| 58  | math.games                 | gap_subsequence_discrepancy      | YES  | candidate | False | 0.93  | PASS |
-| 59  | math.games                 | independent_reply_certificate    | YES  | candidate | False | 0.94  | PASS |
-| 60  | math.games                 | minimax_value_graph              | YES  | candidate | False | 0.97  | PASS |
-| 61  | math.games                 | pairing_strategy_verify          | YES  | candidate | False | 0.98  | PASS |
-| 62  | math.games                 | win_draw_loss_graph              | YES  | candidate | False | 0.93  | PASS |
-| 63  | math.tiling                | check_tiling_certificate         | YES  | candidate | False | 0.98  | PASS |
-| 64  | math.tiling                | coloring_bound                   | YES  | candidate | False | 0.95  | PASS |
-| 65  | math.tiling                | count_tilings                    | YES  | candidate | False | 0.95  | PASS |
-| 66  | math.tiling                | min_tiles_cover                  | YES  | candidate | False | 0.96  | PASS |
-| 67  | math.tiling                | unique_tiling_check              | YES  | candidate | False | 0.96  | PASS |
-| 68  | math.algebraic-structures  | algebraic_polynomial_check       | YES  | candidate | False | 0.99  | PASS |
-| 69  | math.algebraic-structures  | wronskian_root_identity          | YES  | candidate | False | 1.25  | PASS |
-| 70  | math.diophantine           | quadratic_discriminant_family    | YES  | candidate | False | 0.95  | PASS |
-| 71  | math.integer-structure     | frobenius_semigroup              | YES  | candidate | False | 0.96  | PASS |
-| 72  | math.integer-structure     | odd_part                         | YES  | candidate | False | 1.00  | PASS |
+| 55  | math.finite-states         | digit_sum_window                 | YES  | candidate | False | 0.91  | PASS |
+| 56  | math.finite-states         | hamiltonian_paths_grid           | YES  | candidate | False | 0.99  | PASS |
+| 57  | math.games                 | deck_game_outcome                | YES  | candidate | False | 0.92  | PASS |
+| 58  | math.games                 | gap_subsequence_discrepancy      | YES  | candidate | False | 0.95  | PASS |
+| 59  | math.games                 | independent_reply_certificate    | YES  | candidate | False | 1.05  | PASS |
+| 60  | math.games                 | minimax_value_graph              | YES  | candidate | False | 0.93  | PASS |
+| 61  | math.games                 | pairing_strategy_verify          | YES  | candidate | False | 0.92  | PASS |
+| 62  | math.games                 | win_draw_loss_graph              | YES  | candidate | False | 0.94  | PASS |
+| 63  | math.tiling                | check_tiling_certificate         | YES  | candidate | False | 0.97  | PASS |
+| 64  | math.tiling                | coloring_bound                   | YES  | candidate | False | 0.98  | PASS |
+| 65  | math.tiling                | count_tilings                    | YES  | candidate | False | 0.94  | PASS |
+| 66  | math.tiling                | min_tiles_cover                  | YES  | candidate | False | 1.00  | PASS |
+| 67  | math.tiling                | unique_tiling_check              | YES  | candidate | False | 0.91  | PASS |
+| 68  | math.algebraic-structures  | algebraic_polynomial_check       | YES  | candidate | False | 1.02  | PASS |
+| 69  | math.algebraic-structures  | wronskian_root_identity          | YES  | candidate | False | 1.23  | PASS |
+| 70  | math.diophantine           | quadratic_discriminant_family    | YES  | candidate | False | 0.99  | PASS |
+| 71  | math.integer-structure     | frobenius_semigroup              | YES  | candidate | False | 0.94  | PASS |
+| 72  | math.integer-structure     | odd_part                         | YES  | candidate | False | 0.92  | PASS |
 | 73  | math.integer-structure     | odd_part_table                   | YES  | candidate | False | 0.95  | PASS |
-| 74  | math.invariants            | double_counting                  | YES  | candidate | False | 0.96  | PASS |
-| 75  | math.invariants            | polynomial_invariant             | YES  | candidate | False | 0.99  | PASS |
-| 76  | math.numerics              | closed_form_conjecture           | YES  | candidate | False | 0.99  | PASS |
-| 77  | math.numerics              | identify_constant                | YES  | candidate | False | 0.93  | PASS |
-| 78  | math.numerics              | verify_fd_certificate            | YES  | candidate | False | 0.98  | PASS |
-| 79  | math.optimization          | certificate_check                | YES  | candidate | False | 1.05  | PASS |
-| 80  | math.optimization          | numeric_extremum_search          | YES  | candidate | False | 0.97  | PASS |
+| 74  | math.invariants            | double_counting                  | YES  | candidate | False | 0.98  | PASS |
+| 75  | math.invariants            | polynomial_invariant             | YES  | candidate | False | 1.01  | PASS |
+| 76  | math.numerics              | closed_form_conjecture           | YES  | candidate | False | 1.07  | PASS |
+| 77  | math.numerics              | identify_constant                | YES  | candidate | False | 1.01  | PASS |
+| 78  | math.numerics              | verify_fd_certificate            | YES  | candidate | False | 0.92  | PASS |
+| 79  | math.optimization          | certificate_check                | YES  | candidate | False | 1.07  | PASS |
+| 80  | math.optimization          | numeric_extremum_search          | YES  | candidate | False | 1.23  | PASS |
 | 81  | math.optimization          | subset_gap_worst_case            | YES  | candidate | False | 0.94  | PASS |
-| 82  | math.probability           | normal_overflow_seats            | YES  | candidate | False | 0.94  | PASS |
+| 82  | math.probability           | normal_overflow_seats            | YES  | candidate | False | 1.05  | PASS |
 ======================================================================================
 SUMMARY: 82/82 PASSED (100.0%), 0 FAILED
 ======================================================================================

@@ -971,6 +971,17 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             catalog = null;
         }
     }
+    // Problem-level route / bounded-closure attempts are run-scoped, not
+    // work-item scoped. Observations remain task-local by design, but a route is
+    // chosen from the problem text once; re-forcing it on every work unit spends
+    // the shared effect/model budget without adding new evidence.
+    let methodSelectionAttempted = false;
+    let enumerationAttempted = false;
+    let exactCheckAttempted = false;
+    let semanticToolAttempted = false;
+    let mathAssetAttempted = false;
+    let verdictClosureAttempted = false;
+    let densityClosureAttempted = false;
     try {
         while (workUnits < opts.maxWorkUnits && !root.stopped()) {
             if (callsLeft() <= reserve() || root.remainingMs() <= MIN_MS) {
@@ -1040,7 +1051,6 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             }
             let advanced = false;
             let yielded = false;
-            let methodSelectionAttempted = false;
             // Set only when a new card body was just loaded. The next WORK turn
             // consumes it once to append the bounded method/tool advisory.
             let methodToolCoPromptCardId = null;
@@ -1053,22 +1063,20 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             let secondMethodOfferPending = false;
             let methodLoadRefusalNotice = null;
             let methodLoadRefusalUsed = false;
-            let enumerationAttempted = false;
             let forcedEnumerationSelection = false;
-            let exactCheckAttempted = false;
             let forcedExactCheckSelection = false;
             let forcedExactCheckOperation = null;
-            let semanticToolAttempted = false;
             let forcedSemanticToolSelection = false;
             let forcedSemanticToolRoute = null;
-            let mathAssetAttempted = false;
             let forcedMathAssetSelection = false;
             let forcedMathAssetRoute = null;
             let forcedRetryUsed = false;
             let forcedTurnFailedOpen = false;
-            let verdictClosureAttempted = false;
+            // After a forced turn refuses twice, spend one ordinary WORK call asking
+            // for the final packet instead of executing the refused action again.
+            let forcedFallbackAnswerPending = false;
+            let forcedFallbackUsed = false;
             let forcedVerdictClosure = false;
-            let densityClosureAttempted = false;
             let forcedDensityClosure = false;
             let densityCheckFailure = null;
             // Batch 2 (deep loop): bounded, fail-closed retry of a TRANSIENT model
@@ -1077,6 +1085,8 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
             let workRetries = 0;
             while (!root.stopped()) {
                 forcedTurnFailedOpen = false;
+                const forceFinalTurn = forcedFallbackAnswerPending;
+                forcedFallbackAnswerPending = false;
                 let secondMethodOfferShown = false;
                 if (root.remainingMs() <= MIN_MS) {
                     stop = "DEADLINE_EXCEEDED";
@@ -1633,6 +1643,23 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         };
                     }
                 }
+                if (forceFinalTurn) {
+                    const messages = [
+                        {
+                            role: "system",
+                            content: context.messages[0].content +
+                                "\n\nFINAL ANSWER REQUIRED. The previous forced method/tool turn did not produce an admissible action and its retry is spent. " +
+                                "Do not call a tool, method or exploration now. Return exactly one complete p2a-work-v1 WorkPacket with the best-effort candidateProposal.",
+                        },
+                        context.messages[1],
+                    ];
+                    context = {
+                        ...context,
+                        messages,
+                        contextHash: p4Hash(JSON.stringify(messages)),
+                        contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+                    };
+                }
                 let outcome = await calls.model({
                     task: running,
                     phase: "WORK",
@@ -1684,6 +1711,14 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 // reply does not name the requested effect, re-send the same bounded
                 // instruction exactly once. After that one retry the turn fails open
                 // to the model's best-effort packet; no observation is ever invented.
+                // A forced math-asset prompt is one-shot even when the model refuses it
+                // and returns a packet: leaving the flag set re-renders the same prompt
+                // on later turns after the route was already attempted.
+                if (forcedMathAssetSelection) {
+                    forcedMathAssetSelection = false;
+                    forcedMathAssetRoute = null;
+                    forcedRetryUsed = false;
+                }
                 const forcedRouteAtAction = forcedSemanticToolRoute;
                 const forcedMethodAtAction = forcedMethodSelection;
                 const obeyedRouteAtAction = forcedRouteAtAction !== null &&
@@ -1693,7 +1728,16 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         (typeof action.args["operation"] === "string" &&
                             action.args["operation"] === forcedRouteAtAction.operation));
                 if (forcedMethodAtAction || forcedRouteAtAction !== null) {
-                    const obeyedMethod = forcedMethodAtAction && action?.action === "method";
+                    // A method-shaped reply is not obedience unless it names a real id
+                    // from the advertised catalog. Accepting an unknown id skipped the
+                    // bounded retry and then the ordinary guard hard-stopped the run.
+                    const obeyedMethodId = action?.action === "method" && typeof action.id === "string"
+                        ? action.id
+                        : null;
+                    const obeyedMethod = forcedMethodAtAction &&
+                        obeyedMethodId !== null &&
+                        catalog !== null &&
+                        catalog.entries.some((entry) => entry.id === obeyedMethodId);
                     const obeyedTool = obeyedRouteAtAction;
                     if (!obeyedMethod && !obeyedTool) {
                         if (!forcedRetryUsed) {
@@ -1726,7 +1770,20 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     forcedMathAssetRoute = null;
                     forcedRetryUsed = false;
                 }
+                if (forceFinalTurn && action !== null && action.action !== "final" && action.action !== "unsolved") {
+                    // The bounded final-answer turn is not another tool/method quota.
+                    // Refuse to execute it and report the honest no-candidate outcome.
+                    stop = "NO_CANDIDATE";
+                    break;
+                }
                 if (action !== null && action.action === "math_asset") {
+                    // The forced MATH ASSET TURN is a one-shot gate. Leaving these flags
+                    // set makes the next iteration render the same prompt again and can
+                    // spend the whole tool quota on loop-forced repeats before a hard
+                    // control stop.
+                    forcedMathAssetSelection = false;
+                    forcedMathAssetRoute = null;
+                    forcedRetryUsed = false;
                     if (captured.mathAsset === null || captured.mathAsset === undefined) {
                         stop = "CONTROL_REJECTED";
                         break;
@@ -2104,6 +2161,13 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                     "Use the loaded method bodies already in methodAssets and answer with exactly one complete WorkPacket now.";
                             continue;
                         }
+                        if (forcedTurnFailedOpen &&
+                            !forcedFallbackUsed &&
+                            callsLeft() >= 1 + opts.maxReviews) {
+                            forcedFallbackUsed = true;
+                            forcedFallbackAnswerPending = true;
+                            continue;
+                        }
                         stop = "CONTROL_REJECTED";
                         break;
                     }
@@ -2124,6 +2188,13 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             methodLoadRefusalNotice =
                                 "METHOD LOAD REFUSED by the Host quota. Use the loaded method bodies already in methodAssets " +
                                     "and answer with exactly one complete WorkPacket now.";
+                            continue;
+                        }
+                        if (forcedTurnFailedOpen &&
+                            !forcedFallbackUsed &&
+                            callsLeft() >= 1 + opts.maxReviews) {
+                            forcedFallbackUsed = true;
+                            forcedFallbackAnswerPending = true;
                             continue;
                         }
                         stop = "CONTROL_REJECTED";

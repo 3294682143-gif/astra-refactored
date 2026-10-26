@@ -2,6 +2,23 @@
 
 > 本文件写给**新上下文的执行者**。只记录本会话已核实的事实与下一步动作。
 > 不要相信任何"已完成/已提分"的叙述，除非重新跑出证据。
+> **状态（2026-10-26 全量复跑与修复完成，§27；2 个残余边界见 §27.4）：**
+> 1. **22 道旧 `CONTROL_REJECTED` 定向复跑：20/22 候选**，控制层误杀已清零；
+>    2 题残余为 `BUDGET` / `FIELD_VALUE`，不再是 `CONTROL_REJECTED` 潮。
+> 2. **同一 100 题全量真实复跑：94/100 交付候选**（88 REVIEWS_COMPLETE + 6 REVIEW_STOP），
+>    1594 calls / 13,003,477 tokens，`remote_outcome_unknown=0`、`unknown_usage_requests=0`；
+>    6 题未交付（1 超时、3 FIELD_VALUE、1 BUDGET、1 PACKET_REJECTED）。
+>    失败题定向补跑并集 **98/100 候选**（该并集口径不等于单轮盲跑）。
+> 3. **独立语义判分：74/100 CORRECT**；失败题定向补跑并集 **76/100**。
+>    本地 `ReferenceJudge` 仍只有 22/100（格式敏感，不是数学准确率）。
+> 4. 离线门禁全绿：`tsc -b` 0、Node **543/543**、Python **1561 passed / 24 skipped**、
+>    manifest `VERIFY_OK`、web manifest `WEB_MANIFEST_OK`、`git diff --check` clean。
+> 5. 关键修复：Host math-asset effect 配额、forced math-asset 状态清空、未知 method id
+>    fail-open、route attempt run-scoped、失败资产 `inputContract`、dev v1.4 schema export、
+>    v1.4 primary release manifest。详细证据见 §27 与
+>    `docs/CONTROL_REJECTED_REPAIR_20261026.md`、
+>    `docs/WEB_100_ITEM_SEMANTIC_REVIEW_20261026.md`。
+
 > **状态（2026-10-25 数学资产统一终验完成，§19）：**
 > 1. **全量 82 项行为正式入口闭环 100% 达成**：82 组数学资产计算行为逐项通过 `ReasoningAgent.solve` 参数化端到端测试（`tests/e2e/test_ts_math_assets_82_e2e.py`，82/82 passed in 87s），完整贯通 **Python 正式入口 → Node stdio-runtime → Python Host → use_math_asset 执行 → 观测进入下一轮模型上下文 → 交付 candidate 候选 → 证据等级严格受限（candidate_verified=False）**。
 > 2. **主链与阻断问题已全部清零**：Python `math` 导入已修复，Node 最终状态快照浮点支持生效，发布包启动、输入 binding、根预算、方法知识回传、LF 字节一致性等问题全部闭环。
@@ -2099,7 +2116,7 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - 输入与运行器与历史基线完全一致：`/home/ma-user/work/input/test0.txt`（sha256 `d9899510…`）、
   `official_judge_emulator/run_judge.py`、`item_concurrency=4`、真实 Intern-S2 HTTPS 客户端。
 - 机器口径：100/100 完成，**70/100 交付候选**、1226 次调用、9,532,989 token、
-  `remote_outcome_unknown=0`、`unknown_usage_requests=0`、`degraded=false`；
+  `remote_outcome_unknown=0`、`unknown_usage_requests=0`、`unknown_usage_requests=0`；
   停止原因 `REVIEWS_COMPLETE 67 / CONTROL_REJECTED 22 / ERROR 8 / REVIEW_STOP 3`。
 - 语义复核口径：**正确 58 / 部分正确 7 / 错误 3 / 存疑 2 / 未交付 30**；已交付候选内正确率 58/70 = 83%。
   本地 `ReferenceJudge` 只给 18/100（格式敏感），不能当数学正确率引用。
@@ -2110,7 +2127,7 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 
 ---
 
-## 26 2026-10-25 CONTROL_REJECTED 全量修复（进行中，未收敛，勿据此宣布达标）
+## 26 2026-10-25 CONTROL_REJECTED 根因定位（已完成；全量结果见 §27）
 
 ### 26.1 用 agent team 做的只读诊断（三份报告，均 HIGH 置信、带行号证据）
 
@@ -2182,3 +2199,64 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 `__main__`，于是第一次单题复现里的 `effect ERROR` 部分是 **harness 伪影**。
 100 题全量那次（用 `official_judge_emulator` 的 worker 脚本，有正确保护）的失败是真实的。
 任何"单题复现"脚本都必须带 `__main__` 守卫，否则会把自身的进程问题误判成产品缺陷。
+
+---
+
+## 27 2026-10-26 全量修复复跑（代码、门禁、真实模型）
+
+### 27.1 本轮额外修复
+
+- **Host math-asset effect 配额**：`on_math_asset` 原先用 `effect_calls >= max_effects`
+  判断总容量，method + asset 后第二个 asset 被误判 BUDGET；改为
+  `_effect_admission("tool")`（共享 id 容量 + tool 子配额分开）。
+- **forced math-asset 状态生命周期**：解析到 math-asset 动作或模型拒绝该强制轮后立即清空
+  `forcedMathAssetSelection/forcedMathAssetRoute`，不再重复渲染 `MATH ASSET TURN`。
+- **未知 method id**：强制 method 选择只在 id 属于真实 `methodCatalog` 时算服从；两次失败后
+  用一次有界最终 WorkPacket 轮 fail-open，不再把未知 id 直接打成 `CONTROL_REJECTED`。
+- **route attempt run-scoped**：`methodSelectionAttempted` / `enumerationAttempted` /
+  `exactCheckAttempted` / `semanticToolAttempted` / `mathAssetAttempted` /
+  `verdictClosureAttempted` / `densityClosureAttempted` 从 work-unit 作用域提升到 run 作用域；
+  observations 仍保持 task-local。
+- **失败资产回执**：Host 权威失败回执补 `inputContract`（来自 `MATH_ASSET_BY_ID`），
+  模型能看到真实 required/optional 参数。
+- **dev / release 协议**：`packages/protocol/package.json` 导出 v1.4 schema；
+  `agent-host-main.ts` 只接受 v1.4，缺失时 fail-closed，不再静默回退 v1.3；
+  release manifest primary 改为 v1.4，v1.3/v1.2 显式 legacy，加入
+  `agent-host-main.js` 和 schema `protocolVersion` 校验；补 legacy 1.2 schema 与
+  `math-assets.schema.json` export。
+
+### 27.2 门禁（最终源码/产物）
+
+- `tsc -b`：0 errors
+- Node：**543/543 passed**
+- Python：**1561 passed / 24 skipped / 0 failed**（448s）
+- `release/BUILD_MANIFEST.json`：`VERIFY_OK`（4 JS、11 assets、6 bundle entries）
+- `scripts/sync_web_release_manifest.py --check`：`WEB_MANIFEST_OK`
+- `git diff --check`：clean
+- 发布 bundle 离线合成 100 题控制路径：**100/100 candidate**（仅控制路径探针）
+- 22 题离线失败/路由探针：**22/22 candidate**
+
+### 27.3 真实模型结果
+
+**22 题定向复跑**（`/tmp/astra-control22-final2-20261026`）：
+- 20/22 候选（16 REVIEWS_COMPLETE、4 REVIEW_STOP），374 calls / 3,279,716 tokens。
+- 2 题残余：原 #6 `BUDGET`、#15 `FIELD_VALUE`。
+- 独立语义判分：15/22 CORRECT；其中 #1 的参考答案本身有误，不应直接算模型错误。
+
+**100 题全量单轮**（`/tmp/astra-full100-final2-20261026`，同一输入、同一 emulator、
+`real_client_factory_fast_20261026`，只把进程间限速 4s→3s）：
+- **94/100 候选**（88 REVIEWS_COMPLETE + 6 REVIEW_STOP）
+- 1594 calls / 13,003,477 tokens
+- 6 题未交付：1 超时、3 FIELD_VALUE、1 BUDGET、1 PACKET_REJECTED
+- 本地 ReferenceJudge 22/100（格式敏感）
+- 独立语义判分 **74/100 CORRECT**（非官方）
+- 失败题定向补跑（`/tmp/astra-fail6-final-20261026`）：4 题恢复候选，2 题仍失败；
+  **并集 98/100 候选、76/100 语义 CORRECT**，该并集口径不是单轮盲跑。
+
+### 27.4 尚未消除的边界
+
+- #15 的 `FIELD_VALUE` 已定位为 Host `agent_context._check_work` 的
+  `protectedCandidate` 投影校验：Node 选中的 CONSENSUS 来源（如 `model-13`）在
+  Host `project_artifacts` 中没有 `bySourceRef` row；本轮没有通过放宽校验掩盖。
+- #48 的 `PACKET_REJECTED` 是模型 WorkPacket 被协议门禁拒绝；定向补跑仍失败。
+- 其余残余是固定预算/字段错误；`candidate_verified` 仍恒为 `false`。

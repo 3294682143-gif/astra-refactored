@@ -49,8 +49,45 @@ from .agent_protocol import AGENT_HOST_VERSION, payload
 from .p2_methods import fixture_catalog
 from .p3_host_methods import checked_catalog
 from .scoped_asset_call import AssetCallError, scoped_asset_call
+from .generated.math_assets import MATH_ASSET_BY_ID
 
 __all__ = ["AgentHost"]
+
+
+def _asset_input_contract(asset_id, target):
+    """The canonical parameter contract of one math asset, or ``None``.
+
+    This mirrors the Node fallback in ``agent-loop.ts`` byte-for-byte in shape:
+    the model must see the real required/optional parameters after a failed
+    asset call, not a guessed skeleton. Only catalog data is returned; no
+    observation, answer or model text is involved.
+    """
+    if not isinstance(asset_id, str):
+        return None
+    definition = MATH_ASSET_BY_ID.get(asset_id)
+    if not isinstance(definition, dict):
+        return None
+    behaviors = definition.get("behaviors")
+    if not isinstance(behaviors, list):
+        return None
+    matching = [
+        row for row in behaviors
+        if isinstance(row, dict) and (target is None or row.get("target") == target)
+    ]
+    listed = (matching if matching else behaviors)[:4]
+    contract = []
+    for row in listed:
+        if not isinstance(row, dict):
+            continue
+        contract.append({
+            "target": row.get("target"),
+            "requiredParams": list(row.get("requiredParams") or []),
+            "optionalParams": list(row.get("optionalParams") or []),
+        })
+    if not contract:
+        return None
+    return {"assetId": asset_id, "behaviors": contract}
+
 
 _MIN_REMAINING_MS = 25
 _MAX_REMAINING_MS = 3600000
@@ -727,7 +764,12 @@ class AgentHost(_Host):
             _fail()
         if self.remaining_ms() <= _MIN_REMAINING_MS:
             _fail("DEADLINE_EXCEEDED")
-        if self.effect_calls >= self.max_effects:
+        # The public ``max_effects`` is the TOOL quota, not the total effect-id
+        # capacity. Method cards have their own slot, so a math asset must be
+        # admitted against the shared capacity plus the tool-kind quota;
+        # comparing ``effect_calls`` to ``max_effects`` would refuse the second
+        # asset after one method card even though the tool quota is still free.
+        if not self._effect_admission("tool"):
             _fail("BUDGET")
         request = params["request"]
         binding = request.get("binding", {})
@@ -820,14 +862,18 @@ class AgentHost(_Host):
             # the real status / limitations / guidance and the real catalog input
             # contract: it is a PROVISIONAL ERROR receipt, never a result, and the
             # Node loop keeps it out of every observation view.
+            failure_target = request.get("target") or request.get("input", {}).get("target")
             failure_observation = json.dumps(
                 {
                     "effectFailure": {
                         "assetId": request.get("assetId"),
-                        "target": request.get("target") or request.get("input", {}).get("target"),
+                        "target": failure_target,
                         "status": str(result.get("status") or "UNKNOWN"),
                         "limitations": list(result.get("limitations") or [])[:6],
                         "guidance": list(result.get("guidance") or [])[:6],
+                        "inputContract": _asset_input_contract(
+                            request.get("assetId"), failure_target
+                        ),
                         "receivedInputKeys": sorted(
                             str(key) for key in (request.get("input") or {})
                         ),

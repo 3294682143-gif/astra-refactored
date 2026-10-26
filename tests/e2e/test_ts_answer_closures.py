@@ -279,7 +279,7 @@ def test_solution_completeness_closure_returns_the_whole_exact_set(process_track
 
 
 class InterpolationToolClient(FakeClient):
-    """Fake model that obeys the deterministic interpolation route once."""
+    """Fake model that obeys the unified interpolation math asset once."""
 
     def __init__(self):
         super().__init__()
@@ -287,7 +287,7 @@ class InterpolationToolClient(FakeClient):
 
     def chat(self, messages, temperature=0.2, max_tokens=8192):
         system = messages[0]["content"]
-        if "SEMANTIC TOOL TURN (INTERPOLATION_FIT)" in system:
+        if "MATH ASSET TURN" in system and self.interpolation_turns == 0:
             self.seen.append((messages, temperature, max_tokens))
             self.calls += 1
             self.interpolation_turns += 1
@@ -300,9 +300,10 @@ class InterpolationToolClient(FakeClient):
                             "role": "assistant",
                             "content": json.dumps(
                                 {
-                                    "action": "tool",
-                                    "name": "interpolation_fit_check",
-                                    "args": {
+                                    "action": "math_asset",
+                                    "assetId": "math.numerics",
+                                    "target": "interpolation_fit",
+                                    "input": {
                                         "points": [
                                             {"x": "0", "y": "1"},
                                             {"x": "1", "y": "4"},
@@ -311,7 +312,6 @@ class InterpolationToolClient(FakeClient):
                                         "expression": "x^2+2*x+1",
                                         "variable": "x",
                                     },
-                                    "scope": "residuals of the claimed polynomial on the explicit points",
                                 }
                             ),
                         },
@@ -347,13 +347,13 @@ def test_interpolation_tool_observation_reaches_a_candidate(
     assert result["status"] == "candidate"
     assert result["final_response"]
     assert client.interpolation_turns == 1
-    assert result["metrics"]["effect_calls"] == 1
-    assert "interpolation_fit_check" in result["metrics"]["tool_names"]
+    assert result["metrics"]["asset_calls"] == 1
+    assert result["metrics"]["tool_effect_calls"] == 1
     assert process_tracker
 
 
 class GroupStructureToolClient(FakeClient):
-    """Fake model that obeys the deterministic group-structure route once."""
+    """Fake model that obeys the unified group-structure math asset once."""
 
     def __init__(self):
         super().__init__()
@@ -361,7 +361,7 @@ class GroupStructureToolClient(FakeClient):
 
     def chat(self, messages, temperature=0.2, max_tokens=8192):
         system = messages[0]["content"]
-        if "SEMANTIC TOOL TURN (GROUP_STRUCTURE)" in system:
+        if "MATH ASSET TURN" in system and self.group_turns == 0:
             self.seen.append((messages, temperature, max_tokens))
             self.calls += 1
             self.group_turns += 1
@@ -374,13 +374,13 @@ class GroupStructureToolClient(FakeClient):
                             "role": "assistant",
                             "content": json.dumps(
                                 {
-                                    "action": "tool",
-                                    "name": "finite_group_structure",
-                                    "args": {
+                                    "action": "math_asset",
+                                    "assetId": "math.algebraic-structures",
+                                    "target": "group_structure",
+                                    "input": {
                                         "generators": ["(12)", "(123)"],
                                         "degree": 3,
                                     },
-                                    "scope": "order and conjugacy classes of the explicitly generated subgroup",
                                 }
                             ),
                         },
@@ -416,8 +416,8 @@ def test_group_structure_tool_observation_reaches_a_candidate(
     assert result["status"] == "candidate"
     assert result["final_response"]
     assert client.group_turns == 1
-    assert result["metrics"]["effect_calls"] == 1
-    assert "finite_group_structure" in result["metrics"]["tool_names"]
+    assert result["metrics"]["asset_calls"] == 1
+    assert result["metrics"]["tool_effect_calls"] == 1
     # A later WORK request carries the exact tool observation, so the
     # candidate is produced after the model has seen the group bookkeeping.
     observations = []
@@ -429,8 +429,7 @@ def test_group_structure_tool_observation_reaches_a_candidate(
             if row["source"] == "PROGRAM_OBSERVATION"
         )
     assert any(
-        row["tool"] == "finite_group_structure"
-        and row["result"]["order"] == 6
+        row["result"]["order"] == 6
         and row["result"]["element_orders"] == {"1": 1, "2": 3, "3": 2}
         for row in observations
     )

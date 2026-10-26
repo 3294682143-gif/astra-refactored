@@ -231,7 +231,7 @@ Host 不从环境中读取模型密钥，也不另建模型请求通道。真实
 | `node` | `"node"` | 受信的 Node 可执行文件名或路径 |
 | `mode` | `"platform"` | `"platform"`、`"local"` 或 `"shared_public"` |
 
-配置定义见 [agent_runtime.py](python/astra_bridge/agent_runtime.py)，跨进程约束见 [agent-host-v13.schema.json](packages/protocol/schema/agent-host-v13.schema.json)。
+配置定义见 [agent_runtime.py](python/astra_bridge/agent_runtime.py)，跨进程约束见 [agent-host-v14.schema.json](packages/protocol/schema/agent-host-v14.schema.json)。
 
 默认配置是保守预览 profile：**方法卡、R0 和修复均关闭**。如需测试方法卡加载，可显式构造：
 

@@ -165,7 +165,11 @@ def test_persistent_exact_check_refusal_stops_after_one_retry(process_tracker):
     agent = user_agent.ReasoningAgent(
         client=client,
         engine="ts",
-        max_model_calls=16,
+        # The current unified route may offer both a math asset and the
+        # exact-check tool on every work unit. A persistent refusal must still
+        # fail open and deliver the ordinary packet, so leave enough front-stage
+        # calls for four work units plus the bounded retries.
+        max_model_calls=24,
         max_work_units=8,
         max_effects=1,
         max_reviews=0,
@@ -176,8 +180,9 @@ def test_persistent_exact_check_refusal_stops_after_one_retry(process_tracker):
     result = agent.solve(EXACT_PROBLEM, {"source": "e2e"})
 
     assert result["status"] == "candidate"
-    assert result["metrics"]["routed"] >= 1
-    assert client.exact_turns == 2 * result["metrics"]["routed"]
+    # A problem-level route is attempted once per run, not once per work unit.
+    assert result["metrics"]["routed"] == 1
+    assert client.exact_turns == 2
     assert result["metrics"]["effect_calls"] == 0
     assert process_tracker
 
@@ -232,4 +237,108 @@ def test_persistent_method_refusal_stops_after_one_retry(process_tracker):
     assert client.method_turns == 2
     assert result["metrics"]["method_loads"] == 0
     assert result["metrics"]["effect_calls"] == 0
+    assert process_tracker
+
+
+def test_forced_math_asset_turn_is_cleared_after_one_execution(process_tracker):
+    """The loop must not re-render MATH ASSET TURN from a stale forced flag.
+
+    Before this regression, an obeying client was asked for the same asset on
+    every iteration; the second/third loop-forced call hit the shared effect
+    quota and became CONTROL_REJECTED.
+    """
+
+    class _ObeyingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.asset_turns = []
+
+        def chat(self, messages, temperature=0.2, max_tokens=8192):
+            system = messages[0]["content"]
+            body = json.loads(messages[1]["content"])
+            if "MATH ASSET TURN" in system:
+                self.asset_turns.append(body.get("sourceRequestId"))
+                self.seen.append((messages, temperature, max_tokens))
+                self.calls += 1
+                return _envelope(
+                    json.dumps(
+                        {
+                            "action": "math_asset",
+                            "assetId": "math.linear-algebra",
+                            "target": "maximal_minors",
+                            "input": {
+                                "matrix": ALEXANDER_MATRIX,
+                                "variable": "t",
+                            },
+                        }
+                    )
+                )
+            return _envelope(_packet(body, ALEXANDER_POLYNOMIAL))
+
+    client = _ObeyingClient()
+    agent = user_agent.ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_model_calls=12,
+        max_work_units=4,
+        max_effects=2,
+        max_reviews=0,
+        max_repairs=0,
+        max_consensus=1,
+        max_method_loads=0,
+    )
+    result = agent.solve(EXACT_PROBLEM, {"source": "e2e"})
+
+    assert result["status"] == "candidate"
+    assert result["final_response"] == ALEXANDER_POLYNOMIAL
+    assert client.asset_turns == ["model-2"]
+    assert result["metrics"]["tool_effect_calls"] == 1
+    assert result["metrics"]["effect_calls"] == 1
+    assert process_tracker
+
+
+def test_unknown_forced_method_id_fails_open_to_a_candidate(process_tracker):
+    """An unknown method id is not obedience; the bounded fallback must answer.
+
+    Previously the forced-turn check accepted any ``action == "method"``, then
+    the ordinary catalog guard turned the unknown id into a fatal
+    CONTROL_REJECTED. The retry plus one final-answer turn must instead produce
+    the ordinary packet.
+    """
+
+    class _UnknownMethodClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.forced_turns = []
+
+        def chat(self, messages, temperature=0.2, max_tokens=8192):
+            system = messages[0]["content"]
+            body = json.loads(messages[1]["content"])
+            if "METHOD SELECTION TURN" in system:
+                self.forced_turns.append(body.get("sourceRequestId"))
+                self.seen.append((messages, temperature, max_tokens))
+                self.calls += 1
+                return _envelope(
+                    json.dumps({"action": "method", "id": "no-such-method-id"})
+                )
+            return super().chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+    client = _UnknownMethodClient()
+    agent = user_agent.ReasoningAgent(
+        client=client,
+        engine="ts",
+        max_model_calls=12,
+        max_work_units=4,
+        max_effects=1,
+        max_reviews=0,
+        max_repairs=0,
+        max_consensus=1,
+        max_method_loads=1,
+    )
+    result = agent.solve("Compute 2+2", {"source": "e2e"})
+
+    assert result["status"] == "candidate"
+    assert result["stopReason"] != "CONTROL_REJECTED"
+    assert len(client.forced_turns) == 2
+    assert result["metrics"]["method_loads"] == 0
     assert process_tracker

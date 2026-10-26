@@ -24,7 +24,10 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_VERSION = "build-manifest-v1"
 PROFILE_ID = "math-agent-preview-v2"
 SCHEMA_VERSION = "1.4-unified-math-assets"
-SUPPORTED_SCHEMA_VERSIONS = {"1.3-agent-loop-preview", "1.4-unified-math-assets"}
+# Only the active unified schema may be published as the primary protocol.
+# Legacy schemas stay explicitly named below and are never selected as active.
+LEGACY_SCHEMA_VERSION = "1.3-agent-loop-preview"
+LEGACY_MANIFEST_VERSION = "1.2-agent-loop-preview"
 
 # Precompiled JS entry points (already built by `tsc -b`; never rebuilt at run
 # time). The stdio runtime main is what the Python Host launches.
@@ -32,18 +35,28 @@ JS_ARTIFACTS = (
     "apps/stdio-runtime/dist/src/main.js",
     "apps/stdio-runtime/dist/src/agent-loop.js",
     "apps/stdio-runtime/dist/src/agent-host-flow.js",
+    # main.ts imports this dynamically; leaving it out of the manifest allowed
+    # a stale or missing active Host entry to pass verification.
+    "apps/stdio-runtime/dist/src/agent-host-main.js",
 )
 # The self-contained precompiled bundle (esbuild) plus the schema it reads next
 # to itself; together they run engine="ts" with no node_modules and no compile.
 BUNDLE_ARTIFACTS = {
     "bundle": "release/stdio-runtime.bundle.mjs",
-    "bundleSchema": "release/schema/agent-host-v13.schema.json",
+    # Primary protocol artifact: the active --agent-loop entry loads this one.
+    "bundleSchema": "release/schema/agent-host-v14.schema.json",
+    # Compatibility aliases kept for old readers; never selected as active.
     "bundleSchemaV14": "release/schema/agent-host-v14.schema.json",
+    "bundleLegacySchema": "release/schema/agent-host-v13.schema.json",
+    "bundleLegacyManifestV12": "release/schema/agent-host.schema.json",
     "bundleMathAssetsSchema": "release/schema/math-assets.schema.json",
 }
 ASSET_ARTIFACTS = {
-    "protocolSchema": "packages/protocol/schema/agent-host-v13.schema.json",
+    # Primary protocol artifacts: v1.4 is the only active surface.
+    "protocolSchema": "packages/protocol/schema/agent-host-v14.schema.json",
     "protocolSchemaV14": "packages/protocol/schema/agent-host-v14.schema.json",
+    "protocolLegacySchema": "packages/protocol/schema/agent-host-v13.schema.json",
+    "protocolLegacyManifestV12": "packages/protocol/schema/agent-host.schema.json",
     "mathAssetsSchema": "packages/protocol/schema/math-assets.schema.json",
     "canonicalMathAssets": "mathagent/resources/math-assets.json",
     "mathAssetsTSView": "packages/protocol/src/generated/math-assets.ts",
@@ -125,7 +138,7 @@ def verify(manifest_path: Path) -> int:
     errors = []
     if manifest.get("manifestVersion") != MANIFEST_VERSION:
         errors.append("manifestVersion")
-    if manifest.get("schemaVersion") not in SUPPORTED_SCHEMA_VERSIONS:
+    if manifest.get("schemaVersion") != SCHEMA_VERSION:
         errors.append("schemaVersion")
     if manifest.get("precompiled") is not True or manifest.get("requiresRuntimeTsc") is not False:
         errors.append("precompiled flags")
@@ -146,13 +159,45 @@ def verify(manifest_path: Path) -> int:
         if not path.is_file() or _sha256(path) != expected:
             errors.append(f"mathFamilyFile:{rel}")
     commit = manifest.get("source", {}).get("commit", "")
+    tree = manifest.get("source", {}).get("tree", "")
     # The recorded source commit must still be an ancestor of HEAD (the manifest
-    # commit itself may move HEAD forward).
+    # commit itself may move HEAD forward), and its tree must match the recorded
+    # tree. This at least makes the provenance tuple internally consistent while
+    # the final precompiled commit is being assembled.
     ancestry = subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=ROOT, capture_output=True
     )
     if ancestry.returncode != 0:
         errors.append("source.commit not an ancestor of HEAD")
+    recorded_tree = _git("rev-parse", commit + "^{tree}") if commit else ""
+    if not tree or recorded_tree != tree:
+        errors.append("source.tree does not match source.commit")
+    # The active entry must resolve the v1.4 schema and every shipped schema
+    # must carry the version its manifest entry claims. Hash-only checks cannot
+    # catch a schema copied under the wrong name or a legacy schema promoted to
+    # the primary slot.
+    schema_claims = (
+        (("bundle", "bundleSchema"), "1.4-unified-math-assets"),
+        (("bundle", "bundleSchemaV14"), "1.4-unified-math-assets"),
+        (("bundle", "bundleLegacySchema"), LEGACY_SCHEMA_VERSION),
+        (("bundle", "bundleLegacyManifestV12"), LEGACY_MANIFEST_VERSION),
+        (("assets", "protocolSchema"), "1.4-unified-math-assets"),
+        (("assets", "protocolSchemaV14"), "1.4-unified-math-assets"),
+        (("assets", "protocolLegacySchema"), LEGACY_SCHEMA_VERSION),
+        (("assets", "protocolLegacyManifestV12"), LEGACY_MANIFEST_VERSION),
+    )
+    for (section, name), expected in schema_claims:
+        row = (manifest.get(section) or {}).get(name)
+        if not isinstance(row, dict):
+            errors.append(f"{section}:{name}:missing")
+            continue
+        path = ROOT / row["path"]
+        try:
+            actual = json.loads(path.read_text(encoding="utf-8")).get("protocolVersion")
+        except (OSError, ValueError):
+            actual = None
+        if actual != expected:
+            errors.append(f"{section}:{name}:protocolVersion")
     if errors:
         print("VERIFY_FAILED", json.dumps(errors))
         return 1

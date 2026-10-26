@@ -37,7 +37,7 @@ from test_ts_g3_flagship import G3FlagshipClient  # noqa: E402
 __all__ = ["no_legacy_solver", "process_tracker"]
 
 _SCOPE = "a" * 64
-_SCHEMA = ROOT / "packages" / "protocol" / "schema" / "agent-host-v13.schema.json"
+_SCHEMA = ROOT / "packages" / "protocol" / "schema" / "agent-host-v14.schema.json"
 _G3_PROBLEM = "Find all real solutions x(x-1)=0"
 
 

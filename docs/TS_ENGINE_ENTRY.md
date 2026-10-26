@@ -2,9 +2,10 @@
 
 `ReasoningAgent(client=client, engine="ts").solve(problem, metadata)` now
 launches the existing TypeScript AgentLoop through the single Node entry
-`apps/stdio-runtime/dist/src/main.js --agent-loop`. The Python default remains
-`lite`; `legacy` remains explicit. Missing Node or compiled JS fails closed,
-with no automatic installation, compilation or Python-solver fallback.
+`apps/stdio-runtime/dist/src/main.js --agent-loop`. The Python default is
+`engine="ts"`; `lite` and `legacy` remain explicit alternatives. Missing Node or
+compiled JS fails closed, with no automatic installation, compilation or
+Python-solver fallback.
 
 This is a locally verified production-shaped vertical slice, not official
 deployment acceptance, L1 completion, L2 parity or a mathematical-score result.
@@ -22,10 +23,11 @@ the frozen Controller nor LiteRuntime is instantiated by the TS branch.
 The Host reuses the P0 strict parser/selector pump and process cleanup. Node
 reuses P2HostChannel. While `session.solve` is pending, the same reader serves
 model/tool/method callbacks without a second parser or parallel solver. The active
-`agent-host-v13.schema.json` defines version `1.3-agent-loop-preview`, session IDs,
-exact fields, seven allowed methods and bounded frames. The frozen 1.2
-`agent-host.schema.json` remains byte-identical for read-only replay; live Host
-and Node reject that legacy profile. P0 remains the no-argument profile of
+`agent-host-v14.schema.json` defines version `1.4-unified-math-assets`, session
+IDs, exact fields, nine allowed methods (including `math_asset.execute`) and
+bounded frames. The 1.3 schema and the frozen 1.2
+`agent-host.schema.json` remain explicit read-only compatibility artifacts;
+live Host and Node reject the 1.2 profile. P0 remains the no-argument profile of
 main.js and its probe behavior is unchanged.
 
 Initialization declares `math-agent-preview-v2` and explicit capabilities:

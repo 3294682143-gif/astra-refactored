@@ -16,7 +16,9 @@
     "./schema/p2-host.schema.json": "./schema/p2-host.schema.json",
     "./schema/p3-host.schema.json": "./schema/p3-host.schema.json",
     "./schema/agent-host.schema.json": "./schema/agent-host.schema.json",
-    "./schema/agent-host-v13.schema.json": "./schema/agent-host-v13.schema.json"
+    "./schema/agent-host-v13.schema.json": "./schema/agent-host-v13.schema.json",
+    "./schema/agent-host-v14.schema.json": "./schema/agent-host-v14.schema.json",
+    "./schema/math-assets.schema.json": "./schema/math-assets.schema.json"
   },
   "files": [
     "dist/src",

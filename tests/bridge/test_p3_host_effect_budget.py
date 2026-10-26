@@ -437,3 +437,66 @@ def test_failed_run_still_reports_real_funnel_numbers(no_reads):
     assert metrics["method_ids"] == [MID]
     assert metrics["effect_calls"] == 2
     assert metrics["method_loads"] == 1
+
+
+def test_math_asset_uses_the_tool_quota_not_the_total_effect_count(no_reads, monkeypatch):
+    """A method card must not consume one of the two math-asset/tool slots.
+
+    Regression for the real 100-item BUDGET stops: the Host used to compare
+    ``effect_calls`` against ``max_effects`` in ``on_math_asset``. After one
+    method load (effect-1) and one asset (effect-2), a second asset was refused
+    even though the public tool quota was only half spent and the shared id
+    capacity still had room for effect-3.
+    """
+    import python.astra_bridge.math_assets_runtime as math_assets_runtime
+
+    def fake_use_math_asset(request, *, context, deadline):
+        return {
+            "status": "COMPLETE",
+            "assetId": request["assetId"],
+            "observations": [
+                {
+                    "quantity": request["target"],
+                    "value": {"ok": True},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(math_assets_runtime, "use_math_asset", fake_use_math_asset)
+    instance = host(maxEffects=2, maxMethodLoads=1)
+    _spend(instance, 1, method_action(), wire="method.load")
+    instance.sent.clear()
+
+    def asset_params(ordinal):
+        return {
+            "sessionId": SESSION,
+            "request": {
+                "action": "math_asset",
+                "assetId": "math.numerics",
+                "target": ("interpolation_fit" if ordinal == 2 else "finite_difference"),
+                "input": {"points": [], "expression": "x", "variable": "x"},
+                "binding": {
+                    "taskId": TASK,
+                    "goalId": "goal-1",
+                    "scopeId": SCOPE,
+                    "contractVersion": 1,
+                    "sourceRequestId": "model-" + str(ordinal),
+                },
+            },
+        }
+
+    instance.on_math_asset("node-effect-2", asset_params(2))
+    assert instance.effect_calls == 2
+    assert instance.tool_effect_count == 1
+    assert instance.effects[-1]["receipt"]["effectId"] == "effect-2"
+
+    instance.on_math_asset("node-effect-3", asset_params(3))
+    assert instance.effect_calls == 3
+    assert instance.tool_effect_count == 2
+    assert instance.effects[-1]["receipt"]["effectId"] == "effect-3"
+    assert len(instance.tool_names) == 2
+
+    with pytest.raises(ProbeError) as excinfo:
+        instance.on_math_asset("node-effect-4", asset_params(4))
+    assert excinfo.value.code == "BUDGET"
+    assert instance.effect_calls == 3

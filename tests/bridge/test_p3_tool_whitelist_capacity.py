@@ -89,8 +89,8 @@ SCHEMA_DIR = ROOT / "packages" / "protocol" / "schema"
 # it. `test_legacy_manifest_keeps_its_narrow_effect_table` pins that boundary.
 SCHEMAS = (
     SCHEMA_DIR / "p3-host.schema.json",
-    SCHEMA_DIR / "agent-host-v13.schema.json",
-    ROOT / "release" / "schema" / "agent-host-v13.schema.json",
+    SCHEMA_DIR / "agent-host-v14.schema.json",
+    ROOT / "release" / "schema" / "agent-host-v14.schema.json",
 )
 LEGACY_SCHEMA = SCHEMA_DIR / "agent-host.schema.json"
 TOOL_SOURCE = ROOT / "packages" / "protocol" / "src" / "p3.ts"
@@ -225,9 +225,10 @@ def test_schema_tool_enums_equal_the_whitelist(path):
         assert enum == EXPECTED_TOOLS
 
 
-def test_both_v13_schema_copies_stay_byte_identical():
-    packaged = (SCHEMA_DIR / "agent-host-v13.schema.json").read_bytes()
-    released = (ROOT / "release" / "schema" / "agent-host-v13.schema.json").read_bytes()
+@pytest.mark.parametrize("name", ["agent-host-v13.schema.json", "agent-host-v14.schema.json"])
+def test_active_and_legacy_schema_copies_stay_byte_identical(name):
+    packaged = (SCHEMA_DIR / name).read_bytes()
+    released = (ROOT / "release" / "schema" / name).read_bytes()
     assert packaged == released
 
 

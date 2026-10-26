@@ -214,7 +214,7 @@ def test_legacy_manifest_is_read_only_and_live_is_refused():
         agent_protocol.validate_manifest(legacy)
     active = agent_protocol.load_manifest()
     assert active["protocolVersion"] == agent_protocol.AGENT_HOST_VERSION
-    assert active["protocolVersion"] == "1.3-agent-loop-preview"
+    assert active["protocolVersion"] == "1.4-unified-math-assets"
     with pytest.raises(ProbeError):
         host_module.AgentHost(legacy, "legacy-session", None, PROBLEM, "0" * 64,
                               {"maxModelCalls": 0}, None)

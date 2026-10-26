@@ -11,10 +11,8 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   agentHostPayload,
   parseAgentHostFrame,
-  validateAgentHostManifest,
   validateAgentHostV14Manifest,
-  type AgentHostAnyManifest,
-  type AgentHostManifest,
+  type AgentHostV14Manifest,
   type AgentHostMethod,
   type JsonRpcMessage,
 } from "@astra/protocol";
@@ -27,27 +25,23 @@ import { AgentHostFlow } from "./agent-host-flow.js";
  * package export. This keeps the bundle runnable without node_modules.
  */
 function manifestUrl(): URL {
+  // The active entry is the unified v1.4 runtime. A missing v1.4 schema must
+  // fail closed: silently loading the v1.3 sibling turns a packaging error into
+  // a mixed-version run (Python sends v1.4 initialize, Node answers with a v1.3
+  // FIELD_VALUE, and the Host reports an empty-stream EOF).
   const v14Sibling = new URL("./schema/agent-host-v14.schema.json", import.meta.url);
   if (existsSync(v14Sibling)) {
     return v14Sibling;
   }
-  const sibling = new URL("./schema/agent-host-v13.schema.json", import.meta.url);
-  if (existsSync(sibling)) {
-    return sibling;
-  }
-  try {
-    return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v14.schema.json"));
-  } catch {
-    return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v13.schema.json"));
-  }
+  return new URL(import.meta.resolve("@astra/protocol/schema/agent-host-v14.schema.json"));
 }
 
-function loadManifest(): AgentHostAnyManifest {
+function loadManifest(): AgentHostV14Manifest {
   const raw = JSON.parse(readFileSync(manifestUrl(), "utf8")) as Record<string, unknown>;
-  if (raw["protocolVersion"] === "1.4-unified-math-assets") {
-    return validateAgentHostV14Manifest(raw);
+  if (raw["protocolVersion"] !== "1.4-unified-math-assets") {
+    throw new Error("VERSION_MISMATCH");
   }
-  return validateAgentHostManifest(raw);
+  return validateAgentHostV14Manifest(raw);
 }
 
 let started = false;

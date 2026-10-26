@@ -535,3 +535,107 @@ def test_routed_candidates_appear_in_method_selection_before_the_body(
     assert any(row["methodAssets"] and row["methodAssets"][0]["body"] == body
                for row in loaded_work)
     assert process_tracker
+
+
+def test_method_asset_and_tool_fit_the_three_shared_effect_slots(
+    process_tracker, spy_catalog
+):
+    """Method + math asset + tool share one three-slot effect window.
+
+    Regression for the real 100-item BUDGET stops: the Host's
+    ``on_math_asset`` used to compare the total effect count with the public
+    tool quota, so after a method card and one asset it refused the second
+    asset although the tool quota and effect-id table still had room.
+    """
+    method_id = spy_catalog.method_id
+    asset_text = json.dumps(
+        {
+            "action": "math_asset",
+            "assetId": "math.numerics",
+            "target": "interpolation_fit",
+            "input": {
+                "points": [
+                    {"x": "0", "y": "1"},
+                    {"x": "1", "y": "4"},
+                    {"x": "2", "y": "9"},
+                ],
+                "expression": "x**2+2*x+1",
+                "variable": "x",
+            },
+        }
+    )
+    tool_text = json.dumps(
+        {
+            "action": "tool",
+            "name": "polynomial_expand_coefficients",
+            "args": {"expression": "2+2", "variables": ["x"], "parameters": []},
+            "scope": "expand the supplied polynomial",
+        }
+    )
+
+    class _MixedAssetClient(FakeClient):
+        def chat(self, messages, temperature=0.2, max_tokens=8192):
+            if self.calls == 0:
+                self.seen.append((messages, temperature, max_tokens))
+                self.calls += 1
+                return {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps({"action": "method", "id": method_id}),
+                            },
+                        }
+                    ]
+                }
+            if self.calls == 1:
+                self.seen.append((messages, temperature, max_tokens))
+                self.calls += 1
+                return {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": asset_text},
+                        }
+                    ]
+                }
+            if self.calls == 2:
+                self.seen.append((messages, temperature, max_tokens))
+                self.calls += 1
+                return {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": tool_text},
+                        }
+                    ]
+                }
+            return super().chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+    client = _MixedAssetClient()
+    result = _solve(
+        client,
+        max_method_loads=1,
+        max_model_calls=6,
+        max_work_units=1,
+        max_effects=2,
+        max_reviews=0,
+        max_consensus=0,
+    )
+    assert result["status"] == "candidate"
+    assert result["metrics"]["effect_calls"] == 3
+    assert result["metrics"]["method_loads"] == 1
+    assert result["metrics"]["tool_effect_calls"] == 2
+    last = json.loads(client.seen[-1][0][1]["content"])
+    sources = sorted(row["source"] for row in last["toolObservations"])
+    assert sources == ["METHOD_REFERENCE", "PROGRAM_OBSERVATION", "PROGRAM_OBSERVATION"]
+    assert sorted(row["effectId"] for row in last["toolObservations"]) == [
+        "effect-1",
+        "effect-2",
+        "effect-3",
+    ]
+    assert process_tracker

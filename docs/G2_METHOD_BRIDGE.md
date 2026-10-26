@@ -20,7 +20,7 @@ mathematical mechanism, dependency or model provider was introduced.
   mathematical acceptance. Context v2 preserves the exact asset across work
   units as advisory text; receipts stay task-scoped. R2 sees neither resource
   bodies nor method self-assessment. STRICT still withholds unverified answers.
-- Active protocol/profile: 1.3-agent-loop-preview / math-agent-preview-v2.
+- Active protocol/profile: 1.4-unified-math-assets / math-agent-preview-v2.
   Frozen 1.2 schema SHA256 is
   `18a7ef79448396afaac75bbaf65c9ab5d27658cf596d19624b0ac3616ff705ad`.
   Both languages validate old frames read-only and reject live legacy startup.

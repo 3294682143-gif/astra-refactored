@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -102,6 +103,38 @@ def _mock_client():
         }
 
     return SimpleNamespace(chat=chat)
+
+
+def test_bundle_fails_closed_when_the_v14_sibling_is_missing(tmp_path):
+    """A bundle without its v1.4 schema must not silently downgrade to v1.3.
+
+    The old active entry fell back to the v1.3 sibling and then rejected the
+    Python v1.4 initialize frame with FIELD_VALUE, which surfaced as an empty
+    stream / EOF. The active entry now has only a v1.4 path and must fail with a
+    fixed child code instead of loading a different protocol.
+    """
+    copied_bundle = tmp_path / "stdio-runtime.bundle.mjs"
+    shutil.copy2(_default_script(), copied_bundle)
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir()
+    shutil.copy2(
+        ROOT / "release" / "schema" / "agent-host-v13.schema.json",
+        schema_dir / "agent-host-v13.schema.json",
+    )
+    completed = subprocess.run(
+        ["node", str(copied_bundle), "--agent-loop"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        timeout=15,
+    )
+    assert completed.returncode != 0
+    assert completed.stdout == ""
+    assert completed.stderr.strip() in {
+        "FIELD_VALUE", "MANIFEST_INVALID", "VERSION_MISMATCH",
+    }
 
 
 def test_default_reasoning_agent_uses_ts_engine_and_bundle():
