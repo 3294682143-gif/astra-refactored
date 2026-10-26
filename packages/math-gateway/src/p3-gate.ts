@@ -125,7 +125,22 @@ export class P3EffectGate {
     return record !== null && (record.state === "ADMITTED" || record.state === "DISPATCHED");
   }
 
-  admit(action: unknown, binding: unknown, remainingTurns: unknown, remainingMs: unknown): P3AdmitResult {
+  /**
+   * Admit one tool/method/explore effect.
+   *
+   * ``nextEffectOrdinal`` lets the caller hand in the ordinal the root session
+   * will actually accept. The math-asset branch reserves effect ids directly on
+   * the root, so a gate that kept counting from its construction-time ordinal
+   * would ask for an id the root already spent (PACKET_BINDING → hard control
+   * rejection). Callers that own no such side channel simply omit it.
+   */
+  admit(
+    action: unknown,
+    binding: unknown,
+    remainingTurns: unknown,
+    remainingMs: unknown,
+    nextEffectOrdinal?: unknown,
+  ): P3AdmitResult {
     const turns = boundedInt(remainingTurns, 1, P3_MAX_TURNS);
     const ms = boundedInt(remainingMs, P3_MIN_REMAINING_MS, P3_MAX_REMAINING_MS);
     const parsed = parseP3Action(JSON.stringify(p2Snapshot(action)));
@@ -167,7 +182,18 @@ export class P3EffectGate {
         fail(P2_ERROR_CODES.BUDGET_EXHAUSTED);
       }
     }
-    const effectId = `effect-${this.firstEffectOrdinal + this.records.length}`;
+    const ordinal =
+      nextEffectOrdinal === undefined
+        ? this.firstEffectOrdinal + this.records.length
+        : boundedInt(nextEffectOrdinal, 1, P3_MAX_EFFECTS);
+    if (ordinal !== this.firstEffectOrdinal + this.records.length) {
+      // Rebasing is only legal when the caller proves it spent ordinals outside
+      // this gate (math assets); the ordinal must still move strictly forward.
+      if (ordinal <= this.firstEffectOrdinal + this.records.length - 1) {
+        fail(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+      }
+    }
+    const effectId = `effect-${ordinal}`;
     const request = p3EffectRequest({
       effectId,
       binding: this.bindingOf(bound.sourceRequestId),
@@ -180,6 +206,25 @@ export class P3EffectGate {
       this.methodAttempts += 1;
     }
     return p2Snapshot({ status: "ADMITTED", request }) as P3AdmitResult;
+  }
+
+  /**
+   * Undo an admission whose dispatch the caller refused (the root rejected the
+   * effect id, or the run ran out of capacity between admit and dispatch).
+   *
+   * Only an ADMITTED tail record that was never dispatched may be dropped: a
+   * dispatched effect is a real remote call and must always be settled.
+   */
+  rollbackAdmitted(effectId: string): void {
+    const record = this.last();
+    if (record === null || record.effectId !== effectId || record.state !== "ADMITTED") {
+      fail(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+    }
+    this.records.pop();
+    this.usedSources.delete(record.request.binding.sourceRequestId);
+    if (record.request.action.action === "method") {
+      this.methodAttempts = Math.max(0, this.methodAttempts - 1);
+    }
   }
 
   markDispatched(effectId: string): P3EffectRecord {

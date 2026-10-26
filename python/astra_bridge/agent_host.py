@@ -813,6 +813,67 @@ class AgentHost(_Host):
             self.effects.append(effect_entry)
             effect_entries.append(effect_entry)
 
+        if not effect_entries and str(result.get("status")) not in ("COMPLETE", "SUCCESS"):
+            # A math asset that did not complete (NEEDS_INPUT / OUT_OF_SCOPE /
+            # UNAVAILABLE / ERROR) carries no observation, so the model would
+            # never learn that its call failed. Record one *failure* receipt with
+            # the real status / limitations / guidance and the real catalog input
+            # contract: it is a PROVISIONAL ERROR receipt, never a result, and the
+            # Node loop keeps it out of every observation view.
+            failure_observation = json.dumps(
+                {
+                    "effectFailure": {
+                        "assetId": request.get("assetId"),
+                        "target": request.get("target") or request.get("input", {}).get("target"),
+                        "status": str(result.get("status") or "UNKNOWN"),
+                        "limitations": list(result.get("limitations") or [])[:6],
+                        "guidance": list(result.get("guidance") or [])[:6],
+                        "receivedInputKeys": sorted(
+                            str(key) for key in (request.get("input") or {})
+                        ),
+                    }
+                },
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            failure_receipt = {
+                "effectId": effect_id,
+                "binding": {
+                    "sessionId": self.session_id,
+                    "problemHash": self.problem_hash,
+                    "contractVersion": int(binding.get("contractVersion", 1)),
+                    "taskId": str(binding.get("taskId", "")),
+                    "scopeId": str(binding.get("scopeId", "")),
+                    "sourceRequestId": source_id,
+                },
+                "source": "PROGRAM_OBSERVATION",
+                "level": "PROVISIONAL",
+                "status": "ERROR",
+                "observation": failure_observation,
+                "observationHash": hashlib.sha256(
+                    failure_observation.encode("utf-8")
+                ).hexdigest(),
+                "checkResult": "UNKNOWN",
+            }
+            action_payload = {
+                "action": "math_asset",
+                "assetId": request.get("assetId"),
+                "input": copy.deepcopy(request.get("input", {})),
+            }
+            if "target" in request:
+                action_payload["target"] = request["target"]
+            failure_entry = {
+                "request": {
+                    "effectId": effect_id,
+                    "binding": copy.deepcopy(failure_receipt["binding"]),
+                    "action": action_payload,
+                    "remainingMs": self.remaining_ms(),
+                },
+                "receipt": copy.deepcopy(failure_receipt),
+            }
+            self.effects.append(failure_entry)
+            effect_entries.append(failure_entry)
+
         receipts_list = [entry["receipt"] for entry in effect_entries]
         self._emit("effect_returned", {
             "effectId": effect_id,

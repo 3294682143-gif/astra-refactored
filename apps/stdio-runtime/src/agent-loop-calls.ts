@@ -265,6 +265,11 @@ export class AgentCalls {
       }
     }
     const turns = Math.min(3, Math.max(1, remainingModelCalls + 1));
+    // The math-asset branch spends effect ids straight on the root session, so
+    // the gate must be told which ordinal the root will accept next; otherwise a
+    // method/tool effect after an asset asks for an already-spent id and the run
+    // dies with CONTROL_REJECTED instead of running the effect.
+    const nextEffectOrdinal = this.root.effectCalls() + 1;
     const admitted = effectGate.admit(
       action,
       {
@@ -277,12 +282,20 @@ export class AgentCalls {
       },
       turns,
       this.root.remainingMs(),
+      nextEffectOrdinal,
     );
     if (admitted.status === "CACHED") {
       return admitted.receipt;
     }
     const admittedRequest = admitted.request;
-    this.root.reserveEffect(admittedRequest.effectId);
+    try {
+      this.root.reserveEffect(admittedRequest.effectId);
+    } catch (error) {
+      // Nothing was dispatched: drop the admission so the gate keeps no phantom
+      // pending record, then rethrow for the caller's honest refusal path.
+      effectGate.rollbackAdmitted(admittedRequest.effectId);
+      throw error;
+    }
     effectGate.markDispatched(admittedRequest.effectId);
     const freshRemaining = this.root.remainingMs();
     if (freshRemaining <= AGENT_IO_MIN_REMAINING_MS) {

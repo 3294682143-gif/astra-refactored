@@ -253,6 +253,37 @@ function methodToolCoPrompt(methodId: string, route: SemanticToolRoute): string 
     : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
 }
 
+/**
+ * The real input contract of one math asset, read from the shipped catalog.
+ *
+ * A failed asset call is only useful feedback when the model can see what the
+ * asset actually accepts, so the list below is copied verbatim from
+ * ``MATH_ASSET_BY_ID`` (no invented parameters, no example answers).
+ */
+function assetInputContract(
+  assetId: unknown,
+  target: string | null,
+): Record<string, unknown> | null {
+  if (typeof assetId !== "string") {
+    return null;
+  }
+  const definition = MATH_ASSET_BY_ID.get(assetId);
+  if (definition === undefined) {
+    return null;
+  }
+  const behaviors = Array.isArray(definition.behaviors) ? [...definition.behaviors] : [];
+  const matching = behaviors.filter((row) => target === null || row.target === target);
+  const listed = (matching.length > 0 ? matching : behaviors).slice(0, 4).map((row) => ({
+    target: row.target,
+    requiredParams: [...row.requiredParams],
+    optionalParams: [...row.optionalParams],
+  }));
+  if (listed.length === 0) {
+    return null;
+  }
+  return { assetId, behaviors: listed };
+}
+
 function mathAssetCoPrompt(route: SemanticMathAssetRoute): string {
   const block =
     "\n\nMATH ASSET ADVISORY (" + route.assetId + ", target " + route.target + "). " +
@@ -2162,6 +2193,65 @@ export async function runAgentLoop(
               }
             }
           }
+          // A math asset that did not complete (NEEDS_INPUT / OUT_OF_SCOPE /
+          // UNAVAILABLE / ERROR) produces no observation, so without this the
+          // model never learns its call failed and burns the effect budget on the
+          // same guess. The receipt below is a *failure* receipt: real status,
+          // real limitations/guidance and the real catalog input contract, never
+          // a fabricated result, and it deliberately stays out of
+          // toolObservationViews / exactObservations.
+          if (!isComplete) {
+            const hostReceiptsForFailure = Array.isArray((mathAssetResult as any).receipts)
+              ? ((mathAssetResult as any).receipts as readonly P3EffectReceipt[])
+              : [];
+            const failureObservation = JSON.stringify({
+              effectFailure: {
+                assetId: action.assetId,
+                target: action.target ?? null,
+                status: String(mathAssetResult.status ?? "UNKNOWN"),
+                limitations: (Array.isArray(mathAssetResult.limitations) ? mathAssetResult.limitations : []).slice(0, 6),
+                guidance: (Array.isArray(mathAssetResult.guidance) ? mathAssetResult.guidance : []).slice(0, 6),
+                inputContract: assetInputContract(action.assetId, action.target ?? null),
+                receivedInputKeys: Object.keys((action.input ?? {}) as Record<string, unknown>).sort(),
+              },
+            });
+            const hostFailureReceipt = hostReceiptsForFailure[0];
+            const failureReceipt: P3EffectReceipt = hostFailureReceipt && hostFailureReceipt.effectId
+              ? hostFailureReceipt
+              : {
+              effectId: reservedEffect,
+              binding: {
+                sessionId: session,
+                problemHash,
+                contractVersion: contract.contractVersion,
+                taskId: running.taskId,
+                scopeId: running.scopeId,
+                sourceRequestId: outcome.requestId,
+              },
+              source: "PROGRAM_OBSERVATION",
+              level: "PROVISIONAL",
+              status: "ERROR",
+              observation: failureObservation,
+              observationHash: p4Hash(failureObservation),
+              checkResult: "UNKNOWN",
+            };
+            observations.push(failureReceipt);
+            calls.effects.push({
+              request: {
+                effectId: failureReceipt.effectId,
+                binding: failureReceipt.binding,
+                action: {
+                  action: "math_asset",
+                  assetId: action.assetId,
+                  ...(action.target ? { target: action.target } : {}),
+                  input: action.input,
+                },
+                remainingMs: root.remainingMs(),
+              },
+              receipt: failureReceipt,
+            });
+          }
+
           // Late observation check (§5.5): if a candidate is already protected, check whether
           // newly arrived observations contradict it and initiate a bounded revision turn.
           const unconsumed = observations.filter(

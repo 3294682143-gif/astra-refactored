@@ -2107,3 +2107,78 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   5 题 A/B 显示整合树在 3 次调用内 `CONTROL_REJECTED`、整合前树能到候选，样本小且两树宿主版本不同，
   只能列为待查，未归因。使用统一数学资产的 78 题里 70 题交付候选（90%）。
 - 逐题明细与证据：`docs/WEB_100_ITEM_SEMANTIC_REVIEW.md`，原始报告 `/tmp/astra-full100-bd98a87`。
+
+---
+
+## 26 2026-10-25 CONTROL_REJECTED 全量修复（进行中，未收敛，勿据此宣布达标）
+
+### 26.1 用 agent team 做的只读诊断（三份报告，均 HIGH 置信、带行号证据）
+
+1. **effect-id 游标错位 —— CONTROL_REJECTED 的真正根因。**
+   `P3EffectGate` 在任务开始时把 `firstEffectOrdinal` 固定为 `root.effectCalls()+1`
+   （`packages/math-gateway/src/p3-gate.ts`，`effectId = firstEffectOrdinal + records.length`），
+   而 `math_asset` 分支**绕过 gate 直接在 root 上 reserve**（`agent-loop.ts:2007-2018`）。
+   两次资产调用花掉 `effect-1`/`effect-2` 后，method 仍向 root 申请 `effect-1` →
+   `agent-loop-calls.ts:268` → `root.reserveEffect` 抛 `PACKET_BINDING`
+   （`runtime-core/src/agent-session.ts:357-380`）→ `agent-loop.ts:2364-2379` 硬置
+   `CONTROL_REJECTED`，method 从未派发（`method_loads=0`）。
+   这与真实 trace 完全吻合：`/tmp/diag-item3`（idx=3）没有 effect-3 的 DISPATCHED/RETURNED。
+2. **失败回执被整体丢弃。** math_asset 失败时只 `root.settleEffect(ERROR)`，不构造
+   `P3EffectReceipt`；Host 也只遍历 `result["observations"]`（失败时为空，`agent_host.py:771-816`），
+   于是下一轮 `toolObservations: []`。上下文层本身是接受 ERROR 回执的
+   （`agent-loop-context.ts:916-949` 只拒非 COMPLETE/ERROR），既有测试
+   `tests/e2e/test_ts_methods_safety.py:102-129` 也要求 ERROR 回执进入下一轮。
+3. **模型看不到资产输入契约。** `methodAssets` 是方法卡正文缓存、`methodCatalog` 只有白名单 6 字段，
+   首轮上下文没有 `group_structure` 的参数约束；而 `MATH_ASSET_BY_ID`
+   （含真实 `requiredParams`/`optionalParams`）在 `agent-loop.ts` 里已被 import 却未使用。
+
+### 26.2 本轮实施（工作树内，未提交）
+
+| 改动 | 文件 | 目的 |
+|---|---|---|
+| gate 支持 `nextEffectOrdinal` 重定基 + `rollbackAdmitted` | `packages/math-gateway/src/p3-gate.ts` | 让 method/tool 向 root 申请真实的下一个 effect id；派发被拒时回收登记 |
+| `AgentCalls.effect` 传 `root.effectCalls()+1`，reserve 失败即回滚 | `apps/stdio-runtime/src/agent-loop-calls.ts` | 消除 effect-id 漂移，不再硬停 |
+| 资产未完成时生成真实 ERROR 回执（`status`/`limitations`/`guidance`/`receivedInputKeys` + catalog 真实参数契约），只进 `toolObservations`，绝不进 `toolObservationViews`/`exactObservations` | `apps/stdio-runtime/src/agent-loop.ts` | 让模型看见"调用失败 + 可用参数" |
+| 同一份失败回执由 Host 侧权威生成，Node 优先复用 Host 回执 | `python/astra_bridge/agent_host.py` | 保证 Host `toolObservations` 逐字节相等校验不被打破 |
+| 新增回归：资产后 method 派发为 effect-2 且 `method_loads=1`；超容量资产如实拒绝；失败资产把带 `inputContract` 的 ERROR 回执喂给下一轮 | `apps/stdio-runtime/tests/agent-effect-ordinal.test.ts` | 三条缺陷的最小复现 |
+
+### 26.3 已验证
+
+- `node --test`（protocol + stdio-runtime）：**543/543 通过**
+- `pytest tests/bridge tests/math_assets tests/e2e/test_ts_math_assets_82_e2e.py`：**964 passed**
+- 收紧「兜底回执只在 `!isComplete` 时启用」后重跑：`tsc -b` 0、esbuild bundle 重建、
+  `agent-effect-ordinal` 3/3、`test_ts_math_assets_82_e2e.py + test_p3_host_effects.py` **117 passed**
+- `release/BUILD_MANIFEST.json` 已重建并 `sync_web_release_manifest.py` 同步
+
+### 26.4 真实模型重放 idx=3 的三段变化（同一题、同一 profile）
+
+| 阶段 | 结果 | 关键指标 |
+|---|---|---|
+| 修复前 | `CONTROL_REJECTED` | 3 次调用、effect 只结算不复用 id、`method_loads=0` |
+| 只修 effect-id 游标 | `FIELD_VALUE` | 13 次调用，但 Node 兜底回执与 Host `expected` 不再逐字节相等 |
+| 收窄兜底（只对 `!isComplete` 生成失败回执） | **`BUDGET`** | 13 次调用、`effect_calls=2`、`asset_calls=1`、`tool_effect_calls=1`、**`method_loads=1`**、第 13 轮 `allowFinal=true` |
+
+已确认修复生效的直接证据（同一 trace）：
+
+- 第 2 轮 `toolObservations` = 1 条 `COMPLETE`，第 5/8 轮 = 2 条 —— 观测确实回到了模型上下文；
+- 第 3 轮模型请求 method 卡，**method 真的加载了**（`method_loads=1`），修复前这一步就是硬停点；
+- 第 13 轮 `allowTools/allowMethods/allowFinal = true/true/true`，说明候选已受保护，模型仍在迭代。
+
+仍未出候选，但性质变了：现在是**诚实的预算耗尽**（profile 的 `max_effects=2` 已用满），
+不再是控制层把运行打死。这属于测量 profile 与收敛策略问题，不能算控制缺陷。
+
+### 26.5 下一步（按顺序）
+
+1. 用当前 profile 重跑上一轮 22 道 `CONTROL_REJECTED` 题，量化「控制拒绝 → 预算耗尽/候选」的转化率；
+2. 若仍有大量题卡在 `max_effects=2`，把 `MAX_PROFILE.max_effects` 调到 3–4 **并单列说明这是测量口径变更**，
+   不用它冒充产品修复；
+3. 全量 100 题 + 逐题语义复核，与 §25 的 70/100 候选、58/100 语义正确做对照；
+4. 全绿后再更新终验结论。
+
+### 26.6 一条必须记住的 harness 教训
+
+`/tmp/diag_one.py` 最初缺 `if __name__ == "__main__":` 保护，而 `use_math_asset` 走
+`multiprocessing` 的 **spawn**（`mathagent/tools.py:284-294`）：spawn 子进程会重新执行
+`__main__`，于是第一次单题复现里的 `effect ERROR` 部分是 **harness 伪影**。
+100 题全量那次（用 `official_judge_emulator` 的 worker 脚本，有正确保护）的失败是真实的。
+任何"单题复现"脚本都必须带 `__main__` 守卫，否则会把自身的进程问题误判成产品缺陷。

@@ -5418,7 +5418,16 @@ var init_p3_gate = __esm({
         const record = this.last();
         return record !== null && (record.state === "ADMITTED" || record.state === "DISPATCHED");
       }
-      admit(action, binding, remainingTurns, remainingMs) {
+      /**
+       * Admit one tool/method/explore effect.
+       *
+       * ``nextEffectOrdinal`` lets the caller hand in the ordinal the root session
+       * will actually accept. The math-asset branch reserves effect ids directly on
+       * the root, so a gate that kept counting from its construction-time ordinal
+       * would ask for an id the root already spent (PACKET_BINDING → hard control
+       * rejection). Callers that own no such side channel simply omit it.
+       */
+      admit(action, binding, remainingTurns, remainingMs, nextEffectOrdinal) {
         const turns = boundedInt(remainingTurns, 1, P3_MAX_TURNS);
         const ms7 = boundedInt(remainingMs, P3_MIN_REMAINING_MS, P3_MAX_REMAINING_MS);
         const parsed = parseP3Action(JSON.stringify(p2Snapshot(action)));
@@ -5458,7 +5467,13 @@ var init_p3_gate = __esm({
             fail3(P2_ERROR_CODES.BUDGET_EXHAUSTED);
           }
         }
-        const effectId = `effect-${this.firstEffectOrdinal + this.records.length}`;
+        const ordinal = nextEffectOrdinal === void 0 ? this.firstEffectOrdinal + this.records.length : boundedInt(nextEffectOrdinal, 1, P3_MAX_EFFECTS);
+        if (ordinal !== this.firstEffectOrdinal + this.records.length) {
+          if (ordinal <= this.firstEffectOrdinal + this.records.length - 1) {
+            fail3(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+          }
+        }
+        const effectId = `effect-${ordinal}`;
         const request = p3EffectRequest({
           effectId,
           binding: this.bindingOf(bound.sourceRequestId),
@@ -5471,6 +5486,24 @@ var init_p3_gate = __esm({
           this.methodAttempts += 1;
         }
         return p2Snapshot({ status: "ADMITTED", request });
+      }
+      /**
+       * Undo an admission whose dispatch the caller refused (the root rejected the
+       * effect id, or the run ran out of capacity between admit and dispatch).
+       *
+       * Only an ADMITTED tail record that was never dispatched may be dropped: a
+       * dispatched effect is a real remote call and must always be settled.
+       */
+      rollbackAdmitted(effectId) {
+        const record = this.last();
+        if (record === null || record.effectId !== effectId || record.state !== "ADMITTED") {
+          fail3(P2_ERROR_CODES.ILLEGAL_TRANSITION);
+        }
+        this.records.pop();
+        this.usedSources.delete(record.request.binding.sourceRequestId);
+        if (record.request.action.action === "method") {
+          this.methodAttempts = Math.max(0, this.methodAttempts - 1);
+        }
       }
       markDispatched(effectId) {
         const record = this.requireLast(effectId);
@@ -15287,6 +15320,7 @@ var init_agent_loop_calls = __esm({
           }
         }
         const turns = Math.min(3, Math.max(1, remainingModelCalls + 1));
+        const nextEffectOrdinal = this.root.effectCalls() + 1;
         const admitted = effectGate.admit(action, {
           sessionId: this.root.sessionId,
           problemHash: this.root.problemHash,
@@ -15294,12 +15328,17 @@ var init_agent_loop_calls = __esm({
           taskId: frozenTask.taskId,
           scopeId: frozenTask.scopeId,
           sourceRequestId
-        }, turns, this.root.remainingMs());
+        }, turns, this.root.remainingMs(), nextEffectOrdinal);
         if (admitted.status === "CACHED") {
           return admitted.receipt;
         }
         const admittedRequest = admitted.request;
-        this.root.reserveEffect(admittedRequest.effectId);
+        try {
+          this.root.reserveEffect(admittedRequest.effectId);
+        } catch (error) {
+          effectGate.rollbackAdmitted(admittedRequest.effectId);
+          throw error;
+        }
         effectGate.markDispatched(admittedRequest.effectId);
         const freshRemaining = this.root.remainingMs();
         if (freshRemaining <= AGENT_IO_MIN_REMAINING_MS) {
@@ -21299,6 +21338,26 @@ function methodToolCoPrompt(methodId2, route) {
   const chars = [...block];
   return chars.length <= MAX_METHOD_TOOL_COPROMPT_CHARS ? block : chars.slice(0, MAX_METHOD_TOOL_COPROMPT_CHARS).join("");
 }
+function assetInputContract(assetId, target) {
+  if (typeof assetId !== "string") {
+    return null;
+  }
+  const definition = MATH_ASSET_BY_ID.get(assetId);
+  if (definition === void 0) {
+    return null;
+  }
+  const behaviors = Array.isArray(definition.behaviors) ? [...definition.behaviors] : [];
+  const matching = behaviors.filter((row) => target === null || row.target === target);
+  const listed = (matching.length > 0 ? matching : behaviors).slice(0, 4).map((row) => ({
+    target: row.target,
+    requiredParams: [...row.requiredParams],
+    optionalParams: [...row.optionalParams]
+  }));
+  if (listed.length === 0) {
+    return null;
+  }
+  return { assetId, behaviors: listed };
+}
 function mathAssetCoPrompt(route) {
   const block = "\n\nMATH ASSET ADVISORY (" + route.assetId + ", target " + route.target + '). Prefer one math_asset action over a final WorkPacket: {"action":"math_asset","assetId":"' + route.assetId + '","target":"' + route.target + '","input":' + route.argsTemplate + "}. After PROGRAM_OBSERVATION, submit the complete WorkPacket as usual.";
   const chars = [...block];
@@ -22522,6 +22581,53 @@ ${g.guidance.join("\n")}`).join("");
                 }
               }
             }
+          }
+          if (!isComplete) {
+            const hostReceiptsForFailure = Array.isArray(mathAssetResult.receipts) ? mathAssetResult.receipts : [];
+            const failureObservation = JSON.stringify({
+              effectFailure: {
+                assetId: action.assetId,
+                target: action.target ?? null,
+                status: String(mathAssetResult.status ?? "UNKNOWN"),
+                limitations: (Array.isArray(mathAssetResult.limitations) ? mathAssetResult.limitations : []).slice(0, 6),
+                guidance: (Array.isArray(mathAssetResult.guidance) ? mathAssetResult.guidance : []).slice(0, 6),
+                inputContract: assetInputContract(action.assetId, action.target ?? null),
+                receivedInputKeys: Object.keys(action.input ?? {}).sort()
+              }
+            });
+            const hostFailureReceipt = hostReceiptsForFailure[0];
+            const failureReceipt = hostFailureReceipt && hostFailureReceipt.effectId ? hostFailureReceipt : {
+              effectId: reservedEffect,
+              binding: {
+                sessionId: session,
+                problemHash,
+                contractVersion: contract.contractVersion,
+                taskId: running.taskId,
+                scopeId: running.scopeId,
+                sourceRequestId: outcome.requestId
+              },
+              source: "PROGRAM_OBSERVATION",
+              level: "PROVISIONAL",
+              status: "ERROR",
+              observation: failureObservation,
+              observationHash: p4Hash(failureObservation),
+              checkResult: "UNKNOWN"
+            };
+            observations.push(failureReceipt);
+            calls.effects.push({
+              request: {
+                effectId: failureReceipt.effectId,
+                binding: failureReceipt.binding,
+                action: {
+                  action: "math_asset",
+                  assetId: action.assetId,
+                  ...action.target ? { target: action.target } : {},
+                  input: action.input
+                },
+                remainingMs: root.remainingMs()
+              },
+              receipt: failureReceipt
+            });
           }
           const unconsumed = observations.filter((o) => !consumedObservationHashes.has(o.observationHash));
           if (protectedOrigin !== null && unconsumed.length > 0) {
