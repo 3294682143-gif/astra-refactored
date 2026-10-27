@@ -22170,6 +22170,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       }
       let advanced = false;
       let yielded = false;
+      let unsolvedRefusals = 0;
       let methodToolCoPromptCardId = null;
       let forcedMethodSelection = false;
       let forcedMethodCandidates = [];
@@ -22565,6 +22566,22 @@ ${g.guidance.join("\n")}`).join("");
             contextHash: p4Hash(JSON.stringify(messages)),
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
           };
+        }
+        if (unsolvedRefusals > 0) {
+          const messages = [
+            {
+              role: "system",
+              content: context.messages[0].content + "\n\n" + UNSOLVED_REFUSED_NOTE
+            },
+            context.messages[1]
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+          };
+          unsolvedRefusals += 1;
         }
         let outcome = await calls.model({
           task: running,
@@ -23215,6 +23232,16 @@ ${g.guidance.join("\n")}`).join("");
           continue;
         }
         if (action !== null && action.action === "unsolved") {
+          if (unsolvedRefusals === 0 && answerBearingTask && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews) {
+            sessionLog.append("CONSENSUS", {
+              stage: "UNSOLVED_REFUSAL",
+              requestId: outcome.requestId,
+              accepted: false,
+              candidateChars: 0
+            });
+            unsolvedRefusals = 1;
+            continue;
+          }
           if (revision.pendingTaskId() === null) {
             try {
               ledger.validateYieldTask(running.taskId, outcome.requestId, "UNSOLVED");
@@ -24407,7 +24434,7 @@ ${g.guidance.join("\n")}`).join("");
   }, true);
   return p2Snapshot({ summary, privateState }, true);
 }
-var MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, MAX_EXPLORATION_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
+var UNSOLVED_REFUSED_NOTE, MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, MAX_EXPLORATION_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
   "apps/stdio-runtime/dist/src/agent-loop.js"() {
     "use strict";
@@ -24429,6 +24456,14 @@ var init_agent_loop2 = __esm({
     init_agent_progress();
     init_agent_loop_io();
     init_agent_semantics();
+    UNSOLVED_REFUSED_NOTE = [
+      "UNSOLVED REFUSED. The previous turn answered unsolved, which is not an admitted deliverable",
+      "for this task: the problem text is readable and inside the declared scope, so difficulty,",
+      "length or partial knowledge is never a reason to abstain. Return exactly one complete",
+      "p2a-work-v1 WorkPacket with deliveryStatus COMPLETE and your best exact answer in",
+      "candidateProposal, and put the parts you could not settle in claim or derivation instead of",
+      "abstaining. Do not call a tool in this turn."
+    ].join(" ");
     MIN_MS = 25;
     EXPLORATION_TOOL_NAME = "generated_exploration";
     MAX_METHOD_TOOL_COPROMPT_CHARS = 600;

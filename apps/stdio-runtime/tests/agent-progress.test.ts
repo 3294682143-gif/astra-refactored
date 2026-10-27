@@ -98,21 +98,65 @@ function assertYielded(
   assert.notEqual(obligation.status, "SATISFIED");
 }
 
-test("unsolved yields the current task and another ready task works", async () => {
+test("an unsolved action is refused once and the retry delivers", async () => {
   const run = await runProgress({
     work: (request) =>
       request.requestId === "model-1" ? unsolvedReply() : reactiveWork(request),
   });
-  // A yielded task never stops the loop: the remaining ready tasks keep working
-  // (the UNKNOWN graph has ANSWER_REQUEST, INDEPENDENT_DERIVATION and
-  // OUTPUT_COVERAGE), so the count is the tasks that could still run.
-  assert.equal(run.result.summary.modelCalls, 3);
-  assert.equal(run.result.summary.workUnits, 2);
-  assert.equal(run.result.summary.effectCalls, 0);
-  const works = workRequests(run.requests);
-  assert.equal(works.length, 3);
-  assert.notEqual(taskOf(works[0]!).taskId, taskOf(works[1]!).taskId);
-  assertYielded(run, "UNSOLVED", "model-1");
+  // An abstention on a readable task is strictly worse than a wrong
+  // best-effort candidate, so the first unsolved action is refused with one
+  // extra WORK turn and the retry's answer is delivered. Nothing is yielded.
+  const refused = (run.result.privateState.sessionLog?.events ?? []).filter(
+    (event) => event.kind === "CONSENSUS" && event.data["stage"] === "UNSOLVED_REFUSAL",
+  );
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0]!.data["requestId"], "model-1");
+  assert.equal(refused[0]!.data["accepted"], false);
+  const yielded = run.result.privateState.events.filter(
+    (row) => row.eventType === "TASK_YIELDED",
+  );
+  assert.equal(yielded.length, 0, "a refused abstention never yields the task");
+  // The retry really saw the refusal note and the same user payload.
+  const retry = run.requests.find((request) => request.requestId === "model-2");
+  assert.ok(retry !== undefined);
+  assert.equal(retry.messages[0]!.content.includes("UNSOLVED REFUSED"), true);
+  const first = run.requests.find((request) => request.requestId === "model-1");
+  assert.ok(first !== undefined);
+  // Only the request id that binds each turn differs; the recorded user payload
+  // is otherwise byte-identical, so the Host context check is unaffected.
+  const payloadOf = (request: AgentModelRequest): Record<string, unknown> => {
+    const body = bodyOf(request);
+    delete body["sourceRequestId"];
+    return body;
+  };
+  assert.deepEqual(payloadOf(retry), payloadOf(first));
+});
+
+test("a second unsolved action is accepted and yields the task", async () => {
+  let unsolveds = 0;
+  const run = await runProgress({
+    work: (request) => {
+      if (unsolveds < 2) {
+        const current = request.requestId;
+        // The first answer of each task abstains; the refusal retry does too.
+        if (current === "model-1" || current === "model-2") {
+          unsolveds += 1;
+          return unsolvedReply();
+        }
+      }
+      return reactiveWork(request);
+    },
+  });
+  // The refusal is bounded: after it, the next unsolved action is honoured.
+  const refused = (run.result.privateState.sessionLog?.events ?? []).filter(
+    (event) => event.kind === "CONSENSUS" && event.data["stage"] === "UNSOLVED_REFUSAL",
+  );
+  assert.ok(refused.length >= 1);
+  const yielded = run.result.privateState.events.filter(
+    (row) => row.eventType === "TASK_YIELDED",
+  );
+  assert.ok(yielded.length >= 1, "the second abstention is accepted");
+  assert.equal(yielded[0]!.yieldReason, "UNSOLVED");
 });
 
 test("a legal partial packet yields and keeps its own artifact", async () => {

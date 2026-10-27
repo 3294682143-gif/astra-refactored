@@ -108,6 +108,25 @@ import {
   frontRunnerIndex,
   sameAnswerKey,
 } from "./agent-answer-key.js";
+
+/**
+ * The one-turn note that refuses an `unsolved` action.
+ *
+ * An unsolved action abandons the task for the rest of the run, so it is refused
+ * once on an answer-bearing task before it is accepted: an abstention is
+ * strictly worse than a wrong best-effort candidate, and the re-run showed the
+ * model abstaining on items it answers correctly when asked again. The note only
+ * changes the system message of that retry, so the recorded user payload stays
+ * byte-identical and the Host context check is unaffected.
+ */
+const UNSOLVED_REFUSED_NOTE = [
+  "UNSOLVED REFUSED. The previous turn answered unsolved, which is not an admitted deliverable",
+  "for this task: the problem text is readable and inside the declared scope, so difficulty,",
+  "length or partial knowledge is never a reason to abstain. Return exactly one complete",
+  "p2a-work-v1 WorkPacket with deliveryStatus COMPLETE and your best exact answer in",
+  "candidateProposal, and put the parts you could not settle in claim or derivation instead of",
+  "abstaining. Do not call a tool in this turn.",
+].join(" ");
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import {
@@ -1300,6 +1319,10 @@ export async function runAgentLoop(
       }
       let advanced = false;
       let yielded = false;
+      // Counts the WORK turn that re-asks for an answer after a refused
+      // `unsolved` action. Zero means no refusal has happened yet; the retry
+      // turn injects UNSOLVED_REFUSED_NOTE exactly once.
+      let unsolvedRefusals = 0;
       // Set only when a new card body was just loaded. The next WORK turn
       // consumes it once to append the bounded method/tool advisory.
       let methodToolCoPromptCardId: string | null = null;
@@ -1967,6 +1990,24 @@ export async function runAgentLoop(
             contextHash: p4Hash(JSON.stringify(messages)),
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
           };
+        }
+        if (unsolvedRefusals > 0) {
+          // The refusal note is injected exactly once, on the retry that follows
+          // a refused unsolved action.
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + "\n\n" + UNSOLVED_REFUSED_NOTE,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
+          unsolvedRefusals += 1;
         }
         let outcome = await calls.model({
           task: running,
@@ -2857,6 +2898,24 @@ export async function runAgentLoop(
           continue;
         }
         if (action !== null && action.action === "unsolved") {
+          // One bounded refusal: a task that can be answered must not be yielded
+          // as unsolved. The retry is a fresh WORK turn with UNSOLVED_REFUSED_NOTE
+          // appended to its system message, and it spends no work unit.
+          if (
+            unsolvedRefusals === 0 &&
+            answerBearingTask &&
+            revision.pendingTaskId() === null &&
+            callsLeft() >= 4 + opts.maxReviews
+          ) {
+            sessionLog.append("CONSENSUS", {
+              stage: "UNSOLVED_REFUSAL",
+              requestId: outcome.requestId,
+              accepted: false,
+              candidateChars: 0,
+            });
+            unsolvedRefusals = 1;
+            continue;
+          }
           if (revision.pendingTaskId() === null) {
             try {
               ledger.validateYieldTask(running.taskId, outcome.requestId, "UNSOLVED");
