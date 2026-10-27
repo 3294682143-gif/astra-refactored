@@ -26,6 +26,7 @@ from python.astra_bridge.agent_history import ballot_choice
 from python.astra_bridge.answer_semantics import (
     answer_components,
     component_agreement_scores,
+    component_value,
 )
 
 VECTORS = Path(__file__).resolve().parent / "fixtures" / "canonical_answer_keys.v2.json"
@@ -230,3 +231,43 @@ def test_component_majority_never_overrides_a_whole_answer_majority():
     # even though a third ballot matches more component majorities.
     packets = [("model-1", "x=1, y=9"), ("model-2", "x=1, y=9"), ("model-3", "x=1, y=2")]
     assert ballot_choice(packets) == "model-2"
+
+
+def test_component_value_drops_a_short_left_hand_tag():
+    assert component_value("σ^{-2}=(14253)") == "(14253)"
+    assert component_value("(14253)") == "(14253)"
+    assert component_value("x=1") == "1"
+    assert component_value("A: 3") == "3"
+    # A real equation is never read as a tag plus a value.
+    assert component_value("240 - 190·(5/6)^{3/2} = 95.46") == "95.46"
+
+
+def test_labelled_and_bare_ballots_agree_on_the_same_blank():
+    """Two correct-but-differently-labelled ballots must outvote wrong bare ones.
+
+    This is item 5: one ballot said ``σ^{-2}=(14253), σ^{-1}(126)σ=(165)`` and
+    another said ``(14253),(165)``, while two wrong ballots said
+    ``(15432), (236)``. Comparing raw component text split the two correct
+    answers into two minorities and handed both votes to the wrong bare value.
+    """
+    ballots = [
+        "σ^{-2}=(14253), σ^{-1}(126)σ=(165)",
+        "(15432), (236)",
+        "(15432),(236)",
+        "(14253),(165)",
+    ]
+    assert [answer_components(row) for row in ballots] == [
+        ["σ^{-2}=(14253)", "σ^{-1}(126)σ=(165)"],
+        ["(15432)", "(236)"],
+        ["(15432)", "(236)"],
+        ["(14253)", "(165)"],
+    ]
+    assert component_agreement_scores(ballots) == [2, 0, 0, 2]
+    packets = [(f"model-{index + 4}", row) for index, row in enumerate(ballots)]
+    # The two wrong ballots are byte-different but canonically IDENTICAL, so they
+    # are a whole-answer majority of two and the whole-answer vote still wins.
+    # Component agreement cannot overrule a real majority, and it must not: on
+    # this item the only thing that saves the answer is the anchored audit. This
+    # assertion records the limit instead of pretending the vote can fix it, so a
+    # later change that silently promotes component agreement is caught here.
+    assert ballot_choice(packets) == "model-6"

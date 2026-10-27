@@ -190,6 +190,34 @@ export function sameAnswerKey(a: string, b: string): boolean {
 const COMPONENT_OPEN = "([{（【「";
 const COMPONENT_CLOSE = ")]}）】」";
 const COMPONENT_SEPARATOR = /[,;，；、]/u;
+/**
+ * A short left-hand tag of a labelled component: `σ^{-2}=(14253)`, `x=1`,
+ * `A: 3`. It must not contain a separator (already split), and it must be short
+ * so that a real equation such as `240 - 190·(5/6)^{3/2} = 95.46` is never
+ * treated as a tag plus a value.
+ */
+const COMPONENT_TAG = /^[^=:：]{1,32}[=:：]\s*(.+)$/su;
+
+/**
+ * The value of one component, with a short left-hand tag removed.
+ *
+ * Two ballots of the same question routinely label the same blank differently
+ * (`σ^{-2}=(14253)` against a bare `(14253)`), and an unlabelled comparison would
+ * split those two identical answers into two minorities while a wrong bare value
+ * keeps both of its votes. Only the component comparison uses this form; the
+ * whole-answer vote and the delivered text always stay the model's own.
+ */
+export function componentValue(part: string): string {
+  const text = part.trim();
+  const match = COMPONENT_TAG.exec(text);
+  if (match === null) return text;
+  const value = (match[1] as string).trim();
+  return value.length === 0 ? text : value;
+}
+
+function componentKey(part: string): string {
+  return canonicalAnswerKey(componentValue(part));
+}
 
 /**
  * Split a multi-part answer into its top-level components.
@@ -247,15 +275,15 @@ export function componentAgreementScores(candidates: readonly string[]): number[
   for (let index = 0; index < width; index += 1) {
     const counts = new Map<string, number>();
     for (const row of components) {
-      const key = canonicalAnswerKey(row[index]!);
+      const key = componentKey(row[index]!);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     let best = 0;
     for (const count of counts.values()) best = Math.max(best, count);
     // Latest tie-break, exactly like the whole-answer vote.
-    let target = canonicalAnswerKey(components[components.length - 1]![index]!);
+    let target = componentKey(components[components.length - 1]![index]!);
     for (let row = components.length - 1; row >= 0; row -= 1) {
-      const key = canonicalAnswerKey(components[row]![index]!);
+      const key = componentKey(components[row]![index]!);
       if ((counts.get(key) ?? 0) === best) {
         target = key;
         break;
@@ -266,7 +294,7 @@ export function componentAgreementScores(candidates: readonly string[]): number[
   return components.map((row) =>
     row.reduce(
       (score, part, index) =>
-        score + (canonicalAnswerKey(part) === targets[index] ? 1 : 0),
+        score + (componentKey(part) === targets[index] ? 1 : 0),
       0,
     ),
   );

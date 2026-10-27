@@ -20911,6 +20911,17 @@ function canonicalAnswerKey(text8) {
 function sameAnswerKey(a, b) {
   return canonicalAnswerKey(a) === canonicalAnswerKey(b);
 }
+function componentValue(part) {
+  const text8 = part.trim();
+  const match = COMPONENT_TAG.exec(text8);
+  if (match === null)
+    return text8;
+  const value = match[1].trim();
+  return value.length === 0 ? text8 : value;
+}
+function componentKey(part) {
+  return canonicalAnswerKey(componentValue(part));
+}
 function answerComponents(text8) {
   const value = unwrapOnce(text8);
   const parts = [];
@@ -20942,15 +20953,15 @@ function componentAgreementScores(candidates) {
   for (let index = 0; index < width; index += 1) {
     const counts = /* @__PURE__ */ new Map();
     for (const row of components) {
-      const key = canonicalAnswerKey(row[index]);
+      const key = componentKey(row[index]);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     let best = 0;
     for (const count of counts.values())
       best = Math.max(best, count);
-    let target = canonicalAnswerKey(components[components.length - 1][index]);
+    let target = componentKey(components[components.length - 1][index]);
     for (let row = components.length - 1; row >= 0; row -= 1) {
-      const key = canonicalAnswerKey(components[row][index]);
+      const key = componentKey(components[row][index]);
       if ((counts.get(key) ?? 0) === best) {
         target = key;
         break;
@@ -20958,7 +20969,7 @@ function componentAgreementScores(candidates) {
     }
     targets.push(target);
   }
-  return components.map((row) => row.reduce((score, part, index) => score + (canonicalAnswerKey(part) === targets[index] ? 1 : 0), 0));
+  return components.map((row) => row.reduce((score, part, index) => score + (componentKey(part) === targets[index] ? 1 : 0), 0));
 }
 function frontRunnerIndex(candidates) {
   if (candidates.length === 0)
@@ -20989,7 +21000,7 @@ function frontRunnerIndex(candidates) {
   }
   return candidates.length - 1;
 }
-var LABEL, COMPONENT_OPEN, COMPONENT_CLOSE, COMPONENT_SEPARATOR;
+var LABEL, COMPONENT_OPEN, COMPONENT_CLOSE, COMPONENT_SEPARATOR, COMPONENT_TAG;
 var init_agent_answer_key = __esm({
   "apps/stdio-runtime/dist/src/agent-answer-key.js"() {
     "use strict";
@@ -20998,6 +21009,7 @@ var init_agent_answer_key = __esm({
     COMPONENT_OPEN = "([{\uFF08\u3010\u300C";
     COMPONENT_CLOSE = ")]}\uFF09\u3011\u300D";
     COMPONENT_SEPARATOR = /[,;，；、]/u;
+    COMPONENT_TAG = /^[^=:：]{1,32}[=:：]\s*(.+)$/su;
   }
 });
 

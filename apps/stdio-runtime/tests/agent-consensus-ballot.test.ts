@@ -5,6 +5,7 @@ import { runAgentLoop } from "../src/agent-loop.js";
 import {
   answerComponents,
   componentAgreementScores,
+  componentValue,
   frontRunnerIndex,
 } from "../src/agent-answer-key.js";
 import { CONSENSUS_BALLOT_LENSES, buildAgentWorkContext } from "../src/agent-loop-context.js";
@@ -296,4 +297,31 @@ test("a whole-answer majority always beats component agreement", () => {
 
 test("an empty ballot list has no front-runner", () => {
   assert.equal(frontRunnerIndex([]), -1);
+});
+
+
+test("a labelled component and a bare component compare as the same blank", () => {
+  // Item 5: one ballot answered "σ^{-2}=(14253), σ^{-1}(126)σ=(165)" while
+  // another answered "(14253),(165)". Comparing raw component text would split
+  // those two identical answers into two minorities.
+  const ballots = [
+    "σ^{-2}=(14253), σ^{-1}(126)σ=(165)",
+    "(15432), (236)",
+    "(15432),(236)",
+    "(14253),(165)",
+  ];
+  assert.deepEqual(componentAgreementScores(ballots), [2, 0, 0, 2]);
+  // The two wrong ballots are byte-different but canonically identical, so they
+  // form a whole-answer majority of two and still win. Component agreement must
+  // never overrule a real majority; on this item only the anchored audit saves
+  // the answer. This records the limit deliberately.
+  assert.equal(frontRunnerIndex(ballots), 2);
+});
+
+test("component values drop a short left-hand tag", () => {
+  assert.equal(componentValue("σ^{-2}=(14253)"), "(14253)");
+  assert.equal(componentValue("x=1"), "1");
+  assert.equal(componentValue("A: 3"), "3");
+  // A real equation is never read as a tag plus a value.
+  assert.equal(componentValue("240 - 190·(5/6)^{3/2} = 95.46"), "95.46");
 });

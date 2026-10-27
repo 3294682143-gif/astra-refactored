@@ -47,6 +47,7 @@ __all__ = [
     "answer_components",
     "canonical_answer_key",
     "component_agreement_scores",
+    "component_value",
 ]
 
 _EPS = 1e-9
@@ -464,6 +465,31 @@ def canonical_answer_key(text):
 _COMPONENT_OPEN = frozenset("([{（【「")
 _COMPONENT_CLOSE = frozenset(")]}）】」")
 _COMPONENT_SEPARATOR = frozenset(",;，；、")
+# A short left-hand tag of a labelled component: ``σ^{-2}=(14253)``, ``x=1``.
+# It must not span a separator (the component is already split) and must stay
+# short, so a real equation such as ``240 - 190·(5/6)^{3/2} = 95.46`` is never
+# read as a tag plus a value.
+_COMPONENT_TAG = re.compile(r"^[^=:：]{1,32}[=:：]\s*(.+)$", re.DOTALL)
+
+
+def component_value(part):
+    """The value of one component with a short left-hand tag removed.
+
+    Two ballots of the same question label the same blank differently
+    (``σ^{-2}=(14253)`` against a bare ``(14253)``); comparing the raw text would
+    split those identical answers into two minorities while a wrong bare value
+    keeps both of its votes. Only the component comparison uses this form.
+    """
+    text = js_trim(part) if isinstance(part, str) else ""
+    match = _COMPONENT_TAG.match(text)
+    if match is None:
+        return text
+    value = js_trim(match.group(1))
+    return text if not value else value
+
+
+def _component_key(part):
+    return canonical_answer_key(component_value(part))
 
 
 def answer_components(text):
@@ -513,21 +539,17 @@ def component_agreement_scores(candidates):
     for index in range(width):
         counts = {}
         for row in rows:
-            key = canonical_answer_key(row[index])
+            key = _component_key(row[index])
             counts[key] = counts.get(key, 0) + 1
         best = max(counts.values())
-        target = canonical_answer_key(rows[-1][index])
+        target = _component_key(rows[-1][index])
         for row in reversed(rows):
-            key = canonical_answer_key(row[index])
+            key = _component_key(row[index])
             if counts[key] == best:
                 target = key
                 break
         targets.append(target)
     return [
-        sum(
-            1
-            for index, part in enumerate(row)
-            if canonical_answer_key(part) == targets[index]
-        )
+        sum(1 for index, part in enumerate(row) if _component_key(part) == targets[index])
         for row in rows
     ]
