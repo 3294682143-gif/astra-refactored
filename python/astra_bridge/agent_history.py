@@ -19,7 +19,7 @@ import hashlib
 
 from .p0_probe import ProbeError
 from .p0_protocol import ProtocolError
-from .answer_semantics import canonical_answer_key
+from .answer_semantics import canonical_answer_key, component_agreement_scores
 from .p2_host_fixture import _parse_inner
 from .p3_host_context import parse_action, same_json as _same_json
 from .agent_workflow import _source_record, checked_packet, trusted_packet_binding
@@ -272,6 +272,20 @@ def ballot_choice(candidate_ids):
         key = keys[_candidate_id]
         counts[key] = counts.get(key, 0) + 1
     best = max(counts.values())
+    if best < 2:
+        # No whole-answer majority at all: every ballot is a distinct answer, so
+        # the whole-answer vote would just take the last reply. On a multi-part
+        # question the ballots usually still agree component by component, so the
+        # ballot matching the most component majorities is the strongest real
+        # packet; the Node loop applies exactly the same tie-break.
+        scores = component_agreement_scores(
+            [candidate for _candidate_id, candidate in candidate_ids]
+        )
+        top = max(scores)
+        for index in range(len(candidate_ids) - 1, -1, -1):
+            if scores[index] == top:
+                return candidate_ids[index][0]
+        return candidate_ids[-1][0]
     return next(
         candidate_id
         for candidate_id, _candidate in reversed(candidate_ids)
@@ -329,7 +343,18 @@ def project_artifacts(history, session_id, problem_hash):
                 # ``candidateProposal.trim().length > 0``). Mirror that with the
                 # shared JavaScript whitespace set; an empty candidate packet is
                 # a draft, never a ballot or a tie-break winner.
-                if isinstance(candidate, str) and js_nonempty(candidate):
+                # Node's `evaluateConsensus` drops any packet whose
+                # deliveryStatus is not COMPLETE before it can become a ballot,
+                # so the Host must drop it too: a non-COMPLETE packet that still
+                # carries a candidate would otherwise vote here, the two sides
+                # would pick different winners, and the Node-selected source
+                # would have no ACTIVE row in the projection (the FIELD_VALUE
+                # class of failure).
+                if (
+                    isinstance(candidate, str)
+                    and js_nonempty(candidate)
+                    and packet.get("deliveryStatus") == "COMPLETE"
+                ):
                     candidate_ids.append((candidate_id, candidate))
         # Match Node. A packet carrying a machine-readable CERT1|FINAL row is
         # the final independent certificate and wins over correlated audit

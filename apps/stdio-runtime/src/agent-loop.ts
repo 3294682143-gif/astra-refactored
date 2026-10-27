@@ -103,7 +103,11 @@ import {
   type ExactObservationView,
   type ToolObservationView,
 } from "./agent-answer-closure.js";
-import { canonicalAnswerKey, sameAnswerKey } from "./agent-answer-key.js";
+import {
+  canonicalAnswerKey,
+  frontRunnerIndex,
+  sameAnswerKey,
+} from "./agent-answer-key.js";
 import { AgentRevisionAdmission } from "./agent-revision.js";
 import { AgentProgressPolicy } from "./agent-progress.js";
 import {
@@ -3336,22 +3340,19 @@ export async function runAgentLoop(
               }
               return counts;
             };
-            // The exact-support front-runner: highest canonical-key support and
-            // the latest ballot as the tie-break. This is the same rule the Host
-            // mirrors in `ballot_choice`, so it never disagrees with control.
+            // The exact-support front-runner: a whole-answer majority always wins;
+            // when every ballot differs there is no majority at all, so the ballot
+            // matching the most per-component majorities wins instead of the last
+            // reply. Every tie-break is the latest ballot. `frontRunnerIndex` is the
+            // single implementation of that rule and the Host mirrors it in
+            // `ballot_choice`, so control never disagrees on which packet is
+            // protected.
             const frontRunner = (): ConsensusAttempt | null => {
               const attempts = ballots();
-              if (attempts.length === 0) return null;
-              const counts = ballotCounts();
-              let best = 0;
-              for (const count of counts.values()) best = Math.max(best, count);
-              for (let index = attempts.length - 1; index >= 0; index -= 1) {
-                const attempt = attempts[index]!;
-                if ((counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === best) {
-                  return attempt;
-                }
-              }
-              return null;
+              const index = frontRunnerIndex(
+                attempts.map((attempt) => attempt.candidate),
+              );
+              return index < 0 ? null : attempts[index]!;
             };
             // The best-supported ballot whose answer differs from the
             // front-runner: the only honest second opinion to audit against.

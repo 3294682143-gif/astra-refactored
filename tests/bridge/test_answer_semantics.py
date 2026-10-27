@@ -23,6 +23,10 @@ import pytest
 
 from python.astra_bridge.answer_semantics import canonical_answer_key
 from python.astra_bridge.agent_history import ballot_choice
+from python.astra_bridge.answer_semantics import (
+    answer_components,
+    component_agreement_scores,
+)
 
 VECTORS = Path(__file__).resolve().parent / "fixtures" / "canonical_answer_keys.v2.json"
 
@@ -182,3 +186,47 @@ def test_internal_whitespace_never_merges_adjacent_numbers():
 def test_huge_numeric_text_is_total_and_stays_text():
     key = canonical_answer_key("x+" + "9" * 420)
     assert key.startswith("text:")
+
+
+# -- multi-part ballots ------------------------------------------------------
+
+
+def test_answer_components_only_split_outside_brackets():
+    assert answer_components("(14253),(165)") == ["(14253)", "(165)"]
+    assert answer_components("(a,b)") == ["(a,b)"]
+    assert answer_components("\\{1,2,3\\}") == ["\\{1,2,3\\}"]
+    assert answer_components("x=1, y=2") == ["x=1", "y=2"]
+    assert answer_components("42") == ["42"]
+
+
+def test_component_scores_pick_the_ballot_that_matches_each_part():
+    # Every whole answer differs, so the whole-answer vote has no majority.
+    ballots = ["(14253),(165)", "(14253),(136)", "(13524), (165)"]
+    assert component_agreement_scores(ballots) == [2, 1, 1]
+    packets = [
+        ("model-1", "(14253),(165)"),
+        ("model-2", "(14253),(136)"),
+        ("model-3", "(13524), (165)"),
+    ]
+    # The last reply is wrong on one part; the first ballot is right on both.
+    assert ballot_choice(packets) == "model-1"
+
+
+def test_component_scores_stay_out_of_the_way_for_single_part_answers():
+    ballots = ["5117", "5129", "5000"]
+    assert component_agreement_scores(ballots) == [0, 0, 0]
+    packets = [("model-1", "5117"), ("model-2", "5129"), ("model-3", "5000")]
+    # No component structure: the previous latest tie-break is preserved.
+    assert ballot_choice(packets) == "model-3"
+
+
+def test_component_scores_ignore_ballots_with_different_component_counts():
+    ballots = ["x=1, y=2", "x=1", "x=1, y=2"]
+    assert component_agreement_scores(ballots) == [0, 0, 0]
+
+
+def test_component_majority_never_overrides_a_whole_answer_majority():
+    # Two ballots carry the same whole answer, so the whole-answer majority wins
+    # even though a third ballot matches more component majorities.
+    packets = [("model-1", "x=1, y=9"), ("model-2", "x=1, y=9"), ("model-3", "x=1, y=2")]
+    assert ballot_choice(packets) == "model-2"

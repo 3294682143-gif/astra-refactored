@@ -2338,3 +2338,34 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - **已知空壳**：`math.proof`、`math.recurrence`、`math.statistics`、
   `math.topology` 这 4 个资产的 `behaviors` 为空数组，只能被列出、不能被调用。
   本轮不实现（不编造实现）。
+
+### 28.4 多部分答案的逐分量多数（第二个正确率修复）
+
+定向复跑 #5 暴露了一个多轮投票治不了的失效模式。题目两个空，三次运行给出
+`(14253),(165)`（全对）、`(14253),(136)`（第二空错）、`(13524), (165)`（第一空错）：
+**每次错在不同的分量上**，三个整体 canonical key 互不相同 → 整体多数等于没有多数
+→ 退回"取最后一个"，于是最新的那次（错的）被交付。
+
+修法是给"没有整体多数"这种情况一条规则：
+
+1. 有整体多数（某个 canonical key ≥ 2 票）时**完全不变**，仍是多数 + 末期 tie-break。
+2. 所有 ballot 互不相同时，按顶层分隔符（`, ; ， ； 、`，且**只在括号外**切分，所以
+   `(a,b)`、`\{1,2,3\}` 不会切开）把答案切成若干分量，逐分量取 canonical-key
+   多数，然后选**与该多数最吻合的真实 ballot**（末期 tie-break）。
+3. 单分量答案、或各 ballot 分量数不同 → 全部记 0 分，行为完全退回旧规则。
+
+关键约束：**绝不合成新答案**。选择结果始终是一个真实 packet，因此在 Host 侧仍能
+通过 `_projection_for_source` 的投影校验（合成答案会让整个答案丢失，变成
+`FIELD_VALUE`）。
+
+实现为**同一套规则的两份镜像**：Node `frontRunnerIndex` /
+`answerComponents` / `componentAgreementScores`
+（`apps/stdio-runtime/src/agent-answer-key.ts`），Host
+`ballot_choice` / `answer_components` / `component_agreement_scores`
+（`python/astra_bridge/answer_semantics.py`、`agent_history.py`）。两侧用**逐字相同**
+的用例做对称测试（Node 12 例、Python 80 例），因为这两份实现一旦漂移，
+`protectedCandidate` 投影就会与交付 artifact 错位（§27.4 的 #15 就是这一类）。
+
+同批次里 #5 的答案 `(14253),(165)` 与参考答案
+`$\sigma^{-2}=(14253)$，$\sigma^{-1}(126)\sigma=(165)$` 一致，而改前的答案是
+`(156)`（只答一个空且共轭算错）。

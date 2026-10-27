@@ -43,7 +43,11 @@ import re
 
 from .text_contract import JS_WHITESPACE, js_trim
 
-__all__ = ["canonical_answer_key"]
+__all__ = [
+    "answer_components",
+    "canonical_answer_key",
+    "component_agreement_scores",
+]
 
 _EPS = 1e-9
 _MAX_TOKENS = 4096
@@ -453,3 +457,77 @@ def canonical_answer_key(text):
     if polynomial is not None:
         return _polynomial_token(polynomial)
     return "text:" + compact_lower
+
+
+# -- multi-part ballots ------------------------------------------------------
+
+_COMPONENT_OPEN = frozenset("([{（【「")
+_COMPONENT_CLOSE = frozenset(")]}）】」")
+_COMPONENT_SEPARATOR = frozenset(",;，；、")
+
+
+def answer_components(text):
+    """Split a multi-part answer into its top-level components.
+
+    Only separators OUTSIDE brackets split, so ``(14253),(165)`` is two answers
+    while ``(a,b)`` and ``\{1,2,3\}`` stay one. This mirrors
+    ``answerComponents`` in ``apps/stdio-runtime/src/agent-answer-key.ts``; the
+    Host and the Node must agree, or the protected-candidate projection stops
+    matching the delivered artifact.
+    """
+    if not isinstance(text, str):
+        return []
+    value = _unwrap_once(js_trim(text))
+    parts = []
+    current = []
+    depth = 0
+    for character in value:
+        if character in _COMPONENT_OPEN:
+            depth += 1
+        elif character in _COMPONENT_CLOSE:
+            depth = max(0, depth - 1)
+        if depth == 0 and character in _COMPONENT_SEPARATOR:
+            parts.append(js_trim("".join(current)))
+            current = []
+            continue
+        current.append(character)
+    parts.append(js_trim("".join(current)))
+    return [part for part in parts if part]
+
+
+def component_agreement_scores(candidates):
+    """How many components of each candidate agree with the component majority.
+
+    Used only when the whole-answer vote has NO majority (every ballot differs),
+    to choose the real packet that best matches the per-component majorities
+    instead of the last reply. It never synthesises an answer: the caller still
+    delivers one real packet. Ballots with fewer than two components, or with
+    different component counts, all score zero and the caller keeps its previous
+    behaviour.
+    """
+    rows = [answer_components(candidate) for candidate in candidates]
+    width = len(rows[0]) if rows else 0
+    if width < 2 or any(len(row) != width for row in rows):
+        return [0 for _ in rows]
+    targets = []
+    for index in range(width):
+        counts = {}
+        for row in rows:
+            key = canonical_answer_key(row[index])
+            counts[key] = counts.get(key, 0) + 1
+        best = max(counts.values())
+        target = canonical_answer_key(rows[-1][index])
+        for row in reversed(rows):
+            key = canonical_answer_key(row[index])
+            if counts[key] == best:
+                target = key
+                break
+        targets.append(target)
+    return [
+        sum(
+            1
+            for index, part in enumerate(row)
+            if canonical_answer_key(part) == targets[index]
+        )
+        for row in rows
+    ]

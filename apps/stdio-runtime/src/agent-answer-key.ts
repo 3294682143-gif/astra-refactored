@@ -186,3 +186,126 @@ export function canonicalAnswerKey(text: string): string {
 export function sameAnswerKey(a: string, b: string): boolean {
   return canonicalAnswerKey(a) === canonicalAnswerKey(b);
 }
+
+const COMPONENT_OPEN = "([{（【「";
+const COMPONENT_CLOSE = ")]}）】」";
+const COMPONENT_SEPARATOR = /[,;，；、]/u;
+
+/**
+ * Split a multi-part answer into its top-level components.
+ *
+ * Only separators OUTSIDE brackets split, so `(14253),(165)` is two answers
+ * while `(a,b)` and `\{1,2,3\}` stay one. Empty components are dropped and the
+ * original text of every component is kept, because a component is only ever
+ * compared through `canonicalAnswerKey` and the delivered answer is always one
+ * real packet, never a rewrite.
+ */
+export function answerComponents(text: string): string[] {
+  const value = unwrapOnce(text);
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const character of value) {
+    if (COMPONENT_OPEN.includes(character)) {
+      depth += 1;
+    } else if (COMPONENT_CLOSE.includes(character)) {
+      depth = Math.max(0, depth - 1);
+    }
+    if (depth === 0 && COMPONENT_SEPARATOR.test(character)) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  parts.push(current.trim());
+  return parts.filter((part) => part.length > 0);
+}
+
+/**
+ * How many components of each candidate agree with the per-component majority.
+ *
+ * This only answers a question the whole-answer vote cannot: when every ballot
+ * produced a DIFFERENT whole answer, the whole-answer vote has no majority at
+ * all and falls back to the last reply. On a multi-part question the ballots
+ * usually still agree component by component, and the ballot that matches the
+ * most component majorities is the strongest real packet to deliver. The result
+ * is a score per ballot, never a synthesised answer: the caller keeps one real
+ * packet, so the delivered candidate stays a real receipt the Host can project.
+ *
+ * Two conservative guards keep this out of the way everywhere else: fewer than
+ * two components scores zero for every ballot, and ballots with different
+ * component counts score zero as well (their components are not comparable).
+ */
+export function componentAgreementScores(candidates: readonly string[]): number[] {
+  const components = candidates.map(answerComponents);
+  const width = components[0]?.length ?? 0;
+  if (width < 2 || components.some((row) => row.length !== width)) {
+    return candidates.map(() => 0);
+  }
+  const targets: string[] = [];
+  for (let index = 0; index < width; index += 1) {
+    const counts = new Map<string, number>();
+    for (const row of components) {
+      const key = canonicalAnswerKey(row[index]!);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    let best = 0;
+    for (const count of counts.values()) best = Math.max(best, count);
+    // Latest tie-break, exactly like the whole-answer vote.
+    let target = canonicalAnswerKey(components[components.length - 1]![index]!);
+    for (let row = components.length - 1; row >= 0; row -= 1) {
+      const key = canonicalAnswerKey(components[row]![index]!);
+      if ((counts.get(key) ?? 0) === best) {
+        target = key;
+        break;
+      }
+    }
+    targets.push(target);
+  }
+  return components.map((row) =>
+    row.reduce(
+      (score, part, index) =>
+        score + (canonicalAnswerKey(part) === targets[index] ? 1 : 0),
+      0,
+    ),
+  );
+}
+
+/**
+ * Index of the ballot exact support selects, or -1 for no ballot at all.
+ *
+ * One rule, two stages, and every tie-break is the LATEST ballot:
+ *   1. a whole-answer majority (two or more ballots sharing one canonical key);
+ *   2. otherwise, when every whole answer differs, the ballot matching the most
+ *      per-component majorities (see `componentAgreementScores`).
+ *
+ * The Host mirrors this in `ballot_choice`; the two implementations must stay
+ * identical or the protected-candidate projection stops matching the delivered
+ * artifact.
+ */
+export function frontRunnerIndex(candidates: readonly string[]): number {
+  if (candidates.length === 0) return -1;
+  const counts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const key = canonicalAnswerKey(candidate);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = 0;
+  for (const count of counts.values()) best = Math.max(best, count);
+  if (best >= 2) {
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      if ((counts.get(canonicalAnswerKey(candidates[index]!)) ?? 0) === best) {
+        return index;
+      }
+    }
+    return candidates.length - 1;
+  }
+  const scores = componentAgreementScores(candidates);
+  let top = 0;
+  for (const score of scores) top = Math.max(top, score);
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    if (scores[index] === top) return index;
+  }
+  return candidates.length - 1;
+}

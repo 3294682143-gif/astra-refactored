@@ -16671,10 +16671,24 @@ var init_agent_loop_context = __esm({
       "math.numerics (target: interpolation_fit, finite_difference, richardson_extrapolate); math.regression",
       "(target: ols_check); math.generating-functions (target: expand_coefficients). Pass arguments matching the",
       "asset input contract. All math asset observations are program observations, not proofs.",
-      "When a problem leaves a formula, estimator, interval, normalization or branch convention",
+      "When the problem leaves a formula, estimator, interval, normalization or branch convention",
       "unspecified and standard conventions produce different values, name the convention used,",
       "put the textbook/default value first, retain the materially different standard value, and",
-      "never label another standard convention as mathematically wrong."
+      "never label another standard convention as mathematically wrong.",
+      "Three exactness checks decide most answers that look right and are not. (1) An event that",
+      "depends on SOME object among several -- several people, several devices, several sites, or the",
+      "two directions of one family -- is a union over all of them: handle every object and combine",
+      "the results (union bound, two-sided tail, inclusion-exclusion), never analyse a single object",
+      "alone and never reuse a one-sided critical value for a two-sided question. (2) An object asked",
+      "for as the whole family -- every invariant measure, every eigenvector, every solution, every",
+      "equilibrium, a kernel or null space -- must be written with all free constants, including the",
+      "constant mode that survives when the ratio, eigenvalue or parameter degenerates to one.",
+      "(3) An operator, derivative or integral that the problem places ON a curve, surface, sphere or",
+      "other manifold uses that manifold's own definition, not the Euclidean form: a function that is",
+      "constant on the manifold therefore has zero manifold derivative even when its Euclidean",
+      "Laplacian is not zero.",
+      "candidateProposal must answer every blank, every sub-part and every requested quantity, in the",
+      "order asked; answering only the first blank is incomplete even when that blank is correct."
     ].join(" ");
     REFUTATION_PARAGRAPH = [
       "ANSWER-CHECK TURN. This task states the answer of the whole problem. If a unified math asset",
@@ -16714,6 +16728,19 @@ var init_agent_loop_context = __esm({
       "solution of its defining equation and account for every independent constant, homogeneous and",
       "zero mode, free parameter and degenerate parameter value before claiming uniqueness or",
       "nonexistence. One nonzero candidate is never evidence of uniqueness.",
+      "Three exactness checks decide most of the answers that look right and are not, so run all",
+      "three before delivering: (1) an event that depends on SOME object among several -- several",
+      "people, devices, sites, coordinates or coordinates of the same family -- is a union over all",
+      "of them, so handle every object and combine, do not analyse one object alone; (2) an object",
+      "asked for as the whole family -- every invariant measure, every eigenvector, every solution,",
+      "every equilibrium -- must be written with all its free constants, including any constant mode",
+      "that survives when the ratio or eigenvalue degenerates to one; (3) an operator, derivative or",
+      "integral that the problem places ON a curve, surface, sphere or other manifold uses that",
+      "manifold's own definition, not the Euclidean form, and a function constant on the manifold",
+      "therefore has zero manifold derivative even when its Euclidean Laplacian is not zero.",
+      "Deliver one candidateProposal that answers every blank, every sub-part and every requested",
+      "quantity in the order asked; a proposal that answers only the first blank is incomplete even",
+      "when that blank is right.",
       "For a multiple-choice question decide every option independently as true or false and put",
       "exactly the letters marked true in candidateProposal, without omitting a correct option. For",
       "a true/false statement decide the proposition exactly as written, including every quantifier",
@@ -20866,12 +20893,93 @@ function canonicalAnswerKey(text8) {
 function sameAnswerKey(a, b) {
   return canonicalAnswerKey(a) === canonicalAnswerKey(b);
 }
-var LABEL;
+function answerComponents(text8) {
+  const value = unwrapOnce(text8);
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (const character of value) {
+    if (COMPONENT_OPEN.includes(character)) {
+      depth += 1;
+    } else if (COMPONENT_CLOSE.includes(character)) {
+      depth = Math.max(0, depth - 1);
+    }
+    if (depth === 0 && COMPONENT_SEPARATOR.test(character)) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  parts.push(current.trim());
+  return parts.filter((part) => part.length > 0);
+}
+function componentAgreementScores(candidates) {
+  const components = candidates.map(answerComponents);
+  const width = components[0]?.length ?? 0;
+  if (width < 2 || components.some((row) => row.length !== width)) {
+    return candidates.map(() => 0);
+  }
+  const targets = [];
+  for (let index = 0; index < width; index += 1) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const row of components) {
+      const key = canonicalAnswerKey(row[index]);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    let best = 0;
+    for (const count of counts.values())
+      best = Math.max(best, count);
+    let target = canonicalAnswerKey(components[components.length - 1][index]);
+    for (let row = components.length - 1; row >= 0; row -= 1) {
+      const key = canonicalAnswerKey(components[row][index]);
+      if ((counts.get(key) ?? 0) === best) {
+        target = key;
+        break;
+      }
+    }
+    targets.push(target);
+  }
+  return components.map((row) => row.reduce((score, part, index) => score + (canonicalAnswerKey(part) === targets[index] ? 1 : 0), 0));
+}
+function frontRunnerIndex(candidates) {
+  if (candidates.length === 0)
+    return -1;
+  const counts = /* @__PURE__ */ new Map();
+  for (const candidate of candidates) {
+    const key = canonicalAnswerKey(candidate);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = 0;
+  for (const count of counts.values())
+    best = Math.max(best, count);
+  if (best >= 2) {
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      if ((counts.get(canonicalAnswerKey(candidates[index])) ?? 0) === best) {
+        return index;
+      }
+    }
+    return candidates.length - 1;
+  }
+  const scores = componentAgreementScores(candidates);
+  let top = 0;
+  for (const score of scores)
+    top = Math.max(top, score);
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    if (scores[index] === top)
+      return index;
+  }
+  return candidates.length - 1;
+}
+var LABEL, COMPONENT_OPEN, COMPONENT_CLOSE, COMPONENT_SEPARATOR;
 var init_agent_answer_key = __esm({
   "apps/stdio-runtime/dist/src/agent-answer-key.js"() {
     "use strict";
     init_agent_semantics();
     LABEL = /^(?:最终答案|答案|final\s+answer)\s*[:：]?\s*/iu;
+    COMPONENT_OPEN = "([{\uFF08\u3010\u300C";
+    COMPONENT_CLOSE = ")]}\uFF09\u3011\u300D";
+    COMPONENT_SEPARATOR = /[,;，；、]/u;
   }
 });
 
@@ -23405,19 +23513,8 @@ ${g.guidance.join("\n")}`).join("");
             };
             const frontRunner = () => {
               const attempts = ballots();
-              if (attempts.length === 0)
-                return null;
-              const counts = ballotCounts();
-              let best = 0;
-              for (const count of counts.values())
-                best = Math.max(best, count);
-              for (let index = attempts.length - 1; index >= 0; index -= 1) {
-                const attempt = attempts[index];
-                if ((counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === best) {
-                  return attempt;
-                }
-              }
-              return null;
+              const index = frontRunnerIndex(attempts.map((attempt) => attempt.candidate));
+              return index < 0 ? null : attempts[index];
             };
             const runnerUp = (front) => {
               const frontKey = canonicalAnswerKey(front.candidate);

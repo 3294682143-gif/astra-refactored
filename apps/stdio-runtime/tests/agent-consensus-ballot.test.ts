@@ -2,6 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentModelRequest } from "@astra/protocol";
 import { runAgentLoop } from "../src/agent-loop.js";
+import {
+  answerComponents,
+  componentAgreementScores,
+  frontRunnerIndex,
+} from "../src/agent-answer-key.js";
 import { CONSENSUS_BALLOT_LENSES, buildAgentWorkContext } from "../src/agent-loop-context.js";
 import { reactivePorts, reactiveWork } from "./agent-loop-test-support.js";
 
@@ -248,4 +253,47 @@ test("the ballot prompt never changes the recorded user payload", async () => {
   assert.notEqual(ballot.messages[0]!.content, anchored.messages[0]!.content);
   assert.notEqual(ballot.contextHash, anchored.contextHash);
   assert.equal(ballotPayload["protectedCandidate"], null);
+});
+
+
+// ---------------------------------------------------------------------------
+// Multi-part ballots. These cases are duplicated verbatim in
+// tests/bridge/test_answer_semantics.py: the Host copies this rule exactly, so
+// both languages must return the same winner for the same input.
+// ---------------------------------------------------------------------------
+
+test("a multi-part answer only splits outside brackets", () => {
+  assert.deepEqual(answerComponents("(14253),(165)"), ["(14253)", "(165)"]);
+  assert.deepEqual(answerComponents("(a,b)"), ["(a,b)"]);
+  assert.deepEqual(answerComponents("\\{1,2,3\\}"), ["\\{1,2,3\\}"]);
+  assert.deepEqual(answerComponents("x=1, y=2"), ["x=1", "y=2"]);
+  assert.deepEqual(answerComponents("42"), ["42"]);
+});
+
+test("component scores pick the ballot that matches each part", () => {
+  const ballots = ["(14253),(165)", "(14253),(136)", "(13524), (165)"];
+  assert.deepEqual(componentAgreementScores(ballots), [2, 1, 1]);
+  // Every whole answer differs, so the whole-answer vote has no majority. The
+  // last ballot is wrong on one part and the first ballot is right on both.
+  assert.equal(frontRunnerIndex(ballots), 0);
+});
+
+test("component scores stay out of the way for single-part answers", () => {
+  const ballots = ["5117", "5129", "5000"];
+  assert.deepEqual(componentAgreementScores(ballots), [0, 0, 0]);
+  // No component structure: the previous latest tie-break is preserved.
+  assert.equal(frontRunnerIndex(ballots), 2);
+});
+
+test("ballots with different component counts are not compared", () => {
+  assert.deepEqual(componentAgreementScores(["x=1, y=2", "x=1", "x=1, y=2"]), [0, 0, 0]);
+});
+
+test("a whole-answer majority always beats component agreement", () => {
+  const ballots = ["x=1, y=9", "x=1, y=9", "x=1, y=2"];
+  assert.equal(frontRunnerIndex(ballots), 1);
+});
+
+test("an empty ballot list has no front-runner", () => {
+  assert.equal(frontRunnerIndex([]), -1);
 });
