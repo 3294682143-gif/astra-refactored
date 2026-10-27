@@ -2529,8 +2529,45 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     // One bounded refusal: a task that can be answered must not be yielded
                     // as unsolved. The retry is a fresh WORK turn with UNSOLVED_REFUSED_NOTE
                     // appended to its system message, and it spends no work unit.
+                    // Before asking the model again, give it the evidence it refused to
+                    // gather. The forced math-asset turn normally runs AFTER a candidate
+                    // packet exists, so an item that abstains without ever delivering one
+                    // (item 34 gave up on a DERIVATION task while the candidate obligation
+                    // was still open) never reached it -- even though its problem text
+                    // routed deterministically to a math asset that computes the invariant
+                    // exactly. Here the abstention itself triggers that one forced
+                    // observation turn; the next WORK turn then answers with the evidence in
+                    // front of it instead of from memory.
+                    const rescueRoute = !mathAssetAttempted &&
+                        captured.mathAsset !== null &&
+                        captured.mathAsset !== undefined &&
+                        allowTools &&
+                        toolEffects < opts.maxEffects &&
+                        root.effectCalls() < totalEffectCapacity &&
+                        revision.pendingTaskId() === null &&
+                        callsLeft() >= 4 + opts.maxReviews
+                        ? semanticMathAssetRoute(problemText)
+                        : null;
+                    if (rescueRoute !== null) {
+                        mathAssetAttempted = true;
+                        forcedMathAssetSelection = true;
+                        forcedMathAssetRoute = rescueRoute;
+                        forcedRetryUsed = false;
+                        sessionLog.append("REPAIR", {
+                            kind: "MATH_ASSET_RESCUE",
+                            assetId: rescueRoute.assetId,
+                            target: rescueRoute.target,
+                            routeId: rescueRoute.id,
+                            taskId: running.taskId,
+                            sourceRequestId: outcome.requestId,
+                        });
+                        continue;
+                    }
+                    // The refusal is not limited to the answer-bearing task: item 34 gave up
+                    // on a DERIVATION task that still had the candidate obligation open, so
+                    // the whole run ended with no candidate at all. Any first abstention on a
+                    // readable task is refused once; a second one is honoured.
                     if (unsolvedRefusals === 0 &&
-                        answerBearingTask &&
                         revision.pendingTaskId() === null &&
                         callsLeft() >= 4 + opts.maxReviews) {
                         sessionLog.append("CONSENSUS", {

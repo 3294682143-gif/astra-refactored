@@ -16679,6 +16679,13 @@ var init_agent_loop_context = __esm({
       "operator, derivative or integral ON a circle, sphere, curve or other surface, use that manifold's",
       "own target (for example the circle variant rather than the planar one), because the Euclidean",
       "value is a different quantity and is usually not the answer.",
+      "Choose the asset target that matches the object the problem hands you: when the problem prints an",
+      "explicit matrix (an Alexander, Seifert, adjacency, Laplacian, relation or coefficient matrix) and",
+      "asks for a polynomial or invariant obtained from its minors or determinant, call",
+      "math.linear-algebra with target maximal_minors on that exact matrix and variable, then quote the",
+      "invariant the observation returns instead of a smaller factor you derived by hand. The same rule",
+      "applies to any other printed object with a dedicated target: use the target that consumes that",
+      "object, and prefer its exact result over a recomputation you could not finish.",
       "When the problem leaves a formula, estimator, interval, normalization or branch convention",
       "unspecified and standard conventions produce different values, name the convention used,",
       "put the textbook/default value first, retain the materially different standard value, and",
@@ -23248,7 +23255,23 @@ ${g.guidance.join("\n")}`).join("");
           continue;
         }
         if (action !== null && action.action === "unsolved") {
-          if (unsolvedRefusals === 0 && answerBearingTask && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews) {
+          const rescueRoute = !mathAssetAttempted && captured.mathAsset !== null && captured.mathAsset !== void 0 && allowTools && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews ? semanticMathAssetRoute(problemText) : null;
+          if (rescueRoute !== null) {
+            mathAssetAttempted = true;
+            forcedMathAssetSelection = true;
+            forcedMathAssetRoute = rescueRoute;
+            forcedRetryUsed = false;
+            sessionLog.append("REPAIR", {
+              kind: "MATH_ASSET_RESCUE",
+              assetId: rescueRoute.assetId,
+              target: rescueRoute.target,
+              routeId: rescueRoute.id,
+              taskId: running.taskId,
+              sourceRequestId: outcome.requestId
+            });
+            continue;
+          }
+          if (unsolvedRefusals === 0 && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews) {
             sessionLog.append("CONSENSUS", {
               stage: "UNSOLVED_REFUSAL",
               requestId: outcome.requestId,
