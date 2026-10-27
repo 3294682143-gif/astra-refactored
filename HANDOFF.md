@@ -2276,3 +2276,65 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
 - 独立语义判分 **78/100 CORRECT**；两轮都正确 67/100，至少一轮正确 85/100。
 - 这确认候选率接近满分不等于数学正确率；20 道候选答案仍有真实数学错误或漏项。
 - 第二轮 47–99 段是 shell 重启后的补跑合并，不是单进程连续盲跑。
+
+## 28 2026-10-27 正确率修复：独立 ballot（不再盲目重跑）
+
+前两轮复跑暴露的不是控制层问题，而是**同一个错答被重复确认**：consensus 轮
+里只有第 0 轮是"独立"的，其余都是锚定在**上一轮自己的答案**上的审计，因此
+8 轮 consensus 事实上只产生 1 个独立样本，多轮投票只会放大同一个错误。本轮
+修的就是这件事。
+
+### 28.1 改动（`apps/stdio-runtime`）
+
+1. **真正的独立 ballot**：`maxConsensus >= 8` 时排程改为 5 个独立 ballot +
+   2 个锚定审计 + 1 个证书（`maxConsensus <= 3` 时保持旧的"1 独立 + 证书"，
+   不改变小预算行为）。
+2. **独立 ballot 不暴露候选**：`buildConsensusContext` 在独立轮传
+   `protectedCandidate: null`（此前传 `exposedCandidate`，重做流程里会把上一版
+   答案泄露给"独立"样本）。Host 侧 `allowFinal=false` 时本就允许 `null`。
+3. **独立 ballot 用精简 prompt**：新增 `CONSENSUS_SYSTEM_PROMPT`
+   （`promptProfile: "consensusBallot"`）。**只替换 system message**，user
+   payload 逐字节不变（测试断言除 `sourceRequestId` 外两者 `deepEqual`），因此
+   Host 的上下文校验完全不受影响。精简掉的是 v2–v5 schema、workflowProposal、
+   scopeProposal、final action、progressPolicy、资产目录等与答题无关的协议文本，
+   保留字段表/类型/4096 上限/COMPLETE 规则/assumptions-dependencies 规则。
+4. **ballot 之间用不同 lens 去相关**（`CONSENSUS_BALLOT_LENSES`：直接解 / 回代
+   校验 / 换路重算 / 分情况查漏 / 端点退化检查）。**注意**：`temperature=0.2` 是
+   评测契约的硬校验（`mathagent/user_client.py:90`、`public_evaluation.py:148`、
+   `local_runner.py:117` 均拒绝非 0.2），不能靠提温去相关，lens 是合法手段。
+5. **锚定对象改为"支持度最高的答案"**：审计/证书的 `CURRENT CANDIDATE` 取
+   canonical answer 的 exact-support front-runner（而非"最后一个回答"），
+   `OTHER CANDIDATE` 取最强的不同答案；session log 的 `previousCandidate` /
+   `agreement` 记录真正被审计的那个答案。
+
+选票选择规则（`certified` 优先，否则 exact-support 多数、末期 tie-break）**未
+改动**，因为 Host `agent_history.flush_normal_run` 必须与 Node 逐条镜像，否则
+`protectedCandidate` 投影会错位。
+
+### 28.2 门禁
+
+- `tsc -b` 0；Node **549/549**（新增 `agent-consensus-ballot.test.ts` 6 例）；
+  bundle 由 esbuild 重建、manifest `VERIFY_OK`。
+- 新增测试覆盖：独立轮不泄露候选 + 用精简 prompt、lens 轮换、审计锚定
+  front-runner、错误的首次答案被 3 票否决、小预算排程不变、精简 prompt 不改
+  user payload。
+
+### 28.3 协议/资产现状（本轮核实，供后续决策）
+
+- 现行 profile（跑分用）：`max_model_calls=256`、`max_work_units=64`、
+  `max_effects=2`、`max_reviews=2`、`max_method_loads=2`、`max_repairs=2`、
+  `max_consensus=8`、`max_r0=1`、`problem_seconds=1800`、`mode=local`。
+  库默认是 `max_model_calls=8 / max_consensus=0 / mode=platform`，**不是**跑分配置。
+- 数学资产是**整合后**的一套：26 个 `math.*` assetId、**82 个可调 target**，
+  统一 `{action:"math_asset",assetId,target,input}` 契约；执行层
+  `python/astra_bridge/math_assets_runtime.py:364` 仍按
+  `behavior.legacyToolName` + `legacyOperation` 调旧的 executor，即"统一门面 +
+  原实现"，不是另写一套算法。
+- **旧东西没有删除**：legacy `tool.execute` 通道仍在 v1.4 manifest 里，26 个裸
+  工具名仍是白名单 enum；76 个 legacy 工具名被 82 个 target 引用为内核。
+  v1.3/v1.2 只是只读遗产（schema + sha256 记录），活动入口 fail-closed 只加载
+  v1.4。本轮**不动** legacy 白名单（改它会碰 schema/manifest/web 验收，且会
+  削弱现有能力），仅在文档记录"模型仍可绕过 asset 参数白名单直调裸工具"。
+- **已知空壳**：`math.proof`、`math.recurrence`、`math.statistics`、
+  `math.topology` 这 4 个资产的 `behaviors` 为空数组，只能被列出、不能被调用。
+  本轮不实现（不编造实现）。

@@ -18,7 +18,7 @@ import { P4CandidateGate, P4DiagnosticLedger, p4CheckedPropertyForTool, reviseCa
 import { AGENT_MAX_EFFECTS, AGENT_MAX_METHOD_ASSETS, AgentSession, SessionLog, SESSION_LOG_KIND, SESSION_LOG_SCHEMA_VERSION, ReplayRunner, p3MethodCatalog, readAsset, } from "@astra/runtime-core";
 import { AgentCalls } from "./agent-loop-calls.js";
 import { projectProtectedFinal, validateAgentFinal } from "./agent-final.js";
-import { buildAgentWorkContext } from "./agent-loop-context.js";
+import { buildAgentWorkContext, CONSENSUS_BALLOT_LENSES } from "./agent-loop-context.js";
 import { AgentWorkflowRoutes } from "./agent-workflow.js";
 import { certificateCorrection, isCertifiedPacket, summarizeCertificate, } from "./agent-answer-certificate.js";
 import { answerClosureDefects, answerClosureNote, problemChoiceLetters, } from "./agent-answer-closure.js";
@@ -2916,7 +2916,60 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 candidate: firstCandidate,
                                 certified: isCertifiedPacket(prepared.packet ?? {}),
                             }];
-                        const buildConsensusContext = (nextId, note) => {
+                        // A ballot is one packet that carries a non-empty candidate. Node
+                        // and the Host both ignore an empty candidate packet as a ballot,
+                        // so every helper below filters exactly like the final selection.
+                        const ballots = () => consensusAttempts.filter((attempt) => attempt.candidate.length > 0);
+                        const ballotCounts = () => {
+                            const counts = new Map();
+                            for (const attempt of ballots()) {
+                                const key = canonicalAnswerKey(attempt.candidate);
+                                counts.set(key, (counts.get(key) ?? 0) + 1);
+                            }
+                            return counts;
+                        };
+                        // The exact-support front-runner: highest canonical-key support and
+                        // the latest ballot as the tie-break. This is the same rule the Host
+                        // mirrors in `ballot_choice`, so it never disagrees with control.
+                        const frontRunner = () => {
+                            const attempts = ballots();
+                            if (attempts.length === 0)
+                                return null;
+                            const counts = ballotCounts();
+                            let best = 0;
+                            for (const count of counts.values())
+                                best = Math.max(best, count);
+                            for (let index = attempts.length - 1; index >= 0; index -= 1) {
+                                const attempt = attempts[index];
+                                if ((counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === best) {
+                                    return attempt;
+                                }
+                            }
+                            return null;
+                        };
+                        // The best-supported ballot whose answer differs from the
+                        // front-runner: the only honest second opinion to audit against.
+                        const runnerUp = (front) => {
+                            const frontKey = canonicalAnswerKey(front.candidate);
+                            const counts = ballotCounts();
+                            let best = 0;
+                            for (const [key, count] of counts) {
+                                if (key !== frontKey)
+                                    best = Math.max(best, count);
+                            }
+                            if (best === 0)
+                                return null;
+                            const attempts = ballots();
+                            for (let index = attempts.length - 1; index >= 0; index -= 1) {
+                                const attempt = attempts[index];
+                                if (canonicalAnswerKey(attempt.candidate) !== frontKey &&
+                                    (counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === best) {
+                                    return attempt;
+                                }
+                            }
+                            return null;
+                        };
+                        const buildConsensusContext = (nextId, note, independent) => {
                             const upstreamTaskIds = new Set(running.dependencyTaskIds);
                             const declaredCoverage = store
                                 .scopeCoverageSnapshot()
@@ -2931,7 +2984,11 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 allowTools,
                                 allowMethods,
                                 allowFinal: false,
-                                protectedCandidate: exposedCandidate,
+                                // An independent ballot must be genuinely independent: exposing
+                                // any earlier candidate as the protected answer would anchor the
+                                // sample to the very answer the ballot is meant to test.
+                                protectedCandidate: independent ? null : exposedCandidate,
+                                promptProfile: independent ? "consensusBallot" : "full",
                                 catalog,
                                 methodAssets,
                                 allowRouteProposal,
@@ -2996,22 +3053,39 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             }
                         };
                         let lastObservedCandidate = firstCandidate;
+                        // Independent ballots first, then the anchored audits, then the
+                        // certificate. A bounded consensus budget has to buy two different
+                        // things: DECORRELATED samples, which is the only way a majority can
+                        // beat a single arithmetic slip, and an anchored audit, which is the
+                        // only way a real defect in the front-runner can still be repaired.
+                        // With a small budget the old shape is kept exactly (one independent
+                        // ballot, then the certificate); a large budget spends all of its
+                        // rounds on independent ballots except the two audits and the final
+                        // certificate.
+                        const independentRounds = opts.maxConsensus >= 8 ? opts.maxConsensus - 3 : opts.maxConsensus >= 2 ? 1 : 0;
                         for (let round = 0; round < opts.maxConsensus; round += 1) {
                             if (callsLeft() < 2 + opts.maxReviews)
                                 break;
-                            const isBlind = round === 0 && opts.maxConsensus >= 2;
+                            const isBlind = round < independentRounds && round !== opts.maxConsensus - 1;
                             const isCertificate = !isBlind && (opts.maxConsensus === 1 || round === opts.maxConsensus - 1);
                             const nextId = root.nextModelId();
                             if (nextId === null)
                                 break;
                             let note;
+                            // The candidate this round is really about: the last ballot for an
+                            // independent sample (nothing is shown), the exact-support
+                            // front-runner for an anchored audit or a certificate.
+                            let auditedCandidate = lastObservedCandidate;
                             if (isBlind) {
+                                const lens = CONSENSUS_BALLOT_LENSES[round % CONSENSUS_BALLOT_LENSES.length];
                                 note =
-                                    "INDEPENDENT RECHECK. Return exactly one JSON WorkPacket and nothing else. " +
-                                        "Solve the same problem independently from scratch. Do not copy any earlier answer and do not call a tool in this turn. " +
-                                        "Keep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+                                    `INDEPENDENT SOLVE ${round + 1} OF ${independentRounds}. ` +
+                                        "Solve the same problem from scratch, as if no earlier attempt existed. " +
+                                        lens +
+                                        " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn.";
                             }
                             else if (isCertificate) {
+                                auditedCandidate = frontRunner()?.candidate ?? lastObservedCandidate;
                                 note =
                                     "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; " +
                                         "its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. " +
@@ -3029,15 +3103,20 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                         "A statement of the form 'if P, then X is called Y' or '则称' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. " +
                                         "For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. " +
                                         "If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. " +
-                                        "CURRENT CANDIDATE: " + lastObservedCandidate.slice(0, 1200) +
+                                        // The certificate audits the answer with the most exact
+                                        // support, not whichever ballot happened to be answered last:
+                                        // with independent ballots those two are not the same attempt.
+                                        "CURRENT CANDIDATE: " + auditedCandidate.slice(0, 1200) +
                                         "\nReturn exactly one JSON WorkPacket and nothing else; keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
                             }
                             else {
-                                const latest = consensusAttempts[consensusAttempts.length - 1];
-                                const latestPacket = latest.prepared.packet;
-                                const other = [...consensusAttempts]
-                                    .reverse()
-                                    .find((attempt) => attempt.candidate.length > 0 && attempt.candidate !== lastObservedCandidate);
+                                // Audits are anchored to the front-runner and audited against the
+                                // best-supported rival answer, so a corrected ballot is compared
+                                // with the answer it has to beat instead of with itself.
+                                const front = frontRunner() ?? consensusAttempts[consensusAttempts.length - 1];
+                                auditedCandidate = front.candidate;
+                                const latestPacket = front.prepared.packet;
+                                const other = runnerUp(front);
                                 const otherPacket = other?.prepared.packet ?? null;
                                 const auditMode = round % 4;
                                 const auditHead = auditMode === 0
@@ -3056,7 +3135,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                             : "") +
                                         "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. " +
                                         "Return exactly one JSON WorkPacket and nothing else. " +
-                                        "CURRENT CANDIDATE: " + lastObservedCandidate.slice(0, 500) +
+                                        "CURRENT CANDIDATE: " + front.candidate.slice(0, 500) +
                                         "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) +
                                         "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) +
                                         (otherPacket === null
@@ -3066,7 +3145,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                                 "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) +
                                         "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
                             }
-                            const built = buildConsensusContext(nextId, note);
+                            const built = buildConsensusContext(nextId, note, isBlind);
                             const nextOutcome = await calls.model({
                                 task: running,
                                 phase: "CONSENSUS",
@@ -3083,9 +3162,9 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                             sessionLog.append("CONSENSUS", {
                                 stage: isCertificate ? "CERTIFICATE" : isBlind ? "INDEPENDENT" : "AUDIT",
                                 requestId: nextId,
-                                previousCandidate: lastObservedCandidate,
+                                previousCandidate: auditedCandidate,
                                 nextCandidate: evaluatedNext === null ? null : nextCandidate,
-                                agreement: evaluatedNext !== null && nextCandidate === lastObservedCandidate,
+                                agreement: evaluatedNext !== null && nextCandidate === auditedCandidate,
                                 ...(nextCertificate === null
                                     ? {}
                                     : {
@@ -3133,7 +3212,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                         JSON.stringify(correction) +
                                         " and retain the CERT1 rows. Do not change the mathematics or re-solve; this turn only closes the contradiction. " +
                                         "Keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
-                                    const closureContext = buildConsensusContext(closureId, closureNote);
+                                    const closureContext = buildConsensusContext(closureId, closureNote, false);
                                     const closureOutcome = await calls.model({
                                         task: running,
                                         // WORK is not consensus-budgeted by the Host; the closure
@@ -3170,29 +3249,15 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         // The Host projection applies the same rule. Without a certificate
                         // row, keep the exact-support majority with the latest tie-break.
                         const certifiedAttempts = candidateAttempts.filter((attempt) => attempt.certified);
-                        // Votes are grouped by canonical mathematical key, while every
-                        // stored/displayed candidate remains the model's original text.
-                        const counts = new Map();
-                        for (const attempt of candidateAttempts) {
-                            const key = canonicalAnswerKey(attempt.candidate);
-                            counts.set(key, (counts.get(key) ?? 0) + 1);
-                        }
+                        const support = frontRunner();
                         let chosen = candidateAttempts[candidateAttempts.length - 1] ?? consensusAttempts[0];
                         if (certifiedAttempts.length > 0) {
                             chosen = certifiedAttempts[certifiedAttempts.length - 1];
                         }
-                        else if (candidateAttempts.length > 0) {
-                            let bestCount = 0;
-                            for (const count of counts.values()) {
-                                bestCount = Math.max(bestCount, count);
-                            }
-                            for (let index = candidateAttempts.length - 1; index >= 0; index -= 1) {
-                                const attempt = candidateAttempts[index];
-                                if ((counts.get(canonicalAnswerKey(attempt.candidate)) ?? 0) === bestCount) {
-                                    chosen = attempt;
-                                    break;
-                                }
-                            }
+                        else if (support !== null) {
+                            // Votes are grouped by canonical mathematical key, while every
+                            // stored/displayed candidate remains the model's original text.
+                            chosen = support;
                         }
                         prepared = chosen.prepared;
                         outcome = chosen.outcome;
@@ -3241,7 +3306,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 if (closureId !== null) {
                                     answerClosureTurns += 1;
                                     closureRequestId = closureId;
-                                    const closureContext = buildConsensusContext(closureId, answerClosureNote(defects));
+                                    const closureContext = buildConsensusContext(closureId, answerClosureNote(defects), false);
                                     const closureOutcome = await calls.model({
                                         task: running,
                                         // WORK is not consensus-budgeted by the Host; this is a
