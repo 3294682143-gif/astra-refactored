@@ -18,6 +18,10 @@
 >    v1.4 primary release manifest。详细证据见 §27 与
 >    `docs/CONTROL_REJECTED_REPAIR_20261026.md`、
 >    `docs/WEB_100_ITEM_SEMANTIC_REVIEW_20261026.md`。
+> 6. 同配置第二轮复跑（0–46 + 47–99 两段合并）：**98/100 候选、78/100 语义 CORRECT**；
+>    两轮都正确 **67/100**、至少一轮正确 **85/100**。候选率已接近“97/100 候选”的旧口径，
+>    但数学正确率仍是 70–80 区间，详见
+>    `docs/WEB_100_ITEM_SEMANTIC_REVIEW_20261027.md`。
 
 > **状态（2026-10-25 数学资产统一终验完成，§19）：**
 > 1. **全量 82 项行为正式入口闭环 100% 达成**：82 组数学资产计算行为逐项通过 `ReasoningAgent.solve` 参数化端到端测试（`tests/e2e/test_ts_math_assets_82_e2e.py`，82/82 passed in 87s），完整贯通 **Python 正式入口 → Node stdio-runtime → Python Host → use_math_asset 执行 → 观测进入下一轮模型上下文 → 交付 candidate 候选 → 证据等级严格受限（candidate_verified=False）**。
@@ -2262,3 +2266,13 @@ factory `real_client_factory_retry2:build_client`，`item_concurrency=4`、`max_
   Host `project_artifacts` 中没有 `bySourceRef` row；本轮没有通过放宽校验掩盖。
 - #48 的 `PACKET_REJECTED` 是模型 WorkPacket 被协议门禁拒绝；定向补跑仍失败。
 - 其余残余是固定预算/字段错误；`candidate_verified` 仍恒为 `false`。
+
+### 27.5 2026-10-27 第二轮复跑
+
+- 同输入、同 profile；`/tmp/astra-full100-run2-20261027`（0–46）+
+  `/tmp/astra-full100-run2-tail-20261027`（47–99）。
+- **98/100 候选**（91 REVIEWS_COMPLETE + 7 REVIEW_STOP）；仅 #15、#34 `FIELD_VALUE`。
+- 调用 1711 次 / 13,923,778 token。
+- 独立语义判分 **78/100 CORRECT**；两轮都正确 67/100，至少一轮正确 85/100。
+- 这确认候选率接近满分不等于数学正确率；20 道候选答案仍有真实数学错误或漏项。
+- 第二轮 47–99 段是 shell 重启后的补跑合并，不是单进程连续盲跑。
