@@ -16656,6 +16656,10 @@ var init_agent_loop_context = __esm({
       "For a true/false statement, evaluate the proposition exactly as written, including every",
       "quantifier and modal such as all, every, always, must or necessarily. If the proof needs an",
       "extra condition, is only typical, or admits any counterexample, the final verdict is false.",
+      "A statement of the form 'if P, then X is called Y', or one using \u5219\u79F0 / \u79F0\u4E3A, is a DEFINITION",
+      "and not a claim to prove: judge it by whether it agrees with the standard definition of the",
+      "named object, and never call it false merely because it is definitional, is not a theorem, or",
+      "states only one sufficient condition.",
       "candidateProposal must contain only the canonical verdict token; put qualifications and",
       "explanation in claim or derivation, never an affirmative verdict followed by a qualification",
       "that says it is not always true.",
@@ -23557,7 +23561,8 @@ ${g.guidance.join("\n")}`).join("");
               prepared,
               outcome,
               candidate: firstCandidate,
-              certified: isCertifiedPacket(prepared.packet ?? {})
+              certified: isCertifiedPacket(prepared.packet ?? {}),
+              stage: "SEED"
             }];
             const ballots = () => consensusAttempts.filter((attempt) => attempt.candidate.length > 0);
             const ballotCounts = () => {
@@ -23591,6 +23596,20 @@ ${g.guidance.join("\n")}`).join("");
                 }
               }
               return null;
+            };
+            const auditConsensus = () => {
+              const audits = consensusAttempts.filter((attempt) => attempt.stage === "AUDIT" && attempt.candidate.length > 0);
+              if (audits.length < 2)
+                return null;
+              const key = canonicalAnswerKey(audits[0].candidate);
+              if (!audits.every((attempt) => canonicalAnswerKey(attempt.candidate) === key)) {
+                return null;
+              }
+              const front = frontRunner();
+              if (front !== null && canonicalAnswerKey(front.candidate) === key) {
+                return null;
+              }
+              return audits[audits.length - 1];
             };
             const buildConsensusContext2 = (nextId, note, independent) => {
               const upstreamTaskIds = new Set(running.dependencyTaskIds);
@@ -23679,8 +23698,12 @@ ${g.guidance.join("\n")}`).join("");
                 const lens = CONSENSUS_BALLOT_LENSES[round % CONSENSUS_BALLOT_LENSES.length];
                 note = `INDEPENDENT SOLVE ${round + 1} OF ${independentRounds}. Solve the same problem from scratch, as if no earlier attempt existed. ` + lens + " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn.";
               } else if (isCertificate) {
-                auditedCandidate = frontRunner()?.candidate ?? lastObservedCandidate;
-                note = "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. Return exactly one complete WorkPacket and nothing else. In suggestedChecks include at least two rows of the form `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` (or FAIL), and at least one marker row `CERT1|FINAL|OK` (if the exact final answer fits in 200 code points, use `CERT1|FINAL|<answer>` instead). Each suggestedChecks row must be at most 200 Unicode code points; keep derivation under 3500 code points and do not paste long computations into it. " + (choiceProblem ? "Also include one row `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option exactly once, and set candidateProposal to exactly the options marked TRUE. " : "") + "For a true/false statement also include `CERT1|VERDICT|TRUE` or `CERT1|VERDICT|FALSE`, and make candidateProposal the canonical verdict token alone. Checks must be explicit computations, not words such as verified or correct: substitute into every defining equation, initial condition, boundary condition, normalization and quantifier; for a field list every root and check containment and degree; for a CDF/density check endpoints, nonnegativity, total mass and F'=f; for finite counting enumerate the sample space and every favorable case; for a determinant or expansion recompute it exactly; for a limit identify the scaling and a dominating function. A statement of the form 'if P, then X is called Y' or '\u5219\u79F0' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. CURRENT CANDIDATE: " + auditedCandidate.slice(0, 1200) + "\nReturn exactly one JSON WorkPacket and nothing else; keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
+                auditedCandidate = auditConsensus()?.candidate ?? frontRunner()?.candidate ?? lastObservedCandidate;
+                note = "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. Return exactly one complete WorkPacket and nothing else. In suggestedChecks include at least two rows of the form `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` (or FAIL), and at least one marker row `CERT1|FINAL|OK` (if the exact final answer fits in 200 code points, use `CERT1|FINAL|<answer>` instead). Each suggestedChecks row must be at most 200 Unicode code points; keep derivation under 3500 code points and do not paste long computations into it. " + (choiceProblem ? "Also include one row `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option exactly once, and set candidateProposal to exactly the options marked TRUE. " : "") + "For a true/false statement also include `CERT1|VERDICT|TRUE` or `CERT1|VERDICT|FALSE`, and make candidateProposal the canonical verdict token alone. Checks must be explicit computations, not words such as verified or correct: substitute into every defining equation, initial condition, boundary condition, normalization and quantifier; for a field list every root and check containment and degree; for a CDF/density check endpoints, nonnegativity, total mass and F'=f; for finite counting enumerate the sample space and every favorable case; for a determinant or expansion recompute it exactly; for a limit identify the scaling and a dominating function. A statement of the form 'if P, then X is called Y' or '\u5219\u79F0' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. " + // The certificate audits the answer the audits converged on when
+                // they agree against the ballots, and otherwise the answer with
+                // the most exact support -- never whichever ballot happened to be
+                // answered last.
+                (auditConsensus() === null ? "" : "CURRENT CANDIDATE REPLACES AN EARLIER ONE: the adversarial audits both rejected the ballot majority in favour of the answer below, so audit THIS answer instead of the majority. ") + "CURRENT CANDIDATE: " + auditedCandidate.slice(0, 1200) + "\nReturn exactly one JSON WorkPacket and nothing else; keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
               } else {
                 const front = frontRunner() ?? consensusAttempts[consensusAttempts.length - 1];
                 auditedCandidate = front.candidate;
@@ -23689,7 +23712,7 @@ ${g.guidance.join("\n")}`).join("");
                 const otherPacket = other?.prepared.packet ?? null;
                 const auditMode = round % 4;
                 const auditHead = auditMode === 0 ? "COUNTEREXAMPLE AUDIT. Try to construct a concrete counterexample to the current candidate. A false counterexample invalidates the attempt; if none exists, verify the candidate. " : auditMode === 1 ? "PROOF AUDIT. Audit every definition, hypothesis, inference and stated counterexample. A false counterexample invalidates the whole attempt. " : auditMode === 2 ? "EXACT RECOMPUTATION. Independently recompute every numerical coefficient, matrix entry, probability, limit or formula from the problem statement. Do not repeat the candidate's algebra; compare the exact recomputation with the candidate. " : "BOUNDARY AND COMPLETENESS AUDIT. Check every quantifier, branch, support endpoint, boundary/initial condition, normalization, multiplicity, requested sub-part and option. Construct the complete object and verify that no case or witness is missing. ";
-                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
               }
               const built = buildConsensusContext2(nextId, note, isBlind);
               const nextOutcome = await calls.model({
@@ -23721,7 +23744,8 @@ ${g.guidance.join("\n")}`).join("");
                 prepared: evaluatedNext.prepared,
                 outcome: evaluatedNext.outcome,
                 candidate: nextCandidate,
-                certified: isCertifiedPacket(evaluatedNext.prepared.packet ?? {})
+                certified: isCertifiedPacket(evaluatedNext.prepared.packet ?? {}),
+                stage: isCertificate ? "CERTIFICATE" : isBlind ? "INDEPENDENT" : "AUDIT"
               });
               lastObservedCandidate = nextCandidate;
             }
@@ -23752,7 +23776,8 @@ ${g.guidance.join("\n")}`).join("");
                         prepared: closure.prepared,
                         outcome: closure.outcome,
                         candidate: closureCandidate,
-                        certified: isCertifiedPacket(closure.prepared.packet ?? {})
+                        certified: isCertifiedPacket(closure.prepared.packet ?? {}),
+                        stage: "CLOSURE"
                       });
                     }
                   }

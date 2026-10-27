@@ -3379,12 +3379,15 @@ export async function runAgentLoop(
               outcome: typeof outcome;
               candidate: string;
               certified: boolean;
+              /** Which kind of turn produced this ballot. */
+              stage: "SEED" | "INDEPENDENT" | "AUDIT" | "CERTIFICATE" | "CLOSURE";
             }
             const consensusAttempts: ConsensusAttempt[] = [{
               prepared,
               outcome,
               candidate: firstCandidate,
               certified: isCertifiedPacket(prepared.packet ?? {}),
+              stage: "SEED",
             }];
             // A ballot is one packet that carries a non-empty candidate. Node
             // and the Host both ignore an empty candidate packet as a ballot,
@@ -3434,6 +3437,36 @@ export async function runAgentLoop(
                 }
               }
               return null;
+            };
+            // What the anchored audits concluded, when they AGREE with each other
+            // and disagree with the ballots.
+            //
+            // An audit reads the front-runner's claim and derivation and checks it;
+            // a blind ballot does not. When both audits independently reject the
+            // ballot majority in favour of the same answer, that is the only signal
+            // in the run that has actually seen a defect, and the certificate is
+            // anchored to it instead of to the front-runner. Item 36 is the case
+            // that motivated this: four ballots answered AC, both audits answered
+            // ACD (the reference), and the certificate then put AC back because it
+            // was only shown the front-runner.
+            const auditConsensus = (): ConsensusAttempt | null => {
+              const audits = consensusAttempts.filter(
+                (attempt) => attempt.stage === "AUDIT" && attempt.candidate.length > 0,
+              );
+              if (audits.length < 2) return null;
+              const key = canonicalAnswerKey(audits[0]!.candidate);
+              if (
+                !audits.every(
+                  (attempt) => canonicalAnswerKey(attempt.candidate) === key,
+                )
+              ) {
+                return null;
+              }
+              const front = frontRunner();
+              if (front !== null && canonicalAnswerKey(front.candidate) === key) {
+                return null;
+              }
+              return audits[audits.length - 1]!;
             };
             const buildConsensusContext = (
               nextId: string,
@@ -3563,7 +3596,10 @@ export async function runAgentLoop(
                   lens +
                   " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn.";
               } else if (isCertificate) {
-                auditedCandidate = frontRunner()?.candidate ?? lastObservedCandidate;
+                auditedCandidate =
+                  auditConsensus()?.candidate ??
+                  frontRunner()?.candidate ??
+                  lastObservedCandidate;
                 note =
                   "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; " +
                   "its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. " +
@@ -3581,9 +3617,13 @@ export async function runAgentLoop(
                   "A statement of the form 'if P, then X is called Y' or '则称' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. " +
                   "For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. " +
                   "If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. " +
-                  // The certificate audits the answer with the most exact
-                  // support, not whichever ballot happened to be answered last:
-                  // with independent ballots those two are not the same attempt.
+                  // The certificate audits the answer the audits converged on when
+                  // they agree against the ballots, and otherwise the answer with
+                  // the most exact support -- never whichever ballot happened to be
+                  // answered last.
+                  (auditConsensus() === null
+                    ? ""
+                    : "CURRENT CANDIDATE REPLACES AN EARLIER ONE: the adversarial audits both rejected the ballot majority in favour of the answer below, so audit THIS answer instead of the majority. ") +
                   "CURRENT CANDIDATE: " + auditedCandidate.slice(0, 1200) +
                   "\nReturn exactly one JSON WorkPacket and nothing else; keep claim, derivation and candidateProposal within 4096 Unicode code points each.";
               } else {
@@ -3609,7 +3649,11 @@ export async function runAgentLoop(
                   auditHead +
                   (choiceProblem
                     ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. " +
-                      "The final candidateProposal must list every correct option and must not omit an option that is also correct. "
+                      "The final candidateProposal must list every correct option and must not omit an option that is also correct. " +
+                      // An audit that rejects a definitional option as "not a theorem"
+                      // removes a correct option from a correct answer; item 36 lost
+                      // option D exactly that way.
+                      "An option of the form 'if P, then X is called Y' or '则称' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. "
                     : "") +
                   "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. " +
                   "Return exactly one JSON WorkPacket and nothing else. " +
@@ -3663,6 +3707,7 @@ export async function runAgentLoop(
                 outcome: evaluatedNext.outcome,
                 candidate: nextCandidate,
                 certified: isCertifiedPacket(evaluatedNext.prepared.packet ?? {}),
+                stage: isCertificate ? "CERTIFICATE" : isBlind ? "INDEPENDENT" : "AUDIT",
               });
               lastObservedCandidate = nextCandidate;
             }
@@ -3721,6 +3766,7 @@ export async function runAgentLoop(
                         outcome: closure.outcome,
                         candidate: closureCandidate,
                         certified: isCertifiedPacket(closure.prepared.packet ?? {}),
+                        stage: "CLOSURE",
                       });
                     }
                   }

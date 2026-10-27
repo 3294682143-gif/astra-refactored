@@ -325,3 +325,111 @@ test("component values drop a short left-hand tag", () => {
   // A real equation is never read as a tag plus a value.
   assert.equal(componentValue("240 - 190·(5/6)^{3/2} = 95.46"), "95.46");
 });
+
+
+// ---------------------------------------------------------------------------
+// An anchored audit sees the front-runner's derivation; a blind ballot does not.
+// When both audits reject the ballot majority in favour of the same answer, the
+// certificate must be anchored to the audit answer, not to the majority.
+// ---------------------------------------------------------------------------
+
+const CHOICE_PROBLEM =
+  "关于拓扑空间中的邻域，下列哪些陈述是正确的？A. 包含点 x 的开集一定是 x 的邻域。 " +
+  "B. 点 x 的邻域一定是开集。 C. 两个 x 的邻域的交集也是 x 的邻域。 " +
+  "D. 如果集合 S 中每一点的邻域都是 N，则称 N 是集合 S 的邻域。";
+
+async function runChoice(options: {
+  readonly ballots: readonly string[];
+  readonly audits: readonly string[];
+}) {
+  let auditIndex = 0;
+  const ports = reactivePorts({
+    work: (request) => {
+      const system = request.messages[0]?.content ?? "";
+      if (request.phase !== "CONSENSUS") {
+        return reactiveWork(request, { candidate: options.ballots[0] ?? "AC" });
+      }
+      if (system.startsWith("Independent solve turn.")) {
+        return reactiveWork(request, { candidate: options.ballots[0] ?? "AC" });
+      }
+      if (system.includes("ADVERSARIAL AUDIT")) {
+        const answer = options.audits[auditIndex] ?? options.audits.at(-1) ?? "AC";
+        auditIndex += 1;
+        return reactiveWork(request, { candidate: answer });
+      }
+      // The certificate confirms whatever it is shown and certifies it.
+      const shown = /CURRENT CANDIDATE: ([^\n]+)/u.exec(system)?.[1]?.trim() ?? "AC";
+      const packet = JSON.parse(reactiveWork(request, { candidate: shown })) as Record<
+        string,
+        unknown
+      >;
+      packet["suggestedChecks"] = ["CERT1|CHECK|options => PASS", `CERT1|FINAL|${shown}`];
+      return JSON.stringify(packet);
+    },
+  });
+  const result = await runAgentLoop(
+    CHOICE_PROBLEM,
+    "s",
+    {
+      remainingMs: 5000,
+      maxModelCalls: 24,
+      maxWorkUnits: 1,
+      maxReviews: 0,
+      maxEffects: 0,
+      maxConsensus: 8,
+      now: () => 0,
+    },
+    { model: ports.model, effect: ports.effect },
+  );
+  return { result, requests: ports.requests };
+}
+
+test("a unanimous audit redirects the certificate away from the ballot majority", async () => {
+  const run = await runChoice({ ballots: ["AC"], audits: ["ACD", "ACD"] });
+  const certificate = run.requests.find(
+    (request) =>
+      request.phase === "CONSENSUS" &&
+      request.messages[0]!.content.includes("CERTIFICATE SELF-CHECK"),
+  );
+  assert.ok(certificate !== undefined);
+  assert.equal(
+    certificate.messages[0]!.content.includes("CURRENT CANDIDATE: ACD"),
+    true,
+    "the certificate must be shown the audit answer",
+  );
+  assert.equal(
+    certificate.messages[0]!.content.includes("CURRENT CANDIDATE REPLACES AN EARLIER ONE"),
+    true,
+  );
+  assert.equal(run.result.summary.finalResponse, "ACD");
+});
+
+test("audits that disagree with each other do not redirect the certificate", async () => {
+  const run = await runChoice({ ballots: ["AC"], audits: ["ACD", "AB"] });
+  const certificate = run.requests.find(
+    (request) =>
+      request.phase === "CONSENSUS" &&
+      request.messages[0]!.content.includes("CERTIFICATE SELF-CHECK"),
+  );
+  assert.ok(certificate !== undefined);
+  assert.equal(certificate.messages[0]!.content.includes("CURRENT CANDIDATE: AC"), true);
+  assert.equal(
+    certificate.messages[0]!.content.includes("CURRENT CANDIDATE REPLACES AN EARLIER ONE"),
+    false,
+  );
+});
+
+test("an audit that agrees with the ballots does not redirect the certificate", async () => {
+  const run = await runChoice({ ballots: ["AC"], audits: ["AC", "AC"] });
+  const certificate = run.requests.find(
+    (request) =>
+      request.phase === "CONSENSUS" &&
+      request.messages[0]!.content.includes("CERTIFICATE SELF-CHECK"),
+  );
+  assert.ok(certificate !== undefined);
+  assert.equal(certificate.messages[0]!.content.includes("CURRENT CANDIDATE: AC"), true);
+  assert.equal(
+    certificate.messages[0]!.content.includes("CURRENT CANDIDATE REPLACES AN EARLIER ONE"),
+    false,
+  );
+});
