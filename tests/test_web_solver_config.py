@@ -21,6 +21,7 @@ from python.astra_web.app import create_app
 from python.astra_web.solver_config import (
     BALANCE_LEDGER_URL,
     ENDPOINTS,
+    SolverConfig,
     credential_fingerprint,
 )
 
@@ -31,10 +32,28 @@ INKSTONE = ENDPOINTS[1]
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    # Never touch an ambient host configuration while testing.
-    monkeypatch.delenv("ASTRA_USER_CLIENT_CONFIG", raising=False)
+    # Pin the host configuration into this test's own tmp dir. The production
+    # default is the user-level directory (and never a path inside the repo), so a
+    # test must both avoid that directory and not rely on the repository layout.
+    monkeypatch.setenv("ASTRA_USER_CLIENT_CONFIG", str(tmp_path / "user_client.conf"))
     app = create_app(data_root=tmp_path / "store", mount_static=False)
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def offline_model_listing(monkeypatch: pytest.MonkeyPatch):
+    """Keep the suite offline.
+
+    PUT now asks the endpoint itself which models it serves, so without this the
+    suite would depend on the network. Individual tests override this patch when
+    they need to exercise the accept/reject branches.
+    """
+    import python.astra_web.app as app_module
+
+    def unavailable(endpoint, credential, **kwargs):
+        raise ValueError("model listing unavailable in the offline suite")
+
+    monkeypatch.setattr(app_module, "fetch_models", unavailable)
 
 
 def test_unconfigured_view_is_honest(client: TestClient):
@@ -121,13 +140,54 @@ def test_unsanctioned_endpoint_is_rejected_and_not_persisted(
     assert not (tmp_path / "store" / "user_client.conf").exists()
 
 
-def test_model_must_belong_to_the_selected_endpoint(client: TestClient):
+def test_put_accepts_a_model_the_endpoint_actually_serves(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import python.astra_web.app as app_module
+
+    # The endpoint reports 11 models; the repository records 1. The endpoint wins.
+    monkeypatch.setattr(
+        app_module, "fetch_models", lambda endpoint, credential, **kw: ["intern-s2", "another"]
+    )
     response = client.put(
         "/api/config/solver",
-        json={"endpoint": CHAT.url, "model": INKSTONE.models[0], "credential": CREDENTIAL},
+        json={"endpoint": CHAT.url, "model": "intern-s2", "credential": CREDENTIAL},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["wired"] is True
+    assert body["model_verified"] is True
+
+
+def test_put_rejects_a_model_the_endpoint_does_not_serve(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import python.astra_web.app as app_module
+
+    monkeypatch.setattr(app_module, "fetch_models", lambda endpoint, credential, **kw: ["intern-s2"])
+    response = client.put(
+        "/api/config/solver",
+        json={"endpoint": CHAT.url, "model": "definitely-not-served", "credential": CREDENTIAL},
     )
     assert response.status_code == 400
+    assert "端点未提供该模型" in response.json()["detail"]
     assert client.get("/api/config/solver").json()["configured"] is False
+
+
+def test_put_says_so_when_the_list_cannot_be_read(client: TestClient):
+    # The autouse fixture makes listing fail; the submission is still accepted, and
+    # the response states that it was not verified instead of implying it was.
+    response = client.put(
+        "/api/config/solver",
+        json={"endpoint": CHAT.url, "model": "intern-s2", "credential": CREDENTIAL},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_verified"] is False
+    assert "未能向端点核对模型列表" in body["model_verified_note"]
+    # The model from the endpoint's own list must NOT be rejected for being absent
+    # from the repository's stale known list.
+    assert client.get("/api/capabilities").json()["execution"]["solver_configured"] is True
 
 
 @pytest.mark.parametrize("missing", ["endpoint", "model", "credential"])
@@ -174,15 +234,202 @@ def test_usage_is_observed_only_and_balance_is_linked(client: TestClient):
     assert body["balance"]["ledger_url"] == BALANCE_LEDGER_URL
 
 
-def test_config_file_lives_under_the_data_root(client: TestClient, tmp_path: Path):
+def test_config_file_lives_outside_the_repository(client: TestClient, tmp_path: Path):
     client.put(
         "/api/config/solver",
         json={"endpoint": CHAT.url, "model": CHAT.models[0], "credential": CREDENTIAL},
     )
-    stored = tmp_path / "store" / "user_client.conf"
+    stored = tmp_path / "user_client.conf"
     assert stored.is_file()
     text = stored.read_text(encoding="utf-8")
-    # The file is the one place the credential legitimately exists on disk, and it
-    # is outside the repository.
+    # The file is the one place the credential legitimately exists on disk...
     assert CREDENTIAL in text
     assert "endpoint=" + CHAT.url in text
+    # ...and it must not sit under the BFF data root, which lives inside the
+    # repository (and would make the worktree credential gate fail).
+    assert not (tmp_path / "store" / "user_client.conf").exists()
+
+
+def test_default_config_path_is_not_inside_the_repository(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from python.astra_web.solver_config import config_path
+
+    monkeypatch.delenv("ASTRA_USER_CLIENT_CONFIG", raising=False)
+    resolved = config_path()
+    repo_root = Path(__file__).resolve().parents[1]
+    assert repo_root not in resolved.resolve().parents
+
+
+def test_models_endpoint_rejects_unsanctioned_endpoint(client: TestClient):
+    response = client.post(
+        "/api/config/models",
+        json={"endpoint": "https://evil.example/v1/chat/completions", "credential": CREDENTIAL},
+    )
+    assert response.status_code == 400
+    assert CREDENTIAL not in response.text
+
+
+def test_models_endpoint_passes_through_what_the_endpoint_reports(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import python.astra_web.app as app_module
+
+    monkeypatch.setattr(
+        app_module, "fetch_models", lambda endpoint, credential, **kw: ["m-a", "m-b"]
+    )
+    response = client.post(
+        "/api/config/models", json={"endpoint": CHAT.url, "credential": CREDENTIAL}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "endpoint"
+    assert body["models"] == ["m-a", "m-b"]
+    assert CREDENTIAL not in response.text
+
+
+def test_models_endpoint_falls_back_and_says_so(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import python.astra_web.app as app_module
+
+    def boom(endpoint, credential, **kwargs):
+        raise ValueError("unreachable in this environment")
+
+    monkeypatch.setattr(app_module, "fetch_models", boom)
+    response = client.post(
+        "/api/config/models", json={"endpoint": CHAT.url, "credential": CREDENTIAL}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # The fallback must identify itself, never masquerade as a live list.
+    assert body["source"] == "fallback"
+    assert body["models"] == list(CHAT.models)
+    assert "未能从端点获取模型列表" in body["detail"]
+    assert CREDENTIAL not in response.text
+
+
+def test_models_endpoint_uses_the_stored_credential(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import python.astra_web.app as app_module
+
+    seen: list[str] = []
+
+    def capture(endpoint, credential, **kwargs):
+        seen.append(credential)
+        # Must contain the configured model, or the new live-list check rejects it.
+        return [CHAT.models[0]]
+
+    monkeypatch.setattr(app_module, "fetch_models", capture)
+    client.put(
+        "/api/config/solver",
+        json={"endpoint": CHAT.url, "model": CHAT.models[0], "credential": CREDENTIAL},
+    )
+    seen.clear()
+    response = client.post("/api/config/models", json={"endpoint": CHAT.url})
+    assert response.status_code == 200
+    assert seen == [CREDENTIAL]
+    assert CREDENTIAL not in response.text
+
+
+def test_model_ids_accepts_the_shapes_endpoints_return():
+    from python.astra_web.solver_runtime import _model_ids
+
+    assert _model_ids({"data": [{"id": "a"}, {"id": "b"}, {"id": "a"}]}) == ["a", "b"]
+    assert _model_ids({"models": ["x", "y"]}) == ["x", "y"]
+    assert _model_ids(["only"]) == ["only"]
+    assert _model_ids({"unexpected": 1}) == []
+
+
+# --------------------------------------------------------------------------- #
+# Solver adapter call path. This is where the workbench broke: the adapter
+# referenced a StopReason member that does not exist, so every real run
+# collapsed into an unclassified ERROR and no module call was ever made.
+# --------------------------------------------------------------------------- #
+
+ANSWER_PAYLOAD = {
+    "choices": [
+        {
+            "index": 0,
+            "message": {"content": "候选答案：P(x) 是某整系数多项式的平方。"},
+            "finish_reason": "stop",
+        }
+    ],
+    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+}
+
+
+def _build_adapter(endpoint, monkeypatch: pytest.MonkeyPatch, call):
+    import python.astra_web.solver_runtime as runtime
+
+    monkeypatch.setattr(runtime, "_call_openai_compatible", call)
+    config = SolverConfig(
+        endpoint=endpoint.url, model=endpoint.models[0], credential=CREDENTIAL, source=Path("x")
+    )
+    usage = runtime.UsageLedger()
+    return runtime.build_solver(config, usage), usage
+
+
+def test_solver_adapter_yields_a_candidate_with_a_real_stop_reason(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from python.astra_web.contracts.enums import StopReason
+    from python.astra_web.contracts.mapping import classify_stop_reason
+
+    solve, usage = _build_adapter(INKSTONE, monkeypatch, lambda c, p, t: ANSWER_PAYLOAD)
+    outcome = solve({"problem": "证明题"})
+
+    assert outcome.stop_reason is StopReason.SOLVED
+    # The authoritative mapping turns SOLVED into the *candidate* status — never
+    # into a claim that the answer was verified.
+    assert classify_stop_reason(outcome.stop_reason).value == "candidate"
+    assert outcome.final_response == "候选答案：P(x) 是某整系数多项式的平方。"
+    assert outcome.executed is True
+    assert usage.calls == 1 and usage.total_tokens == 15
+
+
+def test_solver_adapter_reports_a_real_failure_as_a_system_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from python.astra_web.contracts.enums import StopReason
+
+    def boom(config, problem, timeout):
+        raise TimeoutError("no answer")
+
+    solve, usage = _build_adapter(INKSTONE, monkeypatch, boom)
+    outcome = solve({"problem": "证明题"})
+
+    assert outcome.stop_reason is StopReason.ERROR
+    assert outcome.code == "TRANSPORT_FAILED"
+    assert outcome.executed is True
+    assert outcome.final_response == "Unsolved."
+    assert usage.failures == 1
+
+
+def test_solver_adapter_treats_thinking_only_truncation_as_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    payload = {"choices": [{"message": {"content": None}, "finish_reason": "length"}], "usage": {}}
+    solve, _ = _build_adapter(INKSTONE, monkeypatch, lambda c, p, t: payload)
+    outcome = solve({"problem": "证明题"})
+    assert outcome.code == "TRUNCATED_THINKING_ONLY"
+    assert outcome.final_response == "Unsolved."
+
+
+def test_solver_adapter_never_invents_usage(monkeypatch: pytest.MonkeyPatch):
+    payload = {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+    solve, usage = _build_adapter(INKSTONE, monkeypatch, lambda c, p, t: payload)
+    solve({"problem": "证明题"})
+    snapshot = usage.snapshot()
+    # No usage block was reported: the figures stay unknown, never 0.
+    assert snapshot["total_tokens"] is None
+    assert snapshot["prompt_tokens"] is None
+    assert snapshot["unknown_usage_responses"] == 1
+
+
+def test_solver_adapter_requires_problem_text(monkeypatch: pytest.MonkeyPatch):
+    solve, _ = _build_adapter(INKSTONE, monkeypatch, lambda c, p, t: ANSWER_PAYLOAD)
+    outcome = solve({})
+    assert outcome.code == "REQUEST_INVALID"
+    assert outcome.final_response == "Unsolved."

@@ -53,7 +53,7 @@ class UserSuppliedS2Client:
             raise ValueError(
                 "endpoint must match the explicitly supplied HTTPS destination"
             )
-        if not api_key or len(api_key) > 4096 or model != "Intern-S2-Preview-397B":
+        if not api_key or len(api_key) > 4096 or not isinstance(model, str) or not model.strip():
             raise ValueError("explicit supplied client configuration invalid")
         self._api_key = api_key
         self.endpoint, self.model = endpoint, model
@@ -380,19 +380,26 @@ def create_client():
     if not path:
         raise ValueError("explicit user configuration file required")
     text = Path(path).read_text(encoding="utf-8")
-    keys = [
-        line.strip()
-        for line in text.splitlines()
-        if re.fullmatch(r"sk-[A-Za-z0-9_-]{20,4090}", line.strip())
-    ]
-    endpoints = set(
-        re.findall(r"https://chat\.intern-ai\.org\.cn/api/v1/chat/completions", text)
-    )
-    models = set(re.findall(r"Intern-S2-Preview-397B", text))
-    if len(keys) != 1 or len(endpoints) != 1 or len(models) != 1:
+
+    # The file is a small key=value document (endpoint=, model=, credential=).
+    # The endpoint and model are whatever the operator selected from the endpoint's
+    # own list; this factory no longer pins them to one historical value.
+    values: dict[str, list[str]] = {"endpoint": [], "model": [], "credential": []}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip().lower()
+        if key in values:
+            values[key].append(value.strip())
+
+    if any(len(values[key]) != 1 for key in values):
         raise ValueError(
             "user file must explicitly identify one credential, endpoint and model"
         )
     return UserSuppliedS2Client(
-        api_key=keys[0], endpoint=endpoints.pop(), model=models.pop()
+        api_key=values["credential"][0],
+        endpoint=values["endpoint"][0],
+        model=values["model"][0],
     )

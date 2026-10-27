@@ -125,6 +125,11 @@ export function SolvePage() {
   /** 是否已收到 FINAL / RESULT 终态事件（用于区分「流正常收口」与「流中断」）。 */
   const terminalSeenRef = useRef(false);
 
+  // 0 = the deterministic key (dedupe exactly as designed). Each explicit
+  // "重新求解" bumps this, so the backend sees a new key and really starts a fresh
+  // execution instead of replaying the previous terminal record.
+  const [retrySeq, setRetrySeq] = useState(0);
+
   const cleanupStreams = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -144,7 +149,7 @@ export function SolvePage() {
     setState((prev) => reduceRun(prev, ev));
   };
 
-  const handleStartSolve = async () => {
+  const runSolve = async (nonce: number) => {
     cleanupStreams();
     const newRunId = `run-${Date.now().toString(36)}`;
     setFailure(null);
@@ -159,7 +164,13 @@ export function SolvePage() {
 
     // 幂等键由「题目 + 预算配置」确定性推导：同题同配置重复提交会被后端识别为重放（HTTP 200），
     // 不再新起执行；界面据 httpStatus / idempotent_replay 明确区分呈现。
-    const idempotencyKey = stableIdempotencyKey(problem, maxModelCalls, maxMethodLoads);
+    // nonce 仅由「重新求解」递增 —— 默认键逐字节不变，防重复强度不被削弱。
+    const idempotencyKey = stableIdempotencyKey(
+      problem,
+      maxModelCalls,
+      maxMethodLoads,
+      nonce > 0 ? `retry-${nonce}` : "",
+    );
 
     // 真实请求：失败即显示真实错误态，绝不回落演示 / 样例数据。
     const created = await createRun(
@@ -418,7 +429,7 @@ export function SolvePage() {
             <div style={{ marginTop: "20px", display: "flex", gap: "12px" }}>
               <button
                 type="button"
-                onClick={handleStartSolve}
+                onClick={() => void runSolve(retrySeq)}
                 disabled={isRunning}
                 style={{
                   display: "inline-flex",
@@ -506,6 +517,37 @@ export function SolvePage() {
               <br />
               started: {postMeta.started === null ? "未知" : String(postMeta.started)} · terminal（响应时是否已终态）:
               {postMeta.terminal === null ? " 未知" : ` ${String(postMeta.terminal)}`}
+            </div>
+          ) : null}
+
+          {postMeta && !isRunning ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = retrySeq + 1;
+                  setRetrySeq(next);
+                  void runSolve(next);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--color-brand-ring)",
+                  backgroundColor: "#ffffff",
+                  color: "var(--color-brand-deep)",
+                  padding: "8px 14px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <span>重新求解（新键）</span>
+              </button>
+              <span style={{ fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.7 }}>
+                默认同题同配置会返回既有终态（防重复是刻意的）；点此按钮会以新的幂等键真正重跑一次。
+              </span>
             </div>
           ) : null}
 

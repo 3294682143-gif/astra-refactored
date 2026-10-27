@@ -92,13 +92,20 @@ export function isNotExecuted(frame: TerminalFrame | null): boolean {
 /**
  * 由「题目 + 预算配置」生成稳定的幂等键（FNV-1a 双通道，ASCII 头安全）。
  * 同题同配置重复提交 → 后端 HTTP 200 + idempotent_replay=true，不新起执行。
+ *
+ * `nonce` 只在**非空**时参与哈希：默认调用逐字节不变（防重复强度不被削弱）；
+ * 用户在终态后显式点「重新求解」时传入 nonce，键随之改变，后端才会真正新起一次执行。
  */
 export function stableIdempotencyKey(
   problem: string,
   maxModelCalls: number,
   maxMethodLoads: 0 | 1,
+  nonce: string = "",
 ): string {
-  const bytes = new TextEncoder().encode(`${problem}\u0000${maxModelCalls}\u0000${maxMethodLoads}`);
+  const suffix = nonce === "" ? "" : `\u0000${nonce}`;
+  const bytes = new TextEncoder().encode(
+    `${problem}\u0000${maxModelCalls}\u0000${maxMethodLoads}${suffix}`,
+  );
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (const b of bytes) {

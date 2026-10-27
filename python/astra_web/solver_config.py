@@ -85,7 +85,12 @@ def endpoint_spec(url: str) -> Optional[EndpointSpec]:
 
 
 def endpoint_registry() -> list[dict[str, Any]]:
-    """The endpoint/model catalogue handed to the console (no secrets involved)."""
+    """The endpoint/model catalogue handed to the console (no secrets involved).
+
+    ``models`` here is only the *known* list shipped by the repository. The
+    console prefers the endpoint's own live list and falls back to this one, so a
+    model the endpoint adds later does not require a code change.
+    """
     return [
         {
             "key": spec.key,
@@ -95,6 +100,14 @@ def endpoint_registry() -> list[dict[str, Any]]:
         }
         for spec in ENDPOINTS
     ]
+
+
+def models_url(url: str) -> str:
+    """The OpenAI-standard model-list URL for an endpoint serving chat completions."""
+    suffix = "/chat/completions"
+    if url.endswith(suffix):
+        return url[: -len(suffix)] + "/models"
+    return url.rstrip("/") + "/models"
 
 
 @dataclass(frozen=True)
@@ -117,15 +130,27 @@ def credential_fingerprint(credential: str) -> str:
 def config_path(data_root: os.PathLike[str] | str | None = None) -> Path:
     """Resolve the host-side configuration path.
 
-    ``ASTRA_USER_CLIENT_CONFIG`` wins, because that is the entry point the
-    official client factory reads; otherwise the file lives under the data root.
+    Precedence:
+
+    1. ``ASTRA_USER_CLIENT_CONFIG`` — the entry point the official client factory
+       reads.
+    2. an explicit ``data_root`` — for tests and embedded callers.
+    3. the **user-level** configuration directory, deliberately OUTSIDE the
+       repository. A credential must never live inside a repository folder: those
+       get synced, archived and committed by accident, and the worktree credential
+       gate then (correctly) refuses to pass.
     """
     explicit = os.environ.get("ASTRA_USER_CLIENT_CONFIG")
     if explicit:
         return Path(explicit).expanduser()
-    if data_root is None:
-        raise SolverConfigError("data_root or ASTRA_USER_CLIENT_CONFIG is required")
-    return Path(data_root).expanduser() / CONFIG_FILENAME
+    if data_root is not None:
+        return Path(data_root).expanduser() / CONFIG_FILENAME
+    base = (
+        os.environ.get("LOCALAPPDATA")
+        or os.environ.get("XDG_CONFIG_HOME")
+        or str(Path.home())
+    )
+    return Path(base).expanduser() / "astra" / CONFIG_FILENAME
 
 
 def _parse(text: str, source: Path) -> SolverConfig:

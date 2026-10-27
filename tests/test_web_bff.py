@@ -51,6 +51,19 @@ def temp_store(tmp_path: Path) -> Store:
     return Store(root=tmp_path / "store")
 
 
+@pytest.fixture(autouse=True)
+def isolate_host_configuration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Keep the suite off this machine's real model-access configuration.
+
+    The BFF resolves its configuration from the user-level directory by default, so
+    without this the tests would read whatever credential the developer happens to
+    have configured, and the "solver is not wired" assertions would fail for the
+    wrong reason. Pointing the variable at a nonexistent path restores the intended
+    unconfigured state.
+    """
+    monkeypatch.setenv("ASTRA_USER_CLIENT_CONFIG", str(tmp_path / "user_client.conf"))
+
+
 def test_is_valid_run_id():
     assert is_valid_run_id("run-001") is True
     assert is_valid_run_id("abc.123_DEF-99") is True

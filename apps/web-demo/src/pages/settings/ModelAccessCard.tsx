@@ -3,6 +3,7 @@ import { ExternalLink, KeyRound, RefreshCw, Save, Trash2 } from "lucide-react";
 import {
   clearSolverConfig,
   fetchSolverConfig,
+  fetchSolverModels,
   fetchSolverUsage,
   saveSolverConfig,
   type ApiResult,
@@ -64,6 +65,9 @@ export function ModelAccessCard() {
   const [credential, setCredential] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [liveModels, setLiveModels] = useState<readonly string[] | null>(null);
+  const [modelsNote, setModelsNote] = useState<string | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const reload = useCallback(async () => {
     const [nextConfig, nextUsage] = await Promise.all([fetchSolverConfig(), fetchSolverUsage()]);
@@ -78,11 +82,41 @@ export function ModelAccessCard() {
   const view = config && config.ok ? config.data : null;
   const options = view?.endpoints ?? [];
   const activeEndpoint = options.find((option) => option.url === (endpoint || view?.endpoint));
-  const models = activeEndpoint?.models ?? [];
+  // The endpoint's own list wins; the repository's known list is only a fallback,
+  // and the note below always says which of the two is on screen.
+  const models = liveModels ?? activeEndpoint?.models ?? [];
 
+  const loadModels = async () => {
+    setLoadingModels(true);
+    setModelsNote(null);
+    const result = await fetchSolverModels({
+      endpoint,
+      credential: credential.trim().length > 0 ? credential : undefined,
+    });
+    setLoadingModels(false);
+    if (!result.ok) {
+      setModelsNote(`获取模型列表失败：${result.error.message}`);
+      return;
+    }
+    setLiveModels(result.data.models);
+    setModelsNote(
+      result.data.source === "endpoint"
+        ? `模型列表来自端点实时返回（${result.data.models.length} 个）`
+        : (result.data.detail ?? "未能从端点获取模型列表，以下为仓库已知列表"),
+    );
+  };
+
+  // The endpoint select must always agree with a real option. When nothing is
+  // stored yet it defaults to the first sanctioned endpoint; leaving the state
+  // empty silently disabled the save button, because the model list is derived
+  // from the selected endpoint (an empty selection matches no option at all).
+  const storedEndpoint = view?.endpoint ?? null;
+  const firstEndpointUrl = options[0]?.url ?? "";
   useEffect(() => {
-    if (!endpoint && view?.endpoint) setEndpoint(view.endpoint);
-  }, [endpoint, view?.endpoint]);
+    if (!endpoint && (storedEndpoint !== null || firstEndpointUrl !== "")) {
+      setEndpoint(storedEndpoint ?? firstEndpointUrl);
+    }
+  }, [endpoint, storedEndpoint, firstEndpointUrl]);
 
   useEffect(() => {
     if (models.length > 0 && !models.includes(model)) {
@@ -164,7 +198,12 @@ export function ModelAccessCard() {
                 id="solver-endpoint"
                 style={fieldStyle}
                 value={endpoint || view?.endpoint || ""}
-                onChange={(event) => setEndpoint(event.target.value)}
+                onChange={(event) => {
+                  setEndpoint(event.target.value);
+                  // A live list belongs to the endpoint that produced it.
+                  setLiveModels(null);
+                  setModelsNote(null);
+                }}
               >
                 {options.length === 0 ? <option value="">{UNKNOWN}（接口未返回端点目录）</option> : null}
                 {options.map((option) => (
@@ -176,21 +215,41 @@ export function ModelAccessCard() {
             </div>
             <div>
               <label style={labelStyle} htmlFor="solver-model">
-                模型（随端点联动）
+                模型（由端点实时返回，随端点联动）
               </label>
-              <select
-                id="solver-model"
-                style={fieldStyle}
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-              >
-                {models.length === 0 ? <option value="">{UNKNOWN}</option> : null}
-                {models.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <select
+                  id="solver-model"
+                  style={fieldStyle}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                >
+                  {models.length === 0 ? <option value="">{UNKNOWN}</option> : null}
+                  {models.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void loadModels()}
+                  disabled={loadingModels || !endpoint}
+                  style={{ ...buttonStyle, whiteSpace: "nowrap" }}
+                >
+                  <RefreshCw size={13} />
+                  <span>{loadingModels ? "获取中..." : "获取模型列表"}</span>
+                </button>
+              </div>
+              {modelsNote ? (
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.6 }}>
+                  {modelsNote}
+                </div>
+              ) : (
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--color-ink-mute)", lineHeight: 1.6 }}>
+                  先填 API Key 再点「获取模型列表」，列表由后端用你的 Key 向端点实时取回。
+                </div>
+              )}
             </div>
           </div>
 

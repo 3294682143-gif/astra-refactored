@@ -283,6 +283,25 @@ export function fetchSolverUsage(): Promise<ApiResult<SolverUsageView>> {
   return requestJson<SolverUsageView>("/api/config/usage");
 }
 
+/** The model list the endpoint itself reports; `fallback` means it could not be read. */
+export interface SolverModelsView {
+  readonly endpoint: string;
+  readonly models: readonly string[];
+  readonly source: "endpoint" | "fallback";
+  readonly detail?: string;
+}
+
+export function fetchSolverModels(input: {
+  endpoint: string;
+  credential?: string;
+}): Promise<ApiResult<SolverModelsView>> {
+  return requestJson<SolverModelsView>("/api/config/models", {
+    method: "POST",
+    body: JSON.stringify(input),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export function fetchHealth(): Promise<ApiResult<HealthResponse>> {
   return requestJson<HealthResponse>("/api/health");
 }

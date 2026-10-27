@@ -124,4 +124,20 @@ describe("幂等键稳定性（④ 护栏）", () => {
     const key = stableIdempotencyKey("设 P(x) 为整系数多项式 证明", 48, 0);
     assert.match(key, /^solve-[0-9a-f]{16}$/);
   });
+
+  it("默认 nonce 为空时键逐字节不变（防重复强度不被削弱）", () => {
+    // 实测锚点：题目「1+1」+ 24 + 1 曾产生 solve-6f4ce3753bc7c167（见会话内重算）。
+    assert.strictEqual(stableIdempotencyKey("1+1", 24, 1), "solve-6f4ce3753bc7c167");
+    assert.strictEqual(stableIdempotencyKey("p", 24, 1, ""), stableIdempotencyKey("p", 24, 1));
+  });
+
+  it("显式 nonce 产生新键 —— 重新求解才真正重跑", () => {
+    const base = stableIdempotencyKey("p", 24, 1);
+    assert.notStrictEqual(stableIdempotencyKey("p", 24, 1, "retry-1"), base);
+    assert.notStrictEqual(
+      stableIdempotencyKey("p", 24, 1, "retry-1"),
+      stableIdempotencyKey("p", 24, 1, "retry-2"),
+    );
+    assert.match(stableIdempotencyKey("p", 24, 1, "retry-1"), /^solve-[0-9a-f]{16}$/);
+  });
 });
