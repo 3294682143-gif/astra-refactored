@@ -2569,6 +2569,36 @@ definition => FAIL
 真正还能提分的只有 #5 与 #34 这类**需要精确计算能力**的题，路径是补数学资产
 target（置换幂、Alexander 多项式），而不是继续改 prompt。
 
+### 28.12 #34 的进一步结论：能力已有，但取不到
+
+离线验证过最强的一条事实：把 #34 题面里那个 4×4 亚历山大矩阵直接喂给
+`exact_check_expr(operation="MAXIMAL_MINORS", variable="t")`，返回的归一化子式就是
+参考答案
+
+```
+t**6 - 5*t**5 + 10*t**4 - 13*t**3 + 10*t**2 - 5*t + 1   multiplicity 16
+```
+
+也就是说**能力早就够了**，缺的是"取到它"。顺着这条线修了三处：
+
+1. 补上 `math_asset` 路径的闭合测试覆盖（原来只有 legacy `exact_check_expr` 有）。
+   三个用例钉住：maximal-minor 观测能把错误次数的候选闭合到观测到的多项式、
+   不可用的闭合回复不替换候选、放弃动作触发恰好一次强制取证轮。
+2. 放弃动作现在会**触发一次强制取证轮**（原来只在"已交付候选包之后"才强制，
+   而 #34 从不交付包就放弃，所以永远到不了那里）。
+3. 放弃拒绝不再限于 answer-bearing 任务（#34 是在 DERIVATION 任务上放弃的）。
+
+**但 #34 仍未修好**：对真实 API 仍然 13–14 calls 就 `unsolved`。Node 侧拿不到
+`unsolved` 路径的诊断数据（Host 直接返回 `_unsolved`，没有 trace、没有 session
+log、没有 effect history），所以**尚未定位**剩余原因，而不是"已知道原因没修"。
+
+试过一个假设：method 卡加载先花掉了共享的 effect 预算，导致资产没配额。实现后
+**回滚**了，因为它破坏既有的 method-card/tool coprompt 契约（两个测试变红）。
+不在猜测上改协议行为。
+
+下一步若要继续 #34，正确的顺序是：先让 `_unsolved` 路径也导出 trace 与 history
+（纯观测改动，不影响控制），看到真实的 phase 序列和 effect 消耗，再决定改哪里。
+
 ### 28.10 门禁（本轮最终）
 
 - `tsc -b` 0；Node **556/556**（新增 ballot 12 例、unsolved 拒绝 2 例）。
