@@ -565,6 +565,8 @@ def project_artifacts(history, session_id, problem_hash):
             continue
         provenance = body.get("routeProvenance")
         if provenance is None:
+            provenance = body.get("controlRouteProvenance")
+        if provenance is None:
             provenance = body.get("dependencyProvenance")
         if provenance is not None and task_id not in seen_dynamic:
             if envelope.get("eventSeq") != next_seq:

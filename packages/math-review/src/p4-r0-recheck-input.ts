@@ -500,7 +500,9 @@ export function validateP4R0RecheckInput(
     need(prep.canSupportObligation === false);
     const planningModelCalls = num(prep.planningModelCalls, 0, 1);
     const remainingRootCalls = num(prep.remainingRootCalls, 0, 2);
-    const remainingMs = num(prep.remainingMs, 0, 5000);
+    // Same root-deadline domain as the R0 review input: the recheck shares the
+    // evaluation item's real remaining time, not a preview-only 5s ceiling.
+    const remainingMs = num(prep.remainingMs, 0, 3_600_000);
     need((P4_R0_RECHECK_ACTION as readonly string[]).includes(prep.action as string));
     if (prep.action === "REQUEST_REVIEW") {
       need(planningModelCalls === 1);

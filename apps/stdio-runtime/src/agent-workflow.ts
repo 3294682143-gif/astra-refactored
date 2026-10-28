@@ -49,6 +49,20 @@ const DEFAULT_MECHANISM = {
   construction: "unified-agent-loop",
 } as const;
 
+/**
+ * Mechanism of the control-originated second route used by the explicit
+ * full-capability profile. It is deliberately disjoint from the default
+ * route's operation and construction, and its route starts with no dependency
+ * refs, so the two routes never share an unverified premise.
+ */
+export const AGENT_CONTROL_SECOND_ROUTE_MECHANISM = Object.freeze({
+  representation: "independent-recomputation",
+  operation: "second-derivation",
+  lemmas: Object.freeze([] as string[]),
+  construction: "empty-dependency-independent-route",
+});
+
+
 function fail(code: (typeof P2_ERROR_CODES)[keyof typeof P2_ERROR_CODES]): never {
   throw new P2Error(code);
 }
@@ -86,6 +100,7 @@ export class AgentWorkflowRoutes {
   private readonly store: P2WorkunitStore;
   private readonly defaultRoute: P2RouteSpec;
   private readonly taskRoutes = new Map<string, AgentTaskRoute>();
+  private readonly controlRouteTaskIds = new Set<string>();
   private readonly admissions: AgentRouteAdmission[] = [];
   private readonly dependencies: AgentRouteAdmission[] = [];
 
@@ -598,6 +613,210 @@ export class AgentWorkflowRoutes {
       provenance,
     }) as AgentRouteAdmission);
     return true;
+  }
+
+  /**
+   * Admit the control-originated second route of the explicit
+   * full-capability profile.
+   *
+   * This is not a model `NEW_ROUTE` proposal and it never relaxes that path:
+   * the same mechanism-signature, scope, pending-obligation and budget checks
+   * apply, and the new task starts with empty artifact/dependency refs. The
+   * source is a real ACTIVE artifact; the obligation is a real OPEN
+   * obligation of the same goal and scope. The only difference is that control
+   * supplies the mechanism so the G2 branch can be exercised even when no
+   * model proposal is produced.
+   */
+  admitControlSecondRoute(
+    artifact: P2Artifact,
+    obligationId: string,
+    remainingCalls: number,
+    maxReviews: number,
+    remainingWorkUnits: number,
+    remainingMs: number,
+  ): boolean {
+    if (!this.canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
+      return false;
+    }
+    if (!isPlainObject(artifact)) {
+      return false;
+    }
+    const frozen = p2Snapshot(artifact) as P2Artifact;
+    if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
+      return false;
+    }
+    if (frozen.packet === null) {
+      return false;
+    }
+    const ref: P2ArtifactRef = {
+      artifactId: frozen.artifactId,
+      artifactVersion: frozen.envelope.artifactVersion ?? 0,
+    };
+    let entry;
+    try {
+      entry = this.store.get(ref);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+    if (entry.availability !== "ACTIVE") {
+      return false;
+    }
+    if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
+      return false;
+    }
+
+    const contract = this.ledger.snapshot();
+    const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
+    if (sourceTask === undefined || sourceTask.delivery !== "DELIVERED") {
+      return false;
+    }
+    if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
+      return false;
+    }
+    const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
+    if (obligation === undefined || obligation.goalId !== sourceTask.goalId) {
+      return false;
+    }
+    if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
+      return false;
+    }
+    if (obligation.envelope.scopeId !== sourceTask.scopeId) {
+      return false;
+    }
+    const template = contract.tasks.find((task) => task.taskId === obligation.envelope.taskId);
+    if (template === undefined || template.scopeId !== sourceTask.scopeId) {
+      return false;
+    }
+    const sourceRoute = this.forTask(sourceTask);
+
+    const probe = new P2RouteRegistry();
+    for (const existing of this.store.routesSnapshot()) {
+      try {
+        probe.register({
+          routeId: existing.routeId,
+          representation: existing.representation,
+          operation: existing.operation,
+          lemmas: existing.lemmas,
+          construction: existing.construction,
+        });
+      } catch (error) {
+        if (error instanceof P2Error) {
+          return false;
+        }
+        throw error;
+      }
+    }
+    let signature: string;
+    let routeInput: P2RouteInput;
+    try {
+      routeInput = {
+        routeId: "probe",
+        ...AGENT_CONTROL_SECOND_ROUTE_MECHANISM,
+      };
+      signature = p2RouteSignature(routeInput);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+    if (signature === sourceRoute.signature) {
+      return false;
+    }
+    const routeId = routeIdOf(signature);
+    if (this.store.routesSnapshot().some((route) => route.routeId === routeId)) {
+      return false;
+    }
+    let spec: P2RouteSpec;
+    try {
+      spec = probe.register({ ...routeInput, routeId });
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+    if (
+      spec.operation === sourceRoute.operation &&
+      spec.construction === sourceRoute.construction
+    ) {
+      return false;
+    }
+
+    // The context validator's route-provenance guard is shared with a model
+    // NEW_ROUTE and requires exactly `route-task-<sourceRequestId>`. The
+    // control-origin marker lives in a private Set, so reusing that identity
+    // does not weaken any check.
+    const taskId = `route-task-${frozen.sourceRequestId}`;
+    if ([...taskId].length > MAX_TASK_ID_CHARS) {
+      return false;
+    }
+    if (contract.tasks.some((task) => task.taskId === taskId)) {
+      return false;
+    }
+    const eventSeq = this.ledger.nextEventSeq();
+    const sessionId = contract.envelope.sessionId;
+    const newTask: P2Task = p2Snapshot({
+      envelope: {
+        ...template.envelope,
+        recordId: `${sessionId}:m1:g2-route:${frozen.sourceRequestId}`,
+        taskId,
+        eventSeq,
+      },
+      taskId,
+      goalId: template.goalId,
+      obligationId: template.obligationId,
+      scopeId: template.scopeId,
+      inputArtifactRefs: [],
+      dependencyTaskIds: [],
+      expectedResult: template.expectedResult,
+      acceptanceCriteria: template.acceptanceCriteria,
+      delivery: "READY",
+    }) as P2Task;
+    const prospective = p2Snapshot({
+      ...contract,
+      tasks: [...contract.tasks, newTask],
+    });
+    try {
+      this.ledger.validateTaskAddition([newTask]);
+      this.store.validateAddedTasks(prospective);
+    } catch (error) {
+      if (error instanceof P2Error) {
+        return false;
+      }
+      throw error;
+    }
+
+    const provenance: AgentRouteProvenance = p2Snapshot({
+      sourceRequestId: frozen.sourceRequestId,
+      sourceArtifactRef: ref,
+      obligationId,
+      routeSignature: signature,
+    }) as AgentRouteProvenance;
+
+    this.ledger.addTasks([newTask]);
+    this.store.syncAddedTasks(this.ledger.snapshot());
+    this.store.registerRoute({ ...routeInput, routeId });
+    this.taskRoutes.set(taskId, p2Snapshot({
+      taskId,
+      routeId: spec.routeId,
+      provenance,
+    }) as AgentTaskRoute);
+    this.controlRouteTaskIds.add(taskId);
+    this.admissions.push(p2Snapshot({
+      taskId,
+      routeId: spec.routeId,
+      provenance,
+    }) as AgentRouteAdmission);
+    return true;
+  }
+
+  /** Whether one task was created by the control-originated G2 route. */
+  isControlSecondRoute(taskId: string): boolean {
+    return this.controlRouteTaskIds.has(taskId);
   }
 
   /** Plain-array snapshot for the private state; no Map escapes. */

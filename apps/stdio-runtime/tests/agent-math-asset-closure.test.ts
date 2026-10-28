@@ -214,15 +214,18 @@ test("an abstention triggers one forced asset turn before it is accepted", async
       mathAsset: mathAssetPort,
     },
   );
-  const rows = (result.privateState.sessionLog?.events ?? []).filter(
-    (event) => event.kind === "REPAIR" && event.data["kind"] === "MATH_ASSET_RESCUE",
+  const early = (result.privateState.sessionLog?.events ?? []).filter(
+    (event) => event.kind === "REPAIR" && event.data["kind"] === "MATH_ASSET_EARLY",
   );
-  assert.equal(rows.length, 1, "the abstention must trigger exactly one rescue turn");
-  assert.equal(rows[0]!.data["target"], "maximal_minors");
+  assert.equal(early.length, 1, "the evidence turn must be taken exactly once");
+  assert.equal(early[0]!.data["target"], "maximal_minors");
+  // The evidence turn is now the FIRST model turn, before any answer attempt, so
+  // a long problem cannot spend its whole budget on answer turns and audits and
+  // then time out without ever running the computation it needs.
   assert.equal(
-    seen.some((text) => text.includes("MATH ASSET TURN")),
+    seen[0]?.includes("MATH ASSET TURN"),
     true,
-    "the rescue turn must ask for the asset",
+    "the asset turn must come first",
   );
   assert.equal(result.summary.status, "candidate");
   assert.equal(result.summary.finalResponse, INVARIANT);

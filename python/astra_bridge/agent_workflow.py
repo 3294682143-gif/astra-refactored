@@ -24,8 +24,19 @@ __all__ = [
     "normalize_route",
     "default_route",
     "check_route_provenance",
+    "check_control_route_provenance",
     "check_dependency_provenance",
 ]
+
+# Must stay byte-identical to AGENT_CONTROL_SECOND_ROUTE_MECHANISM in the TS
+# workflow module. It is control data, not model data; the Host re-derives the
+# route identity from this fixed mechanism.
+_CONTROL_SECOND_MECHANISM = {
+    "representation": "independent-recomputation",
+    "operation": "second-derivation",
+    "lemmas": [],
+    "construction": "empty-dependency-independent-route",
+}
 
 _WORK_V1 = "p2a-work-v1"
 _WORK_V2 = "p2a-work-v2"
@@ -557,7 +568,8 @@ def _source_record(history, source_id, session_id, problem_hash, *,
     return body, packet
 
 
-def _source_artifact_ref(history, source_id, session_id, problem_hash):
+def _source_artifact_ref(history, source_id, session_id, problem_hash,
+                         phases=("WORK",)):
     """``artifact-N`` where N counts real COMPLETE valid WorkPackets up to source."""
     if not isinstance(history, dict):
         _fail()
@@ -566,7 +578,9 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
     # the projection is queried; the projection then reports the actual
     # artifact id and version, counting every real accepted M3 work including
     # partial deliveries, so a skipped partial never shifts a later id.
-    _, packet = _source_record(history, source_id, session_id, problem_hash)
+    _, packet = _source_record(
+        history, source_id, session_id, problem_hash, phases=phases,
+    )
     if packet["deliveryStatus"] != "COMPLETE":
         _fail()
     prior = {}
@@ -596,7 +610,7 @@ def _source_artifact_ref(history, source_id, session_id, problem_hash):
 
 
 def _check_source_body(body, source_id, session_id, problem_hash,
-                       source_schema=_CONTEXT_V7):
+                       source_schema=_CONTEXT_V7, require_route_proposal=True):
     """Strict shape of the source WORK context body of a NEW_ROUTE proposal.
 
     ``source_schema`` is explicit: the active v5 context passes ``v5`` and the
@@ -612,7 +626,7 @@ def _check_source_body(body, source_id, session_id, problem_hash,
         _fail()
     if body.get("sourceRequestId") != source_id:
         _fail()
-    if body.get("allowRouteProposal") is not True:
+    if require_route_proposal and body.get("allowRouteProposal") is not True:
         _fail()
     task = body.get("task")
     scope = body.get("scope")
@@ -963,6 +977,130 @@ def check_route_provenance(body, history, source_schema=_CONTEXT_V7):
     if not isinstance(envelope, dict) or not isinstance(source_envelope, dict):
         _fail()
     if envelope.get("recordId") != session_id + ":m1:route-task:" + source_id:
+        _fail()
+    if envelope.get("taskId") != task_id:
+        _fail()
+    if envelope.get("eventSeq") != _expected_event_seq(
+        history, session_id, problem_hash, _ordinal(source_id),
+    ):
+        _fail()
+    for name in source_envelope:
+        if name in ("recordId", "taskId", "eventSeq"):
+            continue
+        if envelope.get(name) != source_envelope[name]:
+            _fail()
+    if len(envelope) != len(source_envelope):
+        _fail()
+    return {
+        "sourceRequestId": source_id,
+        "sourceArtifactRef": {
+            "artifactId": ref["artifactId"],
+            "artifactVersion": ref["artifactVersion"],
+        },
+        "obligationId": obligation_id,
+        "routeSignature": route_signature,
+    }
+
+
+def check_control_route_provenance(body, history, source_schema=_CONTEXT_V7):
+    """Re-derive the control-originated G2 route provenance of one WORK body.
+
+    This is deliberately disjoint from a model ``NEW_ROUTE``: there is no v2
+    proposal packet to trust. The mechanism is the fixed control mechanism, the
+    source is a real COMPLETE source WORK record, the obligation is real and
+    open in that source scope, and the child is the empty-dependency
+    ``route-task-<source>`` task. Returns the four-field provenance or ``None``
+    when the body carries no control-route marker. The Host repeats every
+    derivation; it never trusts the Node-supplied route object.
+    """
+    if not isinstance(body, dict):
+        _fail()
+    provenance = body.get("controlRouteProvenance")
+    if provenance is None:
+        return None
+    if source_schema not in (_CONTEXT_V5, _CONTEXT_V6, _CONTEXT_V7):
+        _fail()
+    if body.get("schemaVersion") != source_schema:
+        _fail()
+    if body.get("routeProvenance") is not None:
+        _fail()
+    if body.get("dependencyProvenance") is not None:
+        _fail()
+    _exact_keys(provenance, _PROVENANCE_FIELDS)
+    session_id = body.get("sessionId")
+    problem_hash = body.get("problemHash")
+    request_id = body.get("sourceRequestId")
+    _text(session_id, _MAX_SHORT)
+    _hash64(problem_hash)
+    _ordinal(request_id)
+    task = body.get("task")
+    route = body.get("route")
+    if not isinstance(task, dict) or not isinstance(route, dict):
+        _fail()
+    task_id = task.get("taskId")
+    _text(task_id, _MAX_SHORT)
+    source_id = provenance["sourceRequestId"]
+    _ordinal(source_id)
+    if _ordinal(source_id) >= _ordinal(request_id):
+        _fail()
+    ref = provenance["sourceArtifactRef"]
+    _exact_keys(ref, _REF_FIELDS)
+    if not _is_int(ref["artifactVersion"]) or ref["artifactVersion"] != 1:
+        _fail()
+    obligation_id = provenance["obligationId"]
+    _text(obligation_id, _MAX_SHORT)
+    route_signature = provenance["routeSignature"]
+    _hash64(route_signature)
+    if task_id != "route-task-" + source_id:
+        _fail()
+    # A full-capability G2 route may be sourced from the selected CONSENSUS
+    # packet as well as a direct WORK packet: both are real complete model
+    # packets in the same trusted context. The other route checks still apply.
+    source_body, source_packet = _source_record(
+        history, source_id, session_id, problem_hash,
+        phases=("WORK", "CONSENSUS"),
+    )
+    source_task, source_scope, source_route, source_obligations = _check_source_body(
+        source_body, source_id, session_id, problem_hash, source_schema,
+        require_route_proposal=False,
+    )
+    if source_packet["deliveryStatus"] != "COMPLETE":
+        _fail()
+    if source_packet["sessionId"] != session_id or source_packet["problemHash"] != problem_hash:
+        _fail()
+    if source_packet["taskId"] != source_task.get("taskId"):
+        _fail()
+    if source_packet["routeId"] != source_route.get("routeId"):
+        _fail()
+    if source_packet["sourceRequestId"] != source_id:
+        _fail()
+    scope_id = source_scope.get("scopeId")
+    _hash64(scope_id)
+    _target_obligation(source_obligations, obligation_id, scope_id)
+    expected_ref = _source_artifact_ref(
+        history, source_id, session_id, problem_hash,
+        phases=("WORK", "CONSENSUS"),
+    )
+    if ref != expected_ref:
+        _fail()
+    expected_route = normalize_route(copy.deepcopy(_CONTROL_SECOND_MECHANISM))
+    if route != expected_route or route_signature != expected_route["signature"]:
+        _fail()
+    if task.get("goalId") != source_task.get("goalId"):
+        _fail()
+    if task.get("obligationId") != obligation_id:
+        _fail()
+    if task.get("scopeId") != scope_id:
+        _fail()
+    if task.get("inputArtifactRefs") != [] or task.get("dependencyTaskIds") != []:
+        _fail()
+    _text(task.get("expectedResult"), _MAX_TEXT)
+    _text(task.get("acceptanceCriteria"), _MAX_SHORT)
+    envelope = task.get("envelope")
+    source_envelope = source_task.get("envelope")
+    if not isinstance(envelope, dict) or not isinstance(source_envelope, dict):
+        _fail()
+    if envelope.get("recordId") != session_id + ":m1:g2-route:" + source_id:
         _fail()
     if envelope.get("taskId") != task_id:
         _fail()

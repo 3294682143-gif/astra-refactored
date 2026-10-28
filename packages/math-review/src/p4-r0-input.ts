@@ -340,7 +340,10 @@ export function validateP4R0Input(preparation: P4R0Preparation): P4R0Preparation
     need(prep.canSupportObligation === false);
     const planningModelCalls = num(prep.planningModelCalls, 0, 1);
     const remainingRootCalls = num(prep.remainingRootCalls, 0, P4_R0_MAX_ROOT_CALLS);
-    const remainingMs = num(prep.remainingMs, 0, 5000);
+    // The evaluation profile gives one item up to 1800s; the R0 stage shares
+    // that root deadline. A 5000ms ceiling here rejected every real evaluation
+    // preparation before the first role call, so R0 silently fell back to WORK.
+    const remainingMs = num(prep.remainingMs, 0, 3_600_000);
     need((P4_R0_ACTION as readonly string[]).includes(prep.action as string));
     if (prep.action === "REQUEST_REVIEW") {
       need(riskCodes.length > 0);

@@ -61,6 +61,7 @@ function isBoundedInteger(value: unknown, max: number): value is number {
 /** Strict options check: unknown keys, wrong types and out-of-range values fail. */
 function readOptions(options: unknown): {
   readonly enabled: boolean;
+  readonly force: boolean;
   readonly planningModelCalls: number;
   readonly remainingRootCalls: number;
   readonly remainingMs: number;
@@ -68,7 +69,13 @@ function readOptions(options: unknown): {
   if (!isPlainObject(options)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  const allowed = ["enabled", "planningModelCalls", "remainingRootCalls", "remainingMs"];
+  const allowed = [
+    "enabled",
+    "force",
+    "planningModelCalls",
+    "remainingRootCalls",
+    "remainingMs",
+  ];
   for (const key of Object.keys(options)) {
     if (!allowed.includes(key)) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
@@ -76,6 +83,10 @@ function readOptions(options: unknown): {
   }
   const enabled = options.enabled === undefined ? false : options.enabled;
   if (typeof enabled !== "boolean") {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const force = options.force === undefined ? false : options.force;
+  if (typeof force !== "boolean") {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const planning = options.planningModelCalls === undefined ? 0 : options.planningModelCalls;
@@ -90,6 +101,7 @@ function readOptions(options: unknown): {
   }
   return {
     enabled,
+    force,
     planningModelCalls: planning,
     remainingRootCalls: options.remainingRootCalls,
     remainingMs: options.remainingMs,
@@ -180,11 +192,19 @@ export function prepareP4R0(contract: P2Contract, options: P4R0Options): P4R0Pre
     }
 
     const riskCodes = riskCodesOf(frozenContract);
+    // An explicit full-capability opt-in is the only way a template without an
+    // intrinsic risk code enters R0. `EXPLICIT_RISK_HINT` is the closed
+    // vocabulary's own name for a caller-declared risk; the stage bound,
+    // review dimensions and evidence semantics are unchanged.
+    const effectiveRiskCodes: readonly P4R0RiskCode[] =
+      frozenOptions.force && riskCodes.length === 0
+        ? ["EXPLICIT_RISK_HINT"]
+        : riskCodes;
     if (frozenContract.riskHints.length > P2_LIMITS.maxArrayItems) {
       throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     let action: P4R0Action;
-    if (!frozenOptions.enabled || riskCodes.length === 0) {
+    if (!frozenOptions.enabled || effectiveRiskCodes.length === 0) {
       action = "SKIPPED_BY_POLICY";
     } else if (
       frozenOptions.planningModelCalls === 0 ||
@@ -208,7 +228,7 @@ export function prepareP4R0(contract: P2Contract, options: P4R0Options): P4R0Pre
         planText,
       },
       action,
-      riskCodes,
+      riskCodes: effectiveRiskCodes,
       structuralMatch: true,
       semanticResult: "UNKNOWN",
       canSupportObligation: false,

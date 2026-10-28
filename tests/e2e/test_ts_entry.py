@@ -40,7 +40,7 @@ class FakeClient:
         self.seen.append((messages, temperature, max_tokens))
         body = json.loads(messages[1]["content"])
         self.calls += 1
-        if body.get("stage") == "R2":
+        if body.get("stage") in ("R2", "R4") or body.get("schemaVersion") == "p4-r2-context-v1":
             text = self._review(body)
         elif self.tool_first and self.calls == 1:
             text = json.dumps(
@@ -84,7 +84,7 @@ class FakeClient:
             "requestId": body["requestId"],
             "target": body["target"],
             "targetHash": body["targetHash"],
-            "stage": "R2",
+            "stage": body.get("stage", "R2"),
             "conclusion": "NO_ISSUE",
             "reviewCoverage": [row["obligationId"] for row in body["obligations"]],
             "issues": [],

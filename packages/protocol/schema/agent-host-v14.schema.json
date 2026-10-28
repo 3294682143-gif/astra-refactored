@@ -6,7 +6,7 @@
   "protocolVersion": "1.4-unified-math-assets",
   "limits": {
     "maxFrameBytes": 65536,
-    "maxFramesPerSession": 64,
+    "maxFramesPerSession": 1024,
     "maxDepth": 24,
     "maxSafeInteger": 9007199254740991,
     "maxIdChars": 128,

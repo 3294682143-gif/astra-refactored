@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 import user_agent  # noqa: E402
-from test_ts_entry import FakeClient, no_legacy_solver, process_tracker  # noqa: E402
+from test_ts_entry import no_legacy_solver, process_tracker  # noqa: E402
+from test_ts_g3_r0 import R0Client  # noqa: E402
 from python.astra_bridge import math_ab_harness as ab  # noqa: E402
 
 __all__ = ["no_legacy_solver", "process_tracker"]
@@ -20,7 +21,7 @@ CORPUS = [
 
 def _make_agent(arm_id, problem):
     profile = dict(ab.ARM_PROFILES[arm_id])
-    return user_agent.ReasoningAgent(client=FakeClient(), engine="ts", **profile)
+    return user_agent.ReasoningAgent(client=R0Client(), engine="ts", **profile)
 
 
 def test_offline_ab_comparison_runs_cd_and_marks_ab_not_run(process_tracker):

@@ -97,8 +97,12 @@ export function stableIdempotencyKey(
   problem: string,
   maxModelCalls: number,
   maxEffects: 0 | 1 | 2,
+  maxMethodLoads: 0 | 1 | 2 | 3 | 4 = 0,
+  capabilityMode: "full" | "custom" = "custom",
 ): string {
-  const bytes = new TextEncoder().encode(`${problem}\u0000${maxModelCalls}\u0000${maxEffects}`);
+  const bytes = new TextEncoder().encode(
+    `${problem}\u0000${maxModelCalls}\u0000${maxEffects}\u0000${maxMethodLoads}\u0000${capabilityMode}`,
+  );
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (const b of bytes) {

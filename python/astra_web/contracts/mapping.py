@@ -16,6 +16,10 @@ STOP_REASON_TO_STATUS: Final[Mapping[StopReason, StatusCode]] = MappingProxyType
     {
         StopReason.SOLVED: StatusCode.CANDIDATE,
         StopReason.REVIEWS_COMPLETE: StatusCode.CANDIDATE,
+        # A malformed/UNKNOWN review report stops the review loop but the
+        # protected parent candidate is still delivered; it is not a system
+        # failure. Before this mapping it fell through to ERROR in the BFF.
+        StopReason.REVIEW_STOP: StatusCode.CANDIDATE,
         StopReason.REVISE_REJECTED: StatusCode.CANDIDATE,  # 保留原候选交付
         StopReason.NO_CANDIDATE: StatusCode.UNSOLVED,
         StopReason.MAX_ITER: StatusCode.UNSOLVED,
@@ -36,6 +40,7 @@ STOP_REASON_LABEL_ZH: Final[Mapping[StopReason, str]] = MappingProxyType(
     {
         StopReason.SOLVED: "已形成候选",
         StopReason.REVIEWS_COMPLETE: "评审结束，交付候选",
+        StopReason.REVIEW_STOP: "评审中止，保留受保护候选",
         StopReason.REVISE_REJECTED: "修复未通过门控（保留原候选）",
         StopReason.NO_CANDIDATE: "未形成有效候选",
         StopReason.MAX_ITER: "已达迭代步数上限",

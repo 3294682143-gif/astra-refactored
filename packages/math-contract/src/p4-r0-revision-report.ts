@@ -373,6 +373,10 @@ export function validateP4R0RevisionInput(
     need(detectLoneSurrogates(prep).ok);
     const rebuilt = prepareP4R0(prep.target.contract, {
       enabled: true,
+      // A full-capability preparation may carry EXPLICIT_RISK_HINT for a
+      // template with no intrinsic code. Replaying it must use the same
+      // opt-in; on a template with intrinsic codes this changes nothing.
+      force: true,
       planningModelCalls: prep.planningModelCalls,
       remainingRootCalls: prep.remainingRootCalls,
       remainingMs: prep.remainingMs,

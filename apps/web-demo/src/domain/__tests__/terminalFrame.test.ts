@@ -118,6 +118,14 @@ describe("幂等键稳定性（④ 护栏）", () => {
     assert.notStrictEqual(stableIdempotencyKey("p", 24, 1), stableIdempotencyKey("q", 24, 1));
     assert.notStrictEqual(stableIdempotencyKey("p", 24, 1), stableIdempotencyKey("p", 8, 1));
     assert.notStrictEqual(stableIdempotencyKey("p", 24, 1), stableIdempotencyKey("p", 24, 0));
+    assert.notStrictEqual(
+      stableIdempotencyKey("p", 24, 1, 0),
+      stableIdempotencyKey("p", 24, 1, 1),
+    );
+    assert.notStrictEqual(
+      stableIdempotencyKey("p", 256, 2, 1, "full"),
+      stableIdempotencyKey("p", 256, 2, 1, "custom"),
+    );
   });
 
   it("键为 ASCII 安全（可直接作为 HTTP 头值）", () => {

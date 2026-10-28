@@ -83,6 +83,11 @@ class R0Client(FakeClient):
     # -- R0 sub-stages --------------------------------------------------
 
     def _review(self, body):
+        # The same method name serves P4 R2/R4 reports in FakeClient. Keep the
+        # R0 helper scoped to its own context shape and delegate the review
+        # stages to the base fake.
+        if body.get("schemaVersion") == "p4-r2-context-v1" or "role" not in body:
+            return super()._review(body)
         role = body["role"]
         verdict = self.verdicts[role]
         dimension = body["dimensions"][0]
@@ -327,4 +332,33 @@ def test_public_entry_r0_stage_is_inert_with_max_r0_zero(process_tracker):
     checkpoint = agent._impl.export_checkpoint(PROBLEM)
     assert checkpoint is not None
     assert _r0_rows(checkpoint) == []
+    assert process_tracker
+
+
+def test_public_entry_r0_force_runs_on_a_value_template_with_long_deadline(process_tracker):
+    """maxR0=1 is an explicit opt-in even when M1 has no intrinsic risk code.
+
+    The evaluation profile gives a real 1800s deadline; the old 5000ms input
+    ceiling made every such preparation fall back silently to WORK. A VALUE
+    problem is exactly the case that used to produce R0=0 in a full 100-item run.
+    """
+    client = R0Client()
+    agent, result = _solve(
+        client,
+        max_r0=1,
+        max_model_calls=20,
+        max_work_units=4,
+        max_effects=0,
+        max_reviews=0,
+        max_repairs=0,
+        max_consensus=0,
+        problem_seconds=10,
+    )
+    assert result["status"] == "candidate"
+    assert client.r0_seen == 3
+    assert client.review_roles == list(REVIEW_ROLES)
+    checkpoint = agent._impl.export_checkpoint(PROBLEM)
+    assert checkpoint is not None
+    rows = _r0_rows(checkpoint)
+    assert [row["data"]["role"] for row in rows] == ["MEANING", "METHOD", "TASK_TOOL", "AGGREGATE"]
     assert process_tracker

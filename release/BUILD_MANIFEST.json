@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "5a9e5066255648b64b31cbd99b86e253119202b6",
-    "tree": "05dcb20ca48b6b2973ffb52990f12041bdc77d1b"
+    "commit": "7efa1800b277ef040e87304ebbc0ba955dfeb8c2",
+    "tree": "2e6ab76550efc8050cf7b58cc175e1c2fb7d534a"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "89b57009d0d16c5e828a827b41ae1528078695031e7d5e02a725483ed9311e60",
-      "bytes": 241515
+      "sha256": "0422a21bf4b1fb583a0191c43b39bd81b5d6077d7b7966cdb465c52fc635f328",
+      "bytes": 261564
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -32,15 +32,15 @@
   "assets": {
     "protocolSchema": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
-      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+      "sha256": "4e0e266ef2d42de247cd0673da208041545347e2fe12bde0e70d742863775f67"
     },
     "protocolSchemaV14": {
       "path": "packages/protocol/schema/agent-host-v14.schema.json",
-      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+      "sha256": "4e0e266ef2d42de247cd0673da208041545347e2fe12bde0e70d742863775f67"
     },
     "protocolLegacySchema": {
       "path": "packages/protocol/schema/agent-host-v13.schema.json",
-      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+      "sha256": "9566c6f4f3024de12c45e8902341b2e0beb58dd16645534259063d040809cfaa"
     },
     "protocolLegacyManifestV12": {
       "path": "packages/protocol/schema/agent-host.schema.json",
@@ -78,19 +78,19 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "b378f3f42013246ac63e050712c823fe57d46e69e1db076a6fd18ea1e272c959"
+      "sha256": "7a26249bf2ab8cbbcef8ce87c8388aa8f670878aae06e691e7db33a4a05f5d13"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v14.schema.json",
-      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+      "sha256": "4e0e266ef2d42de247cd0673da208041545347e2fe12bde0e70d742863775f67"
     },
     "bundleSchemaV14": {
       "path": "release/schema/agent-host-v14.schema.json",
-      "sha256": "340b9cd30a9fa945548faa03b5732e3f12a011fc524b8537624da836e1cdfe74"
+      "sha256": "4e0e266ef2d42de247cd0673da208041545347e2fe12bde0e70d742863775f67"
     },
     "bundleLegacySchema": {
       "path": "release/schema/agent-host-v13.schema.json",
-      "sha256": "995166dfd3bbde62445f46534ded1848f33ae0940fd21b9a61420b379cd8d0b9"
+      "sha256": "9566c6f4f3024de12c45e8902341b2e0beb58dd16645534259063d040809cfaa"
     },
     "bundleLegacyManifestV12": {
       "path": "release/schema/agent-host.schema.json",

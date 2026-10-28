@@ -147,7 +147,7 @@ class RunRequestDto(BaseModel):
     max_work_units: Annotated[int, Field(ge=1, le=64)] = DEFAULT_BUDGET["max_work_units"]
     max_effects: Annotated[int, Field(ge=0, le=2)] = DEFAULT_BUDGET["max_effects"]
     max_reviews: Annotated[int, Field(ge=0, le=3)] = DEFAULT_BUDGET["max_reviews"]
-    max_method_loads: Annotated[int, Field(ge=0, le=0)] = DEFAULT_BUDGET["max_method_loads"]
+    max_method_loads: Annotated[int, Field(ge=0, le=4)] = DEFAULT_BUDGET["max_method_loads"]
     max_repairs: Annotated[int, Field(ge=0, le=3)] = DEFAULT_BUDGET["max_repairs"]
     max_consensus: Annotated[int, Field(ge=0, le=8)] = DEFAULT_BUDGET["max_consensus"]
     max_r0: Annotated[int, Field(ge=0, le=1)] = DEFAULT_BUDGET["max_r0"]

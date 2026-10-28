@@ -209,7 +209,18 @@ def _p4_hash(value):
 
 
 def _fail(code="FIELD_VALUE"):
-    raise ProbeError(code)
+    # Diagnostic origin only; never part of a returned object or protocol frame.
+    import inspect
+
+    frame = inspect.currentframe()
+    caller = frame.f_back if frame is not None else None
+    origin = None
+    if caller is not None:
+        origin = "%s:%d" % (
+            os.path.basename(caller.f_code.co_filename),
+            caller.f_lineno,
+        )
+    raise ProbeError(code, origin)
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -655,6 +666,14 @@ class AgentHost(_Host):
         if self.expected is None or self.expected != (_HOST_SOLVE_ID, "session.solve"):
             _fail()
         if self.pending is not None or self.stopped:
+            if os.environ.get("ASTRA_DEBUG_GUARD") == "1":
+                import sys as _debug_sys
+                request = (message.get("params") or {}).get("request") or {}
+                _debug_sys.stderr.write(
+                    "ASTRA_HOST_STOP method=%r phase=%r pending=%r stopped=%r\n"
+                    % (method, request.get("phase"), self.pending is not None, self.stopped)
+                )
+                _debug_sys.stderr.flush()
             _fail()
         if self.model_requests > self.resume_model_offset and not self.callback_done:
             _fail()
@@ -1040,7 +1059,12 @@ class AgentHost(_Host):
                 _fail()
             reserve_ok = self.max_model_calls - self.model_requests >= 2 + self.max_reviews
             task_id = request["taskId"]
-            provenance = body["routeProvenance"]
+            control_provenance = body.get("controlRouteProvenance")
+            provenance = (
+                control_provenance
+                if control_provenance is not None
+                else body["routeProvenance"]
+            )
             pending_new_provenance = None
             dep_provenance = body["dependencyProvenance"]
             pending_new_dependency = None
@@ -1234,6 +1258,16 @@ class AgentHost(_Host):
         elif request["phase"] == "CONSENSUS":
             self.consensus_calls += 1
         if transport != "COMPLETE":
+            if os.environ.get("ASTRA_DEBUG_GUARD") == "1":
+                import sys as _debug_sys
+                _debug_sys.stderr.write(
+                    "ASTRA_TRANSPORT_STOP phase=%r request=%r transport=%r remaining=%r deadline=%r now=%r\n"
+                    % (
+                        request.get("phase"), request_id, transport,
+                        request.get("remainingMs"), deadline, time.monotonic(),
+                    )
+                )
+                _debug_sys.stderr.flush()
             self.stopped = True
         if transport == "UNKNOWN" and sent:
             # Only a request that actually left this process can have an unknown

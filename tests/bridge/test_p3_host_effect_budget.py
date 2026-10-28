@@ -500,3 +500,59 @@ def test_math_asset_uses_the_tool_quota_not_the_total_effect_count(no_reads, mon
         instance.on_math_asset("node-effect-4", asset_params(4))
     assert excinfo.value.code == "BUDGET"
     assert instance.effect_calls == 3
+
+
+def test_capability_metrics_are_invocation_counts(no_reads):
+    instance = host(
+        maxR0=1, maxRepairs=1, maxReviews=2, maxConsensus=2,
+    )
+    rows = [
+        {"seq": 1, "kind": "MODEL_REQUEST", "data": {"phase": "R0", "requestId": "model-1"}},
+        {"seq": 2, "kind": "MODEL_REQUEST", "data": {"phase": "R0", "requestId": "model-2"}},
+        {"seq": 3, "kind": "MODEL_REQUEST", "data": {"phase": "R0", "requestId": "model-3"}},
+        {"seq": 4, "kind": "R0_REVIEW", "data": {"role": "MEANING"}},
+        {"seq": 5, "kind": "R0_REVIEW", "data": {"role": "METHOD"}},
+        {"seq": 6, "kind": "R0_REVIEW", "data": {"role": "TASK_TOOL"}},
+        {"seq": 7, "kind": "R0_REVIEW", "data": {"role": "AGGREGATE"}},
+        {"seq": 8, "kind": "CONTRACT_REVISED", "data": {"fromVersion": 1, "toVersion": 2}},
+        {"seq": 9, "kind": "CONSENSUS", "data": {"stage": "INDEPENDENT", "nextCandidate": "4"}},
+        {"seq": 10, "kind": "CONSENSUS", "data": {"stage": "AUDIT", "nextCandidate": "4"}},
+        {"seq": 11, "kind": "CONSENSUS", "data": {"stage": "CERTIFICATE", "nextCandidate": "4"}},
+        {"seq": 12, "kind": "CONSENSUS", "data": {"stage": "ANSWER_CLOSURE"}},
+        {"seq": 13, "kind": "MODEL_REQUEST", "data": {"phase": "R2", "requestId": "model-4"}},
+        {"seq": 14, "kind": "REPAIR", "data": {"kind": "G2_ROUTE_ADMIT"}},
+        {"seq": 15, "kind": "REPAIR", "data": {"kind": "G2_ROUTE_PICK"}},
+        {"seq": 16, "kind": "REPAIR", "data": {"kind": "G2_ROUTE_RESULT", "candidatePresent": True, "agrees": True}},
+        {"seq": 17, "kind": "MODEL_REQUEST", "data": {"phase": "REPAIR", "requestId": "model-5"}},
+        {"seq": 18, "kind": "MODEL_REQUEST", "data": {"phase": "R4", "requestId": "model-6"}},
+        {"seq": 19, "kind": "REPAIR", "data": {"accepted": False, "reason": "REVISE_REJECTED"}},
+        {"seq": 20, "kind": "REPAIR", "data": {"kind": "CAPABILITY_PROBE", "stage": "R4", "accepted": False}},
+    ]
+    metrics = agent_runtime._capability_metrics(instance, rows)
+    assert metrics["capability_profile"] == "FULL"
+    assert metrics["r0_model_calls"] == 3
+    assert metrics["r0_role_reviews"] == 3
+    assert metrics["r0_aggregates"] == 1
+    assert metrics["r0_plan_revisions"] == 1
+    assert metrics["consensus_independent_calls"] == 1
+    assert metrics["consensus_audit_calls"] == 1
+    assert metrics["consensus_certificate_calls"] == 1
+    assert metrics["consensus_closure_calls"] == 1
+    assert metrics["consensus_independent_ballots"] == 1
+    assert metrics["consensus_audit_ballots"] == 1
+    assert metrics["consensus_certificate_ballots"] == 1
+    assert metrics["r2_review_calls"] == 1
+    assert metrics["repair_model_calls"] == 1
+    assert metrics["r4_review_calls"] == 1
+    assert metrics["g2_route_attempts"] == 1
+    assert metrics["g2_routes_admitted"] == 1
+    assert metrics["g2_route_picks"] == 1
+    assert metrics["g2_route_workunits"] == 1
+    assert metrics["g2_route_candidates"] == 1
+    assert metrics["g2_route_agreements"] == 1
+    assert metrics["repair_decisions"] == 1
+    assert metrics["repair_rejected"] == 1
+    assert metrics["capability_probe_calls"] == 1
+    assert metrics["capability_probe_accepted"] == 0
+    # Only counts, never raw text.
+    assert "problem" not in json.dumps(metrics).lower()

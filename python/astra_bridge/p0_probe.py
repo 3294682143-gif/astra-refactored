@@ -72,11 +72,16 @@ def _fixed_stderr_code(chunk):
 class ProbeError(Exception):
     """Fixed-code probe failure; never carries raw input or a path."""
 
-    def __init__(self, code):
+    def __init__(self, code, origin=None):
         if code not in ERROR_CODES and code not in ("CHILD_FAILED", "TIMEOUT", "SPAWN_FAILED"):
             code = "FIELD_VALUE"
         super().__init__(code)
         self.code = code
+        # Diagnostic only: the file:line that raised the failure, never any
+        # input, path or model text. It is written to stderr so an operator can
+        # tell WHICH guard rejected a frame, and it never enters a returned
+        # object or a protocol frame.
+        self.origin = origin
 
 
 class ProbeResult(dict):

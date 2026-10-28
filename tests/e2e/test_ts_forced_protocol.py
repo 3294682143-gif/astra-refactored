@@ -291,7 +291,10 @@ def test_forced_math_asset_turn_is_cleared_after_one_execution(process_tracker):
 
     assert result["status"] == "candidate"
     assert result["final_response"] == ALEXANDER_POLYNOMIAL
-    assert client.asset_turns == ["model-2"]
+    # The evidence turn is intentionally taken before the first answer turn, so
+    # it now owns model-1. The regression this test protects is that the same
+    # forced asset turn is not rendered again on model-2/model-3.
+    assert client.asset_turns == ["model-1"]
     assert result["metrics"]["tool_effect_calls"] == 1
     assert result["metrics"]["effect_calls"] == 1
     assert process_tracker

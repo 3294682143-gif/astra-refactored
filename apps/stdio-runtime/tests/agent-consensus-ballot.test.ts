@@ -433,3 +433,61 @@ test("an audit that agrees with the ballots does not redirect the certificate", 
     false,
   );
 });
+
+test("a bounded WORK recovery does not consume a consensus slot", async () => {
+  // A malformed packet gets one bounded same-task re-solve before the candidate
+  // exists. That recovery is WORK, not a ballot: if it were classified as
+  // CONSENSUS it would consume a Host slot and the later 5+2+1 pool would hit
+  // the cap exactly when the certificate is requested. The first real Host
+  // full-profile failure (items 11/34) had this shape.
+  let workTurns = 0;
+  const ports = reactivePorts({
+    work: (request) => {
+      if (request.phase === "CONSENSUS") {
+        return reactiveWork(request, { candidate: CORRECT });
+      }
+      workTurns += 1;
+      if (workTurns === 1) return "{";
+      return reactiveWork(request, { candidate: WRONG_FIRST });
+    },
+  });
+  const result = await runAgentLoop(
+    PROBLEM,
+    "s",
+    {
+      remainingMs: 5000,
+      maxModelCalls: 24,
+      maxWorkUnits: 1,
+      maxReviews: 0,
+      maxEffects: 0,
+      maxConsensus: 8,
+      now: () => 0,
+    },
+    { model: ports.model, effect: ports.effect },
+  );
+  const consensusRequests = ports.requests.filter(
+    (request) => request.phase === "CONSENSUS",
+  );
+  const recoveryRequests = ports.requests.filter(
+    (request) =>
+      request.phase === "WORK" &&
+      request.messages[0]?.content.includes("SCHEMA RECOVERY") === true,
+  );
+  assert.equal(recoveryRequests.length, 1);
+  assert.equal(consensusRequests.length, 8);
+  const stages = (result.privateState.sessionLog?.events ?? [])
+    .filter((event) => event.kind === "CONSENSUS")
+    .map((event) => event.data["stage"])
+    .filter((stage) => stage !== "ANSWER_CLOSURE");
+  assert.deepEqual(stages, [
+    "INDEPENDENT",
+    "INDEPENDENT",
+    "INDEPENDENT",
+    "INDEPENDENT",
+    "INDEPENDENT",
+    "AUDIT",
+    "AUDIT",
+    "CERTIFICATE",
+  ]);
+  assert.equal(result.summary.finalResponse, CORRECT);
+});

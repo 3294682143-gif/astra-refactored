@@ -42,7 +42,7 @@ SCHEMA_DIALECT = "astra-p0-schema-subset-v1"
 
 LIMITS = {
     "maxFrameBytes": 65536,
-    "maxFramesPerSession": 64,
+    "maxFramesPerSession": 1024,
     "maxDepth": 24,
     "maxSafeInteger": 9007199254740991,
     "maxIdChars": 128,

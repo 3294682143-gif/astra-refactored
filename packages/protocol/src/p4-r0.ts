@@ -84,6 +84,13 @@ export interface P4R0Preparation {
  */
 export interface P4R0Options {
   readonly enabled?: boolean;
+  /**
+   * Explicit opt-in to the bounded R0 stage for a run whose template has no
+   * intrinsic risk code. The full-capability profile sets this together with
+   * `enabled`; it is never inferred from the problem text and never widens the
+   * fixed five-call stage bound.
+   */
+  readonly force?: boolean;
   readonly planningModelCalls?: number;
   readonly remainingRootCalls: number;
   readonly remainingMs: number;

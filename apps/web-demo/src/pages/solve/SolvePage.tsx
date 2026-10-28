@@ -108,6 +108,10 @@ export function SolvePage() {
   const [problem, setProblem] = useState(SAMPLE_PROBLEMS[0]!.text);
   const [maxModelCalls, setMaxModelCalls] = useState(8);
   const [maxEffects, setMaxEffects] = useState<0 | 1 | 2>(1);
+  const [maxMethodLoads, setMaxMethodLoads] = useState<0 | 1 | 2 | 3 | 4>(0);
+  // Default to the full architecture-capability envelope. The light mode is
+  // still available for a quick UI smoke test.
+  const [fullCapability, setFullCapability] = useState(true);
   const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfoResponse | null>(null);
   const defaultsAppliedRef = useRef(false);
@@ -158,6 +162,15 @@ export function SolvePage() {
         if (budget["max_effects"] === 0 || budget["max_effects"] === 1 || budget["max_effects"] === 2) {
           setMaxEffects(budget["max_effects"]);
         }
+        if (
+          budget["max_method_loads"] === 0 ||
+          budget["max_method_loads"] === 1 ||
+          budget["max_method_loads"] === 2 ||
+          budget["max_method_loads"] === 3 ||
+          budget["max_method_loads"] === 4
+        ) {
+          setMaxMethodLoads(budget["max_method_loads"]);
+        }
         defaultsAppliedRef.current = true;
       }
     });
@@ -194,16 +207,33 @@ export function SolvePage() {
 
     // 幂等键由「题目 + 预算配置」确定性推导：同题同配置重复提交会被后端识别为重放（HTTP 200），
     // 不再新起执行；界面据 httpStatus / idempotent_replay 明确区分呈现。
-    const idempotencyKey = stableIdempotencyKey(problem, maxModelCalls, maxEffects);
+    const effectiveModelCalls = fullCapability ? 256 : maxModelCalls;
+    const effectiveEffects = fullCapability ? 2 : maxEffects;
+    const effectiveMethodLoads = fullCapability
+      ? (Math.max(1, maxMethodLoads) as 1 | 2 | 3 | 4)
+      : maxMethodLoads;
+    const idempotencyKey = stableIdempotencyKey(
+      problem,
+      effectiveModelCalls,
+      effectiveEffects,
+      effectiveMethodLoads,
+      fullCapability ? "full" : "custom",
+    );
 
     // 真实请求：失败即显示真实错误态，绝不回落演示 / 样例数据。
     const created = await createRun(
       {
         problem,
         engine: "ts",
-        max_model_calls: maxModelCalls,
-        max_effects: maxEffects,
-        max_method_loads: 0,
+        max_model_calls: effectiveModelCalls,
+        max_work_units: fullCapability ? 64 : 4,
+        max_effects: effectiveEffects,
+        max_reviews: fullCapability ? 3 : 1,
+        max_method_loads: effectiveMethodLoads,
+        max_repairs: fullCapability ? 3 : 0,
+        max_consensus: fullCapability ? 8 : 0,
+        max_r0: fullCapability ? 1 : 0,
+        problem_seconds: fullCapability ? 3600 : 600,
       },
       idempotencyKey,
     );
@@ -415,7 +445,26 @@ export function SolvePage() {
             />
 
             {/* 预算与策略配置 */}
-            <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--color-line)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div style={{ marginTop: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-ink)" }}>预算与策略配置</div>
+              <button
+                type="button"
+                onClick={() => setFullCapability((value) => !value)}
+                style={{
+                  padding: "7px 12px",
+                  borderRadius: "7px",
+                  border: `1px solid ${fullCapability ? "var(--color-brand)" : "var(--color-line-strong)"}`,
+                  backgroundColor: fullCapability ? "var(--color-brand-tint)" : "#ffffff",
+                  color: fullCapability ? "var(--color-brand)" : "var(--color-ink-soft)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {fullCapability ? "全能力模式（R0/G2/5+2+1/R2/REPAIR-R4/M5）" : "轻量模式"}
+              </button>
+            </div>
+            <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--color-ink-soft)", marginBottom: "6px" }}>
                   最大模型调用配额 (max_model_calls)
@@ -458,8 +507,25 @@ export function SolvePage() {
                   ))}
                 </div>
                 <div style={{ fontSize: "10px", color: "var(--color-ink-mute)", marginTop: "4px" }}>
-                  max_method_loads 固定为 0；调用额度只计真实数学资产/工具效果。
+                  数学资产/工具调用额度；0 表示不调用。
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--color-ink-soft)", marginBottom: "6px" }}>
+                  方法卡额度 (max_method_loads)
+                </label>
+                <select
+                  value={maxMethodLoads}
+                  onChange={(e) => setMaxMethodLoads(Number(e.target.value) as 0 | 1 | 2 | 3 | 4)}
+                  style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid var(--color-line-strong)", fontSize: "13px" }}
+                >
+                  <option value={0}>0 张 (不使用方法卡)</option>
+                  <option value={1}>1 张 (全能力推荐)</option>
+                  <option value={2}>2 张</option>
+                  <option value={3}>3 张</option>
+                  <option value={4}>4 张</option>
+                </select>
               </div>
             </div>
 
@@ -590,7 +656,7 @@ export function SolvePage() {
               started: {postMeta.started === null ? "未知" : String(postMeta.started)} · terminal（响应时是否已终态）:
               {postMeta.terminal === null ? " 未知" : ` ${String(postMeta.terminal)}`}
               <br />
-              本次生效配置：engine=ts · max_model_calls={maxModelCalls} · max_effects={maxEffects} · max_method_loads=0
+              本次生效配置：engine=ts · {fullCapability ? "全能力模式" : "轻量模式"} · max_model_calls={fullCapability ? 256 : maxModelCalls} · max_effects={fullCapability ? 2 : maxEffects} · max_reviews={fullCapability ? 3 : 1} · max_repairs={fullCapability ? 3 : 0} · max_consensus={fullCapability ? 8 : 0} · max_r0={fullCapability ? 1 : 0} · max_method_loads={fullCapability ? Math.max(1, maxMethodLoads) : maxMethodLoads}
               {capabilities ? `（服务端默认 max_model_calls=${String(capabilities.default_budget?.["max_model_calls"] ?? "未知")}）` : ""}
             </div>
           ) : null}

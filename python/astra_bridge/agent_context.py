@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 
 from .agent_client import _validate_request
@@ -19,6 +20,7 @@ from .p2_host_fixture import _exact_keys, _parse_inner, _strict_utf8
 from .p3_host_methods import checked_catalog
 from .p3_host_context import same_json
 from .agent_workflow import (
+    check_control_route_provenance,
     check_dependency_provenance,
     check_route_provenance,
     checked_packet,
@@ -116,7 +118,19 @@ def _is_hash64(value):
 
 
 def _fail():
-    raise ProbeError("FIELD_VALUE")
+    # The origin is diagnostic only: `inspect` is imported lazily and the frame
+    # information never reaches a returned object.
+    import inspect
+
+    frame = inspect.currentframe()
+    caller = frame.f_back if frame is not None else None
+    origin = None
+    if caller is not None:
+        origin = "%s:%d" % (
+            os.path.basename(caller.f_code.co_filename),
+            caller.f_lineno,
+        )
+    raise ProbeError("FIELD_VALUE", origin)
 
 
 def _is_int(value):
@@ -791,7 +805,8 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         extra = extra | {"allowArtifactRedo", "revisionProvenance", "revisionTarget"}
     if version == _PROGRESS_CONTEXT_SCHEMA_VERSION:
         required = required + ("progressPolicy",)
-        extra = extra | {"progressPolicy"}
+        # Optional control-origin G2 marker; null on every ordinary v7 turn.
+        extra = extra | {"progressPolicy", "controlRouteProvenance"}
     if not set(required) <= keys or not keys <= set(required) | extra:
         _fail()
     if body["schemaVersion"] != version:
@@ -842,16 +857,23 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
         _REVISION_CONTEXT_SCHEMA_VERSION,
         _PROGRESS_CONTEXT_SCHEMA_VERSION,
     ):
-        route_prov = check_route_provenance(body, history, version)
+        control_prov = check_control_route_provenance(body, history, version)
+        route_prov = None
+        if control_prov is None:
+            route_prov = check_route_provenance(body, history, version)
         dep_prov = None
         if version in (
             _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION,
             _PROGRESS_CONTEXT_SCHEMA_VERSION,
         ):
             dep_prov = check_dependency_provenance(body, history, version)
-        if route_prov is not None and dep_prov is not None:
+        if sum(row is not None for row in (control_prov, route_prov, dep_prov)) > 1:
             _fail()
-        provenance = dep_prov if dep_prov is not None else route_prov
+        provenance = (
+            dep_prov if dep_prov is not None
+            else control_prov if control_prov is not None
+            else route_prov
+        )
         if provenance is not None:
             source_entry = history.get(provenance["sourceRequestId"])
             if not isinstance(source_entry, dict):
@@ -958,11 +980,20 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
     ):
         if not isinstance(body["allowRouteProposal"], bool):
             _fail()
-        route_prov = check_route_provenance(body, history, version)
-        if route_prov is None and body["routeProvenance"] is not None:
-            _fail()
-        if route_prov is not None and not same_json(body["routeProvenance"], route_prov):
-            _fail()
+        control_prov = check_control_route_provenance(body, history, version)
+        if control_prov is not None:
+            if body["routeProvenance"] is not None:
+                _fail()
+            if not same_json(body["controlRouteProvenance"], control_prov):
+                _fail()
+        else:
+            if body.get("controlRouteProvenance") is not None:
+                _fail()
+            route_prov = check_route_provenance(body, history, version)
+            if route_prov is None and body["routeProvenance"] is not None:
+                _fail()
+            if route_prov is not None and not same_json(body["routeProvenance"], route_prov):
+                _fail()
     if version in (
         _DEPENDENCY_CONTEXT_SCHEMA_VERSION, _REVISION_CONTEXT_SCHEMA_VERSION,
         _PROGRESS_CONTEXT_SCHEMA_VERSION,

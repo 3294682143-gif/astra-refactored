@@ -1586,7 +1586,7 @@ var init_agent_loop = __esm({
 function isPlainObject4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function sameLimits(raw) {
+function sameLimits(raw, framesLimit = null) {
   if (!isPlainObject4(raw))
     return false;
   const keys2 = Object.keys(raw);
@@ -1596,12 +1596,13 @@ function sameLimits(raw) {
   for (const key of expected) {
     if (!Object.prototype.hasOwnProperty.call(raw, key))
       return false;
-    if (raw[key] !== LIMITS[key])
+    const expectedValue = key === "maxFramesPerSession" && framesLimit !== null ? framesLimit : LIMITS[key];
+    if (raw[key] !== expectedValue)
       return false;
   }
   return true;
 }
-function validateManifest(raw, version, expected) {
+function validateManifest(raw, version, expected, framesLimit = null) {
   if (!isPlainObject4(raw))
     throw new Error("MANIFEST_INVALID");
   if (raw["protocolVersion"] !== version)
@@ -1612,7 +1613,7 @@ function validateManifest(raw, version, expected) {
     throw new Error("MANIFEST_INVALID");
   if (MANIFEST_FORMAT !== "astra-p0-protocol-manifest-v1")
     throw new Error("MANIFEST_INVALID");
-  if (!sameLimits(raw["limits"]))
+  if (!sameLimits(raw["limits"], framesLimit))
     throw new Error("MANIFEST_INVALID");
   const envelopes = raw["envelopes"];
   if (!isPlainObject4(envelopes))
@@ -4507,7 +4508,7 @@ var init_src = __esm({
     PROTOCOL_VERSION = "1.0-p0";
     LIMITS = {
       maxFrameBytes: 65536,
-      maxFramesPerSession: 64,
+      maxFramesPerSession: 1024,
       maxDepth: 24,
       maxSafeInteger: Number.MAX_SAFE_INTEGER,
       maxIdChars: 128,
@@ -8088,7 +8089,13 @@ function readOptions(options) {
   if (!isPlainObject11(options)) {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
-  const allowed = ["enabled", "planningModelCalls", "remainingRootCalls", "remainingMs"];
+  const allowed = [
+    "enabled",
+    "force",
+    "planningModelCalls",
+    "remainingRootCalls",
+    "remainingMs"
+  ];
   for (const key of Object.keys(options)) {
     if (!allowed.includes(key)) {
       throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
@@ -8096,6 +8103,10 @@ function readOptions(options) {
   }
   const enabled = options.enabled === void 0 ? false : options.enabled;
   if (typeof enabled !== "boolean") {
+    throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
+  }
+  const force = options.force === void 0 ? false : options.force;
+  if (typeof force !== "boolean") {
     throw new P2Error(P2_ERROR_CODES.PACKET_SCHEMA);
   }
   const planning = options.planningModelCalls === void 0 ? 0 : options.planningModelCalls;
@@ -8110,6 +8121,7 @@ function readOptions(options) {
   }
   return {
     enabled,
+    force,
     planningModelCalls: planning,
     remainingRootCalls: options.remainingRootCalls,
     remainingMs: options.remainingMs
@@ -8169,11 +8181,12 @@ function prepareP4R0(contract, options) {
       throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     const riskCodes = riskCodesOf(frozenContract);
+    const effectiveRiskCodes = frozenOptions.force && riskCodes.length === 0 ? ["EXPLICIT_RISK_HINT"] : riskCodes;
     if (frozenContract.riskHints.length > P2_LIMITS.maxArrayItems) {
       throw new P2Error(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     let action;
-    if (!frozenOptions.enabled || riskCodes.length === 0) {
+    if (!frozenOptions.enabled || effectiveRiskCodes.length === 0) {
       action = "SKIPPED_BY_POLICY";
     } else if (frozenOptions.planningModelCalls === 0 || frozenOptions.remainingRootCalls < P4_R0_MAX_ROOT_CALLS || frozenOptions.remainingMs <= 25) {
       action = "INSUFFICIENT_BUDGET";
@@ -8192,7 +8205,7 @@ function prepareP4R0(contract, options) {
         planText
       },
       action,
-      riskCodes,
+      riskCodes: effectiveRiskCodes,
       structuralMatch: true,
       semanticResult: "UNKNOWN",
       canSupportObligation: false,
@@ -8436,6 +8449,10 @@ function validateP4R0RevisionInput(preparation, trigger) {
     need(detectLoneSurrogates(prep).ok);
     const rebuilt = prepareP4R0(prep.target.contract, {
       enabled: true,
+      // A full-capability preparation may carry EXPLICIT_RISK_HINT for a
+      // template with no intrinsic code. Replaying it must use the same
+      // opt-in; on a template with intrinsic codes this changes nothing.
+      force: true,
       planningModelCalls: prep.planningModelCalls,
       remainingRootCalls: prep.remainingRootCalls,
       remainingMs: prep.remainingMs
@@ -11347,7 +11364,7 @@ function validateP4R0Input(preparation) {
     need2(prep.canSupportObligation === false);
     const planningModelCalls = num(prep.planningModelCalls, 0, 1);
     const remainingRootCalls = num(prep.remainingRootCalls, 0, P4_R0_MAX_ROOT_CALLS);
-    const remainingMs = num(prep.remainingMs, 0, 5e3);
+    const remainingMs = num(prep.remainingMs, 0, 36e5);
     need2(P4_R0_ACTION.includes(prep.action));
     if (prep.action === "REQUEST_REVIEW") {
       need2(riskCodes.length > 0);
@@ -12702,7 +12719,7 @@ function validateP4R0RecheckInput(preparation) {
     need4(prep.canSupportObligation === false);
     const planningModelCalls = num2(prep.planningModelCalls, 0, 1);
     const remainingRootCalls = num2(prep.remainingRootCalls, 0, 2);
-    const remainingMs = num2(prep.remainingMs, 0, 5e3);
+    const remainingMs = num2(prep.remainingMs, 0, 36e5);
     need4(P4_R0_RECHECK_ACTION.includes(prep.action));
     if (prep.action === "REQUEST_REVIEW") {
       need4(planningModelCalls === 1);
@@ -15687,19 +15704,9 @@ var init_agent_progress = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-loop-context.js
+// apps/stdio-runtime/dist/src/agent-workflow.js
 function fail22(code) {
   throw new P2Error(code);
-}
-function ordinalOf2(requestId) {
-  if (typeof requestId !== "string") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
-  }
-  const match = REQUEST_ORDINAL3.exec(requestId);
-  if (match === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
-  }
-  return Number.parseInt(match[1], 10);
 }
 function isPlainObject20(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -15708,17 +15715,714 @@ function isPlainObject20(value) {
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
-function exact10(value, keys2) {
-  if (!isPlainObject20(value)) {
+function boundedInt4(value, max) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > max) {
     fail22(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return value;
+}
+function routeIdOf(signature) {
+  return `route-${signature.slice(0, 16)}`;
+}
+var MAX_ROUTES, MAX_DEPENDENCIES, MAX_REVIEWS4, MAX_WORK_UNITS, MAX_REMAINING_MS6, MIN_REMAINING_MS8, MAX_TASK_ID_CHARS, DEFAULT_MECHANISM, AGENT_CONTROL_SECOND_ROUTE_MECHANISM, AgentWorkflowRoutes;
+var init_agent_workflow = __esm({
+  "apps/stdio-runtime/dist/src/agent-workflow.js"() {
+    "use strict";
+    init_src();
+    init_src5();
+    init_src3();
+    MAX_ROUTES = 2;
+    MAX_DEPENDENCIES = 2;
+    MAX_REVIEWS4 = 3;
+    MAX_WORK_UNITS = 64;
+    MAX_REMAINING_MS6 = 36e5;
+    MIN_REMAINING_MS8 = 25;
+    MAX_TASK_ID_CHARS = 256;
+    DEFAULT_MECHANISM = {
+      representation: "original-problem",
+      operation: "direct-reasoning",
+      lemmas: [],
+      construction: "unified-agent-loop"
+    };
+    AGENT_CONTROL_SECOND_ROUTE_MECHANISM = Object.freeze({
+      representation: "independent-recomputation",
+      operation: "second-derivation",
+      lemmas: Object.freeze([]),
+      construction: "empty-dependency-independent-route"
+    });
+    AgentWorkflowRoutes = class {
+      ledger;
+      store;
+      defaultRoute;
+      taskRoutes = /* @__PURE__ */ new Map();
+      controlRouteTaskIds = /* @__PURE__ */ new Set();
+      admissions = [];
+      dependencies = [];
+      constructor(ledger, store) {
+        this.ledger = ledger;
+        this.store = store;
+        const signature = p2RouteSignature({ routeId: "probe", ...DEFAULT_MECHANISM });
+        this.defaultRoute = store.registerRoute({
+          routeId: routeIdOf(signature),
+          ...DEFAULT_MECHANISM
+        });
+      }
+      /** The default route of this run. */
+      default() {
+        return this.defaultRoute;
+      }
+      /**
+       * Route of one task: the real admitted mapping when one exists, otherwise
+       * the default route. No old artifact is ever relabelled.
+       */
+      forTask(task) {
+        const mapped = this.taskRoutes.get(task.taskId);
+        if (mapped === void 0) {
+          return this.defaultRoute;
+        }
+        const found = this.store.routesSnapshot().find((route) => route.routeId === mapped.routeId);
+        if (found === void 0) {
+          fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+        }
+        return found;
+      }
+      /** Provenance of one task, or null for a task on the default route. */
+      provenanceOf(taskId) {
+        const admission = this.admissions.find((row) => row.taskId === taskId);
+        return admission?.provenance ?? null;
+      }
+      /** Provenance of one dependent task, or null when it is not one. */
+      dependencyProvenanceOf(taskId) {
+        const admission = this.dependencies.find((row) => row.taskId === taskId);
+        return admission?.provenance ?? null;
+      }
+      /**
+       * Whether a second route may even be considered. All bounds are strict
+       * integers; a model can never widen them.
+       */
+      canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
+        const calls = boundedInt4(remainingCalls, AGENT_MAX_MODEL_CALLS);
+        const reviews = boundedInt4(maxReviews, MAX_REVIEWS4);
+        const units = boundedInt4(remainingWorkUnits, MAX_WORK_UNITS);
+        const ms7 = boundedInt4(remainingMs, MAX_REMAINING_MS6);
+        if (this.admissions.length !== 0) {
+          return false;
+        }
+        if (this.store.routesSnapshot().length >= MAX_ROUTES) {
+          return false;
+        }
+        if (calls < 1 + reviews) {
+          return false;
+        }
+        if (units < 1) {
+          return false;
+        }
+        return ms7 > MIN_REMAINING_MS8;
+      }
+      /**
+       * Whether one dependent task may even be considered. Same strict bounds as
+       * `canAdmit`, but the route count is not a limit here: only the dependency
+       * admission count is.
+       */
+      canContinue(remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
+        const calls = boundedInt4(remainingCalls, AGENT_MAX_MODEL_CALLS);
+        const reviews = boundedInt4(maxReviews, MAX_REVIEWS4);
+        const units = boundedInt4(remainingWorkUnits, MAX_WORK_UNITS);
+        const ms7 = boundedInt4(remainingMs, MAX_REMAINING_MS6);
+        if (this.dependencies.length >= MAX_DEPENDENCIES) {
+          return false;
+        }
+        if (calls < 1 + reviews) {
+          return false;
+        }
+        if (units < 1) {
+          return false;
+        }
+        return ms7 > MIN_REMAINING_MS8;
+      }
+      /**
+       * Admit one dependent task from a real COMPLETE v3 artifact.
+       *
+       * Every check runs before the first mutation. A rejected proposal returns
+       * `false` and leaves the ledger, store, routes and mappings untouched; the
+       * already accepted artifact and candidate are preserved. The model supplies
+       * no task id, refs, route or budget: the child inherits the real route of its
+       * source task and its input refs are filled later by the ledger.
+       */
+      admitDependency(artifact, remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
+        if (!this.canContinue(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
+          return false;
+        }
+        if (!isPlainObject20(artifact)) {
+          return false;
+        }
+        const frozen = p2Snapshot(artifact);
+        if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
+          return false;
+        }
+        const packet = frozen.packet;
+        if (packet === null || packet.schemaVersion !== "p2a-work-v3") {
+          return false;
+        }
+        const proposal = packet.workflowProposal;
+        if (proposal === null || !isPlainObject20(proposal)) {
+          return false;
+        }
+        if (proposal.kind !== "DEPENDENT_TASK") {
+          return false;
+        }
+        if (typeof proposal.rationale !== "string" || proposal.rationale.trim().length === 0) {
+          return false;
+        }
+        const obligationId = proposal.obligationId;
+        if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
+          return false;
+        }
+        const ref = {
+          artifactId: frozen.artifactId,
+          artifactVersion: frozen.envelope.artifactVersion ?? 0
+        };
+        let entry;
+        try {
+          entry = this.store.get(ref);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (entry.availability !== "ACTIVE") {
+          return false;
+        }
+        if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
+          return false;
+        }
+        const currentVersion = frozen.envelope.artifactVersion ?? 0;
+        if (this.store.snapshot().some((row) => row.artifact.artifactId === frozen.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > currentVersion)) {
+          return false;
+        }
+        const contract = this.ledger.snapshot();
+        const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
+        if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
+          return false;
+        }
+        if (obligationId !== sourceTask.obligationId) {
+          return false;
+        }
+        const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
+        if (obligation === void 0) {
+          return false;
+        }
+        if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
+          return false;
+        }
+        if (obligation.envelope.scopeId !== sourceTask.scopeId) {
+          return false;
+        }
+        if (!packet.pendingObligations.includes(obligationId)) {
+          return false;
+        }
+        const sourceRoute = this.forTask(sourceTask);
+        if (sourceRoute.routeId !== frozen.routeId) {
+          return false;
+        }
+        if (!this.store.routesSnapshot().some((route) => route.routeId === sourceRoute.routeId)) {
+          return false;
+        }
+        const taskId = `dep-task-${frozen.sourceRequestId}`;
+        if ([...taskId].length > MAX_TASK_ID_CHARS) {
+          return false;
+        }
+        if (contract.tasks.some((task) => task.taskId === taskId)) {
+          return false;
+        }
+        if (this.dependencies.some((row) => row.provenance.sourceRequestId === frozen.sourceRequestId)) {
+          return false;
+        }
+        const eventSeq = this.ledger.nextEventSeq();
+        const sessionId = contract.envelope.sessionId;
+        const newTask = p2Snapshot({
+          envelope: {
+            ...sourceTask.envelope,
+            recordId: `${sessionId}:m1:dep-task:${frozen.sourceRequestId}`,
+            taskId,
+            eventSeq
+          },
+          taskId,
+          goalId: sourceTask.goalId,
+          obligationId: sourceTask.obligationId,
+          scopeId: sourceTask.scopeId,
+          inputArtifactRefs: [],
+          dependencyTaskIds: [sourceTask.taskId],
+          expectedResult: sourceTask.expectedResult,
+          acceptanceCriteria: sourceTask.acceptanceCriteria,
+          delivery: "READY"
+        });
+        const prospective = p2Snapshot({
+          ...contract,
+          tasks: [...contract.tasks, newTask]
+        });
+        try {
+          this.ledger.validateTaskAddition([newTask]);
+          this.store.validateAddedTasks(prospective);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        const provenance = p2Snapshot({
+          sourceRequestId: frozen.sourceRequestId,
+          sourceArtifactRef: ref,
+          obligationId,
+          routeSignature: sourceRoute.signature
+        });
+        this.ledger.addTasks([newTask]);
+        this.store.syncAddedTasks(this.ledger.snapshot());
+        this.taskRoutes.set(taskId, p2Snapshot({
+          taskId,
+          routeId: sourceRoute.routeId,
+          provenance: null
+        }));
+        this.dependencies.push(p2Snapshot({
+          taskId,
+          routeId: sourceRoute.routeId,
+          provenance
+        }));
+        return true;
+      }
+      /**
+       * Admit one dynamic route from a real COMPLETE v2 artifact.
+       *
+       * Every check runs before the first mutation. A rejected proposal returns
+       * `false` and leaves the ledger, store, routes and mappings untouched; the
+       * already accepted artifact and candidate are preserved.
+       */
+      admit(artifact, remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
+        if (!this.canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
+          return false;
+        }
+        if (!isPlainObject20(artifact)) {
+          return false;
+        }
+        const frozen = p2Snapshot(artifact);
+        if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
+          return false;
+        }
+        const packet = frozen.packet;
+        if (packet === null || packet.schemaVersion !== "p2a-work-v2") {
+          return false;
+        }
+        const proposal = packet.workflowProposal;
+        if (proposal === null || !isPlainObject20(proposal)) {
+          return false;
+        }
+        if (proposal.kind !== "NEW_ROUTE") {
+          return false;
+        }
+        if (typeof proposal.rationale !== "string" || proposal.rationale.trim().length === 0) {
+          return false;
+        }
+        const obligationId = proposal.obligationId;
+        if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
+          return false;
+        }
+        const mechanism = proposal.mechanism;
+        if (!isPlainObject20(mechanism)) {
+          return false;
+        }
+        const ref = {
+          artifactId: frozen.artifactId,
+          artifactVersion: frozen.envelope.artifactVersion ?? 0
+        };
+        let entry;
+        try {
+          entry = this.store.get(ref);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (entry.availability !== "ACTIVE") {
+          return false;
+        }
+        if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
+          return false;
+        }
+        const contract = this.ledger.snapshot();
+        const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
+        if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
+          return false;
+        }
+        if (obligationId !== sourceTask.obligationId) {
+          return false;
+        }
+        const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
+        if (obligation === void 0) {
+          return false;
+        }
+        if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
+          return false;
+        }
+        if (obligation.envelope.scopeId !== sourceTask.scopeId) {
+          return false;
+        }
+        if (!packet.pendingObligations.includes(obligationId)) {
+          return false;
+        }
+        const template = contract.tasks.find((task) => task.taskId === obligation.envelope.taskId);
+        if (template === void 0) {
+          return false;
+        }
+        if (template.scopeId !== sourceTask.scopeId) {
+          return false;
+        }
+        const sourceRoute = this.forTask(sourceTask);
+        if (sourceRoute.routeId !== frozen.routeId) {
+          return false;
+        }
+        const probe = new P2RouteRegistry();
+        for (const existing of this.store.routesSnapshot()) {
+          try {
+            probe.register({
+              routeId: existing.routeId,
+              representation: existing.representation,
+              operation: existing.operation,
+              lemmas: existing.lemmas,
+              construction: existing.construction
+            });
+          } catch (error) {
+            if (error instanceof P2Error) {
+              return false;
+            }
+            throw error;
+          }
+        }
+        let signature;
+        let routeInput;
+        try {
+          routeInput = {
+            routeId: "probe",
+            representation: mechanism.representation,
+            operation: mechanism.operation,
+            lemmas: mechanism.lemmas,
+            construction: mechanism.construction
+          };
+          signature = p2RouteSignature(routeInput);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (signature === sourceRoute.signature) {
+          return false;
+        }
+        const routeId = routeIdOf(signature);
+        if (this.store.routesSnapshot().some((route) => route.routeId === routeId)) {
+          return false;
+        }
+        let spec;
+        try {
+          spec = probe.register({ ...routeInput, routeId });
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (spec.operation === sourceRoute.operation && spec.construction === sourceRoute.construction) {
+          return false;
+        }
+        const taskId = `route-task-${frozen.sourceRequestId}`;
+        if ([...taskId].length > MAX_TASK_ID_CHARS) {
+          return false;
+        }
+        if (contract.tasks.some((task) => task.taskId === taskId)) {
+          return false;
+        }
+        const eventSeq = this.ledger.nextEventSeq();
+        const sessionId = contract.envelope.sessionId;
+        const newTask = p2Snapshot({
+          envelope: {
+            ...template.envelope,
+            recordId: `${sessionId}:m1:route-task:${frozen.sourceRequestId}`,
+            taskId,
+            eventSeq
+          },
+          taskId,
+          goalId: template.goalId,
+          obligationId: template.obligationId,
+          scopeId: template.scopeId,
+          inputArtifactRefs: [],
+          dependencyTaskIds: [],
+          expectedResult: template.expectedResult,
+          acceptanceCriteria: template.acceptanceCriteria,
+          delivery: "READY"
+        });
+        const prospective = p2Snapshot({
+          ...contract,
+          tasks: [...contract.tasks, newTask]
+        });
+        try {
+          this.ledger.validateTaskAddition([newTask]);
+          this.store.validateAddedTasks(prospective);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        const provenance = p2Snapshot({
+          sourceRequestId: frozen.sourceRequestId,
+          sourceArtifactRef: ref,
+          obligationId,
+          routeSignature: signature
+        });
+        this.ledger.addTasks([newTask]);
+        this.store.syncAddedTasks(this.ledger.snapshot());
+        this.store.registerRoute({ ...routeInput, routeId });
+        this.taskRoutes.set(taskId, p2Snapshot({
+          taskId,
+          routeId: spec.routeId,
+          provenance
+        }));
+        this.admissions.push(p2Snapshot({
+          taskId,
+          routeId: spec.routeId,
+          provenance
+        }));
+        return true;
+      }
+      /**
+       * Admit the control-originated second route of the explicit
+       * full-capability profile.
+       *
+       * This is not a model `NEW_ROUTE` proposal and it never relaxes that path:
+       * the same mechanism-signature, scope, pending-obligation and budget checks
+       * apply, and the new task starts with empty artifact/dependency refs. The
+       * source is a real ACTIVE artifact; the obligation is a real OPEN
+       * obligation of the same goal and scope. The only difference is that control
+       * supplies the mechanism so the G2 branch can be exercised even when no
+       * model proposal is produced.
+       */
+      admitControlSecondRoute(artifact, obligationId, remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
+        if (!this.canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
+          return false;
+        }
+        if (!isPlainObject20(artifact)) {
+          return false;
+        }
+        const frozen = p2Snapshot(artifact);
+        if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
+          return false;
+        }
+        if (frozen.packet === null) {
+          return false;
+        }
+        const ref = {
+          artifactId: frozen.artifactId,
+          artifactVersion: frozen.envelope.artifactVersion ?? 0
+        };
+        let entry;
+        try {
+          entry = this.store.get(ref);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (entry.availability !== "ACTIVE") {
+          return false;
+        }
+        if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
+          return false;
+        }
+        const contract = this.ledger.snapshot();
+        const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
+        if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
+          return false;
+        }
+        if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
+          return false;
+        }
+        const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
+        if (obligation === void 0 || obligation.goalId !== sourceTask.goalId) {
+          return false;
+        }
+        if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
+          return false;
+        }
+        if (obligation.envelope.scopeId !== sourceTask.scopeId) {
+          return false;
+        }
+        const template = contract.tasks.find((task) => task.taskId === obligation.envelope.taskId);
+        if (template === void 0 || template.scopeId !== sourceTask.scopeId) {
+          return false;
+        }
+        const sourceRoute = this.forTask(sourceTask);
+        const probe = new P2RouteRegistry();
+        for (const existing of this.store.routesSnapshot()) {
+          try {
+            probe.register({
+              routeId: existing.routeId,
+              representation: existing.representation,
+              operation: existing.operation,
+              lemmas: existing.lemmas,
+              construction: existing.construction
+            });
+          } catch (error) {
+            if (error instanceof P2Error) {
+              return false;
+            }
+            throw error;
+          }
+        }
+        let signature;
+        let routeInput;
+        try {
+          routeInput = {
+            routeId: "probe",
+            ...AGENT_CONTROL_SECOND_ROUTE_MECHANISM
+          };
+          signature = p2RouteSignature(routeInput);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (signature === sourceRoute.signature) {
+          return false;
+        }
+        const routeId = routeIdOf(signature);
+        if (this.store.routesSnapshot().some((route) => route.routeId === routeId)) {
+          return false;
+        }
+        let spec;
+        try {
+          spec = probe.register({ ...routeInput, routeId });
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        if (spec.operation === sourceRoute.operation && spec.construction === sourceRoute.construction) {
+          return false;
+        }
+        const taskId = `route-task-${frozen.sourceRequestId}`;
+        if ([...taskId].length > MAX_TASK_ID_CHARS) {
+          return false;
+        }
+        if (contract.tasks.some((task) => task.taskId === taskId)) {
+          return false;
+        }
+        const eventSeq = this.ledger.nextEventSeq();
+        const sessionId = contract.envelope.sessionId;
+        const newTask = p2Snapshot({
+          envelope: {
+            ...template.envelope,
+            recordId: `${sessionId}:m1:g2-route:${frozen.sourceRequestId}`,
+            taskId,
+            eventSeq
+          },
+          taskId,
+          goalId: template.goalId,
+          obligationId: template.obligationId,
+          scopeId: template.scopeId,
+          inputArtifactRefs: [],
+          dependencyTaskIds: [],
+          expectedResult: template.expectedResult,
+          acceptanceCriteria: template.acceptanceCriteria,
+          delivery: "READY"
+        });
+        const prospective = p2Snapshot({
+          ...contract,
+          tasks: [...contract.tasks, newTask]
+        });
+        try {
+          this.ledger.validateTaskAddition([newTask]);
+          this.store.validateAddedTasks(prospective);
+        } catch (error) {
+          if (error instanceof P2Error) {
+            return false;
+          }
+          throw error;
+        }
+        const provenance = p2Snapshot({
+          sourceRequestId: frozen.sourceRequestId,
+          sourceArtifactRef: ref,
+          obligationId,
+          routeSignature: signature
+        });
+        this.ledger.addTasks([newTask]);
+        this.store.syncAddedTasks(this.ledger.snapshot());
+        this.store.registerRoute({ ...routeInput, routeId });
+        this.taskRoutes.set(taskId, p2Snapshot({
+          taskId,
+          routeId: spec.routeId,
+          provenance
+        }));
+        this.controlRouteTaskIds.add(taskId);
+        this.admissions.push(p2Snapshot({
+          taskId,
+          routeId: spec.routeId,
+          provenance
+        }));
+        return true;
+      }
+      /** Whether one task was created by the control-originated G2 route. */
+      isControlSecondRoute(taskId) {
+        return this.controlRouteTaskIds.has(taskId);
+      }
+      /** Plain-array snapshot for the private state; no Map escapes. */
+      snapshot() {
+        return p2Snapshot({
+          routes: this.store.routesSnapshot(),
+          taskRoutes: [...this.taskRoutes.values()],
+          routeAdmissions: [...this.admissions],
+          dependencyAdmissions: [...this.dependencies]
+        });
+      }
+    };
+  }
+});
+
+// apps/stdio-runtime/dist/src/agent-loop-context.js
+function fail23(code) {
+  throw new P2Error(code);
+}
+function ordinalOf2(requestId) {
+  if (typeof requestId !== "string") {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const match = REQUEST_ORDINAL3.exec(requestId);
+  if (match === null) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return Number.parseInt(match[1], 10);
+}
+function isPlainObject21(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+function exact10(value, keys2) {
+  if (!isPlainObject21(value)) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const source = value;
   if (Object.keys(source).length !== keys2.length) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   for (const key of keys2) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
   }
   return source;
@@ -15727,48 +16431,102 @@ function checkRouteProvenance(value, contract, task, route, requestId) {
   const row = exact10(value, PROVENANCE_FIELDS);
   const sourceRequestId = row.sourceRequestId;
   if (typeof sourceRequestId !== "string") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
   if (match === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (Number.parseInt(match[1], 10) >= ordinalOf2(requestId)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const ref = exact10(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
   if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if ([...ref.artifactId].length > 256) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   if (typeof ref.artifactVersion !== "number" || !Number.isSafeInteger(ref.artifactVersion) || ref.artifactVersion < 1) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   const obligationId = row.obligationId;
   if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
   if (obligation === void 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (obligation.goalId !== task.goalId || obligation.envelope.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const routeSignature = row.routeSignature;
   if (typeof routeSignature !== "string" || !HASH7.test(routeSignature)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (routeSignature !== route.signature) {
-    fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (task.inputArtifactRefs.length !== 0 || task.dependencyTaskIds.length !== 0) {
-    fail22(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    fail23(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
   }
   if (task.taskId !== `route-task-${sourceRequestId}`) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    sourceRequestId,
+    sourceArtifactRef: {
+      artifactId: ref.artifactId,
+      artifactVersion: ref.artifactVersion
+    },
+    obligationId,
+    routeSignature
+  });
+}
+function checkControlRouteProvenance(value, contract, task, route, requestId) {
+  const row = exact10(value, PROVENANCE_FIELDS);
+  const sourceRequestId = row.sourceRequestId;
+  if (typeof sourceRequestId !== "string") {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
+  if (match === null) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (Number.parseInt(match[1], 10) >= ordinalOf2(requestId)) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const ref = exact10(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
+  if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if ([...ref.artifactId].length > 256) {
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  if (typeof ref.artifactVersion !== "number" || !Number.isSafeInteger(ref.artifactVersion) || ref.artifactVersion < 1) {
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const obligationId = row.obligationId;
+  if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
+  if (obligation === void 0 || obligation.goalId !== task.goalId || obligation.envelope.scopeId !== task.scopeId || obligation.status !== "OPEN" && obligation.status !== "REOPENED" && obligation.status !== "IN_PROGRESS") {
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const routeSignature = row.routeSignature;
+  if (typeof routeSignature !== "string" || !HASH7.test(routeSignature)) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (routeSignature !== route.signature || route.operation !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.operation || route.construction !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.construction || route.representation !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.representation || route.lemmas.length !== 0) {
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (task.inputArtifactRefs.length !== 0 || task.dependencyTaskIds.length !== 0) {
+    fail23(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  }
+  if (task.taskId !== `route-task-${sourceRequestId}`) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
     sourceRequestId,
@@ -15784,83 +16542,83 @@ function checkDependencyProvenance(value, contract, task, route, requestId, inpu
   const row = exact10(value, PROVENANCE_FIELDS);
   const sourceRequestId = row.sourceRequestId;
   if (typeof sourceRequestId !== "string") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
   if (match === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (Number.parseInt(match[1], 10) >= ordinalOf2(requestId)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const ref = exact10(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
   if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if ([...ref.artifactId].length > 256) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   if (typeof ref.artifactVersion !== "number" || !Number.isSafeInteger(ref.artifactVersion) || ref.artifactVersion < 1) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   const obligationId = row.obligationId;
   if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
   if (obligation === void 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (obligation.goalId !== task.goalId || obligation.envelope.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const routeSignature = row.routeSignature;
   if (typeof routeSignature !== "string" || !HASH7.test(routeSignature)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (routeSignature !== route.signature) {
-    fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (task.taskId !== `${DEPENDENCY_TASK_PREFIX}${sourceRequestId}`) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (task.inputArtifactRefs.length !== 1 || task.dependencyTaskIds.length !== 1) {
-    fail22(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    fail23(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
   }
   if (inputs.length !== 1) {
-    fail22(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+    fail23(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
   }
   const input = inputs[0];
   if (input.artifactId !== ref.artifactId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (input.envelope.artifactVersion !== ref.artifactVersion) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (input.sourceRequestId !== sourceRequestId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (input.routeId !== route.routeId) {
-    fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (input.envelope.sessionId !== contract.envelope.sessionId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (input.envelope.problemHash !== contract.problemHash) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (input.envelope.contractVersion !== contract.contractVersion) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (input.envelope.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const declaredRef = task.inputArtifactRefs[0];
   if (declaredRef.artifactId !== ref.artifactId || declaredRef.artifactVersion !== ref.artifactVersion) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (task.dependencyTaskIds[0] !== input.envelope.taskId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
     sourceRequestId,
@@ -15876,45 +16634,45 @@ function checkRevisionProvenance(value, requestId) {
   const row = exact10(value, REVISION_PROVENANCE_FIELDS);
   const sourceRequestId = row.sourceRequestId;
   if (typeof sourceRequestId !== "string") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const sourceMatch = REVISION_ORDINAL.exec(sourceRequestId);
   if (sourceMatch === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const sourceOrdinal = Number.parseInt(sourceMatch[1], 10);
   if (sourceOrdinal >= ordinalOf2(requestId)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const targetSourceRequestId = row.targetSourceRequestId;
   if (typeof targetSourceRequestId !== "string") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const targetMatch = REVISION_ORDINAL.exec(targetSourceRequestId);
   if (targetMatch === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const targetOrdinal = Number.parseInt(targetMatch[1], 10);
   if (targetOrdinal > sourceOrdinal) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const sourceRef = exact10(row.sourceArtifactRef, REVISION_TARGET_REF_FIELDS);
   if (typeof sourceRef.artifactId !== "string" || sourceRef.artifactId.trim().length === 0 || [...sourceRef.artifactId].length > REVISION_MAX_ID_CHARS) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof sourceRef.artifactVersion !== "number" || !Number.isSafeInteger(sourceRef.artifactVersion) || sourceRef.artifactVersion < 1) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   const targetRef = exact10(row.targetArtifactRef, REVISION_TARGET_REF_FIELDS);
   if (typeof targetRef.artifactId !== "string" || targetRef.artifactId.trim().length === 0 || [...targetRef.artifactId].length > REVISION_MAX_ID_CHARS) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof targetRef.artifactVersion !== "number" || !Number.isSafeInteger(targetRef.artifactVersion) || targetRef.artifactVersion < 1) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   const targetHash = row.targetHash;
   if (typeof targetHash !== "string" || !HASH7.test(targetHash)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
     sourceRequestId,
@@ -15934,108 +16692,108 @@ function checkRevisionTarget(value, contract, task, route, trustedScope, provena
   const row = exact10(value, REVISION_TARGET_FIELDS);
   const envelope = exact10(row.envelope, REVISION_TARGET_ENVELOPE_FIELDS);
   if (envelope.sourceModule !== "M3") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.sessionId !== contract.envelope.sessionId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.problemHash !== contract.problemHash) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.contractVersion !== contract.contractVersion) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (envelope.taskId !== task.taskId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   if (typeof envelope.recordId !== "string" || envelope.recordId.trim().length === 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof envelope.causeEventId !== "string" || envelope.causeEventId.trim().length === 0) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof envelope.eventSeq !== "number" || !Number.isSafeInteger(envelope.eventSeq) || envelope.eventSeq < 1) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const artifactId = row.artifactId;
   if (typeof artifactId !== "string" || artifactId.trim().length === 0 || [...artifactId].length > REVISION_MAX_ID_CHARS) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.artifactId !== artifactId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof envelope.artifactVersion !== "number" || !Number.isSafeInteger(envelope.artifactVersion) || envelope.artifactVersion < 1) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (artifactId !== provenance.targetArtifactRef.artifactId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (envelope.artifactVersion !== provenance.targetArtifactRef.artifactVersion) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (row.sourceRequestId !== provenance.targetSourceRequestId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (row.routeId !== route.routeId) {
-    fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (row.transportStatus !== "COMPLETE" || row.deliveryStatus !== "COMPLETE") {
-    fail22(P2_ERROR_CODES.PACKET_DELIVERY);
+    fail23(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   if (row.level !== "PROVISIONAL" || row.checkResult !== "UNKNOWN") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (typeof row.provisionalDependency !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const rawText = row.rawResponseText;
   if (typeof rawText !== "string" || !detectLoneSurrogates(rawText).ok) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (Buffer.byteLength(rawText, "utf8") > MAX_CONTEXT_BYTES9) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   if (typeof row.rawResponseHash !== "string" || !HASH7.test(row.rawResponseHash)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (row.rawResponseHash !== p4Hash(rawText)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (row.rawResponseHash !== provenance.targetHash) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (row.rawResponseRef !== `${contract.envelope.sessionId}:raw:${row.sourceRequestId}`) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const scope = row.scope;
   if (typeof scope !== "object" || scope === null || Array.isArray(scope)) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   if (scope.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   if (canonicalScope(scope) !== canonicalScope(trustedScope)) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   const dependencies = row.dependencies;
   if (!Array.isArray(dependencies)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   for (const item of dependencies) {
     const ref = exact10(item, REVISION_TARGET_REF_FIELDS);
     if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0 || [...ref.artifactId].length > REVISION_MAX_ID_CHARS) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (typeof ref.artifactVersion !== "number" || !Number.isSafeInteger(ref.artifactVersion) || ref.artifactVersion < 1) {
-      fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+      fail23(P2_ERROR_CODES.VERSION_MISMATCH);
     }
   }
   const packet = row.packet;
   if (packet === null || typeof packet !== "object" || Array.isArray(packet)) {
-    fail22(P2_ERROR_CODES.PACKET_DELIVERY);
+    fail23(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   let parsed;
   try {
@@ -16051,37 +16809,37 @@ function checkRevisionTarget(value, contract, task, route, trustedScope, provena
     }));
   } catch (error) {
     if (error instanceof P2Error) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     throw error;
   }
   if (!p4JsonEqual(p2Snapshot(parsed), p2Snapshot(packet))) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const bound = packet;
   if (bound.sessionId !== contract.envelope.sessionId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (bound.problemHash !== contract.problemHash) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (bound.contractVersion !== contract.contractVersion) {
-    fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+    fail23(P2_ERROR_CODES.VERSION_MISMATCH);
   }
   if (bound.taskId !== task.taskId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (bound.goalId !== task.goalId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (bound.scopeId !== task.scopeId) {
-    fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+    fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
   }
   if (bound.routeId !== route.routeId) {
-    fail22(P2_ERROR_CODES.ROUTE_MISMATCH);
+    fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (bound.sourceRequestId !== row.sourceRequestId) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   return p2Snapshot({
     envelope: {
@@ -16115,7 +16873,7 @@ function checkRevisionTarget(value, contract, task, route, trustedScope, provena
 }
 function guardedObservations(contract, task, requestId, observations, catalog, assets) {
   if (!Array.isArray(observations) || observations.length > MAX_OBSERVATIONS) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   const current = ordinalOf2(requestId);
   const kept = [];
@@ -16124,80 +16882,80 @@ function guardedObservations(contract, task, requestId, observations, catalog, a
     const receipt = exact10(p2Snapshot(item), RECEIPT_FIELDS3);
     const effectId = receipt.effectId;
     if (typeof effectId !== "string" || !EFFECT_IDS4.includes(effectId)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (seenEffects.has(effectId)) {
-      fail22(P2_ERROR_CODES.DUPLICATE_REQUEST_ID);
+      fail23(P2_ERROR_CODES.DUPLICATE_REQUEST_ID);
     }
     seenEffects.add(effectId);
     const binding = exact10(receipt.binding, BINDING_FIELDS4);
     if (binding.sessionId !== contract.envelope.sessionId) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (binding.problemHash !== contract.problemHash) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (binding.contractVersion !== contract.contractVersion) {
-      fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+      fail23(P2_ERROR_CODES.VERSION_MISMATCH);
     }
     if (binding.taskId !== task.taskId) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (binding.scopeId !== task.scopeId) {
-      fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+      fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
     }
     if (typeof binding.sourceRequestId !== "string") {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (ordinalOf2(binding.sourceRequestId) >= current) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (receipt.status !== "COMPLETE" && receipt.status !== "ERROR") {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (receipt.source !== "PROGRAM_OBSERVATION" && receipt.source !== "METHOD_REFERENCE" && receipt.source !== "GENERATED_OBSERVATION") {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     const expectedLevel = receipt.source === "GENERATED_OBSERVATION" ? "OBSERVED" : "PROVISIONAL";
     if (receipt.level !== expectedLevel || receipt.checkResult !== "UNKNOWN") {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     const observation = receipt.observation;
     if (typeof observation !== "string" || observation.trim().length === 0) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (!detectLoneSurrogates(observation).ok) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (Buffer.byteLength(observation, "utf8") > MAX_OBSERVATION_BYTES4) {
-      fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+      fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     if (typeof receipt.observationHash !== "string" || !HASH7.test(receipt.observationHash)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (receipt.observationHash !== p4Hash(observation)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     const sourceRequestId = binding.sourceRequestId;
     if (typeof sourceRequestId !== "string") {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (receipt.source === "METHOD_REFERENCE" && receipt.status === "COMPLETE") {
       if (catalog === null) {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       let parsed;
       try {
         parsed = JSON.parse(observation);
       } catch {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
-      if (!isPlainObject20(parsed)) {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+      if (!isPlainObject21(parsed)) {
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       const methodId2 = parsed.method;
       if (typeof methodId2 !== "string") {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       const probe = p2Snapshot({
         effectId,
@@ -16215,24 +16973,24 @@ function guardedObservations(contract, task, requestId, observations, catalog, a
       try {
         p3MethodObservation(receipt, probe, catalog);
       } catch {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       const title = catalog.entries.find((entry) => entry.id === methodId2)?.title;
       if (title === void 0) {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       const asset = assets.find((entry) => entry.id === methodId2);
       if (asset === void 0) {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       let checked;
       try {
         checked = readAsset(parsed.asset, methodId2, title);
       } catch {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
       if (checked.id !== asset.id || checked.title !== asset.title || checked.version !== asset.version || checked.body !== asset.body || checked.bodySha256 !== asset.bodySha256 || checked.bodyChars !== asset.bodyChars) {
-        fail22(P2_ERROR_CODES.PACKET_BINDING);
+        fail23(P2_ERROR_CODES.PACKET_BINDING);
       }
     }
     kept.push(p2Snapshot({
@@ -16259,7 +17017,7 @@ function guardedObservations(contract, task, requestId, observations, catalog, a
 }
 function buildAgentWorkContext(input) {
   if (typeof input !== "object" || input === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const captured = p2Snapshot(input);
   const contract = captured.contract;
@@ -16268,49 +17026,53 @@ function buildAgentWorkContext(input) {
   const requestId = captured.requestId;
   const inputs = captured.inputs;
   if (typeof captured.allowTools !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const allowMethods = captured.allowMethods === void 0 ? false : captured.allowMethods;
   if (typeof allowMethods !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const allowFinal = captured.allowFinal === void 0 ? false : captured.allowFinal;
   if (typeof allowFinal !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const allowRouteProposal = captured.allowRouteProposal === void 0 ? false : captured.allowRouteProposal;
   if (typeof allowRouteProposal !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const allowTaskContinuation = captured.allowTaskContinuation === void 0 ? false : captured.allowTaskContinuation;
   if (typeof allowTaskContinuation !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const allowArtifactRedo = captured.allowArtifactRedo === void 0 ? false : captured.allowArtifactRedo;
   if (typeof allowArtifactRedo !== "boolean") {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   let routeProvenance = null;
   if (captured.routeProvenance !== void 0 && captured.routeProvenance !== null) {
     routeProvenance = checkRouteProvenance(p2Snapshot(captured.routeProvenance), contract, task, route, requestId);
   }
+  let controlRouteProvenance = null;
+  if (captured.controlRouteProvenance !== void 0 && captured.controlRouteProvenance !== null) {
+    controlRouteProvenance = checkControlRouteProvenance(p2Snapshot(captured.controlRouteProvenance), contract, task, route, requestId);
+  }
   let dependencyProvenance = null;
   if (captured.dependencyProvenance !== void 0 && captured.dependencyProvenance !== null) {
     dependencyProvenance = checkDependencyProvenance(p2Snapshot(captured.dependencyProvenance), contract, task, route, requestId, captured.inputs);
   }
-  if (routeProvenance !== null && dependencyProvenance !== null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+  if ([routeProvenance, controlRouteProvenance, dependencyProvenance].filter((value) => value !== null).length > 1) {
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const rawRevisionProvenance = captured.revisionProvenance === void 0 ? null : captured.revisionProvenance;
   const rawRevisionTarget = captured.revisionTarget === void 0 ? null : captured.revisionTarget;
   if (rawRevisionProvenance === null !== (rawRevisionTarget === null)) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   let revisionProvenance = null;
   let revisionTarget = null;
   if (rawRevisionProvenance !== null && rawRevisionTarget !== null) {
     if (allowArtifactRedo || allowRouteProposal || allowTaskContinuation) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     revisionProvenance = checkRevisionProvenance(p2Snapshot(rawRevisionProvenance), requestId);
   }
@@ -16319,63 +17081,63 @@ function buildAgentWorkContext(input) {
     try {
       protectedCandidate = checkProtectedCandidate(p2Snapshot(captured.protectedCandidate));
     } catch {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (protectedCandidate.binding.sessionId !== contract.envelope.sessionId) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (protectedCandidate.binding.problemHash !== contract.problemHash) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (protectedCandidate.binding.contractVersion !== contract.contractVersion) {
-      fail22(P2_ERROR_CODES.VERSION_MISMATCH);
+      fail23(P2_ERROR_CODES.VERSION_MISMATCH);
     }
     if (protectedCandidate.binding.scopeId !== task.scopeId) {
-      fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+      fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
     }
     if (ordinalOf2(protectedCandidate.binding.sourceRequestId) >= ordinalOf2(requestId)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
   }
   if (allowFinal && protectedCandidate === null) {
-    fail22(P2_ERROR_CODES.PACKET_BINDING);
+    fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   let catalog = null;
   if (captured.catalog !== void 0 && captured.catalog !== null) {
     try {
       catalog = p3MethodCatalog(p2Snapshot(captured.catalog));
     } catch {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
   }
   const rawAssets = captured.methodAssets === void 0 ? [] : captured.methodAssets;
   if (!Array.isArray(rawAssets) || rawAssets.length > MAX_METHOD_ASSETS) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   const assets = [];
   for (const item of rawAssets) {
-    if (!isPlainObject20(item)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+    if (!isPlainObject21(item)) {
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     const asset = p2Snapshot(item);
     if (catalog === null) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     const title = catalog.entries.find((entry) => entry.id === asset.id)?.title;
     if (title === void 0) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     try {
       assets.push(readAsset(item, asset.id, title));
     } catch {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
   }
   ordinalOf2(requestId);
   const observations = guardedObservations(contract, task, requestId, captured.toolObservations, catalog, assets);
   const rawScopeCoverage = captured.scopeCoverage === void 0 || captured.scopeCoverage === null ? [] : captured.scopeCoverage;
   if (!Array.isArray(rawScopeCoverage) || rawScopeCoverage.length > 32) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   const upstreamTaskIds = new Set(task.dependencyTaskIds);
   const scopeCoverage = [];
@@ -16384,51 +17146,51 @@ function buildAgentWorkContext(input) {
     try {
       row = checkTaskScopeCoverage(p2Snapshot(item));
     } catch {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (row.taskId !== task.taskId && !upstreamTaskIds.has(row.taskId)) {
-      fail22(P2_ERROR_CODES.PACKET_BINDING);
+      fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
     if (row.scopeId !== task.scopeId) {
-      fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+      fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
     }
     scopeCoverage.push(row);
   }
   const base = prepareP2Context(contract, task, route, requestId, inputs, catalog === null ? [] : catalog.entries, assets);
   const userMessage = base.messages[1];
   if (userMessage === void 0) {
-    fail22(P2_ERROR_CODES.PACKET_DELIVERY);
+    fail23(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   let body;
   try {
     body = JSON.parse(userMessage.content);
   } catch {
-    fail22(P2_ERROR_CODES.PACKET_DELIVERY);
+    fail23(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    fail22(P2_ERROR_CODES.PACKET_DELIVERY);
+    fail23(P2_ERROR_CODES.PACKET_DELIVERY);
   }
   const prepared = body;
   if (rawRevisionProvenance !== null && rawRevisionTarget !== null && revisionProvenance !== null) {
     const preparedScope = prepared["scope"];
     if (typeof preparedScope !== "object" || preparedScope === null || Array.isArray(preparedScope)) {
-      fail22(P2_ERROR_CODES.SCOPE_MISMATCH);
+      fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
     }
     revisionTarget = checkRevisionTarget(p2Snapshot(rawRevisionTarget), contract, task, route, preparedScope, revisionProvenance);
   }
   const expectedEntries = catalog === null ? [] : catalog.entries;
   const preparedCatalog = prepared["methodCatalog"];
   if (!Array.isArray(preparedCatalog) || preparedCatalog.length !== expectedEntries.length) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   for (let index = 0; index < expectedEntries.length; index += 1) {
     const expected = expectedEntries[index];
     const row = preparedCatalog[index];
-    if (!isPlainObject20(row)) {
-      fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    if (!isPlainObject21(row)) {
+      fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
     if (row["id"] !== expected.id || row["title"] !== expected.title) {
-      fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+      fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
     }
   }
   const payload = {
@@ -16442,6 +17204,10 @@ function buildAgentWorkContext(input) {
     allowTaskContinuation,
     allowArtifactRedo,
     routeProvenance,
+    // Present only on the control-originated G2 task. Keeping ordinary v7
+    // bodies byte-identical is what lets the historical read-only validators
+    // keep their exact key sets.
+    ...controlRouteProvenance === null ? {} : { controlRouteProvenance },
     dependencyProvenance,
     revisionProvenance,
     revisionTarget,
@@ -16460,7 +17226,7 @@ function buildAgentWorkContext(input) {
   const serialized = JSON.stringify(messages);
   const contextBytes = Buffer.byteLength(serialized, "utf8");
   if (contextBytes > MAX_CONTEXT_BYTES9) {
-    fail22(P2_ERROR_CODES.BOUND_EXCEEDED);
+    fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
   }
   return p2Snapshot({
     schemaVersion: AGENT_WORK_CONTEXT_SCHEMA_VERSION,
@@ -16481,6 +17247,7 @@ var init_agent_loop_context = __esm({
     init_src3();
     init_agent_final();
     init_agent_progress();
+    init_agent_workflow();
     AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7";
     AGENT_WORK_CONTEXT_PROGRESS_POLICY = AGENT_PROGRESS_POLICY;
     MAX_CONTEXT_BYTES9 = 65536;
@@ -16489,7 +17256,7 @@ var init_agent_loop_context = __esm({
     MAX_METHOD_ASSETS = AGENT_MAX_METHOD_ASSETS;
     HASH7 = /^[0-9a-f]{64}$/u;
     REQUEST_ORDINAL3 = /^model-(3[0-2]|[12][0-9]|[1-9])$/u;
-    PROVENANCE_ORDINAL = /^model-([1-3])$/u;
+    PROVENANCE_ORDINAL = /^model-([1-9][0-9]{0,2})$/u;
     EFFECT_IDS4 = [
       "effect-1",
       "effect-2",
@@ -16694,7 +17461,8 @@ var init_agent_loop_context = __esm({
       "depends on SOME object among several -- several people, several devices, several sites, or the",
       "two directions of one family -- is a union over all of them: handle every object and combine",
       "the results (union bound, two-sided tail, inclusion-exclusion), never analyse a single object",
-      "alone and never reuse a one-sided critical value for a two-sided question. (2) An object asked",
+      "alone, and bound each of k symmetric objects at alpha/k rather than at alpha so that a",
+      "two-sided critical value replaces the one-sided one. (2) An object asked",
       "for as the whole family -- every invariant measure, every eigenvector, every solution, every",
       "equilibrium, a kernel or null space -- must be written with all free constants, including the",
       "constant mode that survives when the ratio, eigenvalue or parameter degenerates to one.",
@@ -16750,8 +17518,11 @@ var init_agent_loop_context = __esm({
       "nonexistence. One nonzero candidate is never evidence of uniqueness.",
       "Three exactness checks decide most of the answers that look right and are not, so run all",
       "three before delivering: (1) an event that depends on SOME object among several -- several",
-      "people, devices, sites, coordinates or coordinates of the same family -- is a union over all",
-      "of them, so handle every object and combine, do not analyse one object alone; (2) an object",
+      "people, devices, sites or two of the same kind -- is a union over all of them, so handle every",
+      "object and combine, do not analyse one object alone; a request that one of k symmetric objects",
+      "be safe at level alpha needs each object bounded at alpha/k, so a two-sided critical value and",
+      "never the one-sided alpha value (with two symmetric theatres and alpha = 0.01 the per-theatre",
+      "tail is 0.005, giving z about 2.58, not 2.33); (2) an object",
       "asked for as the whole family -- every invariant measure, every eigenvector, every solution,",
       "every equilibrium -- must be written with all its free constants, including any constant mode",
       "that survives when the ratio or eigenvalue degenerates to one; (3) an operator, derivative or",
@@ -16788,503 +17559,6 @@ var init_agent_loop_context = __esm({
       "Solve it case by case, then confirm that no case, branch or option is missing.",
       "Solve it, then check endpoints, degenerate parameters, dimensions and the requested form."
     ];
-  }
-});
-
-// apps/stdio-runtime/dist/src/agent-workflow.js
-function fail23(code) {
-  throw new P2Error(code);
-}
-function isPlainObject21(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-function boundedInt4(value, max) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > max) {
-    fail23(P2_ERROR_CODES.PACKET_BINDING);
-  }
-  return value;
-}
-function routeIdOf(signature) {
-  return `route-${signature.slice(0, 16)}`;
-}
-var MAX_ROUTES, MAX_DEPENDENCIES, MAX_REVIEWS4, MAX_WORK_UNITS, MAX_REMAINING_MS6, MIN_REMAINING_MS8, MAX_TASK_ID_CHARS, DEFAULT_MECHANISM, AgentWorkflowRoutes;
-var init_agent_workflow = __esm({
-  "apps/stdio-runtime/dist/src/agent-workflow.js"() {
-    "use strict";
-    init_src();
-    init_src5();
-    init_src3();
-    MAX_ROUTES = 2;
-    MAX_DEPENDENCIES = 2;
-    MAX_REVIEWS4 = 3;
-    MAX_WORK_UNITS = 64;
-    MAX_REMAINING_MS6 = 36e5;
-    MIN_REMAINING_MS8 = 25;
-    MAX_TASK_ID_CHARS = 256;
-    DEFAULT_MECHANISM = {
-      representation: "original-problem",
-      operation: "direct-reasoning",
-      lemmas: [],
-      construction: "unified-agent-loop"
-    };
-    AgentWorkflowRoutes = class {
-      ledger;
-      store;
-      defaultRoute;
-      taskRoutes = /* @__PURE__ */ new Map();
-      admissions = [];
-      dependencies = [];
-      constructor(ledger, store) {
-        this.ledger = ledger;
-        this.store = store;
-        const signature = p2RouteSignature({ routeId: "probe", ...DEFAULT_MECHANISM });
-        this.defaultRoute = store.registerRoute({
-          routeId: routeIdOf(signature),
-          ...DEFAULT_MECHANISM
-        });
-      }
-      /** The default route of this run. */
-      default() {
-        return this.defaultRoute;
-      }
-      /**
-       * Route of one task: the real admitted mapping when one exists, otherwise
-       * the default route. No old artifact is ever relabelled.
-       */
-      forTask(task) {
-        const mapped = this.taskRoutes.get(task.taskId);
-        if (mapped === void 0) {
-          return this.defaultRoute;
-        }
-        const found = this.store.routesSnapshot().find((route) => route.routeId === mapped.routeId);
-        if (found === void 0) {
-          fail23(P2_ERROR_CODES.ROUTE_MISMATCH);
-        }
-        return found;
-      }
-      /** Provenance of one task, or null for a task on the default route. */
-      provenanceOf(taskId) {
-        const admission = this.admissions.find((row) => row.taskId === taskId);
-        return admission?.provenance ?? null;
-      }
-      /** Provenance of one dependent task, or null when it is not one. */
-      dependencyProvenanceOf(taskId) {
-        const admission = this.dependencies.find((row) => row.taskId === taskId);
-        return admission?.provenance ?? null;
-      }
-      /**
-       * Whether a second route may even be considered. All bounds are strict
-       * integers; a model can never widen them.
-       */
-      canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
-        const calls = boundedInt4(remainingCalls, AGENT_MAX_MODEL_CALLS);
-        const reviews = boundedInt4(maxReviews, MAX_REVIEWS4);
-        const units = boundedInt4(remainingWorkUnits, MAX_WORK_UNITS);
-        const ms7 = boundedInt4(remainingMs, MAX_REMAINING_MS6);
-        if (this.admissions.length !== 0) {
-          return false;
-        }
-        if (this.store.routesSnapshot().length >= MAX_ROUTES) {
-          return false;
-        }
-        if (calls < 1 + reviews) {
-          return false;
-        }
-        if (units < 1) {
-          return false;
-        }
-        return ms7 > MIN_REMAINING_MS8;
-      }
-      /**
-       * Whether one dependent task may even be considered. Same strict bounds as
-       * `canAdmit`, but the route count is not a limit here: only the dependency
-       * admission count is.
-       */
-      canContinue(remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
-        const calls = boundedInt4(remainingCalls, AGENT_MAX_MODEL_CALLS);
-        const reviews = boundedInt4(maxReviews, MAX_REVIEWS4);
-        const units = boundedInt4(remainingWorkUnits, MAX_WORK_UNITS);
-        const ms7 = boundedInt4(remainingMs, MAX_REMAINING_MS6);
-        if (this.dependencies.length >= MAX_DEPENDENCIES) {
-          return false;
-        }
-        if (calls < 1 + reviews) {
-          return false;
-        }
-        if (units < 1) {
-          return false;
-        }
-        return ms7 > MIN_REMAINING_MS8;
-      }
-      /**
-       * Admit one dependent task from a real COMPLETE v3 artifact.
-       *
-       * Every check runs before the first mutation. A rejected proposal returns
-       * `false` and leaves the ledger, store, routes and mappings untouched; the
-       * already accepted artifact and candidate are preserved. The model supplies
-       * no task id, refs, route or budget: the child inherits the real route of its
-       * source task and its input refs are filled later by the ledger.
-       */
-      admitDependency(artifact, remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
-        if (!this.canContinue(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
-          return false;
-        }
-        if (!isPlainObject21(artifact)) {
-          return false;
-        }
-        const frozen = p2Snapshot(artifact);
-        if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
-          return false;
-        }
-        const packet = frozen.packet;
-        if (packet === null || packet.schemaVersion !== "p2a-work-v3") {
-          return false;
-        }
-        const proposal = packet.workflowProposal;
-        if (proposal === null || !isPlainObject21(proposal)) {
-          return false;
-        }
-        if (proposal.kind !== "DEPENDENT_TASK") {
-          return false;
-        }
-        if (typeof proposal.rationale !== "string" || proposal.rationale.trim().length === 0) {
-          return false;
-        }
-        const obligationId = proposal.obligationId;
-        if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
-          return false;
-        }
-        const ref = {
-          artifactId: frozen.artifactId,
-          artifactVersion: frozen.envelope.artifactVersion ?? 0
-        };
-        let entry;
-        try {
-          entry = this.store.get(ref);
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        if (entry.availability !== "ACTIVE") {
-          return false;
-        }
-        if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
-          return false;
-        }
-        const currentVersion = frozen.envelope.artifactVersion ?? 0;
-        if (this.store.snapshot().some((row) => row.artifact.artifactId === frozen.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > currentVersion)) {
-          return false;
-        }
-        const contract = this.ledger.snapshot();
-        const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
-        if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
-          return false;
-        }
-        if (obligationId !== sourceTask.obligationId) {
-          return false;
-        }
-        const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
-        if (obligation === void 0) {
-          return false;
-        }
-        if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
-          return false;
-        }
-        if (obligation.envelope.scopeId !== sourceTask.scopeId) {
-          return false;
-        }
-        if (!packet.pendingObligations.includes(obligationId)) {
-          return false;
-        }
-        const sourceRoute = this.forTask(sourceTask);
-        if (sourceRoute.routeId !== frozen.routeId) {
-          return false;
-        }
-        if (!this.store.routesSnapshot().some((route) => route.routeId === sourceRoute.routeId)) {
-          return false;
-        }
-        const taskId = `dep-task-${frozen.sourceRequestId}`;
-        if ([...taskId].length > MAX_TASK_ID_CHARS) {
-          return false;
-        }
-        if (contract.tasks.some((task) => task.taskId === taskId)) {
-          return false;
-        }
-        if (this.dependencies.some((row) => row.provenance.sourceRequestId === frozen.sourceRequestId)) {
-          return false;
-        }
-        const eventSeq = this.ledger.nextEventSeq();
-        const sessionId = contract.envelope.sessionId;
-        const newTask = p2Snapshot({
-          envelope: {
-            ...sourceTask.envelope,
-            recordId: `${sessionId}:m1:dep-task:${frozen.sourceRequestId}`,
-            taskId,
-            eventSeq
-          },
-          taskId,
-          goalId: sourceTask.goalId,
-          obligationId: sourceTask.obligationId,
-          scopeId: sourceTask.scopeId,
-          inputArtifactRefs: [],
-          dependencyTaskIds: [sourceTask.taskId],
-          expectedResult: sourceTask.expectedResult,
-          acceptanceCriteria: sourceTask.acceptanceCriteria,
-          delivery: "READY"
-        });
-        const prospective = p2Snapshot({
-          ...contract,
-          tasks: [...contract.tasks, newTask]
-        });
-        try {
-          this.ledger.validateTaskAddition([newTask]);
-          this.store.validateAddedTasks(prospective);
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        const provenance = p2Snapshot({
-          sourceRequestId: frozen.sourceRequestId,
-          sourceArtifactRef: ref,
-          obligationId,
-          routeSignature: sourceRoute.signature
-        });
-        this.ledger.addTasks([newTask]);
-        this.store.syncAddedTasks(this.ledger.snapshot());
-        this.taskRoutes.set(taskId, p2Snapshot({
-          taskId,
-          routeId: sourceRoute.routeId,
-          provenance: null
-        }));
-        this.dependencies.push(p2Snapshot({
-          taskId,
-          routeId: sourceRoute.routeId,
-          provenance
-        }));
-        return true;
-      }
-      /**
-       * Admit one dynamic route from a real COMPLETE v2 artifact.
-       *
-       * Every check runs before the first mutation. A rejected proposal returns
-       * `false` and leaves the ledger, store, routes and mappings untouched; the
-       * already accepted artifact and candidate are preserved.
-       */
-      admit(artifact, remainingCalls, maxReviews, remainingWorkUnits, remainingMs) {
-        if (!this.canAdmit(remainingCalls, maxReviews, remainingWorkUnits, remainingMs)) {
-          return false;
-        }
-        if (!isPlainObject21(artifact)) {
-          return false;
-        }
-        const frozen = p2Snapshot(artifact);
-        if (frozen.transportStatus !== "COMPLETE" || frozen.deliveryStatus !== "COMPLETE") {
-          return false;
-        }
-        const packet = frozen.packet;
-        if (packet === null || packet.schemaVersion !== "p2a-work-v2") {
-          return false;
-        }
-        const proposal = packet.workflowProposal;
-        if (proposal === null || !isPlainObject21(proposal)) {
-          return false;
-        }
-        if (proposal.kind !== "NEW_ROUTE") {
-          return false;
-        }
-        if (typeof proposal.rationale !== "string" || proposal.rationale.trim().length === 0) {
-          return false;
-        }
-        const obligationId = proposal.obligationId;
-        if (typeof obligationId !== "string" || obligationId.trim().length === 0) {
-          return false;
-        }
-        const mechanism = proposal.mechanism;
-        if (!isPlainObject21(mechanism)) {
-          return false;
-        }
-        const ref = {
-          artifactId: frozen.artifactId,
-          artifactVersion: frozen.envelope.artifactVersion ?? 0
-        };
-        let entry;
-        try {
-          entry = this.store.get(ref);
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        if (entry.availability !== "ACTIVE") {
-          return false;
-        }
-        if (entry.artifact !== artifact && JSON.stringify(entry.artifact) !== JSON.stringify(frozen)) {
-          return false;
-        }
-        const contract = this.ledger.snapshot();
-        const sourceTask = contract.tasks.find((task) => task.taskId === frozen.envelope.taskId);
-        if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
-          return false;
-        }
-        if (obligationId !== sourceTask.obligationId) {
-          return false;
-        }
-        const obligation = contract.obligations.find((row) => row.obligationId === obligationId);
-        if (obligation === void 0) {
-          return false;
-        }
-        if (obligation.status === "BLOCKED" || obligation.status === "SATISFIED") {
-          return false;
-        }
-        if (obligation.envelope.scopeId !== sourceTask.scopeId) {
-          return false;
-        }
-        if (!packet.pendingObligations.includes(obligationId)) {
-          return false;
-        }
-        const template = contract.tasks.find((task) => task.taskId === obligation.envelope.taskId);
-        if (template === void 0) {
-          return false;
-        }
-        if (template.scopeId !== sourceTask.scopeId) {
-          return false;
-        }
-        const sourceRoute = this.forTask(sourceTask);
-        if (sourceRoute.routeId !== frozen.routeId) {
-          return false;
-        }
-        const probe = new P2RouteRegistry();
-        for (const existing of this.store.routesSnapshot()) {
-          try {
-            probe.register({
-              routeId: existing.routeId,
-              representation: existing.representation,
-              operation: existing.operation,
-              lemmas: existing.lemmas,
-              construction: existing.construction
-            });
-          } catch (error) {
-            if (error instanceof P2Error) {
-              return false;
-            }
-            throw error;
-          }
-        }
-        let signature;
-        let routeInput;
-        try {
-          routeInput = {
-            routeId: "probe",
-            representation: mechanism.representation,
-            operation: mechanism.operation,
-            lemmas: mechanism.lemmas,
-            construction: mechanism.construction
-          };
-          signature = p2RouteSignature(routeInput);
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        if (signature === sourceRoute.signature) {
-          return false;
-        }
-        const routeId = routeIdOf(signature);
-        if (this.store.routesSnapshot().some((route) => route.routeId === routeId)) {
-          return false;
-        }
-        let spec;
-        try {
-          spec = probe.register({ ...routeInput, routeId });
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        if (spec.operation === sourceRoute.operation && spec.construction === sourceRoute.construction) {
-          return false;
-        }
-        const taskId = `route-task-${frozen.sourceRequestId}`;
-        if ([...taskId].length > MAX_TASK_ID_CHARS) {
-          return false;
-        }
-        if (contract.tasks.some((task) => task.taskId === taskId)) {
-          return false;
-        }
-        const eventSeq = this.ledger.nextEventSeq();
-        const sessionId = contract.envelope.sessionId;
-        const newTask = p2Snapshot({
-          envelope: {
-            ...template.envelope,
-            recordId: `${sessionId}:m1:route-task:${frozen.sourceRequestId}`,
-            taskId,
-            eventSeq
-          },
-          taskId,
-          goalId: template.goalId,
-          obligationId: template.obligationId,
-          scopeId: template.scopeId,
-          inputArtifactRefs: [],
-          dependencyTaskIds: [],
-          expectedResult: template.expectedResult,
-          acceptanceCriteria: template.acceptanceCriteria,
-          delivery: "READY"
-        });
-        const prospective = p2Snapshot({
-          ...contract,
-          tasks: [...contract.tasks, newTask]
-        });
-        try {
-          this.ledger.validateTaskAddition([newTask]);
-          this.store.validateAddedTasks(prospective);
-        } catch (error) {
-          if (error instanceof P2Error) {
-            return false;
-          }
-          throw error;
-        }
-        const provenance = p2Snapshot({
-          sourceRequestId: frozen.sourceRequestId,
-          sourceArtifactRef: ref,
-          obligationId,
-          routeSignature: signature
-        });
-        this.ledger.addTasks([newTask]);
-        this.store.syncAddedTasks(this.ledger.snapshot());
-        this.store.registerRoute({ ...routeInput, routeId });
-        this.taskRoutes.set(taskId, p2Snapshot({
-          taskId,
-          routeId: spec.routeId,
-          provenance
-        }));
-        this.admissions.push(p2Snapshot({
-          taskId,
-          routeId: spec.routeId,
-          provenance
-        }));
-        return true;
-      }
-      /** Plain-array snapshot for the private state; no Map escapes. */
-      snapshot() {
-        return p2Snapshot({
-          routes: this.store.routesSnapshot(),
-          taskRoutes: [...this.taskRoutes.values()],
-          routeAdmissions: [...this.admissions],
-          dependencyAdmissions: [...this.dependencies]
-        });
-      }
-    };
   }
 });
 
@@ -21813,18 +22087,27 @@ async function r0Generate(root, ports, sessionLog, requestId, phase, context, sc
 }
 async function runBoundedR0(initial, root, ports, opts, problemText, session, sessionLog) {
   const fallback = () => compileP2Contract(problemText, session, void 0);
+  const stageRow = (action, reason) => {
+    sessionLog.append("R0_REVIEW", { role: "STAGE", action, reason });
+  };
   try {
     if (root.stopped() || root.remainingMs() <= MIN_MS) {
+      stageRow("SKIPPED", "ROOT_STOPPED_OR_DEADLINE");
       return initial;
     }
     const r0RootCalls = Math.min(opts.maxModelCalls, P4_R0_MAX_ROOT_CALLS);
     const prep = prepareP4R0(initial, {
       enabled: true,
+      // `maxR0=1` is the operator's explicit full-capability opt-in. It must
+      // not be silently downgraded to SKIPPED_BY_POLICY merely because the M1
+      // template has no intrinsic risk code (VALUE/PARAMETER goals have none).
+      force: true,
       planningModelCalls: 1,
       remainingRootCalls: r0RootCalls,
       remainingMs: root.remainingMs()
     });
     if (prep.action !== "REQUEST_REVIEW") {
+      stageRow(prep.action, "PREPARATION_DID_NOT_REQUEST_REVIEW");
       return initial;
     }
     const scopeId = prep.target.binding.planHash;
@@ -21910,6 +22193,8 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
     if (!(error instanceof P2Error)) {
       throw error;
     }
+    const code = error.code;
+    stageRow("FALLBACK", typeof code === "string" && code.length > 0 ? code : "P2_ERROR");
     try {
       return fallback();
     } catch {
@@ -21962,6 +22247,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     maxWorkUnits: derived.maxWorkUnits,
     maxModelCalls: derived.maxModelCalls
   });
+  const fullCapability = opts.maxR0 >= 1 && opts.maxRepairs >= 1 && opts.maxReviews >= 2 && opts.maxConsensus >= 2;
   const totalEffectCapacity = opts.maxEffects === 0 ? 0 : Math.min(opts.maxEffects + opts.maxMethodLoads, AGENT_MAX_EFFECTS);
   const methodLoadCapacity = Math.min(opts.maxMethodLoads, AGENT_MAX_METHOD_ASSETS);
   const root = new AgentSession({
@@ -22016,6 +22302,31 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       root.settleEffect(settledEffect, "COMPLETE");
     }
   }
+  let catalogCalls = 0;
+  let catalog = null;
+  const methodsEnabled = opts.maxMethodLoads > 0 && captured.effect !== null && captured.catalog !== null && opts.maxEffects > 0 && totalEffectCapacity > 0 && opts.maxModelCalls >= 2 + opts.maxReviews;
+  if (methodsEnabled && root.remainingMs() > MIN_MS) {
+    const readRemaining = root.remainingMs();
+    let raw = null;
+    try {
+      raw = await boundedAwait(() => {
+        catalogCalls += 1;
+        return captured.catalog.read(readRemaining);
+      }, readRemaining);
+    } catch {
+      raw = null;
+    }
+    if (raw !== null) {
+      try {
+        catalog = p3MethodCatalog(p2Snapshot(raw));
+      } catch {
+        catalog = null;
+      }
+    }
+    if (catalog === null || catalog.entries.length === 0) {
+      catalog = null;
+    }
+  }
   if (opts.maxR0 >= 1) {
     contract = await runBoundedR0(contract, root, captured, opts, problemText, session, sessionLog);
   }
@@ -22037,11 +22348,10 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   const refutationDone = /* @__PURE__ */ new Set();
   let reviewCalls = 0;
   let repairCalls = 0;
-  let catalogCalls = 0;
+  let g2RouteAdmitted = false;
   const resumedRows = opts.resumeSessionLog ?? [];
   let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
   let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
-  let catalog = null;
   let methodAssets = [];
   const mathAssetObservations = [];
   const assetGuidanceNotes = [];
@@ -22103,29 +22413,6 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       }
     }
   }
-  const methodsEnabled = opts.maxMethodLoads > 0 && captured.effect !== null && captured.catalog !== null && opts.maxEffects > 0 && totalEffectCapacity > 0 && opts.maxModelCalls >= 2 + opts.maxReviews;
-  if (methodsEnabled && root.remainingMs() > MIN_MS) {
-    const readRemaining = root.remainingMs();
-    let raw = null;
-    try {
-      raw = await boundedAwait(() => {
-        catalogCalls += 1;
-        return captured.catalog.read(readRemaining);
-      }, readRemaining);
-    } catch {
-      raw = null;
-    }
-    if (raw !== null) {
-      try {
-        catalog = p3MethodCatalog(p2Snapshot(raw));
-      } catch {
-        catalog = null;
-      }
-    }
-    if (catalog === null || catalog.entries.length === 0) {
-      catalog = null;
-    }
-  }
   let methodSelectionAttempted = false;
   let enumerationAttempted = false;
   let exactCheckAttempted = false;
@@ -22152,6 +22439,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       if (chosen === null) {
         stop = "WORK_UNITS_COMPLETE";
         break;
+      }
+      if (workflow.isControlSecondRoute(chosen.taskId)) {
+        sessionLog.append("REPAIR", {
+          kind: "G2_ROUTE_PICK",
+          taskId: chosen.taskId,
+          routeId: workflow.forTask(chosen).routeId
+        });
       }
       let running;
       try {
@@ -22276,6 +22570,26 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             });
           }
         }
+        if (!mathAssetAttempted && !forceFinalTurn && captured.mathAsset !== null && captured.mathAsset !== void 0 && // NOT gated on `allowTools`: that flag needs the legacy tool port, and a
+        // math asset travels on its own port. Gating on it is why the early
+        // evidence turn never fired on item 34 even though the asset port was
+        // present. The asset still has to fit the shared effect room below.
+        toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && callsLeft() >= 4 + opts.maxReviews) {
+          const earlyRoute = semanticMathAssetRoute(problemText);
+          if (earlyRoute !== null) {
+            mathAssetAttempted = true;
+            forcedMathAssetSelection = true;
+            forcedMathAssetRoute = earlyRoute;
+            forcedRetryUsed = false;
+            sessionLog.append("REPAIR", {
+              kind: "MATH_ASSET_EARLY",
+              assetId: earlyRoute.assetId,
+              target: earlyRoute.target,
+              routeId: earlyRoute.id,
+              taskId: running.taskId
+            });
+          }
+        }
         let context;
         try {
           const upstreamTaskIds = new Set(running.dependencyTaskIds);
@@ -22296,7 +22610,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
             allowRouteProposal,
             allowTaskContinuation,
             allowArtifactRedo,
-            routeProvenance: workflow.provenanceOf(running.taskId),
+            routeProvenance: workflow.isControlSecondRoute(running.taskId) ? null : workflow.provenanceOf(running.taskId),
+            controlRouteProvenance: workflow.isControlSecondRoute(running.taskId) ? workflow.provenanceOf(running.taskId) : null,
             dependencyProvenance: workflow.dependencyProvenanceOf(running.taskId),
             revisionProvenance: revision.provenanceFor(running.taskId),
             revisionTarget: revision.targetFor(running.taskId),
@@ -22307,6 +22622,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         } catch (error) {
           if (!(error instanceof P2Error)) {
             throw error;
+          }
+          if (workflow.isControlSecondRoute(running.taskId)) {
+            sessionLog.append("REPAIR", {
+              kind: "G2_ROUTE_CONTEXT_REJECTED",
+              taskId: running.taskId,
+              code: error.code ?? "P2_ERROR"
+            });
           }
           stop = "CONTEXT_REJECTED";
           break;
@@ -23255,7 +23577,9 @@ ${g.guidance.join("\n")}`).join("");
           continue;
         }
         if (action !== null && action.action === "unsolved") {
-          const rescueRoute = !mathAssetAttempted && captured.mathAsset !== null && captured.mathAsset !== void 0 && allowTools && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews ? semanticMathAssetRoute(problemText) : null;
+          const rescueRoute = !mathAssetAttempted && captured.mathAsset !== null && captured.mathAsset !== void 0 && // Same reason as the early turn: the asset port is independent of the
+          // legacy tool port, so this must not require `allowTools`.
+          toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && revision.pendingTaskId() === null && callsLeft() >= 4 + opts.maxReviews ? semanticMathAssetRoute(problemText) : null;
           if (rescueRoute !== null) {
             mathAssetAttempted = true;
             forcedMathAssetSelection = true;
@@ -23407,7 +23731,6 @@ ${g.guidance.join("\n")}`).join("");
               break;
             }
           }
-          let recoveryUsed = false;
           if (prepared === null) {
             if (opts.maxConsensus >= 1 && answerBearingTask && target === null && revision.pendingTaskId() === null && callsLeft() >= 1 + opts.maxReviews) {
               const recoveryId = root.nextModelId();
@@ -23446,7 +23769,7 @@ ${g.guidance.join("\n")}`).join("");
                 ];
                 const recovered = await calls.model({
                   task: running,
-                  phase: "CONSENSUS",
+                  phase: "WORK",
                   messages,
                   contextHash: p4Hash(JSON.stringify(messages)),
                   contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
@@ -23466,7 +23789,6 @@ ${g.guidance.join("\n")}`).join("");
                     if (artifact.packet !== null && artifact.packet.deliveryStatus === "COMPLETE" && typeof artifact.packet.candidateProposal === "string" && artifact.packet.candidateProposal.trim().length > 0 && [...artifact.packet.claim].length <= 4096 && [...artifact.packet.derivation].length <= 4096 && [...artifact.packet.candidateProposal].length <= 4096) {
                       prepared = artifact;
                       outcome = recovered;
-                      recoveryUsed = true;
                       receiptInput.sourceRequestId = recovered.requestId;
                       receiptInput.text = recovered.receipt.text;
                     }
@@ -23577,7 +23899,7 @@ ${g.guidance.join("\n")}`).join("");
             continue;
           }
           forcedVerdictClosure = false;
-          if (opts.maxConsensus >= 1 && !recoveryUsed && answerBearingTask && target === null && revision.pendingTaskId() === null && prepared.packet !== null && callsLeft() >= 2 + opts.maxReviews) {
+          if (opts.maxConsensus >= 1 && answerBearingTask && target === null && revision.pendingTaskId() === null && prepared.packet !== null && callsLeft() >= 2 + opts.maxReviews) {
             const firstCandidate = firstPacketOverlong ? "" : prepared.packet.candidateProposal ?? "";
             const choiceProblem = problemChoiceLetters(problemText).length >= 2;
             const consensusAttempts = [{
@@ -23735,7 +24057,13 @@ ${g.guidance.join("\n")}`).join("");
                 const otherPacket = other?.prepared.packet ?? null;
                 const auditMode = round % 4;
                 const auditHead = auditMode === 0 ? "COUNTEREXAMPLE AUDIT. Try to construct a concrete counterexample to the current candidate. A false counterexample invalidates the attempt; if none exists, verify the candidate. " : auditMode === 1 ? "PROOF AUDIT. Audit every definition, hypothesis, inference and stated counterexample. A false counterexample invalidates the whole attempt. " : auditMode === 2 ? "EXACT RECOMPUTATION. Independently recompute every numerical coefficient, matrix entry, probability, limit or formula from the problem statement. Do not repeat the candidate's algebra; compare the exact recomputation with the candidate. " : "BOUNDARY AND COMPLETENESS AUDIT. Check every quantifier, branch, support endpoint, boundary/initial condition, normalization, multiplicity, requested sub-part and option. Construct the complete object and verify that no case or witness is missing. ";
-                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + // Item 12 answered the one-sided value (5117) four times out of
+                // four while the reference is the two-sided one (5129): with two
+                // symmetric theatres the event "somebody finds no seat" is the
+                // union over both, so each theatre must hold at alpha/2. The
+                // audit is the turn that has to notice this, because a blind
+                // ballot anchors on the one-sided legend.
+                (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(problemText) ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. " : "") + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
               }
               const built = buildConsensusContext2(nextId, note, isBlind);
               const nextOutcome = await calls.model({
@@ -23965,6 +24293,18 @@ ${g.guidance.join("\n")}`).join("");
             routeInput: p2Snapshot({ routeId: route.routeId, representation: route.representation, operation: route.operation, lemmas: route.lemmas, construction: route.construction })
           });
           workUnits += 1;
+          if (workflow.isControlSecondRoute(running.taskId)) {
+            const g2Candidate = accepted.packet?.candidateProposal;
+            const protectedCandidate2 = target?.artifact.packet?.candidateProposal;
+            const candidatePresent = typeof g2Candidate === "string" && g2Candidate.trim().length > 0;
+            sessionLog.append("REPAIR", {
+              kind: "G2_ROUTE_RESULT",
+              taskId: running.taskId,
+              routeId: route.routeId,
+              candidatePresent,
+              agrees: candidatePresent && typeof protectedCandidate2 === "string" && g2Candidate === protectedCandidate2
+            });
+          }
           if (accepted.deliveryStatus !== "COMPLETE") {
             if (revision.pendingTaskId() === null) {
               try {
@@ -24001,6 +24341,19 @@ ${g.guidance.join("\n")}`).join("");
                 break;
               }
             }
+          }
+          if (fullCapability && !g2RouteAdmitted && target !== null && accepted.deliveryStatus === "COMPLETE") {
+            const g2ObligationId = `${running.goalId}:INDEPENDENT_DERIVATION`;
+            const admittedRoute = workflow.admitControlSecondRoute(accepted, g2ObligationId, callsLeft(), opts.maxReviews, opts.maxWorkUnits - workUnits, root.remainingMs());
+            g2RouteAdmitted = admittedRoute;
+            sessionLog.append("REPAIR", {
+              kind: admittedRoute ? "G2_ROUTE_ADMIT" : "G2_ROUTE_REJECT",
+              origin: "CONTROL_FULL_CAPABILITY",
+              obligationId: g2ObligationId,
+              sourceRequestId: accepted.sourceRequestId,
+              taskId: admittedRoute ? `g2-route-${accepted.sourceRequestId}` : null,
+              readyTasks: ledger.readyTasks().length
+            });
           }
         }
         if (allowRouteProposal) {
@@ -24110,13 +24463,27 @@ ${g.guidance.join("\n")}`).join("");
       if (admitted === null) {
         return null;
       }
+      let reviewMessages = admitted.context.messages;
+      let reviewContextHash = admitted.context.contextHash;
+      let reviewContextBytes = admitted.context.contextBytes;
+      if (fullCapability && stage === "R2") {
+        reviewMessages = [
+          {
+            role: "system",
+            content: admitted.context.messages[0].content + "\n\nFULL-CAPABILITY REVIEW DUTY: audit the derivation step by step, not just the final answer. If any step is unsupported, a case, quantifier or domain boundary is missing, or the candidate does not follow from the stated premises, report ISSUES with an exact quote and the answer obligation id. Do not return NO_ISSUE merely because the candidate looks plausible; NO_ISSUE is valid only after every supplied obligation is explicitly checked. Do not invent an issue."
+          },
+          admitted.context.messages[1]
+        ];
+        reviewContextHash = p4Hash(JSON.stringify(reviewMessages));
+        reviewContextBytes = Buffer.byteLength(JSON.stringify(reviewMessages), "utf8");
+      }
       const before = root.modelCalls();
       const outcome = await calls.model({
         task: reviewTask,
         phase: stage,
-        messages: admitted.context.messages,
-        contextHash: admitted.context.contextHash,
-        contextBytes: admitted.context.contextBytes,
+        messages: reviewMessages,
+        contextHash: reviewContextHash,
+        contextBytes: reviewContextBytes,
         onDispatch: (id4) => session2.markDispatched(id4)
       });
       if (root.modelCalls() > before) {
@@ -24137,8 +24504,12 @@ ${g.guidance.join("\n")}`).join("");
       }
       return session2;
     };
-    const attemptRevision = async (candidate, roundReview, challenges) => {
-      if (candidateTask === null || opts.maxRepairs < 1 || repairCalls >= opts.maxRepairs || schemaRepairs > 0 || callsLeft() < 1 || root.remainingMs() <= MIN_MS) {
+    const attemptRevision = async (candidate, roundReview, challenges, probe = false) => {
+      if (candidateTask === null || opts.maxRepairs < 1 || repairCalls >= opts.maxRepairs || // A bounded schema repair earlier in the same run consumed a WORK
+      // turn, not the evidence-repair quota. The strict profile keeps the
+      // old fail-closed interaction; the explicit full-capability profile
+      // may still use its authorized REPAIR/R4 after R2.
+      schemaRepairs > 0 && !fullCapability || callsLeft() < 1 || root.remainingMs() <= MIN_MS) {
         return null;
       }
       const checker = calls.effects.find((item) => item.receipt.status === "COMPLETE" && item.receipt.source === "PROGRAM_OBSERVATION" && item.receipt.binding.scopeId === candidate.binding.scopeId);
@@ -24193,14 +24564,17 @@ ${g.guidance.join("\n")}`).join("");
           }
         }
       }
-      if (!s1Ok && checker !== void 0 && challenges.length > 0) {
-        stop = "REVISE_REJECTED";
-        return null;
-      }
-      if (!(challenges.length > 0 && checker !== void 0 && answerObligation !== void 0 && s1Ok)) {
-        return null;
-      }
       const challenge = challenges[0];
+      if (challenge === void 0 || answerObligation === void 0) {
+        return null;
+      }
+      const grounded = checker !== void 0 && s1Ok && challenge.issue.obligationIds.includes(answerObligation.obligationId);
+      if (!grounded && !fullCapability) {
+        if (checker !== void 0) {
+          stop = "REVISE_REJECTED";
+        }
+        return null;
+      }
       const repairTask = candidateTask;
       const route = workflow.forTask(repairTask);
       const requestId = root.nextModelId();
@@ -24230,7 +24604,7 @@ ${g.guidance.join("\n")}`).join("");
       const messages = [
         {
           role: "system",
-          content: "You are a strict single revision reviser. Reply with exactly one JSON work packet and nothing else. You cannot declare anything verified."
+          content: "You are a strict single revision reviser. Reply with exactly one JSON object and nothing else; no prose, no markdown. Use schemaVersion p2a-work-v1 with exactly these keys: schemaVersion, sessionId, problemHash, contractVersion, taskId, goalId, scopeId, routeId, sourceRequestId, claim, derivation, assumptions, dependencies, pendingObligations, suggestedChecks, deliveryStatus, candidateProposal. Copy sessionId, problemHash, contractVersion, goalId, scopeId and sourceRequestId exactly from the user body; use taskId=body.task.taskId and routeId=body.route.routeId. dependencies MUST be an array copied from body.task.inputArtifactRefs (usually []); assumptions MUST be []; pendingObligations MUST be []; suggestedChecks MUST be an array. deliveryStatus MUST be exactly COMPLETE and candidateProposal MUST be a non-empty JSON STRING, not an object. Address the supplied challenge with a corrected derivation and a corrected final candidate. You cannot declare anything verified."
         },
         { role: "user", content: JSON.stringify(body) }
       ];
@@ -24274,7 +24648,7 @@ ${g.guidance.join("\n")}`).join("");
         } else if (goalKind === "ALL_SOLUTIONS") {
           basisSupported = false;
         }
-        const basis = basisSupported ? {
+        const basis = grounded && basisSupported && checker !== void 0 ? {
           source: "CHECKER_COUNTEREXAMPLE",
           level: "CHECKED_SCOPE",
           checkResult: "PASS",
@@ -24289,6 +24663,26 @@ ${g.guidance.join("\n")}`).join("");
         } : null;
         const revision2 = basis === null ? null : reviseCandidate(ledger.snapshot(), { parent: candidate, child, challenge, basis }, root.remainingMs());
         if (revision2 === null) {
+          if (fullCapability && opts.maxReviews >= 2 && reviewCalls < opts.maxReviews && callsLeft() >= 1) {
+            const r4 = await runReviewRound(child, "R4");
+            if (r4 !== null) {
+              const r4Snapshot = r4.snapshot();
+              sessionLog.append("REVIEW_CHALLENGE", {
+                reviewCalls,
+                challenges: r4Snapshot.challenges.length,
+                records: r4Snapshot.records.length,
+                stage: "R4"
+              });
+            }
+          }
+          sessionLog.append("REPAIR", {
+            accepted: false,
+            reason: "REVISE_REJECTED",
+            sourceRequestId: requestId,
+            basis: basis === null ? "MISSING_GROUNDED_BASIS" : "REVISION_REFUSED",
+            candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+            ...probe ? { probe: true } : {}
+          });
           stop = "REVISE_REJECTED";
           return null;
         }
@@ -24301,7 +24695,8 @@ ${g.guidance.join("\n")}`).join("");
             // Defect 3: record the revised candidate so resume/replay can
             // rebuild the current candidate and re-derive the final answer.
             candidateProposal: child.artifact.packet?.candidateProposal ?? null,
-            finalResponse: revision2.decision.finalResponse
+            finalResponse: revision2.decision.finalResponse,
+            ...probe ? { probe: true } : {}
           });
         }
         if (revision2 !== null && revision2.accepted) {
@@ -24326,7 +24721,13 @@ ${g.guidance.join("\n")}`).join("");
         if (!(error instanceof P2Error)) {
           throw error;
         }
-        stop = "CONTROL_REJECTED";
+        sessionLog.append("REPAIR", {
+          kind: "REPAIR_PACKET_REJECTED",
+          code: error.code ?? "P2_ERROR",
+          requestId,
+          ...probe ? { probe: true } : {}
+        });
+        stop = "REVISE_REJECTED";
         return null;
       }
     };
@@ -24389,6 +24790,83 @@ ${g.guidance.join("\n")}`).join("");
             break;
           }
         }
+      }
+    }
+    if (fullCapability && target !== null && target.availability === "ACTIVE" && repairCalls === 0 && reviewCalls >= 1 && opts.maxRepairs >= 1 && opts.maxReviews >= 2 && protectedReview !== null && callsLeft() >= 2 && root.remainingMs() > MIN_MS) {
+      const contractNow = ledger.snapshot();
+      const probeGoalKind = goalKindOf(contractNow.goals, target.binding.goalId);
+      const probeAnswerKind = p2AnswerObligationForGoal(probeGoalKind);
+      const probeAnswerObligation = contractNow.obligations.find((row) => row.goalId === target.binding.goalId && row.kind === probeAnswerKind);
+      const probeRecords = protectedReview.snapshot().records;
+      const probeSource = probeRecords[probeRecords.length - 1]?.requestId ?? null;
+      if (probeAnswerObligation !== void 0 && probeSource !== null) {
+        const derivation = target.artifact.packet?.derivation ?? "";
+        const derivationPoints = [...derivation];
+        const probeEnd = Math.min(1, derivationPoints.length);
+        const probeQuote = derivationPoints.slice(0, probeEnd).join("");
+        const probeChallenge = p2Snapshot({
+          challengeId: "challenge-capability-probe-1",
+          target: target.binding,
+          targetHash: target.targetHash,
+          issue: {
+            stepLocator: { start: 0, end: probeEnd, quote: probeQuote },
+            suspectedIssue: "OTHER",
+            rationale: "CAPABILITY PROBE: this is a control-owned architecture exercise, not a mathematical finding. The candidate is deliberately not treated as verified.",
+            requestedCheck: "Exercise the bounded repair path. Return a complete revised packet only if an explicit grounded check is available; otherwise repeat the parent candidate. This probe can never replace the protected parent.",
+            obligationIds: [probeAnswerObligation.obligationId]
+          },
+          requestIds: [probeSource],
+          status: "CHALLENGED",
+          availability: "ACTIVE"
+        });
+        const probeStop = stop;
+        const probeDecision = revisedDecision;
+        const reviewCallsBeforeProbe = reviewCalls;
+        let probeAccepted = false;
+        try {
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "REPAIR",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId
+          });
+          const probed = await attemptRevision(target, protectedReview, [probeChallenge], true);
+          probeAccepted = probed?.accepted === true;
+          if (reviewCalls === reviewCallsBeforeProbe && callsLeft() >= 1 && root.remainingMs() > MIN_MS) {
+            const fallbackR4 = await runReviewRound(target, "R4");
+            if (fallbackR4 !== null) {
+              const snapshot = fallbackR4.snapshot();
+              sessionLog.append("REVIEW_CHALLENGE", {
+                reviewCalls,
+                challenges: snapshot.challenges.length,
+                records: snapshot.records.length,
+                stage: "R4",
+                capabilityProbe: true
+              });
+            }
+          }
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "R4",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId,
+            accepted: probeAccepted
+          });
+        } catch (error) {
+          if (!(error instanceof P2Error)) {
+            throw error;
+          }
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "ERROR",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId,
+            accepted: false,
+            code: error.code ?? "P2_ERROR"
+          });
+        }
+        stop = probeStop;
+        revisedDecision = probeDecision;
       }
     }
   } catch (error) {

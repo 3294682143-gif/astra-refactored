@@ -15,6 +15,7 @@ import math
 import os
 import selectors
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -285,6 +286,167 @@ def _funnel_metrics(host, session_log):
         "tail_reserve": getattr(host, "tail_reserve", 0),
         "front_spent": getattr(host, "front_spent", 0),
     }
+
+
+def _capability_metrics(host, session_log):
+    """Counts of architecture stages that really reached the model/effect port.
+
+    Every value is derived from the immutable Node ``SessionLog`` and the Host's
+    own accepted options. A configured quota is never reported as an invocation:
+    an R0 role review, a consensus ballot, a route admission, a repair or an R4
+    recheck appears here only when its row exists. Counts are bounded integers
+    and carry no problem text, model text, prompt, observation or secret.
+    """
+    profile = (
+        "FULL"
+        if (
+            getattr(host, "max_r0", 0) >= 1
+            and getattr(host, "max_repairs", 0) >= 1
+            and getattr(host, "max_reviews", 0) >= 2
+            and getattr(host, "max_consensus", 0) >= 2
+        )
+        else "CUSTOM"
+    )
+    counts = {
+        "r0_model_calls": 0,
+        "r0_role_reviews": 0,
+        "r0_aggregates": 0,
+        "r0_recheck_calls": 0,
+        "r0_plan_revisions": 0,
+        "consensus_independent_calls": 0,
+        "consensus_audit_calls": 0,
+        "consensus_certificate_calls": 0,
+        "consensus_closure_calls": 0,
+        "consensus_independent_ballots": 0,
+        "consensus_audit_ballots": 0,
+        "consensus_certificate_ballots": 0,
+        "r2_review_calls": 0,
+        "r2_review_records": 0,
+        "r2_challenges": 0,
+        "r4_review_calls": 0,
+        "r4_challenges": 0,
+        "repair_model_calls": 0,
+        "repair_packet_rejected": 0,
+        "capability_probe_calls": 0,
+        "capability_probe_accepted": 0,
+        "repair_decisions": 0,
+        "repair_accepted": 0,
+        "repair_rejected": 0,
+        "g2_route_attempts": 0,
+        "g2_routes_admitted": 0,
+        "g2_routes_rejected": 0,
+        "g2_route_picks": 0,
+        "g2_route_context_rejected": 0,
+        "g2_route_workunits": 0,
+        "g2_route_candidates": 0,
+        "g2_route_agreements": 0,
+    }
+    rows = session_log if isinstance(session_log, list) else ()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        kind = row.get("kind")
+        data = row.get("data")
+        if not isinstance(data, dict):
+            continue
+        if kind == "MODEL_REQUEST":
+            phase = data.get("phase")
+            if phase == "R0":
+                # Three role reviews and at most one revision share this phase;
+                # the separate R0_REVIEW rows identify the role calls.
+                counts["r0_model_calls"] += 1
+            elif phase == "R0_RECHECK":
+                counts["r0_recheck_calls"] += 1
+            elif phase == "R2":
+                counts["r2_review_calls"] += 1
+            elif phase == "R4":
+                counts["r4_review_calls"] += 1
+            elif phase == "REPAIR":
+                counts["repair_model_calls"] += 1
+        elif kind == "R0_REVIEW":
+            if data.get("role") == "AGGREGATE":
+                counts["r0_aggregates"] += 1
+            elif data.get("role") in ("MEANING", "METHOD", "TASK_TOOL"):
+                counts["r0_role_reviews"] += 1
+        elif kind == "REVIEW_CHALLENGE":
+            challenges = data.get("challenges")
+            records = data.get("records")
+            if data.get("stage") == "R4":
+                if _is_int(challenges) and challenges >= 0:
+                    counts["r4_challenges"] += challenges
+            else:
+                if _is_int(records) and records >= 0:
+                    counts["r2_review_records"] += records
+                if _is_int(challenges) and challenges >= 0:
+                    counts["r2_challenges"] += challenges
+        elif kind == "CONTRACT_REVISED":
+            counts["r0_plan_revisions"] += 1
+        elif kind == "CONSENSUS":
+            stage = data.get("stage")
+            candidate = data.get("nextCandidate")
+            has_ballot = isinstance(candidate, str) and bool(candidate.strip())
+            if stage == "INDEPENDENT":
+                counts["consensus_independent_calls"] += 1
+                if has_ballot:
+                    counts["consensus_independent_ballots"] += 1
+            elif stage == "AUDIT":
+                counts["consensus_audit_calls"] += 1
+                if has_ballot:
+                    counts["consensus_audit_ballots"] += 1
+            elif stage == "CERTIFICATE":
+                counts["consensus_certificate_calls"] += 1
+                if has_ballot:
+                    counts["consensus_certificate_ballots"] += 1
+            elif stage == "ANSWER_CLOSURE":
+                counts["consensus_closure_calls"] += 1
+        elif kind == "REPAIR":
+            special = data.get("kind")
+            if special == "G2_ROUTE_ADMIT":
+                counts["g2_route_attempts"] += 1
+                counts["g2_routes_admitted"] += 1
+            elif special == "G2_ROUTE_REJECT":
+                counts["g2_route_attempts"] += 1
+                counts["g2_routes_rejected"] += 1
+            elif special == "G2_ROUTE_PICK":
+                counts["g2_route_picks"] += 1
+            elif special == "G2_ROUTE_CONTEXT_REJECTED":
+                counts["g2_route_context_rejected"] += 1
+            elif special == "REPAIR_PACKET_REJECTED":
+                if data.get("probe") is not True:
+                    counts["repair_packet_rejected"] += 1
+            elif special == "CAPABILITY_PROBE":
+                # One control-owned probe is logged twice (REPAIR and R4, or
+                # REPAIR and ERROR). Count the terminal probe row only, never
+                # the configured quota.
+                if data.get("stage") in ("R4", "ERROR"):
+                    counts["capability_probe_calls"] += 1
+                    if data.get("accepted") is True:
+                        counts["capability_probe_accepted"] += 1
+            elif special == "G2_ROUTE_RESULT":
+                # One accepted WORKUNIT on the control-originated second route.
+                counts["g2_route_workunits"] += 1
+                if data.get("candidatePresent") is True:
+                    counts["g2_route_candidates"] += 1
+                if data.get("agrees") is True:
+                    counts["g2_route_agreements"] += 1
+            accepted = data.get("accepted")
+            if (
+                isinstance(accepted, bool)
+                and special != "CAPABILITY_PROBE"
+                and data.get("probe") is not True
+            ):
+                counts["repair_decisions"] += 1
+                if accepted:
+                    counts["repair_accepted"] += 1
+                else:
+                    counts["repair_rejected"] += 1
+        elif kind == "WORKUNIT":
+            task_id = data.get("taskId")
+            if isinstance(task_id, str) and task_id.startswith("g2-route-"):
+                counts["g2_route_workunits"] += 1
+    out = {"capability_profile": profile}
+    out.update(counts)
+    return out
 
 
 def _closure_evaluation(data):
@@ -820,6 +982,16 @@ class AgentRuntime:
             error_code = exc.code
         except ProbeError as exc:
             error_code = exc.code
+            # Diagnostic only: name the guard that rejected the frame. It goes to
+            # stderr, never into the returned object and never into a protocol
+            # frame, so no input or model text can leak through it.
+            origin = getattr(exc, "origin", None)
+            if isinstance(origin, str) and origin:
+                try:
+                    sys.stderr.write("ASTRA_GUARD %s %s\n" % (exc.code, origin))
+                    sys.stderr.flush()
+                except Exception:  # noqa: BLE001 - never fail a run for a log line
+                    pass
         except OSError:
             error_code = "CHILD_FAILED"
         except Exception as exc:  # noqa: BLE001 - fixed code only, no traceback
@@ -903,18 +1075,16 @@ class AgentRuntime:
             "reported_tokens": reported_tokens if known_usage_requests > 0 else None,
             "unknown_usage_requests": unknown_usage,
         }
-        metrics.update(
-            _funnel_metrics(
-                host,
-                result.get("sessionLog") if isinstance(result, dict) else None,
-            )
-        )
+        session_log_rows = result.get("sessionLog") if isinstance(result, dict) else None
+        metrics.update(_funnel_metrics(host, session_log_rows))
+        metrics.update(_capability_metrics(host, session_log_rows))
         if result is None or error_code is not None:
             if host.model_requests > 0:
                 metrics["logical_model_calls"] = host.model_requests
             return self._unsolved(
                 started, error_code or "FIELD_VALUE", reaped, metrics, finish,
                 stage, child_exit, getattr(host, "stderr_code", None),
+                diagnostics={"host": host, "result": result},
             )
         summary = result["summary"]
         final_response = summary["finalResponse"]
@@ -922,6 +1092,7 @@ class AgentRuntime:
             return self._unsolved(
                 started, "FIELD_VALUE", reaped, metrics, finish,
                 stage, child_exit, getattr(host, "stderr_code", None),
+                diagnostics={"host": host, "result": result},
             )
         trace = []
         for row in result["trace"]:
@@ -967,8 +1138,39 @@ class AgentRuntime:
             "elapsedMs": max(0, int((time.monotonic() - started) * 1000)),
         }
 
+    def _record_unsolved_diagnostics(self, host, result):
+        """Keep the run's own ledger when the run ends without a candidate.
+
+        An unsolved return used to discard everything the child had recorded, so
+        a case like item 34 (13 model calls, then an abstention) could not be
+        diagnosed at all: no session log, no history, no trace. Nothing here
+        changes the returned object or any control decision -- it only copies what
+        the Host already holds into the same ``last_*`` attributes the candidate
+        path uses, so an operator can inspect a failed run exactly like a passing
+        one. Every step is best effort and never raises into the caller.
+        """
+        try:
+            if host is not None:
+                self.last_history = copy.deepcopy(getattr(host, "history", None))
+                self.last_problem_hash = getattr(host, "problem_hash", None)
+                self.last_counts = {
+                    "modelCalls": getattr(host, "model_requests", None),
+                    "effectCalls": None,
+                    "repairCalls": None,
+                }
+            rows = result.get("sessionLog") if isinstance(result, dict) else None
+            if isinstance(rows, list):
+                self.last_session_log = copy.deepcopy(rows)
+        except Exception:  # noqa: BLE001 - diagnostics must never fail a run
+            pass
+
     def _unsolved(self, started, code, reaped, metrics=None, finish=None,
-                  stage=None, child_exit=None, child_code=None):
+                  stage=None, child_exit=None, child_code=None,
+                  diagnostics=None):
+        if diagnostics is not None:
+            self._record_unsolved_diagnostics(
+                diagnostics.get("host"), diagnostics.get("result"),
+            )
         code = _fixed_unsolved_code(code)
         if metrics is None:
             metrics = {

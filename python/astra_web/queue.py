@@ -2,7 +2,7 @@
 
 职责
 ----
-1. 请求接收与白名单校验（POST /api/runs，受控的 max_method_loads ∈ {0, 1}）。
+1. 请求接收与白名单校验（POST /api/runs，受控的 max_method_loads ∈ {0..4}）。
 2. 异步执行器串行调度（并发上限强制 1，可观测）。
 3. 实时 SSE（Server-Sent Events）事件广播，支持 Last-Event-ID 与断线重连。
 

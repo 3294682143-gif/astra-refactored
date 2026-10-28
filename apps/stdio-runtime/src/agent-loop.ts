@@ -791,8 +791,12 @@ async function runBoundedR0(
   sessionLog: SessionLog,
 ): Promise<P2Contract> {
   const fallback = (): P2Contract => compileP2Contract(problemText, session, undefined);
+  const stageRow = (action: string, reason: string): void => {
+    sessionLog.append("R0_REVIEW", { role: "STAGE", action, reason });
+  };
   try {
     if (root.stopped() || root.remainingMs() <= MIN_MS) {
+      stageRow("SKIPPED", "ROOT_STOPPED_OR_DEADLINE");
       return initial;
     }
     // prepareP4R0 caps the frozen planning view at the fixed five-call stage
@@ -801,11 +805,16 @@ async function runBoundedR0(
     const r0RootCalls = Math.min(opts.maxModelCalls, P4_R0_MAX_ROOT_CALLS);
     const prep = prepareP4R0(initial, {
       enabled: true,
+      // `maxR0=1` is the operator's explicit full-capability opt-in. It must
+      // not be silently downgraded to SKIPPED_BY_POLICY merely because the M1
+      // template has no intrinsic risk code (VALUE/PARAMETER goals have none).
+      force: true,
       planningModelCalls: 1,
       remainingRootCalls: r0RootCalls,
       remainingMs: root.remainingMs(),
     });
     if (prep.action !== "REQUEST_REVIEW") {
+      stageRow(prep.action, "PREPARATION_DID_NOT_REQUEST_REVIEW");
       return initial;
     }
     const scopeId = prep.target.binding.planHash;
@@ -925,6 +934,11 @@ async function runBoundedR0(
     if (!(error instanceof P2Error)) {
       throw error;
     }
+    const code = (error as { readonly code?: unknown }).code;
+    stageRow(
+      "FALLBACK",
+      typeof code === "string" && code.length > 0 ? code : "P2_ERROR",
+    );
     try {
       return fallback();
     } catch {
@@ -1010,6 +1024,15 @@ export async function runAgentLoop(
           maxWorkUnits: derived.maxWorkUnits,
           maxModelCalls: derived.maxModelCalls,
         });
+  // The evaluation profile is the explicit full-capability opt-in. R0 alone is
+  // already forced by `maxR0=1`; requiring the review and repair room as well
+  // means the control-originated G2 route can only be admitted when its second
+  // derivation plus the later R2/R4 stages can actually fit the same root.
+  const fullCapability =
+    opts.maxR0 >= 1 &&
+    opts.maxRepairs >= 1 &&
+    opts.maxReviews >= 2 &&
+    opts.maxConsensus >= 2;
   // Public `maxEffects` is the tool quota; method cards have their own quota.
   // The root owns the shared total effect-id capacity. The hard id-table
   // ceiling is owned by @astra/runtime-core.
@@ -1092,6 +1115,42 @@ export async function runAgentLoop(
       root.settleEffect(settledEffect, "COMPLETE");
     }
   }
+  // The Host requires the read-only method catalog callback before the first
+  // model call whenever methods are enabled. R0 is a model call too, so the
+  // catalog must be injected before R0 rather than after it; otherwise a
+  // full-capability run with maxMethodLoads>0 is rejected at its first R0 frame.
+  let catalogCalls = 0;
+  let catalog: P2MethodCatalog | null = null;
+  const methodsEnabled =
+    opts.maxMethodLoads > 0 &&
+    captured.effect !== null &&
+    captured.catalog !== null &&
+    opts.maxEffects > 0 &&
+    totalEffectCapacity > 0 &&
+    opts.maxModelCalls >= 2 + opts.maxReviews;
+  if (methodsEnabled && root.remainingMs() > MIN_MS) {
+    const readRemaining = root.remainingMs();
+    let raw: unknown = null;
+    try {
+      raw = await boundedAwait(() => {
+        catalogCalls += 1;
+        return captured.catalog!.read(readRemaining);
+      }, readRemaining);
+    } catch {
+      raw = null;
+    }
+    if (raw !== null) {
+      try {
+        catalog = p3MethodCatalog(p2Snapshot(raw));
+      } catch {
+        catalog = null;
+      }
+    }
+    if (catalog === null || catalog.entries.length === 0) {
+      catalog = null;
+    }
+  }
+
   // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
   // any WORK, shares the same root budget, and may change the contract to
   // version 2 via at most one `reviseGoals`. With the default `maxR0=0` this is
@@ -1124,11 +1183,10 @@ export async function runAgentLoop(
   const refutationDone = new Set<string>();
   let reviewCalls = 0;
   let repairCalls = 0;
-  let catalogCalls = 0;
+  let g2RouteAdmitted = false;
   const resumedRows = opts.resumeSessionLog ?? [];
   let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
   let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
-  let catalog: P2MethodCatalog | null = null;
   let methodAssets: P2MethodAsset[] = [];
   const mathAssetObservations: MathAssetObservation[] = [];
   const assetGuidanceNotes: Array<{ assetId: string; guidance: readonly string[] }> = [];
@@ -1198,36 +1256,6 @@ export async function runAgentLoop(
     }
   }
 
-  const methodsEnabled =
-    opts.maxMethodLoads > 0 &&
-    captured.effect !== null &&
-    captured.catalog !== null &&
-    opts.maxEffects > 0 &&
-    totalEffectCapacity > 0 &&
-    opts.maxModelCalls >= 2 + opts.maxReviews;
-  if (methodsEnabled && root.remainingMs() > MIN_MS) {
-    const readRemaining = root.remainingMs();
-    let raw: unknown = null;
-    try {
-      raw = await boundedAwait(() => {
-        catalogCalls += 1;
-        return captured.catalog!.read(readRemaining);
-      }, readRemaining);
-    } catch {
-      raw = null;
-    }
-    if (raw !== null) {
-      try {
-        catalog = p3MethodCatalog(p2Snapshot(raw));
-      } catch {
-        catalog = null;
-      }
-    }
-    if (catalog === null || catalog.entries.length === 0) {
-      catalog = null;
-    }
-  }
-
   // Problem-level route / bounded-closure attempts are run-scoped, not
   // work-item scoped. Observations remain task-local by design, but a route is
   // chosen from the problem text once; re-forcing it on every work unit spends
@@ -1274,6 +1302,13 @@ export async function runAgentLoop(
       if (chosen === null) {
         stop = "WORK_UNITS_COMPLETE";
         break;
+      }
+      if (workflow.isControlSecondRoute(chosen.taskId)) {
+        sessionLog.append("REPAIR", {
+          kind: "G2_ROUTE_PICK",
+          taskId: chosen.taskId,
+          routeId: workflow.forTask(chosen).routeId,
+        });
       }
       let running: P2Task;
       try {
@@ -1495,6 +1530,43 @@ export async function runAgentLoop(
             });
           }
         }
+        // Evidence before reasoning. A problem whose text routes deterministically
+        // to a math asset gets that one observation turn FIRST, before any answer
+        // turn, instead of only after a candidate packet exists. Item 34 is why: a
+        // long Alexander-matrix item spent its whole 30-minute problem budget on
+        // answer turns and audits, so the maximal-minor computation returning the
+        // reference polynomial was never reached and the run died with BUDGET
+        // after 13 calls. The turn is one bounded model call plus one effect, it is
+        // taken only when the asset port exists and effect room is left, and it
+        // never replaces the method-card turn (that contract is unchanged).
+        if (
+          !mathAssetAttempted &&
+          !forceFinalTurn &&
+          captured.mathAsset !== null &&
+          captured.mathAsset !== undefined &&
+          // NOT gated on `allowTools`: that flag needs the legacy tool port, and a
+          // math asset travels on its own port. Gating on it is why the early
+          // evidence turn never fired on item 34 even though the asset port was
+          // present. The asset still has to fit the shared effect room below.
+          toolEffects < opts.maxEffects &&
+          root.effectCalls() < totalEffectCapacity &&
+          callsLeft() >= 4 + opts.maxReviews
+        ) {
+          const earlyRoute = semanticMathAssetRoute(problemText);
+          if (earlyRoute !== null) {
+            mathAssetAttempted = true;
+            forcedMathAssetSelection = true;
+            forcedMathAssetRoute = earlyRoute;
+            forcedRetryUsed = false;
+            sessionLog.append("REPAIR", {
+              kind: "MATH_ASSET_EARLY",
+              assetId: earlyRoute.assetId,
+              target: earlyRoute.target,
+              routeId: earlyRoute.id,
+              taskId: running.taskId,
+            });
+          }
+        }
         let context: ReturnType<typeof buildAgentWorkContext>;
         try {
           // Read-only wiring of the declared scope-coverage rows of this task
@@ -1524,7 +1596,12 @@ export async function runAgentLoop(
             allowRouteProposal,
             allowTaskContinuation,
             allowArtifactRedo,
-            routeProvenance: workflow.provenanceOf(running.taskId),
+            routeProvenance: workflow.isControlSecondRoute(running.taskId)
+              ? null
+              : workflow.provenanceOf(running.taskId),
+            controlRouteProvenance: workflow.isControlSecondRoute(running.taskId)
+              ? workflow.provenanceOf(running.taskId)
+              : null,
             dependencyProvenance: workflow.dependencyProvenanceOf(running.taskId),
             revisionProvenance: revision.provenanceFor(running.taskId),
             revisionTarget: revision.targetFor(running.taskId),
@@ -1535,6 +1612,13 @@ export async function runAgentLoop(
         } catch (error) {
           if (!(error instanceof P2Error)) {
             throw error;
+          }
+          if (workflow.isControlSecondRoute(running.taskId)) {
+            sessionLog.append("REPAIR", {
+              kind: "G2_ROUTE_CONTEXT_REJECTED",
+              taskId: running.taskId,
+              code: (error as { readonly code?: unknown }).code ?? "P2_ERROR",
+            });
           }
           stop = "CONTEXT_REJECTED";
           break;
@@ -2914,7 +2998,8 @@ export async function runAgentLoop(
             !mathAssetAttempted &&
             captured.mathAsset !== null &&
             captured.mathAsset !== undefined &&
-            allowTools &&
+            // Same reason as the early turn: the asset port is independent of the
+            // legacy tool port, so this must not require `allowTools`.
             toolEffects < opts.maxEffects &&
             root.effectCalls() < totalEffectCapacity &&
             revision.pendingTaskId() === null &&
@@ -3112,13 +3197,15 @@ export async function runAgentLoop(
               break;
             }
           }
-          let recoveryUsed = false;
           if (prepared === null) {
             // A malformed first packet (and an equally malformed schema repair)
-            // is not a reason to discard the whole answer-bearing task. With
-            // bounded consensus enabled, one blind CONSENSUS re-solve is a
-            // separate, Host-authorized attempt; only a valid COMPLETE packet
-            // is accepted and the invalid raw text never becomes an artifact.
+            // is not a reason to discard the whole answer-bearing task. This is
+            // a bounded re-solve of the same undelivered WORK task, not an
+            // adversarial consensus ballot: it must not consume one of the
+            // fixed independent/audit/certificate slots. It is phase WORK so
+            // the Host's yielded-task / WORK guards still apply, and only a
+            // valid COMPLETE packet is accepted; invalid raw text never becomes
+            // an artifact.
             if (
               opts.maxConsensus >= 1 &&
               answerBearingTask &&
@@ -3172,7 +3259,7 @@ export async function runAgentLoop(
                 ];
                 const recovered = await calls.model({
                   task: running,
-                  phase: "CONSENSUS",
+                  phase: "WORK",
                   messages,
                   contextHash: p4Hash(JSON.stringify(messages)),
                   contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
@@ -3203,7 +3290,6 @@ export async function runAgentLoop(
                     ) {
                       prepared = artifact;
                       outcome = recovered;
-                      recoveryUsed = true;
                       receiptInput.sourceRequestId = recovered.requestId;
                       receiptInput.text = recovered.receipt.text;
                     }
@@ -3401,7 +3487,6 @@ export async function runAgentLoop(
           // byte-identical.
           if (
             opts.maxConsensus >= 1 &&
-            !recoveryUsed &&
             answerBearingTask &&
             target === null &&
             revision.pendingTaskId() === null &&
@@ -3685,6 +3770,17 @@ export async function runAgentLoop(
                 note =
                   "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " +
                   auditHead +
+                  // Item 12 answered the one-sided value (5117) four times out of
+                  // four while the reference is the two-sided one (5129): with two
+                  // symmetric theatres the event "somebody finds no seat" is the
+                  // union over both, so each theatre must hold at alpha/2. The
+                  // audit is the turn that has to notice this, because a blind
+                  // ballot anchors on the one-sided legend.
+                  (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(
+                    problemText,
+                  )
+                    ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. "
+                    : "") +
                   (choiceProblem
                     ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. " +
                       "The final candidateProposal must list every correct option and must not omit an option that is also correct. " +
@@ -4033,6 +4129,22 @@ export async function runAgentLoop(
             routeInput: p2Snapshot({ routeId: route.routeId, representation: route.representation, operation: route.operation, lemmas: route.lemmas, construction: route.construction }),
           });
           workUnits += 1;
+          if (workflow.isControlSecondRoute(running.taskId)) {
+            const g2Candidate = accepted.packet?.candidateProposal;
+            const protectedCandidate = target?.artifact.packet?.candidateProposal;
+            const candidatePresent =
+              typeof g2Candidate === "string" && g2Candidate.trim().length > 0;
+            sessionLog.append("REPAIR", {
+              kind: "G2_ROUTE_RESULT",
+              taskId: running.taskId,
+              routeId: route.routeId,
+              candidatePresent,
+              agrees:
+                candidatePresent &&
+                typeof protectedCandidate === "string" &&
+                g2Candidate === protectedCandidate,
+            });
+          }
           if (accepted.deliveryStatus !== "COMPLETE") {
             if (revision.pendingTaskId() === null) {
               try {
@@ -4082,6 +4194,36 @@ export async function runAgentLoop(
                 break;
               }
             }
+          }
+          // Explicit full-capability G2 admission. The protected candidate
+          // exists, so a real second route can now add one independent
+          // derivation task. It starts with empty artifact/dependency refs and
+          // a mechanism disjoint from the default route; a failed admission is
+          // recorded instead of silently disappearing.
+          if (
+            fullCapability &&
+            !g2RouteAdmitted &&
+            target !== null &&
+            accepted.deliveryStatus === "COMPLETE"
+          ) {
+            const g2ObligationId = `${running.goalId}:INDEPENDENT_DERIVATION`;
+            const admittedRoute = workflow.admitControlSecondRoute(
+              accepted,
+              g2ObligationId,
+              callsLeft(),
+              opts.maxReviews,
+              opts.maxWorkUnits - workUnits,
+              root.remainingMs(),
+            );
+            g2RouteAdmitted = admittedRoute;
+            sessionLog.append("REPAIR", {
+              kind: admittedRoute ? "G2_ROUTE_ADMIT" : "G2_ROUTE_REJECT",
+              origin: "CONTROL_FULL_CAPABILITY",
+              obligationId: g2ObligationId,
+              sourceRequestId: accepted.sourceRequestId,
+              taskId: admittedRoute ? `g2-route-${accepted.sourceRequestId}` : null,
+              readyTasks: ledger.readyTasks().length,
+            });
           }
         }
         // Only a WORK whose context actually allowed a proposal may admit one.
@@ -4236,13 +4378,36 @@ export async function runAgentLoop(
       if (admitted === null) {
         return null;
       }
+      // The full-capability profile must actually perform the derivation
+      // review, not merely call the review endpoint. This note changes only the
+      // reviewer's instructions; the report schema, evidence level and
+      // fail-closed parser are unchanged, and a fabricated issue is still
+      // rejected by the same span/obligation checks.
+      let reviewMessages = admitted.context.messages;
+      let reviewContextHash = admitted.context.contextHash;
+      let reviewContextBytes = admitted.context.contextBytes;
+      if (fullCapability && stage === "R2") {
+        reviewMessages = [
+          {
+            role: "system" as const,
+            content:
+              admitted.context.messages[0]!.content +
+              "\n\nFULL-CAPABILITY REVIEW DUTY: audit the derivation step by step, not just the final answer. " +
+              "If any step is unsupported, a case, quantifier or domain boundary is missing, or the candidate does not follow from the stated premises, report ISSUES with an exact quote and the answer obligation id. " +
+              "Do not return NO_ISSUE merely because the candidate looks plausible; NO_ISSUE is valid only after every supplied obligation is explicitly checked. Do not invent an issue.",
+          },
+          admitted.context.messages[1]!,
+        ];
+        reviewContextHash = p4Hash(JSON.stringify(reviewMessages));
+        reviewContextBytes = Buffer.byteLength(JSON.stringify(reviewMessages), "utf8");
+      }
       const before = root.modelCalls();
       const outcome = await calls.model({
         task: reviewTask,
         phase: stage,
-        messages: admitted.context.messages,
-        contextHash: admitted.context.contextHash,
-        contextBytes: admitted.context.contextBytes,
+        messages: reviewMessages,
+        contextHash: reviewContextHash,
+        contextBytes: reviewContextBytes,
         onDispatch: (id) => session.markDispatched(id),
       });
       if (root.modelCalls() > before) {
@@ -4278,6 +4443,7 @@ export async function runAgentLoop(
       candidate: P4Target,
       roundReview: P4ReviewSession,
       challenges: readonly P4Challenge[],
+      probe = false,
     ): Promise<{
       readonly accepted: boolean;
       readonly decision: ReturnType<typeof reviseCandidate>["decision"];
@@ -4287,7 +4453,11 @@ export async function runAgentLoop(
         candidateTask === null ||
         opts.maxRepairs < 1 ||
         repairCalls >= opts.maxRepairs ||
-        schemaRepairs > 0 ||
+        // A bounded schema repair earlier in the same run consumed a WORK
+        // turn, not the evidence-repair quota. The strict profile keeps the
+        // old fail-closed interaction; the explicit full-capability profile
+        // may still use its authorized REPAIR/R4 after R2.
+        (schemaRepairs > 0 && !fullCapability) ||
         callsLeft() < 1 ||
         root.remainingMs() <= MIN_MS
       ) {
@@ -4380,17 +4550,27 @@ export async function runAgentLoop(
           }
         }
       }
+      const challenge = challenges[0];
+      if (challenge === undefined || answerObligation === undefined) {
+        return null;
+      }
+      const grounded =
+        checker !== undefined &&
+        s1Ok &&
+        challenge.issue.obligationIds.includes(answerObligation.obligationId);
       // Step 1 hard gate 1: a checker present but NOT substantively supporting
       // the challenged obligation is a fail-closed REVISE_REJECTED for EVERY
       // policy (BEST_EFFORT included); the protected parent candidate is kept.
-      if (!s1Ok && checker !== undefined && challenges.length > 0) {
-        stop = "REVISE_REJECTED";
+      // The explicit full-capability profile still dispatches the one bounded
+      // REPAIR and its R4 recheck below, then rejects the replacement for the
+      // missing grounded basis. That exercises the architecture without ever
+      // promoting model opinion to a revision basis.
+      if (!grounded && !fullCapability) {
+        if (checker !== undefined) {
+          stop = "REVISE_REJECTED";
+        }
         return null;
       }
-      if (!(challenges.length > 0 && checker !== undefined && answerObligation !== undefined && s1Ok)) {
-        return null;
-      }
-      const challenge = challenges[0]!;
       const repairTask = candidateTask;
       const route = workflow.forTask(repairTask);
       const requestId = root.nextModelId();
@@ -4421,7 +4601,12 @@ export async function runAgentLoop(
         {
           role: "system" as const,
           content:
-            "You are a strict single revision reviser. Reply with exactly one JSON work packet and nothing else. You cannot declare anything verified.",
+            "You are a strict single revision reviser. Reply with exactly one JSON object and nothing else; no prose, no markdown. " +
+            "Use schemaVersion p2a-work-v1 with exactly these keys: schemaVersion, sessionId, problemHash, contractVersion, taskId, goalId, scopeId, routeId, sourceRequestId, claim, derivation, assumptions, dependencies, pendingObligations, suggestedChecks, deliveryStatus, candidateProposal. " +
+            "Copy sessionId, problemHash, contractVersion, goalId, scopeId and sourceRequestId exactly from the user body; use taskId=body.task.taskId and routeId=body.route.routeId. " +
+            "dependencies MUST be an array copied from body.task.inputArtifactRefs (usually []); assumptions MUST be []; pendingObligations MUST be []; suggestedChecks MUST be an array. " +
+            "deliveryStatus MUST be exactly COMPLETE and candidateProposal MUST be a non-empty JSON STRING, not an object. " +
+            "Address the supplied challenge with a corrected derivation and a corrected final candidate. You cannot declare anything verified.",
         },
         { role: "user" as const, content: JSON.stringify(body) },
       ];
@@ -4495,23 +4680,24 @@ export async function runAgentLoop(
           // revision on the trusted branch/gap coverage.
           basisSupported = false;
         }
-        const basis: P4ReviseBasis | null = basisSupported
-          ? {
-              source: "CHECKER_COUNTEREXAMPLE",
-              level: "CHECKED_SCOPE",
-              checkResult: "PASS",
-              scopeId: candidate.binding.scopeId,
-              witness: checker.receipt.observation.slice(0, 2048),
-              obligatedObligationIds: [answerObligation.obligationId],
-              childCoverage: [answerObligation.obligationId],
-              ...(gapSet.length > 0
-                ? {
-                    requiredGaps: gapSet,
-                    coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
-                  }
-                : {}),
-            }
-          : null;
+        const basis: P4ReviseBasis | null =
+          grounded && basisSupported && checker !== undefined
+            ? {
+                source: "CHECKER_COUNTEREXAMPLE",
+                level: "CHECKED_SCOPE",
+                checkResult: "PASS",
+                scopeId: candidate.binding.scopeId,
+                witness: checker.receipt.observation.slice(0, 2048),
+                obligatedObligationIds: [answerObligation.obligationId],
+                childCoverage: [answerObligation.obligationId],
+                ...(gapSet.length > 0
+                  ? {
+                      requiredGaps: gapSet,
+                      coveredGaps: gapSet.filter((gap) => answerText.includes(gap)),
+                    }
+                  : {}),
+              }
+            : null;
         const revision =
           basis === null
             ? null
@@ -4521,6 +4707,35 @@ export async function runAgentLoop(
                 root.remainingMs(),
               );
         if (revision === null) {
+          // Full capability: the repair child exists, so spend the authorized
+          // R4 recheck even when the revision cannot be grounded. The review
+          // is evidence only; the parent candidate is still kept and the
+          // replacement remains fail-closed.
+          if (
+            fullCapability &&
+            opts.maxReviews >= 2 &&
+            reviewCalls < opts.maxReviews &&
+            callsLeft() >= 1
+          ) {
+            const r4 = await runReviewRound(child, "R4");
+            if (r4 !== null) {
+              const r4Snapshot = r4.snapshot();
+              sessionLog.append("REVIEW_CHALLENGE", {
+                reviewCalls,
+                challenges: r4Snapshot.challenges.length,
+                records: r4Snapshot.records.length,
+                stage: "R4",
+              });
+            }
+          }
+          sessionLog.append("REPAIR", {
+            accepted: false,
+            reason: "REVISE_REJECTED",
+            sourceRequestId: requestId,
+            basis: basis === null ? "MISSING_GROUNDED_BASIS" : "REVISION_REFUSED",
+            candidateProposal: child.artifact.packet?.candidateProposal ?? null,
+            ...(probe ? { probe: true } : {}),
+          });
           stop = "REVISE_REJECTED";
           return null;
         }
@@ -4534,6 +4749,7 @@ export async function runAgentLoop(
             // rebuild the current candidate and re-derive the final answer.
             candidateProposal: child.artifact.packet?.candidateProposal ?? null,
             finalResponse: revision.decision.finalResponse,
+            ...(probe ? { probe: true } : {}),
           });
         }
         if (revision !== null && revision.accepted) {
@@ -4565,7 +4781,16 @@ export async function runAgentLoop(
         if (!(error instanceof P2Error)) {
           throw error;
         }
-        stop = "CONTROL_REJECTED";
+        sessionLog.append("REPAIR", {
+          kind: "REPAIR_PACKET_REJECTED",
+          code: (error as { readonly code?: unknown }).code ?? "P2_ERROR",
+          requestId,
+          ...(probe ? { probe: true } : {}),
+        });
+        // The repair child was unusable, not a control violation of the run:
+        // keep the protected parent candidate and report the same candidate-
+        // preserving terminal reason as any other refused revision.
+        stop = "REVISE_REJECTED";
         return null;
       }
     };
@@ -4631,6 +4856,128 @@ export async function runAgentLoop(
             break;
           }
         }
+      }
+    }
+    // Full-capability sweep: if the real R2 review found no concrete
+    // mathematical challenge, still exercise one bounded REPAIR and one R4
+    // recheck through the same trusted ports. This is a control-owned
+    // capability probe, not a mathematical finding: the protected parent stays
+    // untouched, no revision basis is manufactured, and the probe result is
+    // explicitly labelled in the SessionLog. It is the only way to guarantee
+    // that every item starts the conditional REPAIR/R4 stages while preserving
+    // the rule that an ungrounded revision can never replace a candidate.
+    if (
+      fullCapability &&
+      target !== null &&
+      target.availability === "ACTIVE" &&
+      repairCalls === 0 &&
+      reviewCalls >= 1 &&
+      opts.maxRepairs >= 1 &&
+      opts.maxReviews >= 2 &&
+      protectedReview !== null &&
+      callsLeft() >= 2 &&
+      root.remainingMs() > MIN_MS
+    ) {
+      const contractNow = ledger.snapshot();
+      const probeGoalKind = goalKindOf(
+        contractNow.goals as readonly {
+          readonly goalId: string;
+          readonly kind: P2GoalKind;
+          readonly subgoals: readonly unknown[];
+        }[],
+        target.binding.goalId,
+      );
+      const probeAnswerKind = p2AnswerObligationForGoal(probeGoalKind);
+      const probeAnswerObligation = contractNow.obligations.find(
+        (row) => row.goalId === target!.binding.goalId && row.kind === probeAnswerKind,
+      );
+      const probeRecords = protectedReview.snapshot().records;
+      const probeSource = probeRecords[probeRecords.length - 1]?.requestId ?? null;
+      if (probeAnswerObligation !== undefined && probeSource !== null) {
+        const derivation = target.artifact.packet?.derivation ?? "";
+        const derivationPoints = [...derivation];
+        const probeEnd = Math.min(1, derivationPoints.length);
+        const probeQuote = derivationPoints.slice(0, probeEnd).join("");
+        const probeChallenge = p2Snapshot({
+          challengeId: "challenge-capability-probe-1",
+          target: target.binding,
+          targetHash: target.targetHash,
+          issue: {
+            stepLocator: { start: 0, end: probeEnd, quote: probeQuote },
+            suspectedIssue: "OTHER" as const,
+            rationale:
+              "CAPABILITY PROBE: this is a control-owned architecture exercise, not a mathematical finding. The candidate is deliberately not treated as verified.",
+            requestedCheck:
+              "Exercise the bounded repair path. Return a complete revised packet only if an explicit grounded check is available; otherwise repeat the parent candidate. This probe can never replace the protected parent.",
+            obligationIds: [probeAnswerObligation.obligationId],
+          },
+          requestIds: [probeSource],
+          status: "CHALLENGED" as const,
+          availability: "ACTIVE" as const,
+        }) as P4Challenge;
+        const probeStop = stop;
+        const probeDecision = revisedDecision;
+        const reviewCallsBeforeProbe = reviewCalls;
+        let probeAccepted = false;
+        try {
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "REPAIR",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId,
+          });
+          const probed = await attemptRevision(
+            target,
+            protectedReview,
+            [probeChallenge],
+            true,
+          );
+          probeAccepted = probed?.accepted === true;
+          // A REPAIR packet that fails schema acceptance returns before the
+          // internal R4. The host still authorized the repair, so spend the
+          // R4 probe explicitly; every full-profile candidate must reach R4.
+          if (
+            reviewCalls === reviewCallsBeforeProbe &&
+            callsLeft() >= 1 &&
+            root.remainingMs() > MIN_MS
+          ) {
+            const fallbackR4 = await runReviewRound(target, "R4");
+            if (fallbackR4 !== null) {
+              const snapshot = fallbackR4.snapshot();
+              sessionLog.append("REVIEW_CHALLENGE", {
+                reviewCalls,
+                challenges: snapshot.challenges.length,
+                records: snapshot.records.length,
+                stage: "R4",
+                capabilityProbe: true,
+              });
+            }
+          }
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "R4",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId,
+            accepted: probeAccepted,
+          });
+        } catch (error) {
+          if (!(error instanceof P2Error)) {
+            throw error;
+          }
+          sessionLog.append("REPAIR", {
+            kind: "CAPABILITY_PROBE",
+            stage: "ERROR",
+            taskId: target.binding.taskId,
+            challengeId: probeChallenge.challengeId,
+            accepted: false,
+            code: (error as { readonly code?: unknown }).code ?? "P2_ERROR",
+          });
+        }
+        // A probe is observational for the substantive run: even if a future
+        // checker ever made the probe child grounded, this path must not
+        // replace the parent or overwrite the real terminal reason.
+        stop = probeStop;
+        revisedDecision = probeDecision;
       }
     }
   } catch (error) {

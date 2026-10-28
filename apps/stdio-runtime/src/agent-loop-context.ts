@@ -41,6 +41,7 @@ import {
   type AgentFinalCandidate,
 } from "./agent-final.js";
 import { AGENT_PROGRESS_POLICY } from "./agent-progress.js";
+import { AGENT_CONTROL_SECOND_ROUTE_MECHANISM } from "./agent-workflow.js";
 
 export const AGENT_WORK_CONTEXT_SCHEMA_VERSION = "agent-work-context-v7" as const;
 
@@ -55,7 +56,7 @@ const MAX_OBSERVATION_BYTES = 16000;
 const MAX_METHOD_ASSETS = AGENT_MAX_METHOD_ASSETS;
 const HASH = /^[0-9a-f]{64}$/u;
 const REQUEST_ORDINAL = /^model-(3[0-2]|[12][0-9]|[1-9])$/u;
-const PROVENANCE_ORDINAL = /^model-([1-3])$/u;
+const PROVENANCE_ORDINAL = /^model-([1-9][0-9]{0,2})$/u;
 const EFFECT_IDS = [
   "effect-1",
   "effect-2",
@@ -261,7 +262,8 @@ const SYSTEM_PROMPT = [
   "depends on SOME object among several -- several people, several devices, several sites, or the",
   "two directions of one family -- is a union over all of them: handle every object and combine",
   "the results (union bound, two-sided tail, inclusion-exclusion), never analyse a single object",
-  "alone and never reuse a one-sided critical value for a two-sided question. (2) An object asked",
+  "alone, and bound each of k symmetric objects at alpha/k rather than at alpha so that a",
+  "two-sided critical value replaces the one-sided one. (2) An object asked",
   "for as the whole family -- every invariant measure, every eigenvector, every solution, every",
   "equilibrium, a kernel or null space -- must be written with all free constants, including the",
   "constant mode that survives when the ratio, eigenvalue or parameter degenerates to one.",
@@ -348,8 +350,11 @@ const CONSENSUS_SYSTEM_PROMPT = [
   "nonexistence. One nonzero candidate is never evidence of uniqueness.",
   "Three exactness checks decide most of the answers that look right and are not, so run all",
   "three before delivering: (1) an event that depends on SOME object among several -- several",
-  "people, devices, sites, coordinates or coordinates of the same family -- is a union over all",
-  "of them, so handle every object and combine, do not analyse one object alone; (2) an object",
+  "people, devices, sites or two of the same kind -- is a union over all of them, so handle every",
+  "object and combine, do not analyse one object alone; a request that one of k symmetric objects",
+  "be safe at level alpha needs each object bounded at alpha/k, so a two-sided critical value and",
+  "never the one-sided alpha value (with two symmetric theatres and alpha = 0.01 the per-theatre",
+  "tail is 0.005, giving z about 2.58, not 2.33); (2) an object",
   "asked for as the whole family -- every invariant measure, every eigenvector, every solution,",
   "every equilibrium -- must be written with all its free constants, including any constant mode",
   "that survives when the ratio or eigenvalue degenerates to one; (3) an operator, derivative or",
@@ -416,6 +421,12 @@ export interface AgentWorkContextInput {
   readonly protectedCandidate?: AgentFinalCandidate | null;
   readonly allowRouteProposal?: boolean;
   readonly routeProvenance?: AgentRouteProvenance | null;
+  /**
+   * Control-originated G2 route provenance. It is a separate identity from a
+   * model `NEW_ROUTE` proposal: the Host re-derives the fixed mechanism and
+   * the source artifact, and never accepts a model-supplied value here.
+   */
+  readonly controlRouteProvenance?: AgentRouteProvenance | null;
   readonly allowTaskContinuation?: boolean;
   readonly dependencyProvenance?: AgentDependencyProvenance | null;
   readonly allowArtifactRedo?: boolean;
@@ -540,6 +551,91 @@ function checkRouteProvenance(
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   if (routeSignature !== route.signature) {
+    fail(P2_ERROR_CODES.ROUTE_MISMATCH);
+  }
+  if (task.inputArtifactRefs.length !== 0 || task.dependencyTaskIds.length !== 0) {
+    fail(P2_ERROR_CODES.UNKNOWN_DEPENDENCY);
+  }
+  if (task.taskId !== `route-task-${sourceRequestId}`) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  return p2Snapshot({
+    sourceRequestId,
+    sourceArtifactRef: {
+      artifactId: ref.artifactId,
+      artifactVersion: ref.artifactVersion,
+    },
+    obligationId,
+    routeSignature,
+  }) as AgentRouteProvenance;
+}
+
+/**
+ * Strict shape check of the control-originated G2 route provenance.
+ *
+ * Unlike a model `NEW_ROUTE`, this provenance has no v2 proposal packet to
+ * bind to. The mechanism is therefore not model data: it must be the fixed
+ * control mechanism, the route signature must be its normalized signature, and
+ * the task must be the empty-dependency `route-task-<source>` child. The Host
+ * repeats the same derivation independently.
+ */
+function checkControlRouteProvenance(
+  value: unknown,
+  contract: P2Contract,
+  task: P2Task,
+  route: P2RouteSpec,
+  requestId: string,
+): AgentRouteProvenance {
+  const row = exact(value, PROVENANCE_FIELDS);
+  const sourceRequestId = row.sourceRequestId;
+  if (typeof sourceRequestId !== "string") {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const match = PROVENANCE_ORDINAL.exec(sourceRequestId);
+  if (match === null) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (Number.parseInt(match[1] as string, 10) >= ordinalOf(requestId)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  const ref = exact(row.sourceArtifactRef, PROVENANCE_REF_FIELDS);
+  if (typeof ref.artifactId !== "string" || ref.artifactId.trim().length === 0) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if ([...ref.artifactId].length > 256) {
+    fail(P2_ERROR_CODES.BOUND_EXCEEDED);
+  }
+  if (
+    typeof ref.artifactVersion !== "number" ||
+    !Number.isSafeInteger(ref.artifactVersion) ||
+    ref.artifactVersion < 1
+  ) {
+    fail(P2_ERROR_CODES.VERSION_MISMATCH);
+  }
+  const obligationId = row.obligationId;
+  if (typeof obligationId !== "string" || obligationId !== task.obligationId) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const obligation = contract.obligations.find((item) => item.obligationId === obligationId);
+  if (
+    obligation === undefined ||
+    obligation.goalId !== task.goalId ||
+    obligation.envelope.scopeId !== task.scopeId ||
+    (obligation.status !== "OPEN" && obligation.status !== "REOPENED" && obligation.status !== "IN_PROGRESS")
+  ) {
+    fail(P2_ERROR_CODES.SCOPE_MISMATCH);
+  }
+  const routeSignature = row.routeSignature;
+  if (typeof routeSignature !== "string" || !HASH.test(routeSignature)) {
+    fail(P2_ERROR_CODES.PACKET_BINDING);
+  }
+  if (
+    routeSignature !== route.signature ||
+    route.operation !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.operation ||
+    route.construction !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.construction ||
+    route.representation !== AGENT_CONTROL_SECOND_ROUTE_MECHANISM.representation ||
+    route.lemmas.length !== 0
+  ) {
     fail(P2_ERROR_CODES.ROUTE_MISMATCH);
   }
   if (task.inputArtifactRefs.length !== 0 || task.dependencyTaskIds.length !== 0) {
@@ -1215,6 +1311,19 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
       requestId,
     );
   }
+  let controlRouteProvenance: AgentRouteProvenance | null = null;
+  if (
+    captured.controlRouteProvenance !== undefined &&
+    captured.controlRouteProvenance !== null
+  ) {
+    controlRouteProvenance = checkControlRouteProvenance(
+      p2Snapshot(captured.controlRouteProvenance),
+      contract,
+      task,
+      route,
+      requestId,
+    );
+  }
   let dependencyProvenance: AgentDependencyProvenance | null = null;
   if (captured.dependencyProvenance !== undefined && captured.dependencyProvenance !== null) {
     dependencyProvenance = checkDependencyProvenance(
@@ -1226,7 +1335,11 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
       captured.inputs as readonly P2Artifact[],
     );
   }
-  if (routeProvenance !== null && dependencyProvenance !== null) {
+  if (
+    [routeProvenance, controlRouteProvenance, dependencyProvenance].filter(
+      (value) => value !== null,
+    ).length > 1
+  ) {
     fail(P2_ERROR_CODES.PACKET_BINDING);
   }
   const rawRevisionProvenance =
@@ -1408,6 +1521,10 @@ export function buildAgentWorkContext(input: AgentWorkContextInput): AgentWorkCo
     allowTaskContinuation,
     allowArtifactRedo,
     routeProvenance,
+    // Present only on the control-originated G2 task. Keeping ordinary v7
+    // bodies byte-identical is what lets the historical read-only validators
+    // keep their exact key sets.
+    ...(controlRouteProvenance === null ? {} : { controlRouteProvenance }),
     dependencyProvenance,
     revisionProvenance,
     revisionTarget,

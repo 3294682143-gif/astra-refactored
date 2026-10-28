@@ -144,7 +144,7 @@ def load_legacy_manifest(path=None):
     return validate_legacy_manifest(_read_manifest(path if path is not None else _legacy_path()))
 
 
-def _same_limits(raw):
+def _same_limits(raw, frames_limit=None):
     if not isinstance(raw, dict):
         return False
     if len(raw) != len(LIMITS):
@@ -155,12 +155,14 @@ def _same_limits(raw):
         value = raw[key]
         if isinstance(value, bool) or not isinstance(value, int):
             return False
+        if key == "maxFramesPerSession" and frames_limit is not None:
+            expected = frames_limit
         if value != expected:
             return False
     return True
 
 
-def _validate(raw, version, methods):
+def _validate(raw, version, methods, frames_limit=None):
     if not isinstance(raw, dict):
         _fail("MANIFEST_INVALID")
     if raw.get("format") != AGENT_HOST_MANIFEST_FORMAT:
@@ -169,7 +171,7 @@ def _validate(raw, version, methods):
         _fail("MANIFEST_INVALID")
     if raw.get("protocolVersion") != version:
         _fail("VERSION_MISMATCH")
-    if not _same_limits(raw.get("limits")):
+    if not _same_limits(raw.get("limits"), frames_limit):
         _fail("MANIFEST_INVALID")
     envelopes = raw.get("envelopes")
     if not isinstance(envelopes, dict):
@@ -214,8 +216,16 @@ def validate_manifest(raw):
 
 
 def validate_legacy_manifest(raw):
-    """Validate the frozen 1.2 manifest for read-only replay only."""
-    return _validate(raw, AGENT_HOST_LEGACY_VERSION, AGENT_HOST_LEGACY_METHODS)
+    """Validate the frozen 1.2 manifest for read-only replay only.
+
+    The live frame ceiling grew so full-capability runs can use more than 64
+    frames; the frozen 1.2 manifest keeps its pinned 64-frame value and is
+    accepted only by this read-only validator.
+    """
+    return _validate(
+        raw, AGENT_HOST_LEGACY_VERSION, AGENT_HOST_LEGACY_METHODS,
+        frames_limit=64,
+    )
 
 
 def classify_method(method):

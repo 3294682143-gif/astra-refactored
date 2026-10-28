@@ -31,8 +31,9 @@ def test_run_request_dto_rejects_bool_and_invalid_loads():
         RunRequestDto(problem="test", max_method_loads=True)  # type: ignore
 
     # The Web entry fixes method loads at 0.
+    assert RunRequestDto(problem="test", max_method_loads=1).max_method_loads == 1
     with pytest.raises(ValidationError):
-        RunRequestDto(problem="test", max_method_loads=1)  # type: ignore
+        RunRequestDto(problem="test", max_method_loads=5)  # type: ignore
 
     # Every integer field rejects bool smuggling.
     with pytest.raises(ValidationError):

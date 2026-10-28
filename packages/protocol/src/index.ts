@@ -15,7 +15,7 @@ export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export const LIMITS = {
   maxFrameBytes: 65536,
-  maxFramesPerSession: 64,
+  maxFramesPerSession: 1024,
   maxDepth: 24,
   maxSafeInteger: Number.MAX_SAFE_INTEGER,
   maxIdChars: 128,

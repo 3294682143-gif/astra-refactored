@@ -319,7 +319,7 @@ export function createRun(
     max_work_units?: number;
     max_effects?: number;
     max_reviews?: number;
-    max_method_loads?: 0;
+    max_method_loads?: 0 | 1 | 2 | 3 | 4;
     max_repairs?: number;
     max_consensus?: number;
     max_r0?: 0 | 1;

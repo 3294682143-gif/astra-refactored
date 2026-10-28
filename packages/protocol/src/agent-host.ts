@@ -117,14 +117,18 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function sameLimits(raw: unknown): boolean {
+function sameLimits(raw: unknown, framesLimit: number | null = null): boolean {
   if (!isPlainObject(raw)) return false;
   const keys = Object.keys(raw);
   const expected = Object.keys(LIMITS);
   if (keys.length !== expected.length) return false;
   for (const key of expected) {
     if (!Object.prototype.hasOwnProperty.call(raw, key)) return false;
-    if (raw[key] !== (LIMITS as Record<string, unknown>)[key]) return false;
+    const expectedValue =
+      key === "maxFramesPerSession" && framesLimit !== null
+        ? framesLimit
+        : (LIMITS as Record<string, unknown>)[key];
+    if (raw[key] !== expectedValue) return false;
   }
   return true;
 }
@@ -139,13 +143,14 @@ function validateManifest(
   raw: unknown,
   version: string,
   expected: readonly string[],
+  framesLimit: number | null = null,
 ): AgentHostAnyManifest {
   if (!isPlainObject(raw)) throw new Error("MANIFEST_INVALID");
   if (raw["protocolVersion"] !== version) throw new Error("VERSION_MISMATCH");
   if (raw["format"] !== HOST_FORMAT) throw new Error("MANIFEST_INVALID");
   if (raw["schemaDialect"] !== SCHEMA_DIALECT) throw new Error("MANIFEST_INVALID");
   if (MANIFEST_FORMAT !== "astra-p0-protocol-manifest-v1") throw new Error("MANIFEST_INVALID");
-  if (!sameLimits(raw["limits"])) throw new Error("MANIFEST_INVALID");
+  if (!sameLimits(raw["limits"], framesLimit)) throw new Error("MANIFEST_INVALID");
 
   const envelopes = raw["envelopes"];
   if (!isPlainObject(envelopes)) throw new Error("MANIFEST_INVALID");
@@ -197,6 +202,9 @@ export function validateLegacyAgentHostManifest(raw: unknown): AgentHostLegacyMa
     raw,
     AGENT_HOST_LEGACY_VERSION,
     AGENT_HOST_LEGACY_METHODS,
+    // The frozen 1.2 document keeps its pinned 64-frame value; only the live
+    // profiles use the larger full-capability ceiling.
+    64,
   ) as AgentHostLegacyManifest;
 }
 

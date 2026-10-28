@@ -5,7 +5,7 @@
 GET  /api/health                 健康检查（保证不调用任何外部未授权模型）
 GET  /api/capabilities           能力声明
 GET  /api/runs                   运行索引（L1 摘要）
-POST /api/runs                   启动推导会话（参数校验 max_method_loads ∈ {0, 1}）
+POST /api/runs                   启动推导会话（参数校验 max_method_loads ∈ {0..4}）
 GET  /api/runs/{run_id}          单条运行详情
 GET  /api/runs/{run_id}/events   实时 SSE 事件流通道（支持 Last-Event-ID 重连）
 GET  /api/replays                具备 L2 详细存档的运行
@@ -167,7 +167,7 @@ def capabilities(request: Request) -> JSONResponse:
             "L3": "binary/text artifacts on disk",
         },
         "limits": {
-            "max_method_loads_allowed": [0],
+            "max_method_loads_allowed": [0, 1, 2, 3, 4],
         },
     })
 

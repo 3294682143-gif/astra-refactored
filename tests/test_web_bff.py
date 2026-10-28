@@ -295,9 +295,10 @@ def test_validate_run_request():
     with pytest.raises(ValidationError, match="must be an integer"):
         validate_run_request({"problem": "test", "max_method_loads": True})
 
-    # Web 入口固定 method loads = 0
-    with pytest.raises(ValidationError, match="less than or equal to 0"):
-        validate_run_request({"problem": "test", "max_method_loads": 1})
+    # Web 入口允许 0..4 张方法卡；5 被拒绝
+    assert validate_run_request({"problem": "test", "max_method_loads": 1})["max_method_loads"] == 1
+    with pytest.raises(ValidationError, match="less than or equal to 4"):
+        validate_run_request({"problem": "test", "max_method_loads": 5})
 
     # 未知顶层控制字段与 NaN metadata 都被拒绝
     with pytest.raises(ValidationError, match="Extra inputs"):
@@ -456,6 +457,8 @@ def test_terminal_kind_mapping_covers_four_buckets():
     # 候选型 stopReason 不属于四类异常收口
     assert classify_terminal_kind(StopReason.REVIEWS_COMPLETE) is None
     assert classify_stop_reason(StopReason.REVIEWS_COMPLETE).value == "candidate"
+    assert classify_terminal_kind(StopReason.REVIEW_STOP) is None
+    assert classify_stop_reason(StopReason.REVIEW_STOP).value == "candidate"
 
 
 def test_terminal_records_preserve_final_response_and_never_candidate(temp_store: Store):
