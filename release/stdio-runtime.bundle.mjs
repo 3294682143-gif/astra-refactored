@@ -22348,68 +22348,6 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
   let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
   let methodAssets = [];
-  if (fullCapability && methodsEnabled && catalog !== null && catalog.entries.length > 0 && methodLoads === 0 && opts.maxMethodLoads >= 1 && captured.effect !== null && root.remainingMs() > MIN_MS) {
-    const selectedMethodCandidates = semanticMethodRoute(problemText, catalog.entries);
-    const chosenMethodId = selectedMethodCandidates[0] ?? catalog.entries[0].id;
-    const effectOrdinal = root.effectCalls() + 1;
-    const effectId = `effect-${effectOrdinal}`;
-    const reservedEffect = root.reserveEffect(effectId);
-    try {
-      const effectRemaining = root.remainingMs();
-      const receipt = await captured.effect.execute({
-        effectId,
-        binding: {
-          sessionId: session,
-          problemHash,
-          contractVersion: contract.contractVersion,
-          taskId: contract.tasks[0]?.taskId ?? "task-1",
-          goalId: contract.tasks[0]?.goalId ?? "goal-1",
-          scopeId: contract.tasks[0]?.scopeId ?? "scope-1",
-          sourceRequestId: "control-method-load"
-        },
-        action: { action: "method", id: chosenMethodId },
-        remainingMs: effectRemaining
-      });
-      root.settleEffect(reservedEffect, "COMPLETE");
-      methodLoads += 1;
-      const entry = catalog.entries.find((e) => e.id === chosenMethodId);
-      if (entry) {
-        let loaded = null;
-        try {
-          const rawObs = typeof receipt === "object" && receipt !== null ? receipt.observation : null;
-          if (typeof rawObs === "string") {
-            const parsed = JSON.parse(rawObs);
-            if (parsed && typeof parsed === "object" && "asset" in parsed) {
-              loaded = readAsset(parsed["asset"], entry.id, entry.title);
-            }
-          }
-        } catch {
-          loaded = null;
-        }
-        if (!loaded) {
-          const rawBody = typeof receipt === "object" && receipt !== null ? receipt.observation ?? "" : "";
-          loaded = {
-            id: entry.id,
-            title: entry.title,
-            version: "1.1.0",
-            body: rawBody,
-            bodySha256: typeof receipt?.observationHash === "string" ? receipt.observationHash : "",
-            bodyChars: [...rawBody].length
-          };
-        }
-        methodAssets.push(loaded);
-      }
-      sessionLog.append("METHOD_LOAD", {
-        effectId,
-        methodId: chosenMethodId,
-        ordinal: 1,
-        status: "COMPLETE",
-        checkResult: "COMPLETE"
-      });
-    } catch {
-      root.settleEffect(reservedEffect, "ERROR");
-    }
-  }
   if (opts.maxR0 >= 1) {
     contract = await runBoundedR0(contract, root, captured, opts, problemText, session, sessionLog);
   }

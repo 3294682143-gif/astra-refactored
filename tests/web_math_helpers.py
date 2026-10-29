@@ -47,7 +47,11 @@ class MathAssetScriptedClient:
                     },
                 }]
             }
-        if self.turn == 1:
+        observations = body.get("toolObservations", [])
+        if observations and any(self.target in str(row) for row in observations):
+            self.observation_seen = True
+
+        if not self.observation_seen:
             content = {
                 "action": "math_asset",
                 "assetId": self.asset_id,
@@ -55,9 +59,6 @@ class MathAssetScriptedClient:
                 "input": self.input_data,
             }
         else:
-            observations = body.get("toolObservations", [])
-            if observations and any(self.target in str(row) for row in observations):
-                self.observation_seen = True
             content = {
                 "schemaVersion": "p2a-work-v1",
                 "sessionId": body["sessionId"],

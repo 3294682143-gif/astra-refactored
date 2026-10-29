@@ -259,6 +259,8 @@ export function classifyRunStatus(stopReason: string | null | undefined): RunSta
   if (!stopReason || !stopReason.trim()) return "unknown";
   switch (stopReason) {
     case "REVIEWS_COMPLETE":
+    case "WORK_UNITS_COMPLETE":
+    case "REVIEW_STOP":
     case "SOLVED":
       return "candidate";
     case "NO_CANDIDATE":

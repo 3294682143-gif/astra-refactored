@@ -88,7 +88,10 @@ def _git(*args):
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    raw = path.read_bytes()
+    if b"\r\n" in raw:
+        raw = raw.replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def build() -> dict:
@@ -99,7 +102,10 @@ def build() -> dict:
         path = ROOT / rel
         if not path.is_file():
             raise SystemExit(f"missing precompiled JS: {rel} (run `tsc -b` first)")
-        js.append({"path": Path(rel).as_posix(), "sha256": _sha256(path), "bytes": path.stat().st_size})
+        raw = path.read_bytes()
+        if b"\r\n" in raw:
+            raw = raw.replace(b"\r\n", b"\n")
+        js.append({"path": Path(rel).as_posix(), "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)})
     assets = {}
     for name, rel in ASSET_ARTIFACTS.items():
         path = ROOT / rel

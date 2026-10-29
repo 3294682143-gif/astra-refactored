@@ -1173,78 +1173,7 @@ export async function runAgentLoop(
   let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
   let methodAssets: P2MethodAsset[] = [];
 
-  // Forced method load before R0: ensure at least 1 method card is loaded in fullCapability mode
-  if (
-    fullCapability &&
-    methodsEnabled &&
-    catalog !== null &&
-    catalog.entries.length > 0 &&
-    methodLoads === 0 &&
-    opts.maxMethodLoads >= 1 &&
-    captured.effect !== null &&
-    root.remainingMs() > MIN_MS
-  ) {
-    const selectedMethodCandidates = semanticMethodRoute(problemText, catalog.entries);
-    const chosenMethodId = selectedMethodCandidates[0] ?? catalog.entries[0]!.id;
-    const effectOrdinal = root.effectCalls() + 1;
-    const effectId = `effect-${effectOrdinal}`;
-    const reservedEffect = root.reserveEffect(effectId);
-    try {
-      const effectRemaining = root.remainingMs();
-      const receipt = await captured.effect.execute({
-        effectId,
-        binding: {
-          sessionId: session,
-          problemHash,
-          contractVersion: contract.contractVersion,
-          taskId: contract.tasks[0]?.taskId ?? "task-1",
-          goalId: contract.tasks[0]?.goalId ?? "goal-1",
-          scopeId: contract.tasks[0]?.scopeId ?? "scope-1",
-          sourceRequestId: "control-method-load",
-        },
-        action: { action: "method", id: chosenMethodId },
-        remainingMs: effectRemaining,
-      });
-      root.settleEffect(reservedEffect, "COMPLETE");
-      methodLoads += 1;
-      const entry = catalog.entries.find((e) => e.id === chosenMethodId);
-      if (entry) {
-        let loaded: P2MethodAsset | null = null;
-        try {
-          const rawObs = typeof receipt === "object" && receipt !== null ? (receipt as any).observation : null;
-          if (typeof rawObs === "string") {
-            const parsed = JSON.parse(rawObs);
-            if (parsed && typeof parsed === "object" && "asset" in parsed) {
-              loaded = readAsset((parsed as Record<string, unknown>)["asset"], entry.id, entry.title);
-            }
-          }
-        } catch {
-          loaded = null;
-        }
-        if (!loaded) {
-          const rawBody = typeof receipt === "object" && receipt !== null ? (receipt as any).observation ?? "" : "";
-          loaded = {
-            id: entry.id,
-            title: entry.title,
-            version: "1.1.0",
-            body: rawBody,
-            bodySha256: typeof (receipt as any)?.observationHash === "string" ? (receipt as any).observationHash : "",
-            bodyChars: [...rawBody].length,
-          };
-        }
-        methodAssets.push(loaded);
-      }
-      sessionLog.append("METHOD_LOAD", {
-        effectId,
-        methodId: chosenMethodId,
-        ordinal: 1,
-        status: "COMPLETE",
-        checkResult: "COMPLETE",
-      });
-    } catch {
-      root.settleEffect(reservedEffect, "ERROR");
-    }
-  }
+
 
   // B1 (DECISION-0150): the bounded, opt-in R0 planning review. It runs before
   // any WORK, shares the same root budget, and may change the contract to
