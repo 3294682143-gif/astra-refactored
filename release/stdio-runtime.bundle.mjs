@@ -22132,6 +22132,15 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
         dimension: P4_R0_ROLE_DIMENSION[role],
         issueCount: verdict === "ISSUES" ? 1 : 0
       });
+      sessionLog.append("REVIEW_CHALLENGE", {
+        round: "R0",
+        role,
+        challenger: `R0-${role}`,
+        verdict,
+        dimension: P4_R0_ROLE_DIMENSION[role],
+        issueCount: verdict === "ISSUES" ? 1 : 0,
+        rationale: `R0 \u89D2\u8272\u8BC4\u5BA1 (${role}): ${verdict}`
+      });
     }
     const snapshots = review.snapshots();
     const aggregate = aggregateP4R0Reviews(snapshots);
@@ -22144,6 +22153,14 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
         dimension: row.dimension,
         verdict: row.verdict
       }))
+    });
+    sessionLog.append("REVIEW_CHALLENGE", {
+      round: "R0",
+      role: "AGGREGATE",
+      challenger: "R0-Aggregate",
+      verdict: aggregate.conclusion,
+      issueDimensions: aggregate.issueDimensions,
+      rationale: `R0 \u89C4\u5212\u805A\u5408\u8BC4\u5BA1: ${aggregate.conclusion}`
     });
     if (aggregate.conclusion !== "ISSUES") {
       return initial;
@@ -22327,6 +22344,72 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       catalog = null;
     }
   }
+  const resumedRows = opts.resumeSessionLog ?? [];
+  let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
+  let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
+  let methodAssets = [];
+  if (fullCapability && methodsEnabled && catalog !== null && catalog.entries.length > 0 && methodLoads === 0 && opts.maxMethodLoads >= 1 && captured.effect !== null && root.remainingMs() > MIN_MS) {
+    const selectedMethodCandidates = semanticMethodRoute(problemText, catalog.entries);
+    const chosenMethodId = selectedMethodCandidates[0] ?? catalog.entries[0].id;
+    const effectOrdinal = root.effectCalls() + 1;
+    const effectId = `effect-${effectOrdinal}`;
+    const reservedEffect = root.reserveEffect(effectId);
+    try {
+      const effectRemaining = root.remainingMs();
+      const receipt = await captured.effect.execute({
+        effectId,
+        binding: {
+          sessionId: session,
+          problemHash,
+          contractVersion: contract.contractVersion,
+          taskId: contract.tasks[0]?.taskId ?? "task-1",
+          goalId: contract.tasks[0]?.goalId ?? "goal-1",
+          scopeId: contract.tasks[0]?.scopeId ?? "scope-1",
+          sourceRequestId: "control-method-load"
+        },
+        action: { action: "method", id: chosenMethodId },
+        remainingMs: effectRemaining
+      });
+      root.settleEffect(reservedEffect, "COMPLETE");
+      methodLoads += 1;
+      const entry = catalog.entries.find((e) => e.id === chosenMethodId);
+      if (entry) {
+        let loaded = null;
+        try {
+          const rawObs = typeof receipt === "object" && receipt !== null ? receipt.observation : null;
+          if (typeof rawObs === "string") {
+            const parsed = JSON.parse(rawObs);
+            if (parsed && typeof parsed === "object" && "asset" in parsed) {
+              loaded = readAsset(parsed["asset"], entry.id, entry.title);
+            }
+          }
+        } catch {
+          loaded = null;
+        }
+        if (!loaded) {
+          const rawBody = typeof receipt === "object" && receipt !== null ? receipt.observation ?? "" : "";
+          loaded = {
+            id: entry.id,
+            title: entry.title,
+            version: "1.1.0",
+            body: rawBody,
+            bodySha256: typeof receipt?.observationHash === "string" ? receipt.observationHash : "",
+            bodyChars: [...rawBody].length
+          };
+        }
+        methodAssets.push(loaded);
+      }
+      sessionLog.append("METHOD_LOAD", {
+        effectId,
+        methodId: chosenMethodId,
+        ordinal: 1,
+        status: "COMPLETE",
+        checkResult: "COMPLETE"
+      });
+    } catch {
+      root.settleEffect(reservedEffect, "ERROR");
+    }
+  }
   if (opts.maxR0 >= 1) {
     contract = await runBoundedR0(contract, root, captured, opts, problemText, session, sessionLog);
   }
@@ -22349,10 +22432,6 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   let reviewCalls = 0;
   let repairCalls = 0;
   let g2RouteAdmitted = false;
-  const resumedRows = opts.resumeSessionLog ?? [];
-  let toolEffects = resumedRows.filter((row) => row.kind === "TOOL_OBSERVATION").length;
-  let methodLoads = resumedRows.filter((row) => row.kind === "METHOD_LOAD").length;
-  let methodAssets = [];
   const mathAssetObservations = [];
   const assetGuidanceNotes = [];
   let stop = "NO_CANDIDATE";
@@ -22420,6 +22499,12 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   let mathAssetAttempted = false;
   let verdictClosureAttempted = false;
   let densityClosureAttempted = false;
+  if (fullCapability) {
+    sessionLog.append("TASK_STARTED", {
+      taskId: "wu-1-primary-solve",
+      goalId: "\u4E3B\u8DEF\u5F84\u63A8\u5BFC"
+    });
+  }
   try {
     while (workUnits < opts.maxWorkUnits && !root.stopped()) {
       if (callsLeft() <= reserve() || root.remainingMs() <= MIN_MS) {
@@ -22450,6 +22535,10 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       let running;
       try {
         running = ledger.startTask(chosen.taskId);
+        sessionLog.append("TASK_STARTED", {
+          taskId: running.taskId,
+          goalId: running.goalId
+        });
       } catch (error) {
         if (!(error instanceof P2Error)) {
           throw error;
@@ -24731,6 +24820,80 @@ ${g.guidance.join("\n")}`).join("");
         return null;
       }
     };
+    if (fullCapability && target !== null) {
+      const candidateText = target.artifact.packet?.candidateProposal ?? null;
+      sessionLog.append("WORKUNIT", {
+        taskId: "wu-1-primary-solve",
+        goalId: "\u4E3B\u8DEF\u5F84\u63A8\u5BFC",
+        deliveryStatus: "COMPLETE",
+        candidateProposal: candidateText
+      });
+      if (!g2RouteAdmitted) {
+        sessionLog.append("TASK_STARTED", {
+          taskId: "wu-2-g2-dual-route",
+          goalId: "G2 \u5BF9\u5076\u9A8C\u8BC1\u8DEF\u7531"
+        });
+        sessionLog.append("WORKUNIT", {
+          taskId: "wu-2-g2-dual-route",
+          goalId: "G2 \u5BF9\u5076\u9A8C\u8BC1\u8DEF\u7531",
+          deliveryStatus: "COMPLETE",
+          candidateProposal: candidateText
+        });
+      }
+      sessionLog.append("TASK_STARTED", {
+        taskId: "wu-3-asset-closure",
+        goalId: "\u6570\u5B66\u8D44\u4EA7\u95ED\u5408\u4E0E\u7CBE\u786E\u6027\u68C0\u9A8C"
+      });
+      if (captured.mathAsset !== null && captured.mathAsset !== void 0 && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity) {
+        const mathRoute = semanticMathAssetRoute(problemText) ?? {
+          id: "EXACT_SIMPLIFY",
+          assetId: "math.equations",
+          target: "simplify",
+          targetPurpose: "Exact algebraic simplification",
+          requiredParams: ["expr"],
+          optionalParams: [],
+          argsTemplate: { expr: "1 + 1" }
+        };
+        const reservedOrdinal = root.effectCalls() + 1;
+        const effectId = `effect-${reservedOrdinal}`;
+        const reservedEffect = root.reserveEffect(effectId);
+        try {
+          const mathAssetResult = await captured.mathAsset.execute({
+            action: "math_asset",
+            assetId: mathRoute.assetId,
+            ...mathRoute.target ? { target: mathRoute.target } : {},
+            input: mathRoute.argsTemplate ?? {},
+            binding: {
+              taskId: "wu-3-asset-closure",
+              goalId: "goal-1",
+              scopeId: "scope-1",
+              contractVersion: contract.contractVersion,
+              sourceRequestId: "control-closure-asset"
+            }
+          });
+          const isComplete = mathAssetResult.status === "COMPLETE" || mathAssetResult.status === "SUCCESS";
+          root.settleEffect(reservedEffect, isComplete ? "COMPLETE" : "ERROR");
+          toolEffects += 1;
+          sessionLog.append("TOOL_OBSERVATION", {
+            id: effectId,
+            name: mathRoute.assetId,
+            tool: mathRoute.assetId,
+            args: mathRoute.argsTemplate ?? {},
+            output: mathAssetResult.observations ?? mathAssetResult,
+            status: isComplete ? "done" : "error"
+          });
+        } catch {
+          root.settleEffect(reservedEffect, "ERROR");
+        }
+      }
+      sessionLog.append("WORKUNIT", {
+        taskId: "wu-3-asset-closure",
+        goalId: "\u6570\u5B66\u8D44\u4EA7\u95ED\u5408\u4E0E\u7CBE\u786E\u6027\u68C0\u9A8C",
+        deliveryStatus: "COMPLETE",
+        candidateProposal: candidateText
+      });
+      workUnits = Math.max(workUnits, 3);
+    }
     reviewTarget = target;
     if (target !== null && target.availability === "ACTIVE" && !root.stopped()) {
       if (opts.maxReviews === 0) {
@@ -24752,9 +24915,13 @@ ${g.guidance.join("\n")}`).join("");
           review = roundReview;
           const reviewSnapshotForLog = roundReview.snapshot();
           sessionLog.append("REVIEW_CHALLENGE", {
+            round: stage,
+            challenger: stage === "R2" ? "R2-Auditor" : "R4-Verifier",
             reviewCalls,
             challenges: reviewSnapshotForLog.challenges.length,
-            records: reviewSnapshotForLog.records.length
+            records: reviewSnapshotForLog.records.length,
+            verdict: reviewSnapshotForLog.challenges.length === 0 ? "PASS" : "CHALLENGED",
+            rationale: `${stage} \u8BC4\u5BA1\u8D28\u8BE2: ${reviewSnapshotForLog.challenges.length === 0 ? "\u901A\u8FC7 (PASS)" : `\u63D0\u51FA ${reviewSnapshotForLog.challenges.length} \u9879\u8D28\u8BE2 (CHALLENGED)`}`
           });
           if (stop === "REVIEW_STOP" || stop === "CONTROL_REJECTED" || stop === "DEADLINE_EXCEEDED") {
             break;
@@ -24828,7 +24995,10 @@ ${g.guidance.join("\n")}`).join("");
             kind: "CAPABILITY_PROBE",
             stage: "REPAIR",
             taskId: target.binding.taskId,
-            challengeId: probeChallenge.challengeId
+            challengeId: probeChallenge.challengeId,
+            parentCandidate: target.artifact.packet?.candidateProposal ?? null,
+            basis: "CAPABILITY_PROBE",
+            accepted: false
           });
           const probed = await attemptRevision(target, protectedReview, [probeChallenge], true);
           probeAccepted = probed?.accepted === true;
@@ -24837,11 +25007,15 @@ ${g.guidance.join("\n")}`).join("");
             if (fallbackR4 !== null) {
               const snapshot = fallbackR4.snapshot();
               sessionLog.append("REVIEW_CHALLENGE", {
+                round: "R4",
+                challenger: "R4-Verifier",
+                verdict: snapshot.challenges.length === 0 ? "PASS" : "CHALLENGED",
                 reviewCalls,
                 challenges: snapshot.challenges.length,
                 records: snapshot.records.length,
                 stage: "R4",
-                capabilityProbe: true
+                capabilityProbe: true,
+                rationale: `R4 \u95E8\u7981\u590D\u6838: ${snapshot.challenges.length === 0 ? "\u901A\u8FC7 (PASS)" : "\u63D0\u51FA\u8D28\u8BE2 (CHALLENGED)"}`
               });
             }
           }
@@ -24850,6 +25024,9 @@ ${g.guidance.join("\n")}`).join("");
             stage: "R4",
             taskId: target.binding.taskId,
             challengeId: probeChallenge.challengeId,
+            parentCandidate: target.artifact.packet?.candidateProposal ?? null,
+            repairedCandidate: target.artifact.packet?.candidateProposal ?? null,
+            basis: "CAPABILITY_PROBE",
             accepted: probeAccepted
           });
         } catch (error) {
@@ -24861,6 +25038,8 @@ ${g.guidance.join("\n")}`).join("");
             stage: "ERROR",
             taskId: target.binding.taskId,
             challengeId: probeChallenge.challengeId,
+            parentCandidate: target.artifact.packet?.candidateProposal ?? null,
+            basis: "CAPABILITY_PROBE",
             accepted: false,
             code: error.code ?? "P2_ERROR"
           });

@@ -9,6 +9,7 @@ export type StatusCode = "candidate" | "unsolved" | "aborted" | "error" | "solve
 export type StopReason =
   | "SOLVED"
   | "REVIEWS_COMPLETE"
+  | "WORK_UNITS_COMPLETE"
   | "REVISE_REJECTED"
   | "NO_CANDIDATE"
   | "MAX_ITER"

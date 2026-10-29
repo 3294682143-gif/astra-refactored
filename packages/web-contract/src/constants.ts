@@ -22,6 +22,13 @@ export const STOP_REASON_MAP: Record<string, StopReasonInfo> = {
     categoryTitle: "正常交付",
     description: "求解与各轮评审均完成，已交付合规候选答案。",
   },
+  WORK_UNITS_COMPLETE: {
+    code: "WORK_UNITS_COMPLETE",
+    title: "工作单元链全部完成，交付候选",
+    category: "NORMAL",
+    categoryTitle: "正常交付",
+    description: "多工作单元与评审流转已闭合，已交付合规候选答案。",
+  },
   NO_CANDIDATE: {
     code: "NO_CANDIDATE",
     title: "未能形成候选答案",

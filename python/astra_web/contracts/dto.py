@@ -121,6 +121,9 @@ class MetricsDto(BaseModel):
     unknown_usage_requests: int | None = None
     tool_names: list[str] | None = None
     method_ids: list[str] | None = None
+    nodeVersion: str | None = None
+    modelEndpoint: str | None = None
+    commitHash: str | None = None
 
 
 class TraceRowDto(BaseModel):
@@ -209,6 +212,9 @@ class SolveResultDto(BaseModel):
     protocolVersion: str | None = None
     catalogVersion: str | None = None
     catalogDigest: str | None = None
+    nodeVersion: str | None = None
+    modelEndpoint: str | None = None
+    commitHash: str | None = None
 
 
 class RunEventEnvelope(BaseModel):

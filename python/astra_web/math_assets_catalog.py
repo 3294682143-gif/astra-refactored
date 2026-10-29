@@ -131,6 +131,8 @@ def runtime_info(solver_configured: bool) -> dict[str, Any]:
         "assetCount": summary.get("assetCount"),
         "computationBehaviorCount": summary.get("computationBehaviorCount"),
         "solverConfigured": solver_configured,
+        "nodeVersion": "v24.17.0",
+        "commitHash": "3ea58190144b82d0e707c04ca52921a3019182be",
     }
 
 

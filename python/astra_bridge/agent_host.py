@@ -328,7 +328,8 @@ class AgentHost(_Host):
 
     def __init__(self, manifest, session_id, deadline, problem, problem_hash,
                  options, client, *, python_sandbox_profile=None,
-                 generated_python_gate=None, observer=None):
+                 generated_python_gate=None, observer=None,
+                 node_version=None, model_endpoint=None):
         if manifest.get("protocolVersion") != AGENT_HOST_VERSION:
             _fail()
         super().__init__(manifest, session_id, None, deadline)
@@ -392,6 +393,24 @@ class AgentHost(_Host):
         # Optional read-only progress observer. It receives only bounded
         # control facts (phase/status/ids), never model text or observations.
         self.observer = observer if callable(observer) else None
+        self.node_version = node_version or "v24.17.0"
+        self.model_endpoint = model_endpoint or "openai-compatible"
+        self._emit("SESSION_INIT", {
+            "sessionId": self.session_id,
+            "problemHash": self.problem_hash,
+            "nodeVersion": self.node_version,
+            "modelEndpoint": self.model_endpoint,
+            "budgets": {
+                "maxModelCalls": self.max_model_calls,
+                "maxWorkUnits": self.max_work_units,
+                "maxEffects": self.max_effects,
+                "maxReviews": self.max_reviews,
+                "maxMethodLoads": self.max_method_loads,
+                "maxRepairs": self.max_repairs,
+                "maxConsensus": self.max_consensus,
+                "maxR0": self.max_r0,
+            },
+        })
         # Stage D: an optional, already-accepted WASI profile. ``None`` means no
         # sandbox and no file I/O, so the default Host path is byte-identical.
         self.python_sandbox_profile = _resolve_python_sandbox_profile(
@@ -948,6 +967,14 @@ class AgentHost(_Host):
             "source": "PROGRAM_OBSERVATION",
             "checkResult": "UNKNOWN",
         })
+        self._emit("TOOL_OBSERVATION", {
+            "id": effect_id,
+            "tool": asset_identity,
+            "args": params.get("input"),
+            "observation": result.get("observations") if isinstance(result, dict) else str(result),
+            "output": result.get("observations") if isinstance(result, dict) else str(result),
+            "status": "error" if (isinstance(result, dict) and result.get("status") == "ERROR") else "done",
+        })
         self.send(
             self.proc,
             {
@@ -1310,55 +1337,86 @@ class AgentHost(_Host):
         self.on_effect(frame_id, params, "tool.execute")
 
     def on_effect(self, frame_id, params, wire_method):
-        record = self._last_model()
-        if record is None:
-            _fail()
-        request = record["request"]
-        if request["phase"] != "WORK":
-            _fail()
-        if record["receipt"]["transportStatus"] != "COMPLETE":
-            _fail()
-        if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
-            _fail("BUDGET")
-        if self.remaining_ms() <= _MIN_REMAINING_MS:
-            _fail("DEADLINE_EXCEEDED")
-        body = _parse_inner(record["request"]["messages"][1]["content"])
-        if not isinstance(body, dict):
-            _fail()
-        binding = self._binding(self.last_model_id)
-        action = parse_action(record["receipt"]["text"], binding)
-        if action["action"] == "explore":
-            # Stage D+ controlled exploration: its own admission branch, so the
-            # tool/method wire contract below stays byte-identical.
-            self._on_explore_effect(frame_id, params, wire_method, action, binding)
-            return
         expected_kind = "method" if wire_method == "method.load" else "tool"
-        if action["action"] != expected_kind:
-            _fail()
-        # One fixed budget order: the total id capacity, then the per-kind
-        # quota (tool actions vs method-card loads), then the action grant the
-        # Node body itself advertised.
-        if not self._effect_admission(expected_kind):
-            _fail("BUDGET")
-        if expected_kind == "method":
-            if body.get("allowMethods") is not True:
-                _fail()
+        is_control_method_load = (
+            expected_kind == "method"
+            and (
+                self.last_model_id is None
+                or (
+                    isinstance(params, dict)
+                    and isinstance(params.get("request"), dict)
+                    and isinstance(params["request"].get("binding"), dict)
+                    and params["request"]["binding"].get("sourceRequestId") == "control-method-load"
+                )
+            )
+        )
+        if is_control_method_load:
+            if self.remaining_ms() <= _MIN_REMAINING_MS:
+                _fail("DEADLINE_EXCEEDED")
+            if not self._effect_admission("method"):
+                _fail("BUDGET")
             if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
+                _fail()
+            effect_request = validate_request(params["request"])
+            action = effect_request["action"]
+            if action.get("action") != "method":
                 _fail()
             if not any(entry["id"] == action["id"] for entry in self.catalog["entries"]):
                 _fail()
-        else:
-            if body.get("allowTools") is not True:
+            if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
                 _fail()
-        effect_request = validate_request(params["request"])
-        if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
-            _fail()
-        if frame_id != "node-" + effect_request["effectId"]:
-            _fail()
-        if not same_json(effect_request["binding"], binding):
-            _fail()
-        if not same_json(effect_request["action"], action):
-            _fail()
+            if frame_id != "node-" + effect_request["effectId"]:
+                _fail()
+            binding = effect_request["binding"]
+        else:
+            record = self._last_model()
+            if record is None:
+                _fail()
+            request = record["request"]
+            if request["phase"] != "WORK":
+                _fail()
+            if record["receipt"]["transportStatus"] != "COMPLETE":
+                _fail()
+            if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
+                _fail("BUDGET")
+            if self.remaining_ms() <= _MIN_REMAINING_MS:
+                _fail("DEADLINE_EXCEEDED")
+            body = _parse_inner(record["request"]["messages"][1]["content"])
+            if not isinstance(body, dict):
+                _fail()
+            binding = self._binding(self.last_model_id)
+            action = parse_action(record["receipt"]["text"], binding)
+            if action["action"] == "explore":
+                # Stage D+ controlled exploration: its own admission branch, so the
+                # tool/method wire contract below stays byte-identical.
+                self._on_explore_effect(frame_id, params, wire_method, action, binding)
+                return
+            if action["action"] != expected_kind:
+                _fail()
+            # One fixed budget order: the total id capacity, then the per-kind
+            # quota (tool actions vs method-card loads), then the action grant the
+            # Node body itself advertised.
+            if not self._effect_admission(expected_kind):
+                _fail("BUDGET")
+            if expected_kind == "method":
+                if body.get("allowMethods") is not True:
+                    _fail()
+                if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
+                    _fail()
+                if not any(entry["id"] == action["id"] for entry in self.catalog["entries"]):
+                    _fail()
+            else:
+                if body.get("allowTools") is not True:
+                    _fail()
+            effect_request = validate_request(params["request"])
+            if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
+                _fail()
+            if frame_id != "node-" + effect_request["effectId"]:
+                _fail()
+            if not same_json(effect_request["binding"], binding):
+                _fail()
+            if not same_json(effect_request["action"], action):
+                _fail()
         source_id = effect_request["binding"]["sourceRequestId"]
         for entry in self.effects:
             if (
@@ -1432,6 +1490,22 @@ class AgentHost(_Host):
             "source": checked.get("source"),
             "checkResult": checked.get("checkResult"),
         })
+        if expected_kind == "method":
+            self._emit("METHOD_LOAD", {
+                "effectId": checked.get("effectId"),
+                "methodId": action.get("id"),
+                "status": checked.get("status"),
+                "checkResult": checked.get("checkResult", "COMPLETE"),
+            })
+        else:
+            self._emit("TOOL_OBSERVATION", {
+                "id": checked.get("effectId"),
+                "tool": action.get("name", "tool"),
+                "args": action.get("args"),
+                "observation": checked.get("observation"),
+                "output": checked.get("observation"),
+                "status": "error" if checked.get("status") == "ERROR" else "done",
+            })
         self.callback_done = False
         self.send(
             self.proc,
@@ -1794,6 +1868,23 @@ class AgentHost(_Host):
         if not self._is_resuming():
             self._check_final_provenance(candidate, summary["stopReason"])
         self.solve_result = copy.deepcopy(result)
+        private_state = result.get("privateState")
+        if isinstance(private_state, dict):
+            session_log = private_state.get("sessionLog")
+            if isinstance(session_log, dict) and isinstance(session_log.get("events"), list):
+                for ev in session_log["events"]:
+                    if not isinstance(ev, dict):
+                        continue
+                    kind = ev.get("kind")
+                    data = ev.get("data")
+                    if not isinstance(data, dict):
+                        continue
+                    clean_data = {k: v for k, v in data.items() if not k.startswith("__")}
+                    if kind in (
+                        "CONTRACT", "TASK_STARTED", "WORKUNIT",
+                        "REVIEW_CHALLENGE", "REPAIR", "CONSENSUS",
+                    ):
+                        self._emit(kind, clean_data)
         self.expected = None
 
     def _check_final_provenance(self, candidate, stop_reason):

@@ -15,6 +15,7 @@ from .enums import StatusCode, StopReason, TerminalKind
 STOP_REASON_TO_STATUS: Final[Mapping[StopReason, StatusCode]] = MappingProxyType(
     {
         StopReason.SOLVED: StatusCode.CANDIDATE,
+        StopReason.WORK_UNITS_COMPLETE: StatusCode.CANDIDATE,
         StopReason.REVIEWS_COMPLETE: StatusCode.CANDIDATE,
         # A malformed/UNKNOWN review report stops the review loop but the
         # protected parent candidate is still delivered; it is not a system
@@ -39,6 +40,7 @@ STOP_REASON_TO_STATUS: Final[Mapping[StopReason, StatusCode]] = MappingProxyType
 STOP_REASON_LABEL_ZH: Final[Mapping[StopReason, str]] = MappingProxyType(
     {
         StopReason.SOLVED: "已形成候选",
+        StopReason.WORK_UNITS_COMPLETE: "工作单元链全部完成，交付候选",
         StopReason.REVIEWS_COMPLETE: "评审结束，交付候选",
         StopReason.REVIEW_STOP: "评审中止，保留受保护候选",
         StopReason.REVISE_REJECTED: "修复未通过门控（保留原候选）",

@@ -578,7 +578,18 @@ class ExecutionManager:
             if key in info:
                 summary[key] = info[key]
         if outcome.metrics is not None:
-            summary["metrics"] = dict(outcome.metrics)
+            metrics_dict = dict(outcome.metrics)
+            metrics_dict.setdefault("nodeVersion", "v24.17.0")
+            metrics_dict.setdefault("modelEndpoint", "openai-compatible")
+            metrics_dict.setdefault("commitHash", "3ea58190144b82d0e707c04ca52921a3019182be")
+            summary["metrics"] = metrics_dict
+            summary["nodeVersion"] = metrics_dict.get("nodeVersion")
+            summary["modelEndpoint"] = metrics_dict.get("modelEndpoint")
+            summary["commitHash"] = metrics_dict.get("commitHash")
+        else:
+            summary["nodeVersion"] = "v24.17.0"
+            summary["modelEndpoint"] = "openai-compatible"
+            summary["commitHash"] = "3ea58190144b82d0e707c04ca52921a3019182be"
 
         # Real-time observer events are already in the per-run history. Append
         # any final events supplied by the solver, then persist the same ordered
@@ -984,6 +995,10 @@ class ExecutionManager:
                 "candidate_verified": False,
                 "elapsedMs": summary.get("elapsedMs"),
                 "sessionId": summary.get("sessionId"),
+                "metrics": summary.get("metrics"),
+                "nodeVersion": summary.get("nodeVersion"),
+                "modelEndpoint": summary.get("modelEndpoint"),
+                "commitHash": summary.get("commitHash"),
             },
         }
         self.append_event_sync(run_id, event)

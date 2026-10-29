@@ -21,23 +21,29 @@ class MathAssetScriptedClient:
         self.turn += 1
         body = json.loads(messages[1]["content"])
         schema = body.get("stage") or body.get("schemaVersion")
-        if schema in ("R2", "R4"):
+        if schema in ("R0", "R2", "R4"):
+            target = body.get("target") or {}
+            target_hash = body.get("targetHash") or body.get("planHash") or ""
+            role = body.get("role")
+            resp_dict = {
+                "schemaVersion": "p4-review-v1",
+                "requestId": body.get("requestId", f"model-{self.turn}"),
+                "target": target,
+                "targetHash": target_hash,
+                "stage": schema,
+                "conclusion": "NO_ISSUE",
+                "reviewCoverage": body.get("reviewCoverage") or [row["obligationId"] for row in body.get("obligations", [])],
+                "issues": [],
+            }
+            if role:
+                resp_dict["role"] = role
             return {
                 "choices": [{
                     "index": 0,
                     "finish_reason": "stop",
                     "message": {
                         "role": "assistant",
-                        "content": json.dumps({
-                            "schemaVersion": "p4-review-v1",
-                            "requestId": body.get("requestId", f"model-{self.turn}"),
-                            "target": body["target"],
-                            "targetHash": body.get("targetHash", ""),
-                            "stage": schema,
-                            "conclusion": "NO_ISSUE",
-                            "reviewCoverage": [row["obligationId"] for row in body.get("obligations", [])],
-                            "issues": [],
-                        }),
+                        "content": json.dumps(resp_dict),
                     },
                 }]
             }

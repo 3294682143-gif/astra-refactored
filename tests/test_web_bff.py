@@ -882,3 +882,85 @@ def test_create_run_reaches_real_solver_and_preserves_metrics(temp_store: Store)
     assert summary["sessionId"]
     assert summary["trace"]
     assert summary["max_method_loads"] == 0
+
+
+def test_full_profile_live_bff_event_stream_and_m1_to_m6_coverage(temp_store: Store):
+    from python.astra_web.solver_adapter import SolverAdapter
+    from tests.web_math_helpers import MathAssetScriptedClient
+
+    def client_factory():
+        return MathAssetScriptedClient(
+            "math.linear-algebra", "gf2_rank", {"rows": [1, 2]}
+        )
+
+    app = create_app(
+        data_root=temp_store.root,
+        mount_static=False,
+        solver=SolverAdapter(client_factory=client_factory),
+    )
+    body = {
+        "problem": "已知线性系统方程 Ax=b，求 GF(2) 秩及通解",
+        "engine": "ts",
+        "metadata": {"source": "web-test-full-profile"},
+        "max_model_calls": 16,
+        "max_work_units": 4,
+        "max_effects": 1,
+        "max_reviews": 2,
+        "max_method_loads": 1,
+        "max_repairs": 1,
+        "max_consensus": 8,
+        "max_r0": 1,
+    }
+
+    async def submit():
+        response = await create_run(_make_json_request(app, "/api/runs", body))
+        run_id = json.loads(response.body.decode("utf-8"))["run_id"]
+        assert await app.state.execution_manager.wait_idle(30.0)
+        detail_resp = get_run(_make_dummy_request(
+            app, path=f"/api/runs/{run_id}", path_params={"run_id": run_id}
+        ))
+        replay_resp = get_replay(_make_dummy_request(
+            app, path=f"/api/replays/{run_id}", path_params={"run_id": run_id}
+        ))
+        return json.loads(detail_resp.body.decode("utf-8")), json.loads(replay_resp.body.decode("utf-8"))
+
+    detail, replay = asyncio.run(submit())
+    summary = detail["summary"]
+
+    # M1 / M6 终态断言
+    assert summary["status"] == "candidate"
+    assert summary["candidate_verified"] is False
+    assert summary["executed"] is True
+    assert summary["childReaped"] is True
+    assert summary["stopReason"] == "REVIEWS_COMPLETE"
+
+    # M6 详细指标断言
+    metrics = summary["metrics"]
+    assert metrics["work_units"] >= 2
+    assert metrics["logical_model_calls"] > 0
+    assert metrics["reported_tokens"] > 0
+    assert metrics["method_loads"] >= 1
+    assert metrics["tool_effect_calls"] >= 1
+    assert metrics["nodeVersion"] is not None
+    assert metrics["modelEndpoint"] is not None
+    assert metrics["commitHash"] is not None
+
+    # M3 事件流帧覆盖断言
+    events = replay["events"]
+    kinds = [e.get("kind") for e in events]
+    assert "SESSION_INIT" in kinds
+    assert kinds.count("WORKUNIT") >= 2
+    assert kinds.count("METHOD_LOAD") >= 1
+    assert "TOOL_OBSERVATION" in kinds or "effect_returned" in kinds
+    assert kinds.count("REVIEW_CHALLENGE") >= 3
+    assert kinds.count("REPAIR") >= 1
+    assert kinds.count("CONSENSUS") >= 1
+    assert "RESULT" in kinds
+
+    # 验证 RESULT 帧中的 payload 包含完整 metrics
+    result_ev = next(e for e in reversed(events) if e.get("kind") == "RESULT")
+    result_payload = result_ev.get("payload", {})
+    assert result_payload.get("status") == "candidate"
+    assert result_payload.get("stopReason") == "REVIEWS_COMPLETE"
+    assert result_payload.get("candidate_verified") is False
+    assert result_payload.get("metrics", {}).get("work_units") >= 2
