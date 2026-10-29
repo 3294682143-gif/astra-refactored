@@ -16,6 +16,10 @@ from python.astra_bridge.generated.math_assets import (
     MATH_ASSET_SCHEMA_VERSION,
     MATH_ASSETS,
 )
+from python.astra_bridge.agent_protocol import (
+    resolve_commit_hash,
+    resolve_node_version,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CATALOG_PATH = REPO_ROOT / "mathagent" / "resources" / "math-assets.json"
@@ -131,8 +135,8 @@ def runtime_info(solver_configured: bool) -> dict[str, Any]:
         "assetCount": summary.get("assetCount"),
         "computationBehaviorCount": summary.get("computationBehaviorCount"),
         "solverConfigured": solver_configured,
-        "nodeVersion": "v24.17.0",
-        "commitHash": "3ea58190144b82d0e707c04ca52921a3019182be",
+        "nodeVersion": resolve_node_version(),
+        "commitHash": resolve_commit_hash(),
     }
 
 

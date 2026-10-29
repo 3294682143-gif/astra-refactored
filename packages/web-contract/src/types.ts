@@ -47,9 +47,15 @@ export interface MetricsDto {
   readonly remote_outcome_unknown: boolean | null;
   readonly known_http_attempts: number | null;
   readonly reported_tokens: number | null;
+  readonly exact_tokens?: number | null;
+  readonly estimated_tokens?: number | null;
+  readonly is_token_estimated?: boolean | null;
   readonly unknown_usage_requests: number | null;
   readonly tool_names: readonly string[] | null;
   readonly method_ids: readonly string[] | null;
+  readonly nodeVersion?: string | null;
+  readonly modelEndpoint?: string | null;
+  readonly commitHash?: string | null;
 }
 
 export interface TraceRowDto {

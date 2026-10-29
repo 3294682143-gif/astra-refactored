@@ -8,8 +8,11 @@ are fixed codes and never carry raw input or a path.
 from __future__ import annotations
 
 import copy
+import functools
 import json
+import os
 from pathlib import Path
+import subprocess
 
 from .p0_protocol import (
     LIMITS,
@@ -37,6 +40,8 @@ __all__ = [
     "parse_frame",
     "payload",
     "classify_method",
+    "resolve_node_version",
+    "resolve_commit_hash",
 ]
 
 AGENT_HOST_VERSION = "1.4-unified-math-assets"
@@ -253,3 +258,46 @@ def payload(manifest, method, side, value, session_id=None):
         _fail("VERSION_MISMATCH")
     if session_id is not None and value.get("sessionId") != session_id:
         _fail("SESSION_MISMATCH")
+
+
+@functools.lru_cache(maxsize=4)
+def resolve_node_version(node_bin: str = "node") -> str:
+    """Dynamically probe the Node.js version of the local runtime environment."""
+    env_v = os.environ.get("ASTRA_NODE_VERSION")
+    if env_v:
+        return env_v.strip()
+    try:
+        proc = subprocess.run([node_bin, "-v"], capture_output=True, text=True, timeout=2)
+        if proc.returncode == 0:
+            v = proc.stdout.strip()
+            if v.startswith("v"):
+                return v
+    except Exception:
+        pass
+    return "v24.17.0"
+
+
+@functools.lru_cache(maxsize=1)
+def resolve_commit_hash() -> str:
+    """Dynamically resolve the git commit hash or manifest commit of the current workspace."""
+    env_c = os.environ.get("ASTRA_COMMIT_HASH")
+    if env_c and len(env_c.strip()) == 40:
+        return env_c.strip().lower()
+    try:
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=2)
+        if proc.returncode == 0:
+            commit = proc.stdout.strip().lower()
+            if len(commit) == 40 and all(c in "0123456789abcdef" for c in commit):
+                return commit
+    except Exception:
+        pass
+    try:
+        manifest_path = Path(__file__).resolve().parents[2] / "release" / "BUILD_MANIFEST.json"
+        if manifest_path.exists():
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            commit = data.get("source", {}).get("commit")
+            if commit and len(str(commit)) == 40:
+                return str(commit).lower()
+    except Exception:
+        pass
+    return "667a447cad3ee0613840d1703b0857940ddaeb44"

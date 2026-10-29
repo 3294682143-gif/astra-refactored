@@ -1292,6 +1292,7 @@ export async function runAgentLoop(
     sessionLog.append("TASK_STARTED", {
       taskId: "wu-1-primary-solve",
       goalId: "主路径推导",
+      synthetic: true,
     });
   }
 
@@ -4833,38 +4834,36 @@ export async function runAgentLoop(
         goalId: "主路径推导",
         deliveryStatus: "COMPLETE",
         candidateProposal: candidateText,
+        synthetic: true,
       });
       if (!g2RouteAdmitted) {
         sessionLog.append("TASK_STARTED", {
           taskId: "wu-2-g2-dual-route",
           goalId: "G2 对偶验证路由",
+          synthetic: true,
         });
         sessionLog.append("WORKUNIT", {
           taskId: "wu-2-g2-dual-route",
           goalId: "G2 对偶验证路由",
           deliveryStatus: "COMPLETE",
           candidateProposal: candidateText,
+          synthetic: true,
         });
       }
       sessionLog.append("TASK_STARTED", {
         taskId: "wu-3-asset-closure",
         goalId: "数学资产闭合与精确性检验",
+        synthetic: true,
       });
+      const mathRoute = semanticMathAssetRoute(problemText);
       if (
+        mathRoute !== null &&
+        mathRoute !== undefined &&
         captured.mathAsset !== null &&
         captured.mathAsset !== undefined &&
         toolEffects < opts.maxEffects &&
         root.effectCalls() < totalEffectCapacity
       ) {
-        const mathRoute = semanticMathAssetRoute(problemText) ?? {
-          id: "EXACT_SIMPLIFY",
-          assetId: "math.equations",
-          target: "simplify",
-          targetPurpose: "Exact algebraic simplification",
-          requiredParams: ["expr"],
-          optionalParams: [],
-          argsTemplate: { expr: "1 + 1" },
-        };
         const reservedOrdinal = root.effectCalls() + 1;
         const effectId = `effect-${reservedOrdinal}`;
         const reservedEffect = root.reserveEffect(effectId);
@@ -4902,6 +4901,7 @@ export async function runAgentLoop(
         goalId: "数学资产闭合与精确性检验",
         deliveryStatus: "COMPLETE",
         candidateProposal: candidateText,
+        synthetic: true,
       });
       workUnits = Math.max(workUnits, 3);
     }

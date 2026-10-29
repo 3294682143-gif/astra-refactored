@@ -45,7 +45,7 @@ from .p3_effect_contract import (
 from .p3_effects import perform_effect
 from .p3_host_context import parse_action, same_json
 from .p3_host_protocol import payload as p3_payload
-from .agent_protocol import AGENT_HOST_VERSION, payload
+from .agent_protocol import AGENT_HOST_VERSION, payload, resolve_node_version
 from .p2_methods import fixture_catalog
 from .p3_host_methods import checked_catalog
 from .scoped_asset_call import AssetCallError, scoped_asset_call
@@ -393,7 +393,7 @@ class AgentHost(_Host):
         # Optional read-only progress observer. It receives only bounded
         # control facts (phase/status/ids), never model text or observations.
         self.observer = observer if callable(observer) else None
-        self.node_version = node_version or "v24.17.0"
+        self.node_version = node_version or resolve_node_version()
         self.model_endpoint = model_endpoint or "openai-compatible"
         self._emit("SESSION_INIT", {
             "sessionId": self.session_id,
@@ -1338,85 +1338,54 @@ class AgentHost(_Host):
 
     def on_effect(self, frame_id, params, wire_method):
         expected_kind = "method" if wire_method == "method.load" else "tool"
-        is_control_method_load = (
-            expected_kind == "method"
-            and (
-                self.last_model_id is None
-                or (
-                    isinstance(params, dict)
-                    and isinstance(params.get("request"), dict)
-                    and isinstance(params["request"].get("binding"), dict)
-                    and params["request"]["binding"].get("sourceRequestId") == "control-method-load"
-                )
-            )
-        )
-        if is_control_method_load:
-            if self.remaining_ms() <= _MIN_REMAINING_MS:
-                _fail("DEADLINE_EXCEEDED")
-            if not self._effect_admission("method"):
-                _fail("BUDGET")
-            if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
+        record = self._last_model()
+        if record is None:
+            _fail()
+        request = record["request"]
+        if request["phase"] != "WORK":
+            _fail()
+        if record["receipt"]["transportStatus"] != "COMPLETE":
+            _fail()
+        if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
+            _fail("BUDGET")
+        if self.remaining_ms() <= _MIN_REMAINING_MS:
+            _fail("DEADLINE_EXCEEDED")
+        body = _parse_inner(record["request"]["messages"][1]["content"])
+        if not isinstance(body, dict):
+            _fail()
+        binding = self._binding(self.last_model_id)
+        action = parse_action(record["receipt"]["text"], binding)
+        if action["action"] == "explore":
+            # Stage D+ controlled exploration: its own admission branch, so the
+            # tool/method wire contract below stays byte-identical.
+            self._on_explore_effect(frame_id, params, wire_method, action, binding)
+            return
+        if action["action"] != expected_kind:
+            _fail()
+        # One fixed budget order: the total id capacity, then the per-kind
+        # quota (tool actions vs method-card loads), then the action grant the
+        # Node body itself advertised.
+        if not self._effect_admission(expected_kind):
+            _fail("BUDGET")
+        if expected_kind == "method":
+            if body.get("allowMethods") is not True:
                 _fail()
-            effect_request = validate_request(params["request"])
-            action = effect_request["action"]
-            if action.get("action") != "method":
+            if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
                 _fail()
             if not any(entry["id"] == action["id"] for entry in self.catalog["entries"]):
                 _fail()
-            if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
-                _fail()
-            if frame_id != "node-" + effect_request["effectId"]:
-                _fail()
-            binding = effect_request["binding"]
         else:
-            record = self._last_model()
-            if record is None:
+            if body.get("allowTools") is not True:
                 _fail()
-            request = record["request"]
-            if request["phase"] != "WORK":
-                _fail()
-            if record["receipt"]["transportStatus"] != "COMPLETE":
-                _fail()
-            if self.max_model_calls - self.model_requests < 1 + self.max_reviews:
-                _fail("BUDGET")
-            if self.remaining_ms() <= _MIN_REMAINING_MS:
-                _fail("DEADLINE_EXCEEDED")
-            body = _parse_inner(record["request"]["messages"][1]["content"])
-            if not isinstance(body, dict):
-                _fail()
-            binding = self._binding(self.last_model_id)
-            action = parse_action(record["receipt"]["text"], binding)
-            if action["action"] == "explore":
-                # Stage D+ controlled exploration: its own admission branch, so the
-                # tool/method wire contract below stays byte-identical.
-                self._on_explore_effect(frame_id, params, wire_method, action, binding)
-                return
-            if action["action"] != expected_kind:
-                _fail()
-            # One fixed budget order: the total id capacity, then the per-kind
-            # quota (tool actions vs method-card loads), then the action grant the
-            # Node body itself advertised.
-            if not self._effect_admission(expected_kind):
-                _fail("BUDGET")
-            if expected_kind == "method":
-                if body.get("allowMethods") is not True:
-                    _fail()
-                if self.catalog is None or self.method_catalog is None or self.catalog_calls != 1:
-                    _fail()
-                if not any(entry["id"] == action["id"] for entry in self.catalog["entries"]):
-                    _fail()
-            else:
-                if body.get("allowTools") is not True:
-                    _fail()
-            effect_request = validate_request(params["request"])
-            if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
-                _fail()
-            if frame_id != "node-" + effect_request["effectId"]:
-                _fail()
-            if not same_json(effect_request["binding"], binding):
-                _fail()
-            if not same_json(effect_request["action"], action):
-                _fail()
+        effect_request = validate_request(params["request"])
+        if effect_request["effectId"] != EFFECT_IDS[self.effect_calls]:
+            _fail()
+        if frame_id != "node-" + effect_request["effectId"]:
+            _fail()
+        if not same_json(effect_request["binding"], binding):
+            _fail()
+        if not same_json(effect_request["action"], action):
+            _fail()
         source_id = effect_request["binding"]["sourceRequestId"]
         for entry in self.effects:
             if (

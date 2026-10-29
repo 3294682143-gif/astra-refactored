@@ -28,7 +28,13 @@ from .agent_host import (
     _resolve_python_sandbox_profile,
 )
 from . import host_carriers, host_checkpoint
-from .agent_protocol import AGENT_HOST_VERSION, load_manifest, payload
+from .agent_protocol import (
+    AGENT_HOST_VERSION,
+    load_manifest,
+    payload,
+    resolve_commit_hash,
+    resolve_node_version,
+)
 from .p0_probe import ProbeError, _child_env, _close_streams, _reap
 from .p0_protocol import ProtocolError
 
@@ -649,7 +655,7 @@ class AgentRuntime:
         # refuse; an approved gate is injected explicitly, never discovered.
         self.generated_python_gate = generated_python_gate
         self.observer = observer if callable(observer) else None
-        self.node_version = "v24.17.0"
+        self.node_version = resolve_node_version(self.node)
         self.model_endpoint = "openai-compatible"
         if hasattr(client, "model") and getattr(client, "model", None):
             self.model_endpoint = str(getattr(client, "model"))
@@ -1049,6 +1055,8 @@ class AgentRuntime:
                 order.append(key)
             settled[key] = row
         reported_tokens = 0
+        exact_tokens = 0
+        estimated_tokens = 0
         known_usage_requests = 0
         unknown_usage = 0
         finish = None
@@ -1059,12 +1067,12 @@ class AgentRuntime:
                 continue
             usage = row.get("usage")
             if isinstance(usage, dict) and _is_int(usage.get("total_tokens")):
-                reported_tokens += usage["total_tokens"]
+                exact_tokens += usage["total_tokens"]
                 known_usage_requests += 1
             else:
                 text_len = len(row.get("text") or "")
                 if text_len > 0:
-                    reported_tokens += text_len // 4 + 128
+                    estimated_tokens += text_len // 4 + 128
                     known_usage_requests += 1
                 else:
                     unknown_usage += 1
@@ -1073,9 +1081,15 @@ class AgentRuntime:
         actual_calls = self.client.calls - before_calls
         if actual_calls > known_usage_requests:
             unknown_usage = max(unknown_usage, actual_calls - known_usage_requests)
-        if reported_tokens == 0 and actual_calls > 0:
-            reported_tokens = actual_calls * 180
+        if exact_tokens == 0 and estimated_tokens == 0 and actual_calls > 0:
+            estimated_tokens = actual_calls * 180
             known_usage_requests = actual_calls
+        total_tokens = exact_tokens + estimated_tokens
+        is_token_estimated = (estimated_tokens > 0)
+        reported_tokens = total_tokens if known_usage_requests > 0 else (actual_calls * 180 if actual_calls > 0 else None)
+        if reported_tokens is not None and exact_tokens == 0 and estimated_tokens == 0:
+            estimated_tokens = reported_tokens
+            is_token_estimated = True
         metrics = {
             "client_method_calls": actual_calls,
             "logical_model_calls": host.model_requests,
@@ -1089,11 +1103,14 @@ class AgentRuntime:
             "frames": host.frames,
             "remote_outcome_unknown": self.client.blocked,
             "known_http_attempts": None,
-            "reported_tokens": reported_tokens if known_usage_requests > 0 else (actual_calls * 180 if actual_calls > 0 else None),
+            "reported_tokens": reported_tokens,
+            "exact_tokens": exact_tokens,
+            "estimated_tokens": estimated_tokens,
+            "is_token_estimated": is_token_estimated,
             "unknown_usage_requests": unknown_usage,
             "nodeVersion": self.node_version,
             "modelEndpoint": self.model_endpoint,
-            "commitHash": "3ea58190144b82d0e707c04ca52921a3019182be",
+            "commitHash": resolve_commit_hash(),
         }
         session_log_rows = result.get("sessionLog") if isinstance(result, dict) else None
         metrics.update(_funnel_metrics(host, session_log_rows))
@@ -1205,6 +1222,9 @@ class AgentRuntime:
                 "remote_outcome_unknown": self.client.blocked,
                 "known_http_attempts": None,
                 "reported_tokens": None,
+                "exact_tokens": None,
+                "estimated_tokens": None,
+                "is_token_estimated": None,
                 "unknown_usage_requests": 0,
                 "routed": 0,
                 "forced": 0,

@@ -22440,7 +22440,8 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   if (fullCapability) {
     sessionLog.append("TASK_STARTED", {
       taskId: "wu-1-primary-solve",
-      goalId: "\u4E3B\u8DEF\u5F84\u63A8\u5BFC"
+      goalId: "\u4E3B\u8DEF\u5F84\u63A8\u5BFC",
+      synthetic: true
     });
   }
   try {
@@ -24764,34 +24765,30 @@ ${g.guidance.join("\n")}`).join("");
         taskId: "wu-1-primary-solve",
         goalId: "\u4E3B\u8DEF\u5F84\u63A8\u5BFC",
         deliveryStatus: "COMPLETE",
-        candidateProposal: candidateText
+        candidateProposal: candidateText,
+        synthetic: true
       });
       if (!g2RouteAdmitted) {
         sessionLog.append("TASK_STARTED", {
           taskId: "wu-2-g2-dual-route",
-          goalId: "G2 \u5BF9\u5076\u9A8C\u8BC1\u8DEF\u7531"
+          goalId: "G2 \u5BF9\u5076\u9A8C\u8BC1\u8DEF\u7531",
+          synthetic: true
         });
         sessionLog.append("WORKUNIT", {
           taskId: "wu-2-g2-dual-route",
           goalId: "G2 \u5BF9\u5076\u9A8C\u8BC1\u8DEF\u7531",
           deliveryStatus: "COMPLETE",
-          candidateProposal: candidateText
+          candidateProposal: candidateText,
+          synthetic: true
         });
       }
       sessionLog.append("TASK_STARTED", {
         taskId: "wu-3-asset-closure",
-        goalId: "\u6570\u5B66\u8D44\u4EA7\u95ED\u5408\u4E0E\u7CBE\u786E\u6027\u68C0\u9A8C"
+        goalId: "\u6570\u5B66\u8D44\u4EA7\u95ED\u5408\u4E0E\u7CBE\u786E\u6027\u68C0\u9A8C",
+        synthetic: true
       });
-      if (captured.mathAsset !== null && captured.mathAsset !== void 0 && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity) {
-        const mathRoute = semanticMathAssetRoute(problemText) ?? {
-          id: "EXACT_SIMPLIFY",
-          assetId: "math.equations",
-          target: "simplify",
-          targetPurpose: "Exact algebraic simplification",
-          requiredParams: ["expr"],
-          optionalParams: [],
-          argsTemplate: { expr: "1 + 1" }
-        };
+      const mathRoute = semanticMathAssetRoute(problemText);
+      if (mathRoute !== null && mathRoute !== void 0 && captured.mathAsset !== null && captured.mathAsset !== void 0 && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity) {
         const reservedOrdinal = root.effectCalls() + 1;
         const effectId = `effect-${reservedOrdinal}`;
         const reservedEffect = root.reserveEffect(effectId);
@@ -24828,7 +24825,8 @@ ${g.guidance.join("\n")}`).join("");
         taskId: "wu-3-asset-closure",
         goalId: "\u6570\u5B66\u8D44\u4EA7\u95ED\u5408\u4E0E\u7CBE\u786E\u6027\u68C0\u9A8C",
         deliveryStatus: "COMPLETE",
-        candidateProposal: candidateText
+        candidateProposal: candidateText,
+        synthetic: true
       });
       workUnits = Math.max(workUnits, 3);
     }

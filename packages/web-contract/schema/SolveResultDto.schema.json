@@ -171,6 +171,42 @@
           "default": null,
           "title": "Reported Tokens"
         },
+        "exact_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exact Tokens"
+        },
+        "estimated_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Tokens"
+        },
+        "is_token_estimated": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Token Estimated"
+        },
         "unknown_usage_requests": {
           "anyOf": [
             {
@@ -212,6 +248,42 @@
           ],
           "default": null,
           "title": "Method Ids"
+        },
+        "nodeVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nodeversion"
+        },
+        "modelEndpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelendpoint"
+        },
+        "commitHash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commithash"
         }
       },
       "title": "MetricsDto",
@@ -439,6 +511,42 @@
       ],
       "default": null,
       "title": "Catalogdigest"
+    },
+    "nodeVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nodeversion"
+    },
+    "modelEndpoint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Modelendpoint"
+    },
+    "commitHash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Commithash"
     }
   },
   "required": [

@@ -42,6 +42,10 @@ from .config import DEFAULT_BUDGET, default_budget
 from .contracts.dto import RunRequestDto
 from .contracts.enums import StopReason
 from .contracts.mapping import classify_stop_reason, classify_terminal_kind
+from python.astra_bridge.agent_protocol import (
+    resolve_commit_hash,
+    resolve_node_version,
+)
 from .storage import (
     NON_TERMINAL_STATUSES,
     DuplicateRunError,
@@ -579,17 +583,17 @@ class ExecutionManager:
                 summary[key] = info[key]
         if outcome.metrics is not None:
             metrics_dict = dict(outcome.metrics)
-            metrics_dict.setdefault("nodeVersion", "v24.17.0")
+            metrics_dict.setdefault("nodeVersion", resolve_node_version())
             metrics_dict.setdefault("modelEndpoint", "openai-compatible")
-            metrics_dict.setdefault("commitHash", "3ea58190144b82d0e707c04ca52921a3019182be")
+            metrics_dict.setdefault("commitHash", resolve_commit_hash())
             summary["metrics"] = metrics_dict
             summary["nodeVersion"] = metrics_dict.get("nodeVersion")
             summary["modelEndpoint"] = metrics_dict.get("modelEndpoint")
             summary["commitHash"] = metrics_dict.get("commitHash")
         else:
-            summary["nodeVersion"] = "v24.17.0"
+            summary["nodeVersion"] = resolve_node_version()
             summary["modelEndpoint"] = "openai-compatible"
-            summary["commitHash"] = "3ea58190144b82d0e707c04ca52921a3019182be"
+            summary["commitHash"] = resolve_commit_hash()
 
         # Real-time observer events are already in the per-run history. Append
         # any final events supplied by the solver, then persist the same ordered

@@ -7,6 +7,14 @@ node_modules/
 venv/
 build/
 dist/
+!apps/stdio-runtime/dist/
+apps/stdio-runtime/dist/*
+!apps/stdio-runtime/dist/src/
+apps/stdio-runtime/dist/src/*
+!apps/stdio-runtime/dist/src/main.js
+!apps/stdio-runtime/dist/src/agent-loop.js
+!apps/stdio-runtime/dist/src/agent-host-flow.js
+!apps/stdio-runtime/dist/src/agent-host-main.js
 *.egg-info/
 .env
 .env.*

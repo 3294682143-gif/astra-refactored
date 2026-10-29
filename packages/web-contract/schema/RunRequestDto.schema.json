@@ -63,7 +63,7 @@
     },
     "max_method_loads": {
       "default": 0,
-      "maximum": 0,
+      "maximum": 4,
       "minimum": 0,
       "title": "Max Method Loads",
       "type": "integer"

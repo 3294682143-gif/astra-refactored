@@ -118,6 +118,9 @@ class MetricsDto(BaseModel):
     remote_outcome_unknown: bool | None = None
     known_http_attempts: int | None = None
     reported_tokens: int | None = None
+    exact_tokens: int | None = None
+    estimated_tokens: int | None = None
+    is_token_estimated: bool | None = None
     unknown_usage_requests: int | None = None
     tool_names: list[str] | None = None
     method_ids: list[str] | None = None
