@@ -1,0 +1,24 @@
+{
+  "name": "@astra/math-contract",
+  "version": "0.0.0-p1",
+  "private": true,
+  "type": "module",
+  "description": "P1 M1 contract module: preserves the full original problem text, its sha256 identity and one still-open ANSWER_REQUEST obligation. No semantic decomposition is claimed.",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astra/protocol": "workspace:*"
+  }
+}

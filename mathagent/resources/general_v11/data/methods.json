@@ -1,0 +1,628 @@
+{
+  "schema": "general-math-methods-v1",
+  "version": "1.1.0",
+  "method_count": 20,
+  "semantics": "Advisory routing metadata; caller-declared conditions are not proof.",
+  "methods": [
+    {
+      "id": "domain-equivalence",
+      "title": "定义域、等价变换与参数分类",
+      "path": "references/domain-equivalence.md",
+      "tasks": [
+        "solve",
+        "prove",
+        "check"
+      ],
+      "objects": [
+        "equation",
+        "rational_expression",
+        "radical",
+        "parameter"
+      ],
+      "structures": [
+        "domain",
+        "equivalence",
+        "degeneracy"
+      ],
+      "conditions_to_check": [
+        "domain_specified"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "列出原定义域、单向/双向变换和排除分支，给完整解集的逆向依据。"
+      ]
+    },
+    {
+      "id": "proof-counterexamples",
+      "title": "量词、证明义务与反例",
+      "path": "references/proof-counterexamples.md",
+      "tasks": [
+        "prove",
+        "disprove",
+        "construct",
+        "check"
+      ],
+      "objects": [
+        "statement",
+        "set",
+        "function",
+        "sequence"
+      ],
+      "structures": [
+        "quantifier",
+        "necessity",
+        "sufficiency",
+        "counterexample"
+      ],
+      "conditions_to_check": [
+        "quantifiers_identified"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "给出满足全部前提的见证/反例，或列出可逐项审核的量词与证明义务。"
+      ]
+    },
+    {
+      "id": "invariants-extremal",
+      "title": "不变量、势函数与极端原理",
+      "path": "references/invariants-extremal.md",
+      "tasks": [
+        "prove",
+        "disprove",
+        "construct",
+        "count"
+      ],
+      "objects": [
+        "configuration",
+        "game",
+        "integer",
+        "graph"
+      ],
+      "structures": [
+        "invariant",
+        "parity",
+        "potential",
+        "extremal"
+      ],
+      "conditions_to_check": [
+        "legal_moves_defined"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "确定候选不变量/势函数，并检验所有合法操作；区分障碍与可达构造。"
+      ]
+    },
+    {
+      "id": "induction-recurrence",
+      "title": "归纳、递推与良基结构",
+      "path": "references/induction-recurrence.md",
+      "tasks": [
+        "prove",
+        "solve",
+        "count"
+      ],
+      "objects": [
+        "sequence",
+        "integer",
+        "recursive_object"
+      ],
+      "structures": [
+        "induction",
+        "recurrence",
+        "well_founded"
+      ],
+      "conditions_to_check": [
+        "base_cases_defined"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "写全基例、依赖次序和归纳闭合步骤，核对初值是否唯一确定递推对象。"
+      ]
+    },
+    {
+      "id": "finite-state-dp",
+      "title": "有限状态、动态规划与模状态组合",
+      "path": "references/finite-state-dp.md",
+      "tasks": [
+        "count",
+        "optimize",
+        "solve",
+        "prove"
+      ],
+      "objects": [
+        "sequence",
+        "graph",
+        "finite_state"
+      ],
+      "structures": [
+        "dynamic_programming",
+        "automaton",
+        "residue_tracking"
+      ],
+      "conditions_to_check": [
+        "state_sufficient",
+        "finite_domain"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "产出充分状态、初态、转移、终态及对象—路径无重无漏的对应。"
+      ]
+    },
+    {
+      "id": "counting-bijections",
+      "title": "双射、双计数与容斥",
+      "path": "references/counting-bijections.md",
+      "tasks": [
+        "count",
+        "prove",
+        "solve"
+      ],
+      "objects": [
+        "set",
+        "combinatorial_object",
+        "sample_space"
+      ],
+      "structures": [
+        "bijection",
+        "double_counting",
+        "inclusion_exclusion"
+      ],
+      "conditions_to_check": [
+        "counted_objects_defined"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "定义所数对象，给正反映射或双计数关联集合，并明确重数。"
+      ]
+    },
+    {
+      "id": "generating-functions",
+      "title": "生成函数、系数提取与卷积",
+      "path": "references/generating-functions.md",
+      "tasks": [
+        "count",
+        "solve",
+        "prove"
+      ],
+      "objects": [
+        "sequence",
+        "polynomial",
+        "formal_series"
+      ],
+      "structures": [
+        "generating_function",
+        "convolution",
+        "recurrence"
+      ],
+      "conditions_to_check": [
+        "coefficient_meaning_defined"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "写出系数含义、生成关系和边界修正，再将所取系数对应回目标。"
+      ]
+    },
+    {
+      "id": "modular-crt",
+      "title": "同余、素数幂分解与广义CRT",
+      "path": "references/modular-crt.md",
+      "tasks": [
+        "solve",
+        "count",
+        "prove",
+        "compute"
+      ],
+      "objects": [
+        "integer",
+        "congruence"
+      ],
+      "structures": [
+        "modular_constraints",
+        "prime_power",
+        "residue_tracking"
+      ],
+      "conditions_to_check": [
+        "integer_domain",
+        "modulus_positive"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "作gcd相容性判别、局部解与合并模数检查，明确剩余类到整数域的映射。"
+      ]
+    },
+    {
+      "id": "integral-symmetry",
+      "title": "对称、换元与积分存在性",
+      "path": "references/integral-symmetry.md",
+      "tasks": [
+        "compute",
+        "prove",
+        "solve",
+        "check"
+      ],
+      "objects": [
+        "integral",
+        "function",
+        "region"
+      ],
+      "structures": [
+        "symmetry",
+        "substitution",
+        "improper_integral"
+      ],
+      "conditions_to_check": [
+        "integration_definition",
+        "domain_preserved"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "定位奇点和积分定义，核验换元的区域/Jacobian或围道弧段条件。"
+      ]
+    },
+    {
+      "id": "coordinates-geometry",
+      "title": "坐标、向量与几何约束",
+      "path": "references/coordinates-geometry.md",
+      "tasks": [
+        "solve",
+        "prove",
+        "construct",
+        "compute"
+      ],
+      "objects": [
+        "point",
+        "line",
+        "plane",
+        "curve",
+        "geometric_configuration"
+      ],
+      "structures": [
+        "coordinates",
+        "metric",
+        "incidence",
+        "symmetry"
+      ],
+      "conditions_to_check": [
+        "given_relations",
+        "nondegeneracy"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "给出合法坐标选择与原几何条件的方程，保留退化和定向分支。"
+      ]
+    },
+    {
+      "id": "inequalities-optimization",
+      "title": "界、凸性与全局最优性",
+      "path": "references/inequalities-optimization.md",
+      "tasks": [
+        "prove",
+        "optimize",
+        "solve",
+        "check"
+      ],
+      "objects": [
+        "function",
+        "inequality",
+        "feasible_set"
+      ],
+      "structures": [
+        "convexity",
+        "monotonicity",
+        "bound",
+        "equality_case"
+      ],
+      "conditions_to_check": [
+        "feasible_domain",
+        "extremum_type"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "给全域有效的界，并给可行取等对象或证明仅有确界。"
+      ]
+    },
+    {
+      "id": "linearization-spectral",
+      "title": "线性化、秩与谱结构",
+      "path": "references/linearization-spectral.md",
+      "tasks": [
+        "solve",
+        "prove",
+        "compute",
+        "count"
+      ],
+      "objects": [
+        "matrix",
+        "linear_system",
+        "linear_map",
+        "quadratic_form"
+      ],
+      "structures": [
+        "rank",
+        "nullspace",
+        "eigenvalue",
+        "change_of_basis"
+      ],
+      "conditions_to_check": [
+        "scalar_field",
+        "dimensions"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "固定数域和坐标方向，产出秩/核/特征空间或完整参数解集的证据。"
+      ]
+    },
+    {
+      "id": "conditioning-indicators",
+      "title": "样本空间、条件化与概率耦合",
+      "path": "references/conditioning-indicators.md",
+      "tasks": [
+        "compute",
+        "prove",
+        "count",
+        "construct"
+      ],
+      "objects": [
+        "random_variable",
+        "sample_space",
+        "event",
+        "distribution"
+      ],
+      "structures": [
+        "conditional_probability",
+        "indicator",
+        "coupling",
+        "independence"
+      ],
+      "conditions_to_check": [
+        "probability_model",
+        "support"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "明确样本空间、事件与依赖条件，选择指标、条件化或耦合的一条实际路线。"
+      ]
+    },
+    {
+      "id": "convergence-limits",
+      "title": "极限交换、可积性与分布收敛",
+      "path": "references/convergence-limits.md",
+      "tasks": [
+        "prove",
+        "compute",
+        "check"
+      ],
+      "objects": [
+        "sequence",
+        "function",
+        "integral",
+        "random_variable"
+      ],
+      "structures": [
+        "convergence",
+        "domination",
+        "uniform_integrability",
+        "limit_distribution"
+      ],
+      "conditions_to_check": [
+        "convergence_mode",
+        "measure_space"
+      ],
+      "dependencies": [],
+      "card_role": "method",
+      "expected_outputs": [
+        "逐条检查所用收敛定理前提，给可积控制或尾部控制，而非只报定理名。"
+      ]
+    },
+    {
+      "id": "differential-equations",
+      "title": "微分方程的建模、归约与条件核验",
+      "path": "references/differential-equations.md",
+      "tasks": [
+        "solve",
+        "prove",
+        "compute",
+        "check"
+      ],
+      "objects": [
+        "differential_equation",
+        "operator",
+        "series",
+        "physical_model"
+      ],
+      "structures": [
+        "initial_value",
+        "boundary_value",
+        "separation",
+        "linearization"
+      ],
+      "conditions_to_check": [
+        "domain",
+        "regularity",
+        "initial_boundary_data"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "判定方程及条件类型，选择相应归约，并列出方程/初值/边界的独立核验项。"
+      ]
+    },
+    {
+      "id": "algebraic-structures",
+      "title": "代数结构归约决策",
+      "path": "references/algebraic-structures.md",
+      "tasks": [
+        "solve",
+        "prove",
+        "compute",
+        "classify"
+      ],
+      "objects": [
+        "group",
+        "ring",
+        "field",
+        "polynomial"
+      ],
+      "structures": [
+        "homomorphism",
+        "quotient",
+        "factorization",
+        "extension"
+      ],
+      "conditions_to_check": [
+        "algebraic_conventions"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "选择求逆、理想、轨道或生成域分支，产出相应的Bezout、核像、类划分或双向包含证据。"
+      ]
+    },
+    {
+      "id": "topology-local-global",
+      "title": "拓扑性质判别决策",
+      "path": "references/topology-local-global.md",
+      "tasks": [
+        "prove",
+        "disprove",
+        "check",
+        "construct"
+      ],
+      "objects": [
+        "metric_space",
+        "topological_space",
+        "map",
+        "set"
+      ],
+      "structures": [
+        "compactness",
+        "completeness",
+        "basis",
+        "local_global"
+      ],
+      "conditions_to_check": [
+        "ambient_space",
+        "topology"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "选择具体定义和判据，明确要构造Cauchy列、分离点、局部细化或全局反例中的哪一种。"
+      ]
+    },
+    {
+      "id": "statistical-inference",
+      "title": "统计模型、似然与推断",
+      "path": "references/statistical-inference.md",
+      "tasks": [
+        "estimate",
+        "test",
+        "compute",
+        "prove",
+        "check"
+      ],
+      "objects": [
+        "sample",
+        "parameter",
+        "likelihood",
+        "distribution"
+      ],
+      "structures": [
+        "confidence_interval",
+        "hypothesis_test",
+        "sufficiency",
+        "fisher_information"
+      ],
+      "conditions_to_check": [
+        "sampling_model",
+        "support",
+        "estimand"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "明确推断对象、统计模型、所选区间/检验/似然方法以及未确认的前提和尺度。"
+      ]
+    },
+    {
+      "id": "regression-diagnostics",
+      "title": "回归、选模与误差结构",
+      "path": "references/regression-diagnostics.md",
+      "tasks": [
+        "estimate",
+        "predict",
+        "test",
+        "check",
+        "prove"
+      ],
+      "objects": [
+        "regression",
+        "design_matrix",
+        "response",
+        "error"
+      ],
+      "structures": [
+        "least_squares",
+        "regularization",
+        "collinearity",
+        "heteroskedasticity"
+      ],
+      "conditions_to_check": [
+        "model_specification",
+        "exogeneity",
+        "design_rank"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "固定模型及判断对象，区分偏F/整体F、均值/预测、参数稳定/预测稳定等具体分支。"
+      ]
+    },
+    {
+      "id": "numerical-approximation",
+      "title": "近似、误差传播与稳定性",
+      "path": "references/numerical-approximation.md",
+      "tasks": [
+        "approximate",
+        "compute",
+        "check",
+        "solve"
+      ],
+      "objects": [
+        "function",
+        "algorithm",
+        "matrix",
+        "differential_equation"
+      ],
+      "structures": [
+        "error_bound",
+        "conditioning",
+        "discretization",
+        "interpolation"
+      ],
+      "conditions_to_check": [
+        "error_metric",
+        "tolerance",
+        "precision"
+      ],
+      "dependencies": [],
+      "card_role": "decision",
+      "expected_outputs": [
+        "分清误差来源、条件性与算法稳定性，给需要证明的误差界或已知可靠范围。"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,452 @@
+{
+  "$defs": {
+    "MetricsDto": {
+      "description": "运行指标快照；未知指标保留 null，绝不默认写成 0。",
+      "properties": {
+        "client_method_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Method Calls"
+        },
+        "logical_model_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logical Model Calls"
+        },
+        "effect_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effect Calls"
+        },
+        "review_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Calls"
+        },
+        "catalog_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Calls"
+        },
+        "method_loads": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method Loads"
+        },
+        "asset_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Calls"
+        },
+        "tool_effect_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Effect Calls"
+        },
+        "method_effect_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method Effect Calls"
+        },
+        "work_units": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Work Units"
+        },
+        "frames": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frames"
+        },
+        "remote_outcome_unknown": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remote Outcome Unknown"
+        },
+        "known_http_attempts": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Known Http Attempts"
+        },
+        "reported_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reported Tokens"
+        },
+        "unknown_usage_requests": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unknown Usage Requests"
+        },
+        "tool_names": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Names"
+        },
+        "method_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method Ids"
+        }
+      },
+      "title": "MetricsDto",
+      "type": "object"
+    },
+    "TraceRowDto": {
+      "description": "单条 trace 记录.",
+      "properties": {
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "ts_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ts Ms"
+        }
+      },
+      "required": [
+        "seq",
+        "kind",
+        "id",
+        "state",
+        "code"
+      ],
+      "title": "TraceRowDto",
+      "type": "object"
+    }
+  },
+  "description": "solve() 公开返回对象的 Web 契约投影。",
+  "properties": {
+    "run_id": {
+      "default": "",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "engine": {
+      "default": "ts",
+      "title": "Engine",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "executed": {
+      "default": true,
+      "title": "Executed",
+      "type": "boolean"
+    },
+    "final_response": {
+      "default": "",
+      "title": "Final Response",
+      "type": "string"
+    },
+    "candidate_verified": {
+      "const": false,
+      "default": false,
+      "title": "Candidate Verified",
+      "type": "boolean"
+    },
+    "strictAcceptance": {
+      "default": "NOT_PERFORMED",
+      "title": "Strictacceptance",
+      "type": "string"
+    },
+    "mode": {
+      "default": "TS_PREVIEW",
+      "title": "Mode",
+      "type": "string"
+    },
+    "targetEnvironment": {
+      "default": "TARGET_UNVERIFIED",
+      "title": "Targetenvironment",
+      "type": "string"
+    },
+    "stopReason": {
+      "title": "Stopreason",
+      "type": "string"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "unresolvedObligations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unresolvedobligations",
+      "type": "array"
+    },
+    "carrier": {
+      "default": "",
+      "title": "Carrier",
+      "type": "string"
+    },
+    "sessionId": {
+      "default": "",
+      "title": "Sessionid",
+      "type": "string"
+    },
+    "trace": {
+      "items": {
+        "$ref": "#/$defs/TraceRowDto"
+      },
+      "title": "Trace",
+      "type": "array"
+    },
+    "metrics": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricsDto"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "finishReason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finishreason"
+    },
+    "childReaped": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Childreaped"
+    },
+    "elapsedMs": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Elapsedms"
+    },
+    "code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Code"
+    },
+    "protocolVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Protocolversion"
+    },
+    "catalogVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalogversion"
+    },
+    "catalogDigest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Catalogdigest"
+    }
+  },
+  "required": [
+    "status",
+    "stopReason"
+  ],
+  "title": "SolveResultDto",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-contract-version": "1.1.0"
+}

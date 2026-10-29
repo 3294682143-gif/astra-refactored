@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/runtime-core" },
+    { "path": "../../packages/math-contract" },
+    { "path": "../../packages/math-gateway" },
+    { "path": "../../packages/math-workunit" },
+    { "path": "../../packages/math-review" },
+    { "path": "../../packages/math-audit" }
+  ]
+}

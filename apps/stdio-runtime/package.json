@@ -1,0 +1,30 @@
+{
+  "name": "@astra/stdio-runtime",
+  "version": "0.0.0-p1",
+  "private": true,
+  "type": "module",
+  "description": "P1 offline stdio composition root. Mock-only local prototype; no real provider, no network, no tool execution.",
+  "main": "./dist/src/main.js",
+  "types": "./dist/src/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/main.d.ts",
+      "default": "./dist/src/main.js"
+    }
+  },
+  "files": [
+    "dist/src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astra/protocol": "workspace:*",
+    "@astra/runtime-core": "workspace:*",
+    "@astra/math-contract": "workspace:*",
+    "@astra/math-gateway": "workspace:*",
+    "@astra/math-workunit": "workspace:*",
+    "@astra/math-review": "workspace:*",
+    "@astra/math-audit": "workspace:*"
+  }
+}

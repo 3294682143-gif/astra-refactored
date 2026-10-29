@@ -1,0 +1,8 @@
+# Offline development and test dependencies for the refactored Astra source tree.
+# Runtime dependencies are declared in pyproject.toml / requirements.txt.
+pytest>=7.4,<9
+# Web/BFF and HTTP tests (also exposed as the optional `web` project extra).
+pydantic>=2.6,<3
+starlette>=0.37,<2
+uvicorn>=0.30,<1
+httpx>=0.27,<1

@@ -1,0 +1,1448 @@
+{
+  "schemaVersion": "math-assets-migration-ledger-v1",
+  "baselineCommit": "2265dff253175505068a7c323dd0a94d742b0e5d",
+  "unifiedAssets": [
+    {
+      "assetId": "math.equations",
+      "name": "定义域与方程",
+      "summary": "定义域、等价变换、方程与函数关系，完整性分别核对。"
+    },
+    {
+      "assetId": "math.proof",
+      "name": "证明与反例",
+      "summary": "量词、证明义务、合法见证与反例；可请求有界计算辅助。"
+    },
+    {
+      "assetId": "math.invariants",
+      "name": "不变量与极值构造",
+      "summary": "变化规则、不变量、双计数与构造边界。"
+    },
+    {
+      "assetId": "math.recurrence",
+      "name": "归纳与递推",
+      "summary": "基例、递推依赖和闭合；有限打表只作观察。"
+    },
+    {
+      "assetId": "math.finite-states",
+      "name": "有限状态计数",
+      "summary": "状态转移、数位条件、有限序列与网格路径。"
+    },
+    {
+      "assetId": "math.combinatorics",
+      "name": "有限组合计数",
+      "summary": "有限枚举、容斥、禁位排列、计数与概率量的区分。"
+    },
+    {
+      "assetId": "math.generating-functions",
+      "name": "生成函数与系数",
+      "summary": "多项式系数、有限生成函数和对象到系数的对应。"
+    },
+    {
+      "assetId": "math.diophantine",
+      "name": "整数方程",
+      "summary": "整数条件、同余、二次族和符号解；保留搜索边界。"
+    },
+    {
+      "assetId": "math.integration",
+      "name": "积分与对称",
+      "summary": "积分条件、变量、区间、对称和精确积分请求。"
+    },
+    {
+      "assetId": "math.geometry",
+      "name": "坐标与有限几何",
+      "summary": "坐标、直线、角、有限点集与覆盖，保留退化及数值范围。"
+    },
+    {
+      "assetId": "math.optimization",
+      "name": "不等式与优化",
+      "summary": "界、约束、驻点、取等及有限搜索，区分全局证明。"
+    },
+    {
+      "assetId": "math.linear-algebra",
+      "name": "线性代数",
+      "summary": "数域、矩阵、秩、核空间、线性系统和极大子式。"
+    },
+    {
+      "assetId": "math.probability",
+      "name": "概率与随机过程",
+      "summary": "概率建模、密度、期望、覆盖时间和近似概率。"
+    },
+    {
+      "assetId": "math.limits",
+      "name": "极限与收敛",
+      "summary": "收敛条件、极限、局部与整体交换条件。"
+    },
+    {
+      "assetId": "math.differential",
+      "name": "微分与微分方程",
+      "summary": "微分算子、Laplacian、三角化简及方程验证边界。"
+    },
+    {
+      "assetId": "math.algebraic-structures",
+      "name": "群环域与代数结构",
+      "summary": "群结构、域扩张、代数关系、多项式根与分解。"
+    },
+    {
+      "assetId": "math.topology",
+      "name": "拓扑与局部整体",
+      "summary": "拓扑定义、紧致、完备、局部与整体，指导和证明义务。"
+    },
+    {
+      "assetId": "math.statistics",
+      "name": "统计推断",
+      "summary": "统计模型、估计、检验、充分性和适用条件。"
+    },
+    {
+      "assetId": "math.regression",
+      "name": "回归诊断",
+      "summary": "OLS 系数、残差、拟合量和模型假设。"
+    },
+    {
+      "assetId": "math.numerics",
+      "name": "数值计算与误差",
+      "summary": "插值、差分、外推、误差及闭式猜想的证据边界。"
+    },
+    {
+      "assetId": "math.encoding",
+      "name": "编码与序列",
+      "summary": "LZ78 的编码、解码、校验与表示；与组合枚举分开解释。"
+    },
+    {
+      "assetId": "math.graphs",
+      "name": "有限图",
+      "summary": "匹配、子图、Tutte 见证和有限图颜色约束。"
+    },
+    {
+      "assetId": "math.tiling",
+      "name": "铺砌与覆盖",
+      "summary": "有限棋盘、形状、覆盖、颜色下界与具体铺砌证书。"
+    },
+    {
+      "assetId": "math.games",
+      "name": "有限博弈",
+      "summary": "状态图、终局、策略见证、minimax 和有限牌组。"
+    },
+    {
+      "assetId": "math.lattices",
+      "name": "格点几何",
+      "summary": "明确有限区域的格点与格上图形计数。"
+    },
+    {
+      "assetId": "math.integer-structure",
+      "name": "整数结构",
+      "summary": "奇部、剩余表和有界数值半群。"
+    }
+  ],
+  "summary": {
+    "canonicalAssetCount": 26,
+    "migratedMethodSourcesTotal": 20,
+    "migratedFamilySourcesTotal": 22,
+    "migratedImplementationSourcesTotal": 76,
+    "batches": {
+      "W0": 26,
+      "W1": 11,
+      "W2": 10,
+      "W3": 14,
+      "W4": 8,
+      "W5": 7
+    }
+  },
+  "methods": [
+    {
+      "sourceId": "domain-equivalence",
+      "title": "定义域、等价变换与参数分类",
+      "targetAssetId": "math.equations",
+      "sourcePath": "mathagent/resources/general_v11/references/domain-equivalence.md",
+      "sourceSha256": "82ccb911fb6306ea4da2958d667cc082a541e9667605fa7ff076bb118b148fe7",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "proof-counterexamples",
+      "title": "量词、证明义务与反例",
+      "targetAssetId": "math.proof",
+      "sourcePath": "mathagent/resources/general_v11/references/proof-counterexamples.md",
+      "sourceSha256": "cfacc482f7524e73692138233b3e8b64adb0b2a6ae3fa702cc29131d0045955e",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "invariants-extremal",
+      "title": "不变量、势函数与极端原理",
+      "targetAssetId": "math.invariants",
+      "sourcePath": "mathagent/resources/general_v11/references/invariants-extremal.md",
+      "sourceSha256": "6094a97dd28be3469eafff40cd75cd04605e81df4be0cfd0258aae0259264f45",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "induction-recurrence",
+      "title": "归纳、递推与良基结构",
+      "targetAssetId": "math.recurrence",
+      "sourcePath": "mathagent/resources/general_v11/references/induction-recurrence.md",
+      "sourceSha256": "c082087fd77a0b56de615bbd0dd268ed5f892bb10f8825e37a07e7e0a616043a",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "finite-state-dp",
+      "title": "有限状态、动态规划与模状态组合",
+      "targetAssetId": "math.finite-states",
+      "sourcePath": "mathagent/resources/general_v11/references/finite-state-dp.md",
+      "sourceSha256": "05e84407770d4b222dfc85c852c3825623193f21a9b0e96831392daed3204aa1",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "counting-bijections",
+      "title": "双射、双计数与容斥",
+      "targetAssetId": "math.combinatorics",
+      "sourcePath": "mathagent/resources/general_v11/references/counting-bijections.md",
+      "sourceSha256": "cb81dea95e56ae23d602a0b816ec360c90dad62d7e20b0454e2b9bd602d948ab",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "generating-functions",
+      "title": "生成函数、系数提取与卷积",
+      "targetAssetId": "math.generating-functions",
+      "sourcePath": "mathagent/resources/general_v11/references/generating-functions.md",
+      "sourceSha256": "313b35e0b30d74b8b647baa86131c2e16c14f05c6b25d0f19676d7d733b3ad17",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "modular-crt",
+      "title": "同余、素数幂分解与广义CRT",
+      "targetAssetId": "math.diophantine",
+      "sourcePath": "mathagent/resources/general_v11/references/modular-crt.md",
+      "sourceSha256": "d53958b156528cb80e88eb6e6f9867e57d90e0ab72641b9fcb33d19f0267acf8",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "integral-symmetry",
+      "title": "对称、换元与积分存在性",
+      "targetAssetId": "math.integration",
+      "sourcePath": "mathagent/resources/general_v11/references/integral-symmetry.md",
+      "sourceSha256": "16c6b8e5ea18a76068cca48d02d504162a9930f830a325d43c318e849a7827b8",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "coordinates-geometry",
+      "title": "坐标、向量与几何约束",
+      "targetAssetId": "math.geometry",
+      "sourcePath": "mathagent/resources/general_v11/references/coordinates-geometry.md",
+      "sourceSha256": "f43dcac80e9bb7d65bcf4f289f11e8a3ed47458cf68b7d8b2e727816101919e7",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "inequalities-optimization",
+      "title": "界、凸性与全局最优性",
+      "targetAssetId": "math.optimization",
+      "sourcePath": "mathagent/resources/general_v11/references/inequalities-optimization.md",
+      "sourceSha256": "7e7c07dfd9421e04d58103eae5bf50c8ccf2c26718ea7c02253da9910fda4e83",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "linearization-spectral",
+      "title": "线性化、秩与谱结构",
+      "targetAssetId": "math.linear-algebra",
+      "sourcePath": "mathagent/resources/general_v11/references/linearization-spectral.md",
+      "sourceSha256": "fad5f65f8a9565ae648d04c5778ccb2cd33e7a3c9c048871cc78e0127cc73b16",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "conditioning-indicators",
+      "title": "样本空间、条件化与概率耦合",
+      "targetAssetId": "math.probability",
+      "sourcePath": "mathagent/resources/general_v11/references/conditioning-indicators.md",
+      "sourceSha256": "238d90bf6a6dc4c76fed2071706ab4baf6b4a408ee062c02c09173892065b5f9",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "convergence-limits",
+      "title": "极限交换、可积性与分布收敛",
+      "targetAssetId": "math.limits",
+      "sourcePath": "mathagent/resources/general_v11/references/convergence-limits.md",
+      "sourceSha256": "99d3f2cb4d179083a02358f4ac097d5615ae43d5c6fe9d67026bc7eb00fae910",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "differential-equations",
+      "title": "微分方程的建模、归约与条件核验",
+      "targetAssetId": "math.differential",
+      "sourcePath": "mathagent/resources/general_v11/references/differential-equations.md",
+      "sourceSha256": "0e31bde722b2f5bcc1c2270fda3b641cd9191080f55049f3c19c9a0dee9732f9",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "algebraic-structures",
+      "title": "代数结构归约决策",
+      "targetAssetId": "math.algebraic-structures",
+      "sourcePath": "mathagent/resources/general_v11/references/algebraic-structures.md",
+      "sourceSha256": "4f3fa09d553ec676de35f7956b7b7645570dddaf66b78cb063d12bc82a3c0d2f",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "topology-local-global",
+      "title": "拓扑性质判别决策",
+      "targetAssetId": "math.topology",
+      "sourcePath": "mathagent/resources/general_v11/references/topology-local-global.md",
+      "sourceSha256": "acd7fc0d2102989158f3606456224773c30bc26b11bd670d8349544063ce01cf",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "statistical-inference",
+      "title": "统计模型、似然与推断",
+      "targetAssetId": "math.statistics",
+      "sourcePath": "mathagent/resources/general_v11/references/statistical-inference.md",
+      "sourceSha256": "a418e61689aaacd9c1363f6558acea109636b08ee213a7c95ed6c3e3ebe51dde",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "regression-diagnostics",
+      "title": "回归、选模与误差结构",
+      "targetAssetId": "math.regression",
+      "sourcePath": "mathagent/resources/general_v11/references/regression-diagnostics.md",
+      "sourceSha256": "30ac25573534fee0d06ae2bfdf1a5e06d15445e3c551a587ec535ab8e8d4fb8b",
+      "status": "pending_migration"
+    },
+    {
+      "sourceId": "numerical-approximation",
+      "title": "近似、误差传播与稳定性",
+      "targetAssetId": "math.numerics",
+      "sourcePath": "mathagent/resources/general_v11/references/numerical-approximation.md",
+      "sourceSha256": "363e04a25915aa10422ec7b184ad2a0dc89de0bb3a0566175b992448c8008f32",
+      "status": "pending_migration"
+    }
+  ],
+  "families": [
+    {
+      "sourceFamilyId": "algorithm_simulation",
+      "targetAssetIds": [
+        "math.combinatorics",
+        "math.encoding"
+      ],
+      "sourcePath": "mathagent/resources/skills/algorithm_simulation.md",
+      "sourceSha256": "a66c56cf7b89936a80bbe64dcbb8463524f69558bd761b0b23adcf9c417f9c76",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "classical_geometry_compute",
+      "targetAssetIds": [
+        "math.geometry",
+        "math.numerics"
+      ],
+      "sourcePath": "mathagent/resources/skills/classical_geometry_compute.md",
+      "sourceSha256": "bdeeee550be751a3dc494ac19dd8115a1309e25e2358b5305bdec2b0c3631420",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "combinatorial_geometry",
+      "targetAssetIds": [
+        "math.geometry"
+      ],
+      "sourcePath": "mathagent/resources/skills/combinatorial_geometry.md",
+      "sourceSha256": "e02b8e3fedb4a133dc4a443ca735cf326f9c7cfb9abbc7d79188681b2338f39d",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "concept_recall",
+      "targetAssetIds": [
+        "math.proof",
+        "math.topology",
+        "math.statistics"
+      ],
+      "sourcePath": "mathagent/resources/skills/concept_recall.md",
+      "sourceSha256": "29fbb270f10fd7c3b050af72da33224a981ece81f5269dc6726ca275e24cb7f9",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "constrained_tiling",
+      "targetAssetIds": [
+        "math.invariants",
+        "math.tiling"
+      ],
+      "sourcePath": "mathagent/resources/skills/constrained_tiling.md",
+      "sourceSha256": "bc1e3cef20b59c9c49e212ed456af64ff496bd285cc8c24480070cd68da7a7fc",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "digit_dp",
+      "targetAssetIds": [
+        "math.finite-states"
+      ],
+      "sourcePath": "mathagent/resources/skills/digit_dp.md",
+      "sourceSha256": "0fcf4acfd22bcddf0637e71f064446959dfda685c06e5a2f025b1d8a31327dff",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "diophantine",
+      "targetAssetIds": [
+        "math.diophantine"
+      ],
+      "sourcePath": "mathagent/resources/skills/diophantine.md",
+      "sourceSha256": "03a5aa3f4ee9547bc19d5a95770825a7d91af0b06add4eec1d3026b33161a92f",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "extremal_construction",
+      "targetAssetIds": [
+        "math.invariants"
+      ],
+      "sourcePath": "mathagent/resources/skills/extremal_construction.md",
+      "sourceSha256": "f84f1091fecc0f687685355d12071e465f762b0784e5a1b85068d8519895138a",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "functional_equation",
+      "targetAssetIds": [
+        "math.equations",
+        "math.graphs"
+      ],
+      "sourcePath": "mathagent/resources/skills/functional_equation.md",
+      "sourceSha256": "0cb2f178a7199f54f6d503d6e097236aef43299a437f3dcf0f317d2793941469",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "game_strategy_proof",
+      "targetAssetIds": [
+        "math.invariants",
+        "math.games"
+      ],
+      "sourcePath": "mathagent/resources/skills/game_strategy_proof.md",
+      "sourceSha256": "f416628300bc2e170c51d1db70f7e3eebddda6b0cfd370a3d321e8334d998f56",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "graph_extremal",
+      "targetAssetIds": [
+        "math.invariants",
+        "math.graphs"
+      ],
+      "sourcePath": "mathagent/resources/skills/graph_extremal.md",
+      "sourceSha256": "e1c70a86852f267e13eda2f39733f3f1d94be03ed79b6f8229f0cadd87ace58d",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "inclusion_exclusion_counting",
+      "targetAssetIds": [
+        "math.combinatorics"
+      ],
+      "sourcePath": "mathagent/resources/skills/inclusion_exclusion_counting.md",
+      "sourceSha256": "9b23609561c79793e0f2a945df5164a4b8499d1550ea1f27263ae0c421566796",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "inequality_extremum",
+      "targetAssetIds": [
+        "math.optimization",
+        "math.numerics"
+      ],
+      "sourcePath": "mathagent/resources/skills/inequality_extremum.md",
+      "sourceSha256": "124578a1f230251f263a61ac2926c4fb18fe34f0b8c2d4017e7ad40aa01243ca",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "lattice_counting",
+      "targetAssetIds": [
+        "math.geometry",
+        "math.lattices"
+      ],
+      "sourcePath": "mathagent/resources/skills/lattice_counting.md",
+      "sourceSha256": "7070886a008131df810bf0b0ae24c29bf72ca4c67b9983b3993f49f0e8579da5",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "linear_algebra_game",
+      "targetAssetIds": [
+        "math.linear-algebra",
+        "math.games"
+      ],
+      "sourcePath": "mathagent/resources/skills/linear_algebra_game.md",
+      "sourceSha256": "396747015bb368226fff31978428452dd559db5bf7cc0f9fb0a61211db211e22",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "minimax_dp",
+      "targetAssetIds": [
+        "math.finite-states",
+        "math.games"
+      ],
+      "sourcePath": "mathagent/resources/skills/minimax_dp.md",
+      "sourceSha256": "2c6aa37a610dc32e2c31d829591bffe66c7dfabc556773d7f453f1fe32638e3a",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "number_theory_structure",
+      "targetAssetIds": [
+        "math.recurrence",
+        "math.diophantine",
+        "math.integer-structure"
+      ],
+      "sourcePath": "mathagent/resources/skills/number_theory_structure.md",
+      "sourceSha256": "acb4b50d050bf4539ce5a07cac087ea91003b99b5d72d12f6aff2f1f756b19ba",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "numerical_methods",
+      "targetAssetIds": [
+        "math.numerics"
+      ],
+      "sourcePath": "mathagent/resources/skills/numerical_methods.md",
+      "sourceSha256": "0ff8e11739a0954037b58e5781b4c1aaef9472a4a2295d1d75627672c170b1d4",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "probabilistic_model",
+      "targetAssetIds": [
+        "math.probability",
+        "math.statistics",
+        "math.regression"
+      ],
+      "sourcePath": "mathagent/resources/skills/probabilistic_model.md",
+      "sourceSha256": "e22ed9344f81c9199c2437d2aa9173fa5c79e4c999b5230054c30942eb42ed9c",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "symbolic_algebra",
+      "targetAssetIds": [
+        "math.equations",
+        "math.linear-algebra",
+        "math.algebraic-structures",
+        "math.numerics"
+      ],
+      "sourcePath": "mathagent/resources/skills/symbolic_algebra.md",
+      "sourceSha256": "8816b72b6881e4360c578a6b5ab876ceac651c83a0927dd003f57b361822a3d4",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "symbolic_calculus",
+      "targetAssetIds": [
+        "math.integration",
+        "math.limits",
+        "math.differential"
+      ],
+      "sourcePath": "mathagent/resources/skills/symbolic_calculus.md",
+      "sourceSha256": "615a4ea563887371e689efd16da489b91166f08e1b7e6a71178db93b030d0e6d",
+      "status": "pending_migration"
+    },
+    {
+      "sourceFamilyId": "transfer_matrix",
+      "targetAssetIds": [
+        "math.recurrence",
+        "math.finite-states"
+      ],
+      "sourcePath": "mathagent/resources/skills/transfer_matrix.md",
+      "sourceSha256": "7f66b8ee83586d64b974df2b81ec4d325ff2497eb00bd2b4f1d9caf424c04461",
+      "status": "pending_migration"
+    }
+  ],
+  "implementations": [
+    {
+      "number": 1,
+      "toolName": "finite_group_structure",
+      "targetAssetId": "math.algebraic-structures",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 2,
+      "toolName": "splitting_field_degree_expr",
+      "targetAssetId": "math.algebraic-structures",
+      "batch": "W0",
+      "baselineScope": "partial",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 3,
+      "toolName": "bounded_enumeration",
+      "targetAssetId": "math.combinatorics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 4,
+      "toolName": "count_avoiding_permutations",
+      "targetAssetId": "math.combinatorics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "inclusion_exclusion_counting",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 5,
+      "toolName": "rook_numbers",
+      "targetAssetId": "math.combinatorics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "inclusion_exclusion_counting",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 6,
+      "toolName": "circle_laplacian_expr",
+      "targetAssetId": "math.differential",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_calculus",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 7,
+      "toolName": "planar_laplacian_expr",
+      "targetAssetId": "math.differential",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_calculus",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 8,
+      "toolName": "solve_quadratic_diophantine",
+      "targetAssetId": "math.diophantine",
+      "batch": "W0",
+      "baselineScope": "partial",
+      "family": "diophantine",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 9,
+      "toolName": "symbolic_diophantine_with_timeout",
+      "targetAssetId": "math.diophantine",
+      "batch": "W0",
+      "baselineScope": "partial",
+      "family": "diophantine",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 10,
+      "toolName": "exact_check_expr",
+      "targetAssetId": "math.equations",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 11,
+      "toolName": "polynomial_function_check",
+      "targetAssetId": "math.equations",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "functional_equation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 12,
+      "toolName": "real_root_count_expr",
+      "targetAssetId": "math.equations",
+      "batch": "W0",
+      "baselineScope": "partial",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 13,
+      "toolName": "solve_system_guarded_expr",
+      "targetAssetId": "math.equations",
+      "batch": "W0",
+      "baselineScope": "partial",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 14,
+      "toolName": "count_by_digit_property",
+      "targetAssetId": "math.finite-states",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "digit_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 15,
+      "toolName": "independence_polynomial_chain",
+      "targetAssetId": "math.finite-states",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "transfer_matrix",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 16,
+      "toolName": "transition_count",
+      "targetAssetId": "math.finite-states",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "transfer_matrix",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 17,
+      "toolName": "polynomial_expand_coefficients",
+      "targetAssetId": "math.generating-functions",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 18,
+      "toolName": "gf2_nullspace",
+      "targetAssetId": "math.linear-algebra",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "linear_algebra_game",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 19,
+      "toolName": "gf2_rank",
+      "targetAssetId": "math.linear-algebra",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "linear_algebra_game",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 20,
+      "toolName": "linear_system_solution_set",
+      "targetAssetId": "math.linear-algebra",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 21,
+      "toolName": "finite_difference_derivative",
+      "targetAssetId": "math.numerics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "numerical_methods",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 22,
+      "toolName": "interpolation_fit_check",
+      "targetAssetId": "math.numerics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 23,
+      "toolName": "richardson_extrapolate",
+      "targetAssetId": "math.numerics",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "numerical_methods",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 24,
+      "toolName": "cover_time_complete_graph",
+      "targetAssetId": "math.probability",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "probabilistic_model",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 25,
+      "toolName": "markov_expected_steps",
+      "targetAssetId": "math.probability",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "probabilistic_model",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 26,
+      "toolName": "stats_ols_check",
+      "targetAssetId": "math.regression",
+      "batch": "W0",
+      "baselineScope": "available",
+      "family": "probabilistic_model",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w0.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 27,
+      "toolName": "format_phrases",
+      "targetAssetId": "math.encoding",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 28,
+      "toolName": "lz78_bit_string",
+      "targetAssetId": "math.encoding",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 29,
+      "toolName": "lz78_decode",
+      "targetAssetId": "math.encoding",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 30,
+      "toolName": "lz78_encode",
+      "targetAssetId": "math.encoding",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 31,
+      "toolName": "verify_phrases",
+      "targetAssetId": "math.encoding",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "algorithm_simulation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 32,
+      "toolName": "constraint_propagation_2coloring",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "available",
+      "family": "functional_equation",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 33,
+      "toolName": "count_complete_bipartite_subgraphs",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "partial",
+      "family": "graph_extremal",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 34,
+      "toolName": "has_perfect_matching",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "partial",
+      "family": "graph_extremal",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 35,
+      "toolName": "triangle_free_check",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "partial",
+      "family": "graph_extremal",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 36,
+      "toolName": "tutte_violation",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "partial",
+      "family": "graph_extremal",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 37,
+      "toolName": "verify_perfect_matching",
+      "targetAssetId": "math.graphs",
+      "batch": "W1",
+      "baselineScope": "partial",
+      "family": "graph_extremal",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w1.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 38,
+      "toolName": "angle_at_vertex",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "classical_geometry_compute",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 39,
+      "toolName": "area_bisection_coverage",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "combinatorial_geometry",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 40,
+      "toolName": "count_angle_ratio_locus",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "classical_geometry_compute",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 41,
+      "toolName": "line_cover_number",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "combinatorial_geometry",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 42,
+      "toolName": "line_separation_number",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "combinatorial_geometry",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 43,
+      "toolName": "line_through",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "classical_geometry_compute",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 44,
+      "toolName": "worst_configuration_search",
+      "targetAssetId": "math.geometry",
+      "batch": "W2",
+      "baselineScope": "partial",
+      "family": "combinatorial_geometry",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 45,
+      "toolName": "count_lattice_hexagons",
+      "targetAssetId": "math.lattices",
+      "batch": "W2",
+      "baselineScope": "available",
+      "family": "lattice_counting",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 46,
+      "toolName": "hexagon_lattice_points",
+      "targetAssetId": "math.lattices",
+      "batch": "W2",
+      "baselineScope": "available",
+      "family": "lattice_counting",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 47,
+      "toolName": "lattice_points_in_polygon",
+      "targetAssetId": "math.lattices",
+      "batch": "W2",
+      "baselineScope": "available",
+      "family": "lattice_counting",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w2.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 48,
+      "toolName": "deletion_divisible_largest",
+      "targetAssetId": "math.finite-states",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "digit_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 49,
+      "toolName": "digit_sum_window_search",
+      "targetAssetId": "math.finite-states",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "digit_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 50,
+      "toolName": "hamiltonian_paths_grid",
+      "targetAssetId": "math.finite-states",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "transfer_matrix",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 51,
+      "toolName": "deck_game_outcome",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "linear_algebra_game",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 52,
+      "toolName": "gap_subsequence_discrepancy",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "minimax_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 53,
+      "toolName": "independent_reply_certificate",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "game_strategy_proof",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 54,
+      "toolName": "minimax_value_graph",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "minimax_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 55,
+      "toolName": "pairing_strategy_verify",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "game_strategy_proof",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 56,
+      "toolName": "win_draw_loss_graph",
+      "targetAssetId": "math.games",
+      "batch": "W3",
+      "baselineScope": "available",
+      "family": "minimax_dp",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 57,
+      "toolName": "check_tiling_certificate",
+      "targetAssetId": "math.tiling",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "constrained_tiling",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 58,
+      "toolName": "coloring_bound",
+      "targetAssetId": "math.tiling",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "constrained_tiling",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 59,
+      "toolName": "count_tilings",
+      "targetAssetId": "math.tiling",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "constrained_tiling",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 60,
+      "toolName": "min_tiles_cover",
+      "targetAssetId": "math.tiling",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "constrained_tiling",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 61,
+      "toolName": "unique_tiling_check",
+      "targetAssetId": "math.tiling",
+      "batch": "W3",
+      "baselineScope": "partial",
+      "family": "constrained_tiling",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w3.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 62,
+      "toolName": "algebraic_polynomial_check",
+      "targetAssetId": "math.algebraic-structures",
+      "batch": "W4",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 63,
+      "toolName": "wronskian_root_identity_expr",
+      "targetAssetId": "math.algebraic-structures",
+      "batch": "W4",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 64,
+      "toolName": "solve_quadratic_discriminant_family",
+      "targetAssetId": "math.diophantine",
+      "batch": "W4",
+      "baselineScope": "partial",
+      "family": "diophantine",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 65,
+      "toolName": "frobenius_semigroup",
+      "targetAssetId": "math.integer-structure",
+      "batch": "W4",
+      "baselineScope": "partial",
+      "family": "number_theory_structure",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 66,
+      "toolName": "odd_part",
+      "targetAssetId": "math.integer-structure",
+      "batch": "W4",
+      "baselineScope": "partial",
+      "family": "number_theory_structure",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 67,
+      "toolName": "odd_part_table",
+      "targetAssetId": "math.integer-structure",
+      "batch": "W4",
+      "baselineScope": "partial",
+      "family": "number_theory_structure",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 68,
+      "toolName": "double_counting_bound",
+      "targetAssetId": "math.invariants",
+      "batch": "W4",
+      "baselineScope": "partial",
+      "family": "extremal_construction",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 69,
+      "toolName": "polynomial_invariant_check",
+      "targetAssetId": "math.invariants",
+      "batch": "W4",
+      "baselineScope": "available",
+      "family": "symbolic_algebra",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w4.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 70,
+      "toolName": "closed_form_conjecture",
+      "targetAssetId": "math.numerics",
+      "batch": "W5",
+      "baselineScope": "partial",
+      "family": "inequality_extremum",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 71,
+      "toolName": "identify_constant",
+      "targetAssetId": "math.numerics",
+      "batch": "W5",
+      "baselineScope": "partial",
+      "family": "classical_geometry_compute",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 72,
+      "toolName": "verify_fd_certificate",
+      "targetAssetId": "math.numerics",
+      "batch": "W5",
+      "baselineScope": "available",
+      "family": "numerical_methods",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 73,
+      "toolName": "certificate_check_expr",
+      "targetAssetId": "math.optimization",
+      "batch": "W5",
+      "baselineScope": "partial",
+      "family": "inequality_extremum",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 74,
+      "toolName": "numeric_extremum_search_expr",
+      "targetAssetId": "math.optimization",
+      "batch": "W5",
+      "baselineScope": "partial",
+      "family": "inequality_extremum",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 75,
+      "toolName": "subset_gap_worst_case",
+      "targetAssetId": "math.optimization",
+      "batch": "W5",
+      "baselineScope": "partial",
+      "family": "inequality_extremum",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    },
+    {
+      "number": 76,
+      "toolName": "normal_overflow_seats",
+      "targetAssetId": "math.probability",
+      "batch": "W5",
+      "baselineScope": "available",
+      "family": "probabilistic_model",
+      "status": "migrated",
+      "testFixture": "tests/math_assets/test_math_assets_w5.py",
+      "acceptanceStatus": "passed",
+      "verifiedOfficialEntry": true
+    }
+  ]
+}

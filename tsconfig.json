@@ -1,0 +1,19 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/domain-contract" },
+    { "path": "packages/domain-math" },
+    { "path": "packages/agent-kernel" },
+    { "path": "packages/domain-control" },
+    { "path": "packages/domain-scientific-computing" },
+    { "path": "packages/domain-data-analysis" },
+    { "path": "packages/protocol" },
+    { "path": "packages/runtime-core" },
+    { "path": "packages/math-contract" },
+    { "path": "packages/math-gateway" },
+    { "path": "packages/math-workunit" },
+    { "path": "packages/math-review" },
+    { "path": "packages/math-audit" },
+    { "path": "apps/stdio-runtime" }
+  ]
+}

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astra.internal/schemas/math-assets-v1.json",
+  "title": "Astra Canonical Math Assets Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogVersion", "description", "assets"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "math-assets-v1"
+    },
+    "catalogVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 26,
+      "maxItems": 26,
+      "items": {
+        "$ref": "#/$defs/MathAsset"
+      }
+    }
+  },
+  "$defs": {
+    "MathAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "name",
+        "version",
+        "summary",
+        "instructions",
+        "inputSchema",
+        "behaviors",
+        "examples"
+      ],
+      "properties": {
+        "assetId": {
+          "type": "string",
+          "pattern": "^math\\.[a-z0-9-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instructions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["conditions", "procedure", "misuse", "verificationBoundary"],
+          "properties": {
+            "conditions": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "procedure": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "misuse": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "verificationBoundary": {
+              "type": "string"
+            }
+          }
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "behaviors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MathAssetBehavior"
+          }
+        },
+        "examples": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["positive", "negative"],
+          "properties": {
+            "positive": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["description", "input"],
+                "properties": {
+                  "description": { "type": "string" },
+                  "input": { "type": "object" }
+                }
+              }
+            },
+            "negative": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["description", "reason"],
+                "properties": {
+                  "description": { "type": "string" },
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "MathAssetBehavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "implementationRef",
+        "legacyToolName",
+        "legacyOperation",
+        "declaredScope",
+        "requiredParams",
+        "optionalParams",
+        "resultType",
+        "evidenceCeiling",
+        "consumer"
+      ],
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "implementationRef": {
+          "type": "string"
+        },
+        "legacyToolName": {
+          "type": ["string", "null"]
+        },
+        "legacyOperation": {
+          "type": ["string", "null"]
+        },
+        "declaredScope": {
+          "type": "string"
+        },
+        "requiredParams": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optionalParams": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "resultType": {
+          "type": "string"
+        },
+        "evidenceCeiling": {
+          "type": "string",
+          "enum": [
+            "EXACT_FOR_INPUT",
+            "NUMERICAL_FOR_INPUT",
+            "WITNESS_FOR_INPUT",
+            "SAMPLED_OBSERVATION",
+            "CONJECTURE",
+            "GUIDANCE"
+          ]
+        },
+        "consumer": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

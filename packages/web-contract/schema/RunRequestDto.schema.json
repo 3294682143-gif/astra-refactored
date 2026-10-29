@@ -1,0 +1,116 @@
+{
+  "additionalProperties": false,
+  "description": "新建 Run 请求体，Web 正式入口只接受 engine='ts'。",
+  "properties": {
+    "problem": {
+      "maxLength": 65536,
+      "minLength": 1,
+      "title": "Problem",
+      "type": "string"
+    },
+    "engine": {
+      "const": "ts",
+      "default": "ts",
+      "title": "Engine",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "idempotency_key": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idempotency Key"
+    },
+    "max_model_calls": {
+      "default": 8,
+      "maximum": 256,
+      "minimum": 0,
+      "title": "Max Model Calls",
+      "type": "integer"
+    },
+    "max_work_units": {
+      "default": 4,
+      "maximum": 64,
+      "minimum": 1,
+      "title": "Max Work Units",
+      "type": "integer"
+    },
+    "max_effects": {
+      "default": 1,
+      "maximum": 2,
+      "minimum": 0,
+      "title": "Max Effects",
+      "type": "integer"
+    },
+    "max_reviews": {
+      "default": 1,
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Max Reviews",
+      "type": "integer"
+    },
+    "max_method_loads": {
+      "default": 0,
+      "maximum": 0,
+      "minimum": 0,
+      "title": "Max Method Loads",
+      "type": "integer"
+    },
+    "max_repairs": {
+      "default": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Max Repairs",
+      "type": "integer"
+    },
+    "max_consensus": {
+      "default": 0,
+      "maximum": 8,
+      "minimum": 0,
+      "title": "Max Consensus",
+      "type": "integer"
+    },
+    "max_r0": {
+      "default": 0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Max R0",
+      "type": "integer"
+    },
+    "problem_seconds": {
+      "default": 600,
+      "maximum": 3600,
+      "minimum": 1,
+      "title": "Problem Seconds",
+      "type": "integer"
+    },
+    "policy": {
+      "default": "BEST_EFFORT",
+      "enum": [
+        "BEST_EFFORT",
+        "STRICT"
+      ],
+      "title": "Policy",
+      "type": "string"
+    }
+  },
+  "required": [
+    "problem"
+  ],
+  "title": "RunRequestDto",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-contract-version": "1.1.0"
+}

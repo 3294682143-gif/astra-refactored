@@ -1,0 +1,11 @@
+﻿t6 PRE-FIX contrast evidence (frozen db33c29 UI served on :8897, same no-L2 record T6-RUN-1)
+- /api/runs/T6-RUN-1 on db33c29: status=error, detail_level=<absent> (pre-t1)
+- Browser http://127.0.0.1:8897/runs/T6-RUN-1 rendered (pre-fix):
+  demo-session / 候选答案 / "L3 · 完整观察" / 事件总数 11 帧 / 候选提案 4
+  => the real run's true terminal was NOT surfaced (masked by demo data + hardcoded L3).
+- Baseline SolvePage close-frame parsing grep: NO MATCH (no parseTerminalFrame/terminalKind/final_response usage)
+- db33c29 health content-type = application/json
+POST-FIX (worktree) same record http://127.0.0.1:8898/runs/T6-RUN-1 rendered:
+  has_record_missing=false ; 回放存档不可用（该运行没有 L2 存档）; 本运行未执行（executed=false）;
+  status=error / terminalKind=system_failure / code=SOLVER_NOT_CONFIGURED / final_response="Unsolved." / 级别 L1
+POST-FIX health content-type = application/json; charset=utf-8

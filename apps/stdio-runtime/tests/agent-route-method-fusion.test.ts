@@ -1,0 +1,363 @@
+/**
+ * Method/tool fusion: a hit tool route names the `general_v11` card that owns
+ * that mathematical family, so `semanticMethodRoute` ranks that card first.
+ * Everything else about the scoring, the bound and the tie-break is unchanged,
+ * and a problem with no tool route keeps its previous list exactly.
+ *
+ * The entries below are the metadata the catalog exposes (id plus `objects`
+ * and `structures` tokens only): the router never reads a method body, an item
+ * index, a reference answer or any hidden table.
+ */
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { P2MethodEntry } from "@astra/protocol";
+import {
+  preferredMethodForToolRoute,
+  semanticMethodRoute,
+  semanticToolRoute,
+} from "../src/agent-semantics.js";
+
+function entry(
+  id: string,
+  objects: readonly string[],
+  structures: readonly string[],
+): P2MethodEntry {
+  return { id, title: id, objects, structures };
+}
+
+/** The 20 `general_v11` cards, metadata only. */
+const CATALOG: readonly P2MethodEntry[] = Object.freeze([
+  entry("domain-equivalence", ["equation", "rational_expression", "radical", "parameter"], [
+    "domain",
+    "equivalence",
+    "degeneracy",
+  ]),
+  entry("proof-counterexamples", ["statement", "set", "function", "sequence"], [
+    "quantifier",
+    "necessity",
+    "sufficiency",
+    "counterexample",
+  ]),
+  entry("invariants-extremal", ["configuration", "game", "integer", "graph"], [
+    "invariant",
+    "parity",
+    "potential",
+    "extremal",
+  ]),
+  entry("induction-recurrence", ["sequence", "integer", "recursive_object"], [
+    "induction",
+    "recurrence",
+    "well_founded",
+  ]),
+  entry("finite-state-dp", ["sequence", "graph", "finite_state"], [
+    "dynamic_programming",
+    "automaton",
+    "residue_tracking",
+  ]),
+  entry("counting-bijections", ["set", "combinatorial_object", "sample_space"], [
+    "bijection",
+    "double_counting",
+    "inclusion_exclusion",
+  ]),
+  entry("generating-functions", ["sequence", "polynomial", "formal_series"], [
+    "generating_function",
+    "convolution",
+    "recurrence",
+  ]),
+  entry("modular-crt", ["integer", "congruence"], [
+    "modular_constraints",
+    "prime_power",
+    "residue_tracking",
+  ]),
+  entry("integral-symmetry", ["integral", "function", "region"], [
+    "symmetry",
+    "substitution",
+    "improper_integral",
+  ]),
+  entry(
+    "coordinates-geometry",
+    ["point", "line", "plane", "curve", "geometric_configuration"],
+    ["coordinates", "metric", "incidence", "symmetry"],
+  ),
+  entry("inequalities-optimization", ["function", "inequality", "feasible_set"], [
+    "convexity",
+    "monotonicity",
+    "bound",
+    "equality_case",
+  ]),
+  entry("linearization-spectral", [
+    "matrix",
+    "linear_system",
+    "linear_map",
+    "quadratic_form",
+  ], ["rank", "nullspace", "eigenvalue", "change_of_basis"]),
+  entry("conditioning-indicators", [
+    "random_variable",
+    "sample_space",
+    "event",
+    "distribution",
+  ], ["conditional_probability", "indicator", "coupling", "independence"]),
+  entry("convergence-limits", ["sequence", "function", "integral", "random_variable"], [
+    "convergence",
+    "domination",
+    "uniform_integrability",
+    "limit_distribution",
+  ]),
+  entry("differential-equations", [
+    "differential_equation",
+    "operator",
+    "series",
+    "physical_model",
+  ], ["initial_value", "boundary_value", "separation", "linearization"]),
+  entry("algebraic-structures", ["group", "ring", "field", "polynomial"], [
+    "homomorphism",
+    "quotient",
+    "factorization",
+    "extension",
+  ]),
+  entry("topology-local-global", ["metric_space", "topological_space", "map", "set"], [
+    "compactness",
+    "completeness",
+    "basis",
+    "local_global",
+  ]),
+  entry("statistical-inference", ["sample", "parameter", "likelihood", "distribution"], [
+    "confidence_interval",
+    "hypothesis_test",
+    "sufficiency",
+    "fisher_information",
+  ]),
+  entry("regression-diagnostics", ["regression", "design_matrix", "response", "error"], [
+    "least_squares",
+    "regularization",
+    "collinearity",
+    "heteroskedasticity",
+  ]),
+  entry("numerical-approximation", [
+    "function",
+    "algorithm",
+    "matrix",
+    "differential_equation",
+  ], ["error_bound", "conditioning", "discretization", "interpolation"]),
+]);
+
+// A least-squares/regression item that also carries statement wording: without
+// the fusion the proof card wins on token count alone.
+const OLS_PROBLEM = "对成对数据做最小二乘拟合直线，并证明关于量词与必要性的命题。";
+const GROUP_PROBLEM = "求 $A_4$ 中共轭类的个数。";
+// No tool route at all: the list must stay exactly the word-only baseline.
+const PLAIN_PROBLEM = "设 f 是连续函数，讨论其在区间上的单调性与凸性，并求极值。";
+
+test("preferredMethodForToolRoute maps every registered route to its owning card", () => {
+  const expected: ReadonlyArray<readonly [string, string]> = [
+    ["GROUP_STRUCTURE", "algebraic-structures"],
+    ["SPLITTING_FIELD_DEGREE", "algebraic-structures"],
+    ["EXACT_FACTOR_OVER_EXTENSION", "algebraic-structures"],
+    ["REAL_ROOT_COUNT", "domain-equivalence"],
+    ["LINEAR_SYSTEM_SOLUTION_SET", "linearization-spectral"],
+    ["EXACT_MAXIMAL_MINORS", "linearization-spectral"],
+    ["POLYNOMIAL_EXPAND_COEFFICIENTS", "generating-functions"],
+    ["CIRCLE_LAPLACIAN", "differential-equations"],
+    ["PLANAR_LAPLACIAN", "differential-equations"],
+    ["EXACT_TRIG_REDUCE", "differential-equations"],
+    ["EXACT_DEFINITE_INTEGRAL", "integral-symmetry"],
+    ["EXACT_LIMIT", "convergence-limits"],
+    ["EXACT_DENSITY_CHECK", "conditioning-indicators"],
+    ["FINITE_ENUMERATION", "counting-bijections"],
+    ["INTERPOLATION_FIT", "numerical-approximation"],
+    ["OLS_CHECK", "regression-diagnostics"],
+    ["EXACT_SIMPLIFY", "domain-equivalence"],
+    ["SOLVE_QUADRATIC_DIOPHANTINE", "modular-crt"],
+    ["SYMBOLIC_DIOPHANTINE", "modular-crt"],
+    ["SYSTEM_OF_EXPRESSIONS", "domain-equivalence"],
+    ["POLYNOMIAL_FUNCTION_CHECK", "domain-equivalence"],
+    ["GF2_RANK", "linearization-spectral"],
+    ["GF2_NULLSPACE", "linearization-spectral"],
+    ["TRANSITION_COUNT", "finite-state-dp"],
+    ["INDEPENDENCE_POLYNOMIAL_CHAIN", "finite-state-dp"],
+    ["COUNT_BY_DIGIT_PROPERTY", "finite-state-dp"],
+    ["ROOK_NUMBERS", "counting-bijections"],
+    ["COUNT_AVOIDING_PERMUTATIONS", "counting-bijections"],
+    ["MARKOV_EXPECTED_STEPS", "conditioning-indicators"],
+    ["COVER_TIME_COMPLETE_GRAPH", "conditioning-indicators"],
+    ["FINITE_DIFFERENCE_DERIVATIVE", "numerical-approximation"],
+    ["RICHARDSON_EXTRAPOLATE", "numerical-approximation"],
+  ];
+  const ids = new Set(CATALOG.map((item) => item.id));
+  for (const [routeId, methodId] of expected) {
+    const route = Object.freeze({
+      id: routeId,
+      toolName: "exact_check_expr",
+      operation: routeId,
+      argsTemplate: "{}",
+    });
+    assert.equal(preferredMethodForToolRoute(route), methodId);
+    // Every target must be a real card of the catalog.
+    assert.equal(ids.has(methodId), true);
+  }
+});
+
+test("preferredMethodForToolRoute is pure and null for unknown or absent routes", () => {
+  assert.equal(preferredMethodForToolRoute(null), null);
+  assert.equal(
+    preferredMethodForToolRoute(
+      Object.freeze({ id: "NOT_A_ROUTE", toolName: "x", operation: "X", argsTemplate: "{}" }),
+    ),
+    null,
+  );
+  const route = semanticToolRoute(OLS_PROBLEM);
+  assert.ok(route !== null);
+  const first = preferredMethodForToolRoute(route);
+  assert.equal(first, "regression-diagnostics");
+  assert.equal(preferredMethodForToolRoute(route), first);
+  assert.equal(route.id, "OLS_CHECK");
+  // The route object itself is never mutated by the mapping.
+  assert.deepEqual(route, semanticToolRoute(OLS_PROBLEM));
+});
+
+test("an OLS_CHECK route puts regression-diagnostics first", () => {
+  assert.equal(semanticToolRoute(OLS_PROBLEM)?.operation, "OLS_CHECK");
+  const routed = semanticMethodRoute(OLS_PROBLEM, CATALOG);
+  assert.equal(routed[0], "regression-diagnostics");
+  assert.ok(routed.length <= 3);
+  // The word-only scores still decide the remaining order.
+  assert.deepEqual([...routed], ["regression-diagnostics", "proof-counterexamples", "coordinates-geometry"]);
+});
+
+test("a GROUP_STRUCTURE route puts algebraic-structures first", () => {
+  assert.equal(semanticToolRoute(GROUP_PROBLEM)?.operation, "GROUP_STRUCTURE");
+  assert.deepEqual([...semanticMethodRoute(GROUP_PROBLEM, CATALOG)], ["algebraic-structures"]);
+});
+
+test("a problem with no tool route keeps the unchanged baseline order", () => {
+  assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
+  assert.deepEqual(
+    [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)],
+    ["inequalities-optimization", "convergence-limits", "integral-symmetry"],
+  );
+});
+
+test("the six Phase-2 routes pull their owner card first without changing the baseline", () => {
+  const cases: ReadonlyArray<readonly [string, string, string]> = [
+    [
+      "求二次丢番图方程 x^2+y^2=25 的整数解。",
+      "SOLVE_QUADRATIC_DIOPHANTINE",
+      "modular-crt",
+    ],
+    [
+      "用符号方法求解丢番图方程 x^2+y^2=25 的整数解集。",
+      "SYMBOLIC_DIOPHANTINE",
+      "modular-crt",
+    ],
+    [
+      "解下列非线性方程组 x^2+y^2=1, x-y=0。",
+      "SYSTEM_OF_EXPRESSIONS",
+      "domain-equivalence",
+    ],
+    [
+      "验证多项式恒等式 f(x+y)=f(x)+f(y) 对 f(x)=x 是否成立。",
+      "POLYNOMIAL_FUNCTION_CHECK",
+      "domain-equivalence",
+    ],
+    ["求 GF(2) 上矩阵的秩。", "GF2_RANK", "linearization-spectral"],
+    [
+      "求 GF(2) 上矩阵的零空间（核空间）。",
+      "GF2_NULLSPACE",
+      "linearization-spectral",
+    ],
+  ];
+  for (const [problem, routeId, methodId] of cases) {
+    assert.equal(semanticToolRoute(problem)?.id, routeId);
+    assert.equal(semanticMethodRoute(problem, CATALOG)[0], methodId);
+  }
+  assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
+  assert.deepEqual(
+    [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)],
+    ["inequalities-optimization", "convergence-limits", "integral-symmetry"],
+  );
+});
+
+test("fusion is deterministic, order independent and bounded", () => {
+  for (const problem of [OLS_PROBLEM, GROUP_PROBLEM, PLAIN_PROBLEM]) {
+    const first = semanticMethodRoute(problem, CATALOG);
+    assert.deepEqual(first, semanticMethodRoute(problem, CATALOG));
+    assert.deepEqual(first, semanticMethodRoute(problem, [...CATALOG].reverse()));
+    assert.ok(first.length <= 3);
+    const known = new Set(CATALOG.map((item) => item.id));
+    assert.equal(first.every((id) => known.has(id)), true);
+  }
+});
+
+test("a route whose owning card is not loaded never fabricates a candidate", () => {
+  const subset = CATALOG.filter((item) => item.id !== "regression-diagnostics");
+  const routed = semanticMethodRoute(OLS_PROBLEM, subset);
+  assert.equal(routed.includes("regression-diagnostics"), false);
+  // The word-only baseline for the remaining cards is untouched.
+  assert.deepEqual([...routed], ["proof-counterexamples", "coordinates-geometry"]);
+});
+
+test("each Phase-3 tool route pulls its owning card to the top", () => {
+  const cases: ReadonlyArray<readonly [string, string, string]> = [
+    [
+      "有向图有 3 个状态，状态转移如图，求长为 4 的顶点序列数。",
+      "TRANSITION_COUNT",
+      "finite-state-dp",
+    ],
+    [
+      "求路图 P_5 的独立集多项式的系数。",
+      "INDEPENDENCE_POLYNOMIAL_CHAIN",
+      "finite-state-dp",
+    ],
+    [
+      "由数字集合 {1,2,3} 组成且能被 3 整除的数有多少个？",
+      "COUNT_BY_DIGIT_PROPERTY",
+      "finite-state-dp",
+    ],
+    [
+      "求 3x3 棋盘禁位棋盘的车多项式的系数。",
+      "ROOK_NUMBERS",
+      "counting-bijections",
+    ],
+    [
+      "求 4 个元素的禁止位置集合的排列数，避开所有禁位。",
+      "COUNT_AVOIDING_PERMUTATIONS",
+      "counting-bijections",
+    ],
+    [
+      "设马尔可夫链的转移概率矩阵为 P，求从状态 0 到状态 2 的期望步数。",
+      "MARKOV_EXPECTED_STEPS",
+      "conditioning-indicators",
+    ],
+    [
+      "求完全图 K_4 上随机游走的覆盖时间。",
+      "COVER_TIME_COMPLETE_GRAPH",
+      "conditioning-indicators",
+    ],
+    [
+      "用中心差分近似求 f(x)=x^3 在 x=1 处的导数，步长 h=0.01。",
+      "FINITE_DIFFERENCE_DERIVATIVE",
+      "numerical-approximation",
+    ],
+    [
+      "使用 Richardson 外推法计算 f(x)=x^3 在 x=1 处的数值导数。",
+      "RICHARDSON_EXTRAPOLATE",
+      "numerical-approximation",
+    ],
+  ];
+  for (const [problem, routeId, methodId] of cases) {
+    assert.equal(semanticToolRoute(problem)?.id, routeId);
+    assert.equal(preferredMethodForToolRoute(semanticToolRoute(problem)), methodId);
+    assert.equal(semanticMethodRoute(problem, CATALOG)[0], methodId);
+  }
+});
+
+test("Phase-3 route fusion leaves the no-route baseline unchanged", () => {
+  const baseline = [...semanticMethodRoute(PLAIN_PROBLEM, CATALOG)];
+  assert.equal(semanticToolRoute(PLAIN_PROBLEM), null);
+  assert.deepEqual(
+    baseline,
+    ["inequalities-optimization", "convergence-limits", "integral-symmetry"],
+  );
+  assert.deepEqual(semanticMethodRoute(PLAIN_PROBLEM, CATALOG), baseline);
+});

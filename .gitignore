@@ -1,0 +1,30 @@
+__pycache__/
+node_modules/
+*.tsbuildinfo
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.env
+.env.*
+*.key
+*.pem
+runtime-install/
+wasi-assets/
+mathagent/resources/platform-python.json
+*.sqlite3
+*.sqlite3-*
+.pytest_tmp/
+var/*
+!var/**/.gitkeep
+scripts/dispatch_d*.py
+# Local run artifacts (not part of the deliverable)
+.astra-pytest-tmp/
+# Verification evidence: the frozen pre-fix copy of the repository is reproduced
+# on demand (git archive), never committed — it duplicates every tracked path.
+tests/web_review/baseline/
+tests/web_review/baseline_*.zip
+datasets/

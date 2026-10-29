@@ -1,0 +1,4170 @@
+{
+  "format": "astra-agent-host-manifest-v1",
+  "schemaDialect": "astra-p0-schema-subset-v1",
+  "title": "Astra unified AgentLoop local Host<->Node protocol manifest (v1.4 unified math assets)",
+  "description": "Single normative field specification for the unified AgentLoop local Host<->Node NDJSON channel with unified math_asset action and MathAssetResult.",
+  "protocolVersion": "1.4-unified-math-assets",
+  "limits": {
+    "maxFrameBytes": 65536,
+    "maxFramesPerSession": 1024,
+    "maxDepth": 24,
+    "maxSafeInteger": 9007199254740991,
+    "maxIdChars": 128,
+    "maxSessionIdChars": 128
+  },
+  "envelopes": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "type": "object"
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "error"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "type": "string",
+          "const": "2.0"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      }
+    }
+  },
+  "methods": {
+    "runtime.initialize": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "profileId",
+          "capabilities",
+          "remainingMs",
+          "maxModelCalls",
+          "maxWorkUnits",
+          "maxEffects",
+          "maxReviews",
+          "policy",
+          "maxMethodLoads"
+        ],
+        "properties": {
+          "deriveBudget": {
+            "type": "boolean"
+          },
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "profileId": {
+            "type": "string",
+            "const": "math-agent-preview-v2"
+          },
+          "capabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "modelGenerate",
+              "toolExecute",
+              "methodLoad",
+              "generatedPython",
+              "maxTokens",
+              "maxTokensVerified",
+              "journal",
+              "requireExplicitFinishForTools"
+            ],
+            "properties": {
+              "modelGenerate": {
+                "type": "string",
+                "const": "AVAILABLE"
+              },
+              "toolExecute": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "UNAVAILABLE"
+                ]
+              },
+              "methodLoad": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "UNAVAILABLE"
+                ]
+              },
+              "generatedPython": {
+                "type": "string",
+                "enum": [
+                  "UNAVAILABLE",
+                  "AVAILABLE_BOUNDED"
+                ]
+              },
+              "maxTokens": {
+                "type": "integer",
+                "const": 8192
+              },
+              "maxTokensVerified": {
+                "type": "boolean",
+                "const": false
+              },
+              "journal": {
+                "type": "string",
+                "const": "IN_MEMORY_ONLY"
+              },
+              "requireExplicitFinishForTools": {
+                "type": "boolean",
+                "const": true
+              },
+              "mathAsset": {
+                "type": "string",
+                "enum": [
+                  "AVAILABLE",
+                  "UNAVAILABLE"
+                ]
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          },
+          "maxModelCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 256
+          },
+          "maxWorkUnits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "maxEffects": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "maxReviews": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "BEST_EFFORT",
+              "STRICT"
+            ]
+          },
+          "maxMethodLoads": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "maxRepairs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "maxConsensus": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "maxR0": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mathAssetCatalog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "digest",
+              "assets"
+            ],
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "assets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "assetId",
+                    "name",
+                    "version",
+                    "summary"
+                  ],
+                  "properties": {
+                    "assetId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "engine",
+          "mode"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "engine": {
+            "type": "string",
+            "const": "ts"
+          },
+          "mode": {
+            "type": "string",
+            "const": "TS_PREVIEW"
+          }
+        }
+      }
+    },
+    "asset.scoped": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "assetGroup",
+          "assetId",
+          "scopeId",
+          "contractVersion"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetGroup": {
+            "type": "string",
+            "enum": [
+              "outputCheckers",
+              "mathFamilies",
+              "skills",
+              "prompts",
+              "methodCards"
+            ]
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "scopeId": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "contractVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "descriptor"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "descriptor": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "session.solve": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "problem",
+          "problemHash",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "problemHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          },
+          "resumeSessionLog": {
+            "type": "array",
+            "maxItems": 512,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "data"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "resumeContractVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "summary",
+          "candidateRequestId",
+          "trace",
+          "sessionLog"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sessionLog": {
+            "type": "array",
+            "maxItems": 1024,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "data"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "candidateRequestId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "model-1",
+              "model-2",
+              "model-3",
+              "model-4",
+              "model-5",
+              "model-6",
+              "model-7",
+              "model-8",
+              "model-9",
+              "model-10",
+              "model-11",
+              "model-12",
+              "model-13",
+              "model-14",
+              "model-15",
+              "model-16",
+              "model-17",
+              "model-18",
+              "model-19",
+              "model-20",
+              "model-21",
+              "model-22",
+              "model-23",
+              "model-24",
+              "model-25",
+              "model-26",
+              "model-27",
+              "model-28",
+              "model-29",
+              "model-30",
+              "model-31",
+              "model-32",
+              "model-33",
+              "model-34",
+              "model-35",
+              "model-36",
+              "model-37",
+              "model-38",
+              "model-39",
+              "model-40",
+              "model-41",
+              "model-42",
+              "model-43",
+              "model-44",
+              "model-45",
+              "model-46",
+              "model-47",
+              "model-48",
+              "model-49",
+              "model-50",
+              "model-51",
+              "model-52",
+              "model-53",
+              "model-54",
+              "model-55",
+              "model-56",
+              "model-57",
+              "model-58",
+              "model-59",
+              "model-60",
+              "model-61",
+              "model-62",
+              "model-63",
+              "model-64",
+              "model-65",
+              "model-66",
+              "model-67",
+              "model-68",
+              "model-69",
+              "model-70",
+              "model-71",
+              "model-72",
+              "model-73",
+              "model-74",
+              "model-75",
+              "model-76",
+              "model-77",
+              "model-78",
+              "model-79",
+              "model-80",
+              "model-81",
+              "model-82",
+              "model-83",
+              "model-84",
+              "model-85",
+              "model-86",
+              "model-87",
+              "model-88",
+              "model-89",
+              "model-90",
+              "model-91",
+              "model-92",
+              "model-93",
+              "model-94",
+              "model-95",
+              "model-96",
+              "model-97",
+              "model-98",
+              "model-99",
+              "model-100",
+              "model-101",
+              "model-102",
+              "model-103",
+              "model-104",
+              "model-105",
+              "model-106",
+              "model-107",
+              "model-108",
+              "model-109",
+              "model-110",
+              "model-111",
+              "model-112",
+              "model-113",
+              "model-114",
+              "model-115",
+              "model-116",
+              "model-117",
+              "model-118",
+              "model-119",
+              "model-120",
+              "model-121",
+              "model-122",
+              "model-123",
+              "model-124",
+              "model-125",
+              "model-126",
+              "model-127",
+              "model-128",
+              "model-129",
+              "model-130",
+              "model-131",
+              "model-132",
+              "model-133",
+              "model-134",
+              "model-135",
+              "model-136",
+              "model-137",
+              "model-138",
+              "model-139",
+              "model-140",
+              "model-141",
+              "model-142",
+              "model-143",
+              "model-144",
+              "model-145",
+              "model-146",
+              "model-147",
+              "model-148",
+              "model-149",
+              "model-150",
+              "model-151",
+              "model-152",
+              "model-153",
+              "model-154",
+              "model-155",
+              "model-156",
+              "model-157",
+              "model-158",
+              "model-159",
+              "model-160",
+              "model-161",
+              "model-162",
+              "model-163",
+              "model-164",
+              "model-165",
+              "model-166",
+              "model-167",
+              "model-168",
+              "model-169",
+              "model-170",
+              "model-171",
+              "model-172",
+              "model-173",
+              "model-174",
+              "model-175",
+              "model-176",
+              "model-177",
+              "model-178",
+              "model-179",
+              "model-180",
+              "model-181",
+              "model-182",
+              "model-183",
+              "model-184",
+              "model-185",
+              "model-186",
+              "model-187",
+              "model-188",
+              "model-189",
+              "model-190",
+              "model-191",
+              "model-192",
+              "model-193",
+              "model-194",
+              "model-195",
+              "model-196",
+              "model-197",
+              "model-198",
+              "model-199",
+              "model-200",
+              "model-201",
+              "model-202",
+              "model-203",
+              "model-204",
+              "model-205",
+              "model-206",
+              "model-207",
+              "model-208",
+              "model-209",
+              "model-210",
+              "model-211",
+              "model-212",
+              "model-213",
+              "model-214",
+              "model-215",
+              "model-216",
+              "model-217",
+              "model-218",
+              "model-219",
+              "model-220",
+              "model-221",
+              "model-222",
+              "model-223",
+              "model-224",
+              "model-225",
+              "model-226",
+              "model-227",
+              "model-228",
+              "model-229",
+              "model-230",
+              "model-231",
+              "model-232",
+              "model-233",
+              "model-234",
+              "model-235",
+              "model-236",
+              "model-237",
+              "model-238",
+              "model-239",
+              "model-240",
+              "model-241",
+              "model-242",
+              "model-243",
+              "model-244",
+              "model-245",
+              "model-246",
+              "model-247",
+              "model-248",
+              "model-249",
+              "model-250",
+              "model-251",
+              "model-252",
+              "model-253",
+              "model-254",
+              "model-255",
+              "model-256",
+              null
+            ]
+          },
+          "trace": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "kind",
+                "id",
+                "state",
+                "code"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "MODEL",
+                    "EFFECT",
+                    "CONTROL"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "DISPATCHED",
+                    "RETURNED",
+                    "OUTCOME_UNKNOWN",
+                    "RECORDED"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "WORK",
+                    "CONSENSUS",
+                    "R2",
+                    "R4",
+                    "REPAIR",
+                    "R0",
+                    "COMPLETE",
+                    "TRUNCATED",
+                    "ERROR",
+                    "UNKNOWN",
+                    "ADMITTED",
+                    "BUDGET_EXHAUSTED",
+                    "DEADLINE_EXCEEDED",
+                    "ILLEGAL_TRANSITION",
+                    "NO_CANDIDATE",
+                    "NO_REVIEW",
+                    "CONTROL_REJECTED",
+                    "PACKET_REJECTED",
+                    "CONTEXT_REJECTED",
+                    "REVIEW_STOP",
+                    "REVIEWS_COMPLETE",
+                    "WORK_UNITS_COMPLETE",
+                    "REVISED_CANDIDATE",
+                    "REVISE_REJECTED",
+                    "PORT_REJECTED",
+                    "STOPPED"
+                  ]
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "targetEnvironment",
+              "sessionId",
+              "status",
+              "finalResponse",
+              "candidateVerified",
+              "strictAcceptance",
+              "policy",
+              "reason",
+              "modelCalls",
+              "effectCalls",
+              "workUnits",
+              "reviewCalls",
+              "repairCalls",
+              "stopReason",
+              "catalogCalls",
+              "methodLoads",
+              "unresolvedObligations"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "const": "TS_PREVIEW"
+              },
+              "targetEnvironment": {
+                "type": "string",
+                "const": "TARGET_UNVERIFIED"
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "candidate",
+                  "unsolved"
+                ]
+              },
+              "finalResponse": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "candidateVerified": {
+                "type": "boolean",
+                "const": false
+              },
+              "strictAcceptance": {
+                "type": "string",
+                "const": "NOT_PERFORMED"
+              },
+              "policy": {
+                "type": "string",
+                "enum": [
+                  "BEST_EFFORT",
+                  "STRICT"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "BEST_EFFORT_CANDIDATE",
+                  "STRICT_NOT_VERIFIED",
+                  "NO_CANDIDATE",
+                  "STALE_CANDIDATE",
+                  "DEADLINE_EXCEEDED",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED"
+                ]
+              },
+              "modelCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 256
+              },
+              "effectCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "workUnits": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 256
+              },
+              "reviewCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "repairCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "stopReason": {
+                "type": "string",
+                "enum": [
+                  "WORK",
+                  "CONSENSUS",
+                  "R2",
+                  "R4",
+                  "REPAIR",
+                  "R0",
+                  "COMPLETE",
+                  "TRUNCATED",
+                  "ERROR",
+                  "UNKNOWN",
+                  "ADMITTED",
+                  "BUDGET_EXHAUSTED",
+                  "DEADLINE_EXCEEDED",
+                  "ILLEGAL_TRANSITION",
+                  "NO_CANDIDATE",
+                  "NO_REVIEW",
+                  "CONTROL_REJECTED",
+                  "PACKET_REJECTED",
+                  "CONTEXT_REJECTED",
+                  "REVIEW_STOP",
+                  "REVIEWS_COMPLETE",
+                  "WORK_UNITS_COMPLETE",
+                  "REVISED_CANDIDATE",
+                  "REVISE_REJECTED",
+                  "PORT_REJECTED",
+                  "STOPPED"
+                ]
+              },
+              "catalogCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "methodLoads": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "unresolvedObligations": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "mathAssetCalls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              }
+            }
+          }
+        }
+      }
+    },
+    "session.stop": {
+      "direction": "host-to-node",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "stopped"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "stopped": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      }
+    },
+    "model.generate": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sessionId",
+              "problemHash",
+              "requestId",
+              "phase",
+              "taskId",
+              "scopeId",
+              "messages",
+              "contextHash",
+              "contextBytes",
+              "remainingMs",
+              "maxTokens"
+            ],
+            "properties": {
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "problemHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "requestId": {
+                "type": "string",
+                "enum": [
+                  "model-1",
+                  "model-2",
+                  "model-3",
+                  "model-4",
+                  "model-5",
+                  "model-6",
+                  "model-7",
+                  "model-8",
+                  "model-9",
+                  "model-10",
+                  "model-11",
+                  "model-12",
+                  "model-13",
+                  "model-14",
+                  "model-15",
+                  "model-16",
+                  "model-17",
+                  "model-18",
+                  "model-19",
+                  "model-20",
+                  "model-21",
+                  "model-22",
+                  "model-23",
+                  "model-24",
+                  "model-25",
+                  "model-26",
+                  "model-27",
+                  "model-28",
+                  "model-29",
+                  "model-30",
+                  "model-31",
+                  "model-32",
+                  "model-33",
+                  "model-34",
+                  "model-35",
+                  "model-36",
+                  "model-37",
+                  "model-38",
+                  "model-39",
+                  "model-40",
+                  "model-41",
+                  "model-42",
+                  "model-43",
+                  "model-44",
+                  "model-45",
+                  "model-46",
+                  "model-47",
+                  "model-48",
+                  "model-49",
+                  "model-50",
+                  "model-51",
+                  "model-52",
+                  "model-53",
+                  "model-54",
+                  "model-55",
+                  "model-56",
+                  "model-57",
+                  "model-58",
+                  "model-59",
+                  "model-60",
+                  "model-61",
+                  "model-62",
+                  "model-63",
+                  "model-64",
+                  "model-65",
+                  "model-66",
+                  "model-67",
+                  "model-68",
+                  "model-69",
+                  "model-70",
+                  "model-71",
+                  "model-72",
+                  "model-73",
+                  "model-74",
+                  "model-75",
+                  "model-76",
+                  "model-77",
+                  "model-78",
+                  "model-79",
+                  "model-80",
+                  "model-81",
+                  "model-82",
+                  "model-83",
+                  "model-84",
+                  "model-85",
+                  "model-86",
+                  "model-87",
+                  "model-88",
+                  "model-89",
+                  "model-90",
+                  "model-91",
+                  "model-92",
+                  "model-93",
+                  "model-94",
+                  "model-95",
+                  "model-96",
+                  "model-97",
+                  "model-98",
+                  "model-99",
+                  "model-100",
+                  "model-101",
+                  "model-102",
+                  "model-103",
+                  "model-104",
+                  "model-105",
+                  "model-106",
+                  "model-107",
+                  "model-108",
+                  "model-109",
+                  "model-110",
+                  "model-111",
+                  "model-112",
+                  "model-113",
+                  "model-114",
+                  "model-115",
+                  "model-116",
+                  "model-117",
+                  "model-118",
+                  "model-119",
+                  "model-120",
+                  "model-121",
+                  "model-122",
+                  "model-123",
+                  "model-124",
+                  "model-125",
+                  "model-126",
+                  "model-127",
+                  "model-128",
+                  "model-129",
+                  "model-130",
+                  "model-131",
+                  "model-132",
+                  "model-133",
+                  "model-134",
+                  "model-135",
+                  "model-136",
+                  "model-137",
+                  "model-138",
+                  "model-139",
+                  "model-140",
+                  "model-141",
+                  "model-142",
+                  "model-143",
+                  "model-144",
+                  "model-145",
+                  "model-146",
+                  "model-147",
+                  "model-148",
+                  "model-149",
+                  "model-150",
+                  "model-151",
+                  "model-152",
+                  "model-153",
+                  "model-154",
+                  "model-155",
+                  "model-156",
+                  "model-157",
+                  "model-158",
+                  "model-159",
+                  "model-160",
+                  "model-161",
+                  "model-162",
+                  "model-163",
+                  "model-164",
+                  "model-165",
+                  "model-166",
+                  "model-167",
+                  "model-168",
+                  "model-169",
+                  "model-170",
+                  "model-171",
+                  "model-172",
+                  "model-173",
+                  "model-174",
+                  "model-175",
+                  "model-176",
+                  "model-177",
+                  "model-178",
+                  "model-179",
+                  "model-180",
+                  "model-181",
+                  "model-182",
+                  "model-183",
+                  "model-184",
+                  "model-185",
+                  "model-186",
+                  "model-187",
+                  "model-188",
+                  "model-189",
+                  "model-190",
+                  "model-191",
+                  "model-192",
+                  "model-193",
+                  "model-194",
+                  "model-195",
+                  "model-196",
+                  "model-197",
+                  "model-198",
+                  "model-199",
+                  "model-200",
+                  "model-201",
+                  "model-202",
+                  "model-203",
+                  "model-204",
+                  "model-205",
+                  "model-206",
+                  "model-207",
+                  "model-208",
+                  "model-209",
+                  "model-210",
+                  "model-211",
+                  "model-212",
+                  "model-213",
+                  "model-214",
+                  "model-215",
+                  "model-216",
+                  "model-217",
+                  "model-218",
+                  "model-219",
+                  "model-220",
+                  "model-221",
+                  "model-222",
+                  "model-223",
+                  "model-224",
+                  "model-225",
+                  "model-226",
+                  "model-227",
+                  "model-228",
+                  "model-229",
+                  "model-230",
+                  "model-231",
+                  "model-232",
+                  "model-233",
+                  "model-234",
+                  "model-235",
+                  "model-236",
+                  "model-237",
+                  "model-238",
+                  "model-239",
+                  "model-240",
+                  "model-241",
+                  "model-242",
+                  "model-243",
+                  "model-244",
+                  "model-245",
+                  "model-246",
+                  "model-247",
+                  "model-248",
+                  "model-249",
+                  "model-250",
+                  "model-251",
+                  "model-252",
+                  "model-253",
+                  "model-254",
+                  "model-255",
+                  "model-256"
+                ]
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "WORK",
+                  "CONSENSUS",
+                  "R2",
+                  "R4",
+                  "REPAIR",
+                  "R0",
+                  "R0_RECHECK"
+                ]
+              },
+              "taskId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "scopeId": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "messages": {
+                "type": "array",
+                "maxItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "system",
+                        "user"
+                      ]
+                    },
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 65536
+                    }
+                  }
+                }
+              },
+              "contextHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "contextBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65536
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3600000
+              },
+              "maxTokens": {
+                "type": "integer",
+                "const": 8192
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "requestId",
+          "receipt"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requestId": {
+            "type": "string",
+            "enum": [
+              "model-1",
+              "model-2",
+              "model-3",
+              "model-4",
+              "model-5",
+              "model-6",
+              "model-7",
+              "model-8",
+              "model-9",
+              "model-10",
+              "model-11",
+              "model-12",
+              "model-13",
+              "model-14",
+              "model-15",
+              "model-16",
+              "model-17",
+              "model-18",
+              "model-19",
+              "model-20",
+              "model-21",
+              "model-22",
+              "model-23",
+              "model-24",
+              "model-25",
+              "model-26",
+              "model-27",
+              "model-28",
+              "model-29",
+              "model-30",
+              "model-31",
+              "model-32",
+              "model-33",
+              "model-34",
+              "model-35",
+              "model-36",
+              "model-37",
+              "model-38",
+              "model-39",
+              "model-40",
+              "model-41",
+              "model-42",
+              "model-43",
+              "model-44",
+              "model-45",
+              "model-46",
+              "model-47",
+              "model-48",
+              "model-49",
+              "model-50",
+              "model-51",
+              "model-52",
+              "model-53",
+              "model-54",
+              "model-55",
+              "model-56",
+              "model-57",
+              "model-58",
+              "model-59",
+              "model-60",
+              "model-61",
+              "model-62",
+              "model-63",
+              "model-64",
+              "model-65",
+              "model-66",
+              "model-67",
+              "model-68",
+              "model-69",
+              "model-70",
+              "model-71",
+              "model-72",
+              "model-73",
+              "model-74",
+              "model-75",
+              "model-76",
+              "model-77",
+              "model-78",
+              "model-79",
+              "model-80",
+              "model-81",
+              "model-82",
+              "model-83",
+              "model-84",
+              "model-85",
+              "model-86",
+              "model-87",
+              "model-88",
+              "model-89",
+              "model-90",
+              "model-91",
+              "model-92",
+              "model-93",
+              "model-94",
+              "model-95",
+              "model-96",
+              "model-97",
+              "model-98",
+              "model-99",
+              "model-100",
+              "model-101",
+              "model-102",
+              "model-103",
+              "model-104",
+              "model-105",
+              "model-106",
+              "model-107",
+              "model-108",
+              "model-109",
+              "model-110",
+              "model-111",
+              "model-112",
+              "model-113",
+              "model-114",
+              "model-115",
+              "model-116",
+              "model-117",
+              "model-118",
+              "model-119",
+              "model-120",
+              "model-121",
+              "model-122",
+              "model-123",
+              "model-124",
+              "model-125",
+              "model-126",
+              "model-127",
+              "model-128",
+              "model-129",
+              "model-130",
+              "model-131",
+              "model-132",
+              "model-133",
+              "model-134",
+              "model-135",
+              "model-136",
+              "model-137",
+              "model-138",
+              "model-139",
+              "model-140",
+              "model-141",
+              "model-142",
+              "model-143",
+              "model-144",
+              "model-145",
+              "model-146",
+              "model-147",
+              "model-148",
+              "model-149",
+              "model-150",
+              "model-151",
+              "model-152",
+              "model-153",
+              "model-154",
+              "model-155",
+              "model-156",
+              "model-157",
+              "model-158",
+              "model-159",
+              "model-160",
+              "model-161",
+              "model-162",
+              "model-163",
+              "model-164",
+              "model-165",
+              "model-166",
+              "model-167",
+              "model-168",
+              "model-169",
+              "model-170",
+              "model-171",
+              "model-172",
+              "model-173",
+              "model-174",
+              "model-175",
+              "model-176",
+              "model-177",
+              "model-178",
+              "model-179",
+              "model-180",
+              "model-181",
+              "model-182",
+              "model-183",
+              "model-184",
+              "model-185",
+              "model-186",
+              "model-187",
+              "model-188",
+              "model-189",
+              "model-190",
+              "model-191",
+              "model-192",
+              "model-193",
+              "model-194",
+              "model-195",
+              "model-196",
+              "model-197",
+              "model-198",
+              "model-199",
+              "model-200",
+              "model-201",
+              "model-202",
+              "model-203",
+              "model-204",
+              "model-205",
+              "model-206",
+              "model-207",
+              "model-208",
+              "model-209",
+              "model-210",
+              "model-211",
+              "model-212",
+              "model-213",
+              "model-214",
+              "model-215",
+              "model-216",
+              "model-217",
+              "model-218",
+              "model-219",
+              "model-220",
+              "model-221",
+              "model-222",
+              "model-223",
+              "model-224",
+              "model-225",
+              "model-226",
+              "model-227",
+              "model-228",
+              "model-229",
+              "model-230",
+              "model-231",
+              "model-232",
+              "model-233",
+              "model-234",
+              "model-235",
+              "model-236",
+              "model-237",
+              "model-238",
+              "model-239",
+              "model-240",
+              "model-241",
+              "model-242",
+              "model-243",
+              "model-244",
+              "model-245",
+              "model-246",
+              "model-247",
+              "model-248",
+              "model-249",
+              "model-250",
+              "model-251",
+              "model-252",
+              "model-253",
+              "model-254",
+              "model-255",
+              "model-256"
+            ]
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "transportStatus",
+              "text",
+              "remainingMs"
+            ],
+            "properties": {
+              "transportStatus": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "TRUNCATED",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      }
+    },
+    "tool.execute": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "action",
+              "remainingMs"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3",
+                      "model-4",
+                      "model-5",
+                      "model-6",
+                      "model-7",
+                      "model-8",
+                      "model-9",
+                      "model-10",
+                      "model-11",
+                      "model-12",
+                      "model-13",
+                      "model-14",
+                      "model-15",
+                      "model-16",
+                      "model-17",
+                      "model-18",
+                      "model-19",
+                      "model-20",
+                      "model-21",
+                      "model-22",
+                      "model-23",
+                      "model-24",
+                      "model-25",
+                      "model-26",
+                      "model-27",
+                      "model-28",
+                      "model-29",
+                      "model-30",
+                      "model-31",
+                      "model-32",
+                      "model-33",
+                      "model-34",
+                      "model-35",
+                      "model-36",
+                      "model-37",
+                      "model-38",
+                      "model-39",
+                      "model-40",
+                      "model-41",
+                      "model-42",
+                      "model-43",
+                      "model-44",
+                      "model-45",
+                      "model-46",
+                      "model-47",
+                      "model-48",
+                      "model-49",
+                      "model-50",
+                      "model-51",
+                      "model-52",
+                      "model-53",
+                      "model-54",
+                      "model-55",
+                      "model-56",
+                      "model-57",
+                      "model-58",
+                      "model-59",
+                      "model-60",
+                      "model-61",
+                      "model-62",
+                      "model-63",
+                      "model-64",
+                      "model-65",
+                      "model-66",
+                      "model-67",
+                      "model-68",
+                      "model-69",
+                      "model-70",
+                      "model-71",
+                      "model-72",
+                      "model-73",
+                      "model-74",
+                      "model-75",
+                      "model-76",
+                      "model-77",
+                      "model-78",
+                      "model-79",
+                      "model-80",
+                      "model-81",
+                      "model-82",
+                      "model-83",
+                      "model-84",
+                      "model-85",
+                      "model-86",
+                      "model-87",
+                      "model-88",
+                      "model-89",
+                      "model-90",
+                      "model-91",
+                      "model-92",
+                      "model-93",
+                      "model-94",
+                      "model-95",
+                      "model-96",
+                      "model-97",
+                      "model-98",
+                      "model-99",
+                      "model-100",
+                      "model-101",
+                      "model-102",
+                      "model-103",
+                      "model-104",
+                      "model-105",
+                      "model-106",
+                      "model-107",
+                      "model-108",
+                      "model-109",
+                      "model-110",
+                      "model-111",
+                      "model-112",
+                      "model-113",
+                      "model-114",
+                      "model-115",
+                      "model-116",
+                      "model-117",
+                      "model-118",
+                      "model-119",
+                      "model-120",
+                      "model-121",
+                      "model-122",
+                      "model-123",
+                      "model-124",
+                      "model-125",
+                      "model-126",
+                      "model-127",
+                      "model-128",
+                      "model-129",
+                      "model-130",
+                      "model-131",
+                      "model-132",
+                      "model-133",
+                      "model-134",
+                      "model-135",
+                      "model-136",
+                      "model-137",
+                      "model-138",
+                      "model-139",
+                      "model-140",
+                      "model-141",
+                      "model-142",
+                      "model-143",
+                      "model-144",
+                      "model-145",
+                      "model-146",
+                      "model-147",
+                      "model-148",
+                      "model-149",
+                      "model-150",
+                      "model-151",
+                      "model-152",
+                      "model-153",
+                      "model-154",
+                      "model-155",
+                      "model-156",
+                      "model-157",
+                      "model-158",
+                      "model-159",
+                      "model-160",
+                      "model-161",
+                      "model-162",
+                      "model-163",
+                      "model-164",
+                      "model-165",
+                      "model-166",
+                      "model-167",
+                      "model-168",
+                      "model-169",
+                      "model-170",
+                      "model-171",
+                      "model-172",
+                      "model-173",
+                      "model-174",
+                      "model-175",
+                      "model-176",
+                      "model-177",
+                      "model-178",
+                      "model-179",
+                      "model-180",
+                      "model-181",
+                      "model-182",
+                      "model-183",
+                      "model-184",
+                      "model-185",
+                      "model-186",
+                      "model-187",
+                      "model-188",
+                      "model-189",
+                      "model-190",
+                      "model-191",
+                      "model-192",
+                      "model-193",
+                      "model-194",
+                      "model-195",
+                      "model-196",
+                      "model-197",
+                      "model-198",
+                      "model-199",
+                      "model-200",
+                      "model-201",
+                      "model-202",
+                      "model-203",
+                      "model-204",
+                      "model-205",
+                      "model-206",
+                      "model-207",
+                      "model-208",
+                      "model-209",
+                      "model-210",
+                      "model-211",
+                      "model-212",
+                      "model-213",
+                      "model-214",
+                      "model-215",
+                      "model-216",
+                      "model-217",
+                      "model-218",
+                      "model-219",
+                      "model-220",
+                      "model-221",
+                      "model-222",
+                      "model-223",
+                      "model-224",
+                      "model-225",
+                      "model-226",
+                      "model-227",
+                      "model-228",
+                      "model-229",
+                      "model-230",
+                      "model-231",
+                      "model-232",
+                      "model-233",
+                      "model-234",
+                      "model-235",
+                      "model-236",
+                      "model-237",
+                      "model-238",
+                      "model-239",
+                      "model-240",
+                      "model-241",
+                      "model-242",
+                      "model-243",
+                      "model-244",
+                      "model-245",
+                      "model-246",
+                      "model-247",
+                      "model-248",
+                      "model-249",
+                      "model-250",
+                      "model-251",
+                      "model-252",
+                      "model-253",
+                      "model-254",
+                      "model-255",
+                      "model-256"
+                    ]
+                  }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "scope"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "tool",
+                      "explore"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
+                  },
+                  "name": {
+                    "type": "string",
+                    "enum": [
+                      "polynomial_expand_coefficients",
+                      "linear_system_solution_set",
+                      "exact_check_expr",
+                      "bounded_enumeration",
+                      "real_root_count_expr",
+                      "splitting_field_degree_expr",
+                      "circle_laplacian_expr",
+                      "planar_laplacian_expr",
+                      "interpolation_fit_check",
+                      "stats_ols_check",
+                      "finite_group_structure",
+                      "solve_quadratic_diophantine",
+                      "symbolic_diophantine_with_timeout",
+                      "solve_system_guarded_expr",
+                      "polynomial_function_check",
+                      "gf2_rank",
+                      "gf2_nullspace",
+                      "transition_count",
+                      "independence_polynomial_chain",
+                      "count_by_digit_property",
+                      "rook_numbers",
+                      "count_avoiding_permutations",
+                      "markov_expected_steps",
+                      "cover_time_complete_graph",
+                      "finite_difference_derivative",
+                      "richardson_extrapolate"
+                    ]
+                  },
+                  "args": {
+                    "type": "object"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 26,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "receipt",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "status",
+              "source",
+              "observation",
+              "observationHash",
+              "level",
+              "checkResult"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3",
+                      "model-4",
+                      "model-5",
+                      "model-6",
+                      "model-7",
+                      "model-8",
+                      "model-9",
+                      "model-10",
+                      "model-11",
+                      "model-12",
+                      "model-13",
+                      "model-14",
+                      "model-15",
+                      "model-16",
+                      "model-17",
+                      "model-18",
+                      "model-19",
+                      "model-20",
+                      "model-21",
+                      "model-22",
+                      "model-23",
+                      "model-24",
+                      "model-25",
+                      "model-26",
+                      "model-27",
+                      "model-28",
+                      "model-29",
+                      "model-30",
+                      "model-31",
+                      "model-32",
+                      "model-33",
+                      "model-34",
+                      "model-35",
+                      "model-36",
+                      "model-37",
+                      "model-38",
+                      "model-39",
+                      "model-40",
+                      "model-41",
+                      "model-42",
+                      "model-43",
+                      "model-44",
+                      "model-45",
+                      "model-46",
+                      "model-47",
+                      "model-48",
+                      "model-49",
+                      "model-50",
+                      "model-51",
+                      "model-52",
+                      "model-53",
+                      "model-54",
+                      "model-55",
+                      "model-56",
+                      "model-57",
+                      "model-58",
+                      "model-59",
+                      "model-60",
+                      "model-61",
+                      "model-62",
+                      "model-63",
+                      "model-64",
+                      "model-65",
+                      "model-66",
+                      "model-67",
+                      "model-68",
+                      "model-69",
+                      "model-70",
+                      "model-71",
+                      "model-72",
+                      "model-73",
+                      "model-74",
+                      "model-75",
+                      "model-76",
+                      "model-77",
+                      "model-78",
+                      "model-79",
+                      "model-80",
+                      "model-81",
+                      "model-82",
+                      "model-83",
+                      "model-84",
+                      "model-85",
+                      "model-86",
+                      "model-87",
+                      "model-88",
+                      "model-89",
+                      "model-90",
+                      "model-91",
+                      "model-92",
+                      "model-93",
+                      "model-94",
+                      "model-95",
+                      "model-96",
+                      "model-97",
+                      "model-98",
+                      "model-99",
+                      "model-100",
+                      "model-101",
+                      "model-102",
+                      "model-103",
+                      "model-104",
+                      "model-105",
+                      "model-106",
+                      "model-107",
+                      "model-108",
+                      "model-109",
+                      "model-110",
+                      "model-111",
+                      "model-112",
+                      "model-113",
+                      "model-114",
+                      "model-115",
+                      "model-116",
+                      "model-117",
+                      "model-118",
+                      "model-119",
+                      "model-120",
+                      "model-121",
+                      "model-122",
+                      "model-123",
+                      "model-124",
+                      "model-125",
+                      "model-126",
+                      "model-127",
+                      "model-128",
+                      "model-129",
+                      "model-130",
+                      "model-131",
+                      "model-132",
+                      "model-133",
+                      "model-134",
+                      "model-135",
+                      "model-136",
+                      "model-137",
+                      "model-138",
+                      "model-139",
+                      "model-140",
+                      "model-141",
+                      "model-142",
+                      "model-143",
+                      "model-144",
+                      "model-145",
+                      "model-146",
+                      "model-147",
+                      "model-148",
+                      "model-149",
+                      "model-150",
+                      "model-151",
+                      "model-152",
+                      "model-153",
+                      "model-154",
+                      "model-155",
+                      "model-156",
+                      "model-157",
+                      "model-158",
+                      "model-159",
+                      "model-160",
+                      "model-161",
+                      "model-162",
+                      "model-163",
+                      "model-164",
+                      "model-165",
+                      "model-166",
+                      "model-167",
+                      "model-168",
+                      "model-169",
+                      "model-170",
+                      "model-171",
+                      "model-172",
+                      "model-173",
+                      "model-174",
+                      "model-175",
+                      "model-176",
+                      "model-177",
+                      "model-178",
+                      "model-179",
+                      "model-180",
+                      "model-181",
+                      "model-182",
+                      "model-183",
+                      "model-184",
+                      "model-185",
+                      "model-186",
+                      "model-187",
+                      "model-188",
+                      "model-189",
+                      "model-190",
+                      "model-191",
+                      "model-192",
+                      "model-193",
+                      "model-194",
+                      "model-195",
+                      "model-196",
+                      "model-197",
+                      "model-198",
+                      "model-199",
+                      "model-200",
+                      "model-201",
+                      "model-202",
+                      "model-203",
+                      "model-204",
+                      "model-205",
+                      "model-206",
+                      "model-207",
+                      "model-208",
+                      "model-209",
+                      "model-210",
+                      "model-211",
+                      "model-212",
+                      "model-213",
+                      "model-214",
+                      "model-215",
+                      "model-216",
+                      "model-217",
+                      "model-218",
+                      "model-219",
+                      "model-220",
+                      "model-221",
+                      "model-222",
+                      "model-223",
+                      "model-224",
+                      "model-225",
+                      "model-226",
+                      "model-227",
+                      "model-228",
+                      "model-229",
+                      "model-230",
+                      "model-231",
+                      "model-232",
+                      "model-233",
+                      "model-234",
+                      "model-235",
+                      "model-236",
+                      "model-237",
+                      "model-238",
+                      "model-239",
+                      "model-240",
+                      "model-241",
+                      "model-242",
+                      "model-243",
+                      "model-244",
+                      "model-245",
+                      "model-246",
+                      "model-247",
+                      "model-248",
+                      "model-249",
+                      "model-250",
+                      "model-251",
+                      "model-252",
+                      "model-253",
+                      "model-254",
+                      "model-255",
+                      "model-256"
+                    ]
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "PROGRAM_OBSERVATION",
+                  "GENERATED_OBSERVATION"
+                ]
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "observationHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "PROVISIONAL",
+                  "OBSERVED"
+                ]
+              },
+              "checkResult": {
+                "type": "string",
+                "const": "UNKNOWN"
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          }
+        }
+      }
+    },
+    "method.catalog": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600000
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "remainingMs",
+          "catalog"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          },
+          "catalog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "entries"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "const": "1.1.0"
+              },
+              "entries": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "tasks": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "objects": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "structures": {
+                      "type": "array",
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 24
+                      }
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "method",
+                        "decision"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "method.load": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "action",
+              "remainingMs"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3",
+                      "model-4",
+                      "model-5",
+                      "model-6",
+                      "model-7",
+                      "model-8",
+                      "model-9",
+                      "model-10",
+                      "model-11",
+                      "model-12",
+                      "model-13",
+                      "model-14",
+                      "model-15",
+                      "model-16",
+                      "model-17",
+                      "model-18",
+                      "model-19",
+                      "model-20",
+                      "model-21",
+                      "model-22",
+                      "model-23",
+                      "model-24",
+                      "model-25",
+                      "model-26",
+                      "model-27",
+                      "model-28",
+                      "model-29",
+                      "model-30",
+                      "model-31",
+                      "model-32",
+                      "model-33",
+                      "model-34",
+                      "model-35",
+                      "model-36",
+                      "model-37",
+                      "model-38",
+                      "model-39",
+                      "model-40",
+                      "model-41",
+                      "model-42",
+                      "model-43",
+                      "model-44",
+                      "model-45",
+                      "model-46",
+                      "model-47",
+                      "model-48",
+                      "model-49",
+                      "model-50",
+                      "model-51",
+                      "model-52",
+                      "model-53",
+                      "model-54",
+                      "model-55",
+                      "model-56",
+                      "model-57",
+                      "model-58",
+                      "model-59",
+                      "model-60",
+                      "model-61",
+                      "model-62",
+                      "model-63",
+                      "model-64",
+                      "model-65",
+                      "model-66",
+                      "model-67",
+                      "model-68",
+                      "model-69",
+                      "model-70",
+                      "model-71",
+                      "model-72",
+                      "model-73",
+                      "model-74",
+                      "model-75",
+                      "model-76",
+                      "model-77",
+                      "model-78",
+                      "model-79",
+                      "model-80",
+                      "model-81",
+                      "model-82",
+                      "model-83",
+                      "model-84",
+                      "model-85",
+                      "model-86",
+                      "model-87",
+                      "model-88",
+                      "model-89",
+                      "model-90",
+                      "model-91",
+                      "model-92",
+                      "model-93",
+                      "model-94",
+                      "model-95",
+                      "model-96",
+                      "model-97",
+                      "model-98",
+                      "model-99",
+                      "model-100",
+                      "model-101",
+                      "model-102",
+                      "model-103",
+                      "model-104",
+                      "model-105",
+                      "model-106",
+                      "model-107",
+                      "model-108",
+                      "model-109",
+                      "model-110",
+                      "model-111",
+                      "model-112",
+                      "model-113",
+                      "model-114",
+                      "model-115",
+                      "model-116",
+                      "model-117",
+                      "model-118",
+                      "model-119",
+                      "model-120",
+                      "model-121",
+                      "model-122",
+                      "model-123",
+                      "model-124",
+                      "model-125",
+                      "model-126",
+                      "model-127",
+                      "model-128",
+                      "model-129",
+                      "model-130",
+                      "model-131",
+                      "model-132",
+                      "model-133",
+                      "model-134",
+                      "model-135",
+                      "model-136",
+                      "model-137",
+                      "model-138",
+                      "model-139",
+                      "model-140",
+                      "model-141",
+                      "model-142",
+                      "model-143",
+                      "model-144",
+                      "model-145",
+                      "model-146",
+                      "model-147",
+                      "model-148",
+                      "model-149",
+                      "model-150",
+                      "model-151",
+                      "model-152",
+                      "model-153",
+                      "model-154",
+                      "model-155",
+                      "model-156",
+                      "model-157",
+                      "model-158",
+                      "model-159",
+                      "model-160",
+                      "model-161",
+                      "model-162",
+                      "model-163",
+                      "model-164",
+                      "model-165",
+                      "model-166",
+                      "model-167",
+                      "model-168",
+                      "model-169",
+                      "model-170",
+                      "model-171",
+                      "model-172",
+                      "model-173",
+                      "model-174",
+                      "model-175",
+                      "model-176",
+                      "model-177",
+                      "model-178",
+                      "model-179",
+                      "model-180",
+                      "model-181",
+                      "model-182",
+                      "model-183",
+                      "model-184",
+                      "model-185",
+                      "model-186",
+                      "model-187",
+                      "model-188",
+                      "model-189",
+                      "model-190",
+                      "model-191",
+                      "model-192",
+                      "model-193",
+                      "model-194",
+                      "model-195",
+                      "model-196",
+                      "model-197",
+                      "model-198",
+                      "model-199",
+                      "model-200",
+                      "model-201",
+                      "model-202",
+                      "model-203",
+                      "model-204",
+                      "model-205",
+                      "model-206",
+                      "model-207",
+                      "model-208",
+                      "model-209",
+                      "model-210",
+                      "model-211",
+                      "model-212",
+                      "model-213",
+                      "model-214",
+                      "model-215",
+                      "model-216",
+                      "model-217",
+                      "model-218",
+                      "model-219",
+                      "model-220",
+                      "model-221",
+                      "model-222",
+                      "model-223",
+                      "model-224",
+                      "model-225",
+                      "model-226",
+                      "model-227",
+                      "model-228",
+                      "model-229",
+                      "model-230",
+                      "model-231",
+                      "model-232",
+                      "model-233",
+                      "model-234",
+                      "model-235",
+                      "model-236",
+                      "model-237",
+                      "model-238",
+                      "model-239",
+                      "model-240",
+                      "model-241",
+                      "model-242",
+                      "model-243",
+                      "model-244",
+                      "model-245",
+                      "model-246",
+                      "model-247",
+                      "model-248",
+                      "model-249",
+                      "model-250",
+                      "model-251",
+                      "model-252",
+                      "model-253",
+                      "model-254",
+                      "model-255",
+                      "model-256"
+                    ]
+                  }
+                }
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "id"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "const": "method"
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                }
+              },
+              "remainingMs": {
+                "type": "integer",
+                "minimum": 26,
+                "maximum": 3600000
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "receipt",
+          "remainingMs"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "effectId",
+              "binding",
+              "status",
+              "source",
+              "observation",
+              "observationHash",
+              "level",
+              "checkResult"
+            ],
+            "properties": {
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "effect-1",
+                  "effect-2",
+                  "effect-3",
+                  "effect-4",
+                  "effect-5",
+                  "effect-6"
+                ]
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId",
+                  "problemHash",
+                  "contractVersion",
+                  "taskId",
+                  "scopeId",
+                  "sourceRequestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "problemHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "enum": [
+                      "model-1",
+                      "model-2",
+                      "model-3",
+                      "model-4",
+                      "model-5",
+                      "model-6",
+                      "model-7",
+                      "model-8",
+                      "model-9",
+                      "model-10",
+                      "model-11",
+                      "model-12",
+                      "model-13",
+                      "model-14",
+                      "model-15",
+                      "model-16",
+                      "model-17",
+                      "model-18",
+                      "model-19",
+                      "model-20",
+                      "model-21",
+                      "model-22",
+                      "model-23",
+                      "model-24",
+                      "model-25",
+                      "model-26",
+                      "model-27",
+                      "model-28",
+                      "model-29",
+                      "model-30",
+                      "model-31",
+                      "model-32",
+                      "model-33",
+                      "model-34",
+                      "model-35",
+                      "model-36",
+                      "model-37",
+                      "model-38",
+                      "model-39",
+                      "model-40",
+                      "model-41",
+                      "model-42",
+                      "model-43",
+                      "model-44",
+                      "model-45",
+                      "model-46",
+                      "model-47",
+                      "model-48",
+                      "model-49",
+                      "model-50",
+                      "model-51",
+                      "model-52",
+                      "model-53",
+                      "model-54",
+                      "model-55",
+                      "model-56",
+                      "model-57",
+                      "model-58",
+                      "model-59",
+                      "model-60",
+                      "model-61",
+                      "model-62",
+                      "model-63",
+                      "model-64",
+                      "model-65",
+                      "model-66",
+                      "model-67",
+                      "model-68",
+                      "model-69",
+                      "model-70",
+                      "model-71",
+                      "model-72",
+                      "model-73",
+                      "model-74",
+                      "model-75",
+                      "model-76",
+                      "model-77",
+                      "model-78",
+                      "model-79",
+                      "model-80",
+                      "model-81",
+                      "model-82",
+                      "model-83",
+                      "model-84",
+                      "model-85",
+                      "model-86",
+                      "model-87",
+                      "model-88",
+                      "model-89",
+                      "model-90",
+                      "model-91",
+                      "model-92",
+                      "model-93",
+                      "model-94",
+                      "model-95",
+                      "model-96",
+                      "model-97",
+                      "model-98",
+                      "model-99",
+                      "model-100",
+                      "model-101",
+                      "model-102",
+                      "model-103",
+                      "model-104",
+                      "model-105",
+                      "model-106",
+                      "model-107",
+                      "model-108",
+                      "model-109",
+                      "model-110",
+                      "model-111",
+                      "model-112",
+                      "model-113",
+                      "model-114",
+                      "model-115",
+                      "model-116",
+                      "model-117",
+                      "model-118",
+                      "model-119",
+                      "model-120",
+                      "model-121",
+                      "model-122",
+                      "model-123",
+                      "model-124",
+                      "model-125",
+                      "model-126",
+                      "model-127",
+                      "model-128",
+                      "model-129",
+                      "model-130",
+                      "model-131",
+                      "model-132",
+                      "model-133",
+                      "model-134",
+                      "model-135",
+                      "model-136",
+                      "model-137",
+                      "model-138",
+                      "model-139",
+                      "model-140",
+                      "model-141",
+                      "model-142",
+                      "model-143",
+                      "model-144",
+                      "model-145",
+                      "model-146",
+                      "model-147",
+                      "model-148",
+                      "model-149",
+                      "model-150",
+                      "model-151",
+                      "model-152",
+                      "model-153",
+                      "model-154",
+                      "model-155",
+                      "model-156",
+                      "model-157",
+                      "model-158",
+                      "model-159",
+                      "model-160",
+                      "model-161",
+                      "model-162",
+                      "model-163",
+                      "model-164",
+                      "model-165",
+                      "model-166",
+                      "model-167",
+                      "model-168",
+                      "model-169",
+                      "model-170",
+                      "model-171",
+                      "model-172",
+                      "model-173",
+                      "model-174",
+                      "model-175",
+                      "model-176",
+                      "model-177",
+                      "model-178",
+                      "model-179",
+                      "model-180",
+                      "model-181",
+                      "model-182",
+                      "model-183",
+                      "model-184",
+                      "model-185",
+                      "model-186",
+                      "model-187",
+                      "model-188",
+                      "model-189",
+                      "model-190",
+                      "model-191",
+                      "model-192",
+                      "model-193",
+                      "model-194",
+                      "model-195",
+                      "model-196",
+                      "model-197",
+                      "model-198",
+                      "model-199",
+                      "model-200",
+                      "model-201",
+                      "model-202",
+                      "model-203",
+                      "model-204",
+                      "model-205",
+                      "model-206",
+                      "model-207",
+                      "model-208",
+                      "model-209",
+                      "model-210",
+                      "model-211",
+                      "model-212",
+                      "model-213",
+                      "model-214",
+                      "model-215",
+                      "model-216",
+                      "model-217",
+                      "model-218",
+                      "model-219",
+                      "model-220",
+                      "model-221",
+                      "model-222",
+                      "model-223",
+                      "model-224",
+                      "model-225",
+                      "model-226",
+                      "model-227",
+                      "model-228",
+                      "model-229",
+                      "model-230",
+                      "model-231",
+                      "model-232",
+                      "model-233",
+                      "model-234",
+                      "model-235",
+                      "model-236",
+                      "model-237",
+                      "model-238",
+                      "model-239",
+                      "model-240",
+                      "model-241",
+                      "model-242",
+                      "model-243",
+                      "model-244",
+                      "model-245",
+                      "model-246",
+                      "model-247",
+                      "model-248",
+                      "model-249",
+                      "model-250",
+                      "model-251",
+                      "model-252",
+                      "model-253",
+                      "model-254",
+                      "model-255",
+                      "model-256"
+                    ]
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "const": "METHOD_REFERENCE"
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "observationHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "level": {
+                "type": "string",
+                "const": "PROVISIONAL"
+              },
+              "checkResult": {
+                "type": "string",
+                "const": "UNKNOWN"
+              }
+            }
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          }
+        }
+      }
+    },
+    "math_asset.execute": {
+      "direction": "node-to-host",
+      "kind": "request",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "assetId",
+              "input",
+              "binding"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "math_asset"
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "input": {
+                "type": "object"
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "taskId",
+                  "goalId",
+                  "scopeId",
+                  "contractVersion"
+                ],
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "goalId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "contractVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2
+                  },
+                  "sourceRequestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "result",
+          "remainingMs",
+          "receipts"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.4-unified-math-assets"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600000
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "effectId",
+                "binding",
+                "status",
+                "source",
+                "observation",
+                "observationHash",
+                "level",
+                "checkResult"
+              ],
+              "properties": {
+                "effectId": {
+                  "type": "string",
+                  "enum": [
+                    "effect-1",
+                    "effect-2",
+                    "effect-3",
+                    "effect-4",
+                    "effect-5",
+                    "effect-6"
+                  ]
+                },
+                "binding": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sessionId",
+                    "problemHash",
+                    "contractVersion",
+                    "taskId",
+                    "scopeId",
+                    "sourceRequestId"
+                  ],
+                  "properties": {
+                    "sessionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "problemHash": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    },
+                    "contractVersion": {
+                      "type": "integer",
+                      "enum": [
+                        1,
+                        2
+                      ]
+                    },
+                    "taskId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "scopeId": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    },
+                    "sourceRequestId": {
+                      "type": "string",
+                      "enum": [
+                        "model-1",
+                        "model-2",
+                        "model-3",
+                        "model-4",
+                        "model-5",
+                        "model-6",
+                        "model-7",
+                        "model-8",
+                        "model-9",
+                        "model-10",
+                        "model-11",
+                        "model-12",
+                        "model-13",
+                        "model-14",
+                        "model-15",
+                        "model-16",
+                        "model-17",
+                        "model-18",
+                        "model-19",
+                        "model-20",
+                        "model-21",
+                        "model-22",
+                        "model-23",
+                        "model-24",
+                        "model-25",
+                        "model-26",
+                        "model-27",
+                        "model-28",
+                        "model-29",
+                        "model-30",
+                        "model-31",
+                        "model-32",
+                        "model-33",
+                        "model-34",
+                        "model-35",
+                        "model-36",
+                        "model-37",
+                        "model-38",
+                        "model-39",
+                        "model-40",
+                        "model-41",
+                        "model-42",
+                        "model-43",
+                        "model-44",
+                        "model-45",
+                        "model-46",
+                        "model-47",
+                        "model-48",
+                        "model-49",
+                        "model-50",
+                        "model-51",
+                        "model-52",
+                        "model-53",
+                        "model-54",
+                        "model-55",
+                        "model-56",
+                        "model-57",
+                        "model-58",
+                        "model-59",
+                        "model-60",
+                        "model-61",
+                        "model-62",
+                        "model-63",
+                        "model-64",
+                        "model-65",
+                        "model-66",
+                        "model-67",
+                        "model-68",
+                        "model-69",
+                        "model-70",
+                        "model-71",
+                        "model-72",
+                        "model-73",
+                        "model-74",
+                        "model-75",
+                        "model-76",
+                        "model-77",
+                        "model-78",
+                        "model-79",
+                        "model-80",
+                        "model-81",
+                        "model-82",
+                        "model-83",
+                        "model-84",
+                        "model-85",
+                        "model-86",
+                        "model-87",
+                        "model-88",
+                        "model-89",
+                        "model-90",
+                        "model-91",
+                        "model-92",
+                        "model-93",
+                        "model-94",
+                        "model-95",
+                        "model-96",
+                        "model-97",
+                        "model-98",
+                        "model-99",
+                        "model-100",
+                        "model-101",
+                        "model-102",
+                        "model-103",
+                        "model-104",
+                        "model-105",
+                        "model-106",
+                        "model-107",
+                        "model-108",
+                        "model-109",
+                        "model-110",
+                        "model-111",
+                        "model-112",
+                        "model-113",
+                        "model-114",
+                        "model-115",
+                        "model-116",
+                        "model-117",
+                        "model-118",
+                        "model-119",
+                        "model-120",
+                        "model-121",
+                        "model-122",
+                        "model-123",
+                        "model-124",
+                        "model-125",
+                        "model-126",
+                        "model-127",
+                        "model-128",
+                        "model-129",
+                        "model-130",
+                        "model-131",
+                        "model-132",
+                        "model-133",
+                        "model-134",
+                        "model-135",
+                        "model-136",
+                        "model-137",
+                        "model-138",
+                        "model-139",
+                        "model-140",
+                        "model-141",
+                        "model-142",
+                        "model-143",
+                        "model-144",
+                        "model-145",
+                        "model-146",
+                        "model-147",
+                        "model-148",
+                        "model-149",
+                        "model-150",
+                        "model-151",
+                        "model-152",
+                        "model-153",
+                        "model-154",
+                        "model-155",
+                        "model-156",
+                        "model-157",
+                        "model-158",
+                        "model-159",
+                        "model-160",
+                        "model-161",
+                        "model-162",
+                        "model-163",
+                        "model-164",
+                        "model-165",
+                        "model-166",
+                        "model-167",
+                        "model-168",
+                        "model-169",
+                        "model-170",
+                        "model-171",
+                        "model-172",
+                        "model-173",
+                        "model-174",
+                        "model-175",
+                        "model-176",
+                        "model-177",
+                        "model-178",
+                        "model-179",
+                        "model-180",
+                        "model-181",
+                        "model-182",
+                        "model-183",
+                        "model-184",
+                        "model-185",
+                        "model-186",
+                        "model-187",
+                        "model-188",
+                        "model-189",
+                        "model-190",
+                        "model-191",
+                        "model-192",
+                        "model-193",
+                        "model-194",
+                        "model-195",
+                        "model-196",
+                        "model-197",
+                        "model-198",
+                        "model-199",
+                        "model-200",
+                        "model-201",
+                        "model-202",
+                        "model-203",
+                        "model-204",
+                        "model-205",
+                        "model-206",
+                        "model-207",
+                        "model-208",
+                        "model-209",
+                        "model-210",
+                        "model-211",
+                        "model-212",
+                        "model-213",
+                        "model-214",
+                        "model-215",
+                        "model-216",
+                        "model-217",
+                        "model-218",
+                        "model-219",
+                        "model-220",
+                        "model-221",
+                        "model-222",
+                        "model-223",
+                        "model-224",
+                        "model-225",
+                        "model-226",
+                        "model-227",
+                        "model-228",
+                        "model-229",
+                        "model-230",
+                        "model-231",
+                        "model-232",
+                        "model-233",
+                        "model-234",
+                        "model-235",
+                        "model-236",
+                        "model-237",
+                        "model-238",
+                        "model-239",
+                        "model-240",
+                        "model-241",
+                        "model-242",
+                        "model-243",
+                        "model-244",
+                        "model-245",
+                        "model-246",
+                        "model-247",
+                        "model-248",
+                        "model-249",
+                        "model-250",
+                        "model-251",
+                        "model-252",
+                        "model-253",
+                        "model-254",
+                        "model-255",
+                        "model-256"
+                      ]
+                    }
+                  }
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "COMPLETE",
+                    "ERROR",
+                    "UNKNOWN"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "PROGRAM_OBSERVATION",
+                    "GENERATED_OBSERVATION"
+                  ]
+                },
+                "observation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16000
+                },
+                "observationHash": {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64
+                },
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "PROVISIONAL",
+                    "OBSERVED"
+                  ]
+                },
+                "checkResult": {
+                  "type": "string",
+                  "const": "UNKNOWN"
+                }
+              }
+            }
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schemaVersion",
+              "assetId",
+              "assetVersion",
+              "catalogDigest",
+              "requestId",
+              "binding",
+              "normalizedInput",
+              "inputHash",
+              "status",
+              "guidance",
+              "observations",
+              "checks",
+              "usage",
+              "limitations",
+              "resultHash"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "type": "string",
+                "const": "math-assets-v1"
+              },
+              "assetId": {
+                "type": "string"
+              },
+              "assetVersion": {
+                "type": "string"
+              },
+              "catalogDigest": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "binding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "taskId",
+                  "goalId",
+                  "scopeId",
+                  "contractVersion"
+                ],
+                "properties": {
+                  "taskId": {
+                    "type": "string"
+                  },
+                  "goalId": {
+                    "type": "string"
+                  },
+                  "scopeId": {
+                    "type": "string"
+                  },
+                  "contractVersion": {
+                    "type": "integer"
+                  },
+                  "sourceRequestId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "normalizedInput": {
+                "type": "object"
+              },
+              "inputHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "NEEDS_INPUT",
+                  "OUT_OF_SCOPE",
+                  "UNAVAILABLE",
+                  "ERROR",
+                  "UNKNOWN"
+                ]
+              },
+              "guidance": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "quantity",
+                    "value",
+                    "domain",
+                    "exactness",
+                    "coverage",
+                    "sourceInputHash",
+                    "taskId",
+                    "contractVersion"
+                  ],
+                  "properties": {
+                    "quantity": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "domain": {
+                      "type": "string"
+                    },
+                    "exactness": {
+                      "type": "string",
+                      "enum": [
+                        "EXACT_FOR_INPUT",
+                        "NUMERICAL_FOR_INPUT",
+                        "WITNESS_FOR_INPUT",
+                        "SAMPLED_OBSERVATION",
+                        "CONJECTURE",
+                        "GUIDANCE"
+                      ]
+                    },
+                    "coverage": {
+                      "type": "string"
+                    },
+                    "sourceInputHash": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    },
+                    "taskId": {
+                      "type": "string"
+                    },
+                    "contractVersion": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "checkerId",
+                    "version",
+                    "scope",
+                    "inputHash",
+                    "resultHash",
+                    "status"
+                  ],
+                  "properties": {
+                    "checkerId": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "inputHash": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    },
+                    "resultHash": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "usage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "durationMs",
+                  "computationType"
+                ],
+                "properties": {
+                  "durationMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "computationType": {
+                    "type": "string"
+                  }
+                }
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resultHash": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

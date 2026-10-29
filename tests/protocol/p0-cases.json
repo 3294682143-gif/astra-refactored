@@ -1,0 +1,117 @@
+[
+  {
+    "name": "valid-request",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"host-1\",\"method\":\"runtime.probe\",\"params\":{\"protocolVersion\":\"1.0-p0\",\"sessionId\":\"s1\",\"nonce\":\"n1\"}}",
+    "ok": true
+  },
+  {
+    "name": "valid-success",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"host-1\",\"result\":{\"stopped\":true}}",
+    "ok": true
+  },
+  {
+    "name": "valid-error-null-id",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"parse\"}}",
+    "ok": true
+  },
+  {
+    "name": "duplicate-key",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"id\":\"b\",\"method\":\"session.stop\",\"params\":{}}",
+    "ok": false,
+    "code": "DUPLICATE_KEY"
+  },
+  {
+    "name": "duplicate-key-escape-equivalent",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"\\u0069d\":\"b\",\"method\":\"session.stop\",\"params\":{}}",
+    "ok": false,
+    "code": "DUPLICATE_KEY"
+  },
+  {
+    "name": "extra-envelope-field",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{},\"extra\":1}",
+    "ok": false,
+    "code": "EXTRA_FIELD"
+  },
+  {
+    "name": "extra-error-field",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-1,\"message\":\"x\",\"data\":1}}",
+    "ok": false,
+    "code": "EXTRA_FIELD"
+  },
+  {
+    "name": "unsafe-integer",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":9007199254740992}}",
+    "ok": false,
+    "code": "UNSAFE_INTEGER"
+  },
+  {
+    "name": "float-token",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":1.5}}",
+    "ok": false,
+    "code": "FLOAT_TOKEN"
+  },
+  {
+    "name": "exponent-token",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":1e3}}",
+    "ok": false,
+    "code": "FLOAT_TOKEN"
+  },
+  {
+    "name": "result-and-error",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{},\"error\":{\"code\":-1,\"message\":\"x\"}}",
+    "ok": false,
+    "code": "FIELD_VALUE"
+  },
+  {
+    "name": "lone-surrogate",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{\"x\":\"\\ud800\"}}",
+    "ok": false,
+    "code": "FIELD_VALUE"
+  },
+  {
+    "name": "bom-prefix",
+    "raw": "\ufeff{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{}}",
+    "ok": false,
+    "code": "INVALID_UTF8"
+  },
+  {
+    "name": "proto-extra-field",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{\"protocolVersion\":\"1.0-p0\",\"sessionId\":\"s1\",\"extra\":1}}",
+    "ok": true
+  },
+  {
+    "name": "empty-json",
+    "raw": "",
+    "ok": false,
+    "code": "INVALID_JSON"
+  },
+  {
+    "name": "wrong-jsonrpc",
+    "raw": "{\"jsonrpc\":\"1.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{}}",
+    "ok": false,
+    "code": "FIELD_VALUE"
+  },
+  {
+    "name": "non-finite-nan",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":NaN}}",
+    "ok": false,
+    "code": "NON_FINITE_NUMBER"
+  },
+  {
+    "name": "non-finite-infinity",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":Infinity}}",
+    "ok": false,
+    "code": "NON_FINITE_NUMBER"
+  },
+  {
+    "name": "non-finite-negative-infinity",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"result\":{\"n\":-Infinity}}",
+    "ok": false,
+    "code": "NON_FINITE_NUMBER"
+  },
+  {
+    "name": "non-finite-word-inside-string",
+    "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"session.stop\",\"params\":{\"x\":\"NaN Infinity -Infinity\"}}",
+    "ok": true
+  }
+]

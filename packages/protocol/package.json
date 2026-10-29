@@ -1,0 +1,30 @@
+{
+  "name": "@astra/protocol",
+  "version": "0.0.0-p0",
+  "private": true,
+  "type": "module",
+  "description": "P0 cross-language protocol: single protocol manifest, strict parser/validator, shared record and evidence contracts. No environment access, no network.",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./schema/p0.schema.json": "./schema/p0.schema.json",
+    "./schema/p1.schema.json": "./schema/p1.schema.json",
+    "./schema/p2-host.schema.json": "./schema/p2-host.schema.json",
+    "./schema/p3-host.schema.json": "./schema/p3-host.schema.json",
+    "./schema/agent-host.schema.json": "./schema/agent-host.schema.json",
+    "./schema/agent-host-v13.schema.json": "./schema/agent-host-v13.schema.json",
+    "./schema/agent-host-v14.schema.json": "./schema/agent-host-v14.schema.json",
+    "./schema/math-assets.schema.json": "./schema/math-assets.schema.json"
+  },
+  "files": [
+    "dist/src",
+    "schema"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  }
+}

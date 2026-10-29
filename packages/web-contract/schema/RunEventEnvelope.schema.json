@@ -1,0 +1,60 @@
+{
+  "description": "流式事件信封.",
+  "properties": {
+    "runId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Runid",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "at": {
+      "minimum": 0,
+      "title": "At",
+      "type": "integer"
+    },
+    "sourceKind": {
+      "default": "observed_archive",
+      "enum": [
+        "demo_fixture",
+        "official_result",
+        "observed_archive"
+      ],
+      "title": "Sourcekind",
+      "type": "string"
+    },
+    "detailLevel": {
+      "default": "summary_only",
+      "enum": [
+        "summary_only",
+        "partial_observed",
+        "full_observed"
+      ],
+      "title": "Detaillevel",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "runId",
+    "seq",
+    "kind",
+    "at"
+  ],
+  "title": "RunEventEnvelope",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-contract-version": "1.1.0"
+}

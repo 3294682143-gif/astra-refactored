@@ -1,0 +1,24 @@
+{
+  "name": "@astra/math-workunit",
+  "version": "0.0.0-p1",
+  "private": true,
+  "type": "module",
+  "description": "P1 M3 work-unit module: builds the fixed model messages from the contract and turns one receipt into a versioned provisional WorkResult.",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astra/protocol": "workspace:*"
+  }
+}
