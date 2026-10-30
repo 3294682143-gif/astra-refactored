@@ -82,6 +82,12 @@ export interface Artifact {
   readonly dependencyRefs: readonly string[];
   readonly digest: string;
   readonly isStale: boolean;
+  /**
+   * T03 identity binding: when present, the producing run of this artifact.
+   * WorkUnitStore must reject artifacts whose runId mismatches the store's run.
+   * Optional for backward compatibility with existing adapters.
+   */
+  readonly runId?: string;
 }
 
 export interface ScopedEvidence {

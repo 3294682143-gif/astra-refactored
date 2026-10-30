@@ -45,6 +45,13 @@ export class WorkUnitStore {
    * Registers dependency graph edges and tracks lineage.
    */
   registerArtifact(artifact: Artifact): void {
+    // T03: identity binding — a tool receipt produced by another run must be
+    // rejected instead of silently adopted into this run's evidence graph.
+    if (artifact.runId !== undefined && artifact.runId !== this._runId) {
+      throw new Error(
+        `Artifact ${artifact.artifactId} belongs to run ${artifact.runId}, not run ${this._runId} (T03 identity binding)`
+      );
+    }
     const existing = this._artifacts.get(artifact.artifactId);
     if (existing && existing.version >= artifact.version) {
       throw new Error(

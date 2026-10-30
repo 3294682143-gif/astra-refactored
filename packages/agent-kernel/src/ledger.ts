@@ -19,20 +19,34 @@ export interface BudgetConsumption {
   unknownOutcomeCalls: number;
 }
 
+/** Current kernel release stamp recorded on every ledger (T38). */
+export const KERNEL_VERSION = "1.0.0";
+
 export class ContractLedger {
   private _contract: GoalContract;
   private readonly _budget: RootBudget;
   private readonly _consumption: BudgetConsumption;
+  private readonly _kernelVersion: string;
 
-  constructor(initialContract: GoalContract, budget: RootBudget) {
+  constructor(initialContract: GoalContract, budget: RootBudget, kernelVersion: string = KERNEL_VERSION) {
     this._contract = initialContract;
     this._budget = budget;
+    this._kernelVersion = kernelVersion;
     this._consumption = {
       modelCalls: 0,
       toolCalls: 0,
       rejectedCalls: 0,
       unknownOutcomeCalls: 0,
     };
+  }
+
+  /**
+   * T38: the kernel release this ledger was created with. In-flight runs keep
+   * their original version even after the kernel package is upgraded; only new
+   * runs adopt the new version.
+   */
+  get kernelVersion(): string {
+    return this._kernelVersion;
   }
 
   get contract(): GoalContract {
