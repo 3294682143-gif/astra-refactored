@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "ec25bb2a894d57a6b41ac7bd5c1cd78c7b07d962",
-    "tree": "d3b44a374ad8ac9d84f5ff269775d4cf8f2b6fbe"
+    "commit": "c6348532ef34e419af917ef2601b6c448bb12238",
+    "tree": "1317fba1bedf4ab37fed4cfed807c4ba9ba48d30"
   },
   "js": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-loop.js",
-      "sha256": "5cd925a0043e07d903f0009a632b738092187ed3dac194a2ca4167c3f953d40a",
-      "bytes": 271015
+      "sha256": "ba068f02c70bbe2746b668296f3b0c54968c6b8fb76298946c954204e46515d7",
+      "bytes": 269794
     },
     {
       "path": "apps/stdio-runtime/dist/src/agent-host-flow.js",
@@ -78,7 +78,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "db2103a73df196d9a177ea700270dff267e80166ff15d4a476035b2d123c82de"
+      "sha256": "89986e1791e26cf1eefe6d3de24337e5728eeb6915575eb7856bf936a1b7a4e2"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v14.schema.json",

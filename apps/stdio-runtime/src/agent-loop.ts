@@ -829,41 +829,12 @@ async function runBoundedR0(
         break;
       }
       const admitted = review.admit(role, requestId, root.remainingMs(), r0RootCalls);
-      let receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
-      let isJsonValid = false;
-      try {
-        JSON.parse(receipt.text);
-        isJsonValid = true;
-      } catch {
-        isJsonValid = false;
-      }
-      if (
-        (!isJsonValid || receipt.transportStatus !== "COMPLETE") &&
-        root.remainingMs() > MIN_MS &&
-        opts.maxModelCalls - root.modelCalls() > 10
-      ) {
-        const retryId = root.nextModelId();
-        if (retryId !== null) {
-          const retryMessages = [
-            admitted.context.messages[0]!,
-            {
-              role: "user" as const,
-              content:
-                admitted.context.messages[1]!.content +
-                "\n\nPREVIOUS_MALFORMED_REVIEW_RESPONSE=" +
-                receipt.text.slice(0, 1000) +
-                "\n\nNOTE: Previous review response had JSON formatting errors. Please output strictly valid JSON matching schema p4-r0-review-v1 with no markdown, ensuring valid commas and delimiters.",
-            },
-          ];
-          const retryContext = {
-            ...admitted.context,
-            messages: retryMessages,
-            contextHash: p4Hash(JSON.stringify(retryMessages)),
-            contextBytes: Buffer.byteLength(JSON.stringify(retryMessages), "utf8"),
-          };
-          receipt = await r0Generate(root, ports, sessionLog, retryId, "R0", retryContext, scopeId);
-        }
-      }
+      // No per-role retry: the Host binds one role review to the exact request
+      // id it was admitted under and to the outer frame ordinal, so a retried
+      // call can never pass both checks at once. A malformed or truncated reply
+      // settles as INVALID_REPORT (verdict UNKNOWN) and the aggregate falls
+      // back exactly as the pre-retry design did.
+      const receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
       review.markDispatched(role);
       review.settle(role, receipt.transportStatus, receipt.text, root.remainingMs());
       const verdict = roleVerdictOf(review.snapshot(role));
