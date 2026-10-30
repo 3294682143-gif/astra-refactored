@@ -569,6 +569,7 @@ class ExecutionManager:
             "carrier": raw.get("carrier", ""),
             "trace": [dict(row) for row in outcome.trace],
             "requestFingerprint": info.get("requestFingerprint"),
+            "provider": raw.get("provider") or info.get("provider") or os.environ.get("ASTRA_PROVIDER", "s2"),
         }
         for key in (
             "problem", "metadata", "max_model_calls", "max_work_units",

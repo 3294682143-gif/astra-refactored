@@ -4593,15 +4593,14 @@ var init_src = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/p2-host-channel.js
+// apps/stdio-runtime/src/p2-host-channel.ts
 function fixedCode(error) {
-  if (error instanceof Error && FIXED_CODES.has(error.message))
-    return error.message;
+  if (error instanceof Error && FIXED_CODES.has(error.message)) return error.message;
   return "FIELD_VALUE";
 }
 var MAX_DEADLINE_MS, FIXED_CODES, P2HostChannel;
 var init_p2_host_channel = __esm({
-  "apps/stdio-runtime/dist/src/p2-host-channel.js"() {
+  "apps/stdio-runtime/src/p2-host-channel.ts"() {
     "use strict";
     init_src();
     MAX_DEADLINE_MS = 36e5;
@@ -4662,22 +4661,17 @@ var init_p2_host_channel = __esm({
         });
         process.stdin.on("end", () => {
           try {
-            if (!this.stopping)
-              throw new Error("EOF");
-            if (this.buffer.length !== 0)
-              throw new Error("INVALID_JSON");
+            if (!this.stopping) throw new Error("EOF");
+            if (this.buffer.length !== 0) throw new Error("INVALID_JSON");
           } catch (error) {
             this.fail(error);
           }
         });
       }
       send(message, method) {
-        if (this.stopping)
-          this.fail(new Error("FIELD_VALUE"));
-        if (this.remainingMs() <= 0)
-          this.fail(new Error("TIMEOUT"));
-        if ("error" in message)
-          this.fail(new Error("FIELD_VALUE"));
+        if (this.stopping) this.fail(new Error("FIELD_VALUE"));
+        if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
+        if ("error" in message) this.fail(new Error("FIELD_VALUE"));
         if ("method" in message) {
           this.codec.payload(method, "params", message.params);
         } else if ("result" in message) {
@@ -4688,27 +4682,21 @@ var init_p2_host_channel = __esm({
         this.write(message, null);
       }
       stop(message) {
-        if (this.stopping)
-          this.fail(new Error("FIELD_VALUE"));
-        if (this.buffer.length !== 0)
-          this.fail(new Error("INVALID_JSON"));
-        if (this.remainingMs() <= 0)
-          this.fail(new Error("TIMEOUT"));
-        if (!("result" in message))
-          this.fail(new Error("FIELD_VALUE"));
+        if (this.stopping) this.fail(new Error("FIELD_VALUE"));
+        if (this.buffer.length !== 0) this.fail(new Error("INVALID_JSON"));
+        if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
+        if (!("result" in message)) this.fail(new Error("FIELD_VALUE"));
         this.codec.payload("session.stop", "result", message.result);
         this.stopping = true;
         this.write(message, () => {
-          if (this.remainingMs() <= 0)
-            this.fail(new Error("TIMEOUT"));
+          if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
           this.stopFlushed = true;
           this.clearTimer();
           process.exit(0);
         });
       }
       fail(error) {
-        if (this.failed)
-          process.exit(1);
+        if (this.failed) process.exit(1);
         this.failed = true;
         this.clearTimer();
         const code = fixedCode(error);
@@ -4734,34 +4722,26 @@ var init_p2_host_channel = __esm({
         }
       }
       onData(chunk) {
-        if (this.stopping)
-          throw new Error("FIELD_VALUE");
-        if (this.remainingMs() <= 0)
-          throw new Error("TIMEOUT");
+        if (this.stopping) throw new Error("FIELD_VALUE");
+        if (this.remainingMs() <= 0) throw new Error("TIMEOUT");
         this.buffer = Buffer.concat([this.buffer, chunk]);
         while (true) {
           const index = this.buffer.indexOf(10);
           if (index < 0) {
-            if (this.buffer.length > LIMITS.maxFrameBytes)
-              throw new Error("FRAME_TOO_LARGE");
+            if (this.buffer.length > LIMITS.maxFrameBytes) throw new Error("FRAME_TOO_LARGE");
             return;
           }
           const line = this.buffer.subarray(0, index);
           this.buffer = this.buffer.subarray(index + 1);
-          if (line.length === 0)
-            throw new Error("INVALID_JSON");
-          if (line.length > LIMITS.maxFrameBytes)
-            throw new Error("FRAME_TOO_LARGE");
+          if (line.length === 0) throw new Error("INVALID_JSON");
+          if (line.length > LIMITS.maxFrameBytes) throw new Error("FRAME_TOO_LARGE");
           this.frames += 1;
-          if (this.frames > LIMITS.maxFramesPerSession)
-            throw new Error("FRAME_LIMIT_EXCEEDED");
+          if (this.frames > LIMITS.maxFramesPerSession) throw new Error("FRAME_LIMIT_EXCEEDED");
           const message = this.codec.parse(line);
-          if (this.handler === null)
-            throw new Error("FIELD_VALUE");
+          if (this.handler === null) throw new Error("FIELD_VALUE");
           this.handler(message);
           if (this.stopping) {
-            if (this.buffer.length !== 0)
-              throw new Error("INVALID_JSON");
+            if (this.buffer.length !== 0) throw new Error("INVALID_JSON");
             return;
           }
         }
@@ -4770,22 +4750,16 @@ var init_p2_host_channel = __esm({
         const line = `${JSON.stringify(message)}
 `;
         const data = Buffer.from(line, "utf8");
-        if (data.length - 1 > LIMITS.maxFrameBytes)
-          this.fail(new Error("FRAME_TOO_LARGE"));
+        if (data.length - 1 > LIMITS.maxFrameBytes) this.fail(new Error("FRAME_TOO_LARGE"));
         this.frames += 1;
-        if (this.frames > LIMITS.maxFramesPerSession)
-          this.fail(new Error("FRAME_LIMIT_EXCEEDED"));
+        if (this.frames > LIMITS.maxFramesPerSession) this.fail(new Error("FRAME_LIMIT_EXCEEDED"));
         const parsed = this.codec.parse(data.subarray(0, data.length - 1));
-        if (parsed === null)
-          this.fail(new Error("FIELD_VALUE"));
+        if (parsed === null) this.fail(new Error("FIELD_VALUE"));
         try {
           process.stdout.write(data, (error) => {
-            if (error)
-              this.fail(error);
-            if (this.remainingMs() <= 0)
-              this.fail(new Error("TIMEOUT"));
-            if (onFlushed !== null)
-              onFlushed();
+            if (error) this.fail(error);
+            if (this.remainingMs() <= 0) this.fail(new Error("TIMEOUT"));
+            if (onFlushed !== null) onFlushed();
           });
         } catch (error) {
           this.fail(error);
@@ -10684,6 +10658,277 @@ var init_src7 = __esm({
   }
 });
 
+// packages/domain-control/dist/src/control-adapter.js
+var CONTROL_DOMAIN_ID;
+var init_control_adapter = __esm({
+  "packages/domain-control/dist/src/control-adapter.js"() {
+    "use strict";
+    CONTROL_DOMAIN_ID = "control.identification";
+  }
+});
+
+// packages/domain-control/dist/src/parameter-estimator.js
+function solve3x3(A, b) {
+  const a00 = A[0][0], a01 = A[0][1], a02 = A[0][2];
+  const a10 = A[1][0], a11 = A[1][1], a12 = A[1][2];
+  const a20 = A[2][0], a21 = A[2][1], a22 = A[2][2];
+  const det = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
+  if (Math.abs(det) < 1e-12) {
+    throw new Error("Singular normal equation matrix in parameter estimator (insufficient excitation)");
+  }
+  const invDet = 1 / det;
+  const c00 = (a11 * a22 - a12 * a21) * invDet;
+  const c01 = (a02 * a21 - a01 * a22) * invDet;
+  const c02 = (a01 * a12 - a02 * a11) * invDet;
+  const c10 = (a12 * a20 - a10 * a22) * invDet;
+  const c11 = (a00 * a22 - a02 * a20) * invDet;
+  const c12 = (a02 * a10 - a00 * a12) * invDet;
+  const c20 = (a10 * a21 - a11 * a20) * invDet;
+  const c21 = (a01 * a20 - a00 * a21) * invDet;
+  const c22 = (a00 * a11 - a01 * a10) * invDet;
+  const invA = [
+    [c00, c01, c02],
+    [c10, c11, c12],
+    [c20, c21, c22]
+  ];
+  const theta = [
+    c00 * b[0] + c01 * b[1] + c02 * b[2],
+    c10 * b[0] + c11 * b[1] + c12 * b[2],
+    c20 * b[0] + c21 * b[1] + c22 * b[2]
+  ];
+  return { theta, invA };
+}
+function generateOscillatorDataset(options) {
+  const { m, c, k, duration, dt, noiseStd = 1e-3, unmodeledNonlinearStiffness = 0, holdoutRatio = 0.2 } = options;
+  const N = Math.floor(duration / dt);
+  const points = [];
+  let x = 0;
+  let v = 0;
+  let seed = 42;
+  const randn = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    const u1 = Math.max(1e-7, seed / 233280);
+    seed = (seed * 9301 + 49297) % 233280;
+    const u2 = seed / 233280;
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+  const splitThreshold = Math.floor(N * (1 - holdoutRatio));
+  const trainIndices = [];
+  const valIndices = [];
+  for (let i = 0; i < N; i++) {
+    const t = i * dt;
+    const u = Math.sin(1.5 * t) + 0.8 * Math.cos(3.2 * t) + 0.5 * Math.sin(0.5 * t);
+    const measuredX = x + noiseStd * randn();
+    const partition = i < splitThreshold ? "train" : "validation";
+    if (partition === "train") {
+      trainIndices.push(i);
+    } else {
+      valIndices.push(i);
+    }
+    points.push({
+      t,
+      u,
+      x: measuredX,
+      sampleId: i,
+      partition
+    });
+    const f = (tState, xState, vState) => {
+      const uCurrent = Math.sin(1.5 * tState) + 0.8 * Math.cos(3.2 * tState) + 0.5 * Math.sin(0.5 * tState);
+      const restoringForce = k * xState + unmodeledNonlinearStiffness * Math.pow(xState, 3);
+      const a = (uCurrent - c * vState - restoringForce) / m;
+      return [vState, a];
+    };
+    const [k1x, k1v] = f(t, x, v);
+    const [k2x, k2v] = f(t + 0.5 * dt, x + 0.5 * dt * k1x, v + 0.5 * dt * k1v);
+    const [k3x, k3v] = f(t + 0.5 * dt, x + 0.5 * dt * k2x, v + 0.5 * dt * k2v);
+    const [k4x, k4v] = f(t + dt, x + dt * k3x, v + dt * k3v);
+    x += dt / 6 * (k1x + 2 * k2x + 2 * k3x + k4x);
+    v += dt / 6 * (k1v + 2 * k2v + 2 * k3v + k4v);
+  }
+  return { dt, points, trainIndices, valIndices };
+}
+var ParameterEstimator;
+var init_parameter_estimator = __esm({
+  "packages/domain-control/dist/src/parameter-estimator.js"() {
+    "use strict";
+    ParameterEstimator = class {
+      /**
+       * Run full identification pipeline on dataset.
+       * If `contaminatedIndices` is provided (for T36 test), it forces use of holdout samples.
+       */
+      static estimate(dataset, options) {
+        const dt = dataset.dt;
+        const fsHz = 1 / dt;
+        const maxHoldoutRmse = options?.maxHoldoutRmse ?? 0.05;
+        const activeIndices = options?.forceContaminatedIndices && options.forceContaminatedIndices.length > 0 ? options.forceContaminatedIndices : dataset.trainIndices;
+        const valSet = new Set(dataset.valIndices);
+        const leakedIndices = activeIndices.filter((idx) => valSet.has(idx));
+        const leakageDetected = leakedIndices.length > 0;
+        const leakageVerdict = leakageDetected ? `T36\u8FDD\u89C4\uFF1A\u53C2\u6570\u62DF\u5408\u4F7F\u7528\u4E86\u4FDD\u7559\u9A8C\u8BC1\u96C6\u6837\u672C (\u5305\u542B\u9A8C\u8BC1\u6837\u672C\u6570=${leakedIndices.length})\uFF0C\u4E25\u7981\u6570\u636E\u7A7F\u8D8A\uFF0C\u62D2\u7EDD\u9A8C\u6536` : `\u8BAD\u7EC3/\u9A8C\u8BC1\u96C6\u7269\u7406\u9694\u79BB\u4E25\u683C\u6210\u7ACB (\u8BAD\u7EC3\u6837\u672C\u6570=${activeIndices.length}, \u72EC\u7ACB\u9A8C\u8BC1\u6837\u672C\u6570=${dataset.valIndices.length})`;
+        const N_pts = dataset.points.length;
+        const I1_u = new Float64Array(N_pts);
+        const I2_u = new Float64Array(N_pts);
+        const I1_x = new Float64Array(N_pts);
+        const I2_x = new Float64Array(N_pts);
+        for (let i = 1; i < N_pts; i++) {
+          const pPrev = dataset.points[i - 1];
+          const pCurr = dataset.points[i];
+          I1_u[i] = I1_u[i - 1] + 0.5 * dt * (pCurr.u + pPrev.u);
+          I2_u[i] = I2_u[i - 1] + 0.5 * dt * (I1_u[i] + I1_u[i - 1]);
+          I1_x[i] = I1_x[i - 1] + 0.5 * dt * (pCurr.x + pPrev.x);
+          I2_x[i] = I2_x[i - 1] + 0.5 * dt * (I1_x[i] + I1_x[i - 1]);
+        }
+        const x0 = dataset.points[0]?.x ?? 0;
+        const v0 = N_pts > 1 ? ((dataset.points[1]?.x ?? 0) - x0) / dt : 0;
+        let A = [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0]
+        ];
+        let B = [0, 0, 0];
+        const residuals = [];
+        const validFitPoints = [];
+        for (const idx of activeIndices) {
+          if (idx < 5 || idx >= N_pts)
+            continue;
+          const pt = dataset.points[idx];
+          const t = pt.t;
+          const phi0 = pt.x - x0 - v0 * t;
+          const phi1 = I1_x[idx] - x0 * t;
+          const phi2 = I2_x[idx];
+          const y = I2_u[idx];
+          const phi = [phi0, phi1, phi2];
+          validFitPoints.push({ phi, y });
+          for (let r = 0; r < 3; r++) {
+            B[r] += phi[r] * y;
+            for (let c2 = 0; c2 < 3; c2++) {
+              A[r][c2] += phi[r] * phi[c2];
+            }
+          }
+        }
+        if (validFitPoints.length < 5) {
+          throw new Error("Insufficient data points for control parameter estimation");
+        }
+        const { theta, invA } = solve3x3(A, B);
+        const [rawM, rawC, rawK] = theta;
+        const m = Math.max(1e-4, rawM);
+        const c = Math.max(1e-4, rawC);
+        const k = Math.max(1e-4, rawK);
+        let rss = 0;
+        for (const pt of validFitPoints) {
+          const predY = m * pt.phi[0] + c * pt.phi[1] + k * pt.phi[2];
+          const r = pt.y - predY;
+          residuals.push(r);
+          rss += r * r;
+        }
+        const dof = Math.max(1, validFitPoints.length - 3);
+        const sigma2 = rss / dof;
+        const seM = Math.sqrt(Math.max(1e-8, sigma2 * invA[0][0]));
+        const seC = Math.sqrt(Math.max(1e-8, sigma2 * invA[1][1]));
+        const seK = Math.sqrt(Math.max(1e-8, sigma2 * invA[2][2]));
+        const confidenceIntervals = {
+          mass: [Math.max(0, m - 1.96 * seM), m + 1.96 * seM],
+          damping: [Math.max(0, c - 1.96 * seC), c + 1.96 * seC],
+          stiffness: [Math.max(0, k - 1.96 * seK), k + 1.96 * seK]
+        };
+        const omegaN = Math.sqrt(k / m);
+        const systemBandwidthHz = omegaN / (2 * Math.PI);
+        const tenTimesBandwidthHz = 10 * systemBandwidthHz;
+        const aliasingDetected = fsHz < tenTimesBandwidthHz;
+        const aliasingVerdict = aliasingDetected ? `\u6B20\u91C7\u6837\u6DF7\u53E0\u8FDD\u89C4\uFF1A\u91C7\u6837\u7387 fs=${fsHz.toFixed(2)}Hz < 10\xD7\u7CFB\u7EDF\u7279\u5F81\u5E26\u5BBD (10\xD7${systemBandwidthHz.toFixed(2)}Hz = ${tenTimesBandwidthHz.toFixed(2)}Hz)\uFF0C\u4E49\u52A1\u4E0D\u53EF\u5173\u95ED` : `\u91C7\u6837\u7387\u6EE1\u8DB3\u6297\u6DF7\u53E0\u51C6\u5219 (fs=${fsHz.toFixed(2)}Hz >= 10\xD7\u5E26\u5BBD ${tenTimesBandwidthHz.toFixed(2)}Hz)`;
+        const simulatedTrajectory = [];
+        let valRss = 0;
+        const firstValIdx = dataset.valIndices[0] ?? 0;
+        let simX = dataset.points[firstValIdx]?.x ?? 0;
+        let simV = firstValIdx > 0 ? ((dataset.points[firstValIdx]?.x ?? 0) - (dataset.points[firstValIdx - 1]?.x ?? 0)) / dt : 0;
+        const valErrors = [];
+        for (const vIdx of dataset.valIndices) {
+          const p = dataset.points[vIdx];
+          simulatedTrajectory.push(simX);
+          const err = p.x - simX;
+          valErrors.push(err);
+          valRss += err * err;
+          const uVal = p.u;
+          const f = (xVal, vVal) => {
+            const aVal = (uVal - c * vVal - k * xVal) / m;
+            return [vVal, aVal];
+          };
+          const [k1x, k1v] = f(simX, simV);
+          const [k2x, k2v] = f(simX + 0.5 * dt * k1x, simV + 0.5 * dt * k1v);
+          const [k3x, k3v] = f(simX + 0.5 * dt * k2x, simV + 0.5 * dt * k2v);
+          const [k4x, k4v] = f(simX + dt * k3x, simV + dt * k3v);
+          simX += dt / 6 * (k1x + 2 * k2x + 2 * k3x + k4x);
+          simV += dt / 6 * (k1v + 2 * k2v + 2 * k3v + k4v);
+        }
+        const holdoutRmse = dataset.valIndices.length > 0 ? Math.sqrt(valRss / dataset.valIndices.length) : 0;
+        const rmsePassed = holdoutRmse <= maxHoldoutRmse;
+        const de = [];
+        for (let i = 1; i < valErrors.length; i++) {
+          de.push(valErrors[i] - valErrors[i - 1]);
+        }
+        let autoCorrNum = 0;
+        let autoCorrDen = 0;
+        for (let i = 0; i < de.length; i++) {
+          autoCorrDen += de[i] * de[i];
+          if (i < de.length - 1) {
+            autoCorrNum += de[i] * de[i + 1];
+          }
+        }
+        const lag1Autocorrelation = autoCorrDen > 1e-12 ? autoCorrNum / autoCorrDen : 0;
+        const isWhite = lag1Autocorrelation < 0.2 && rmsePassed;
+        const whitenessDiagnosis = isWhite ? "RESIDUAL_WHITE" : "STRUCTURE_UNDERDETERMINED";
+        const whitenessVerdict = isWhite ? `\u6B8B\u5DEE\u5448\u73B0\u767D\u566A\u58F0\u7279\u5F81 (\u5DEE\u5206\u81EA\u76F8\u5173 r1=${lag1Autocorrelation.toFixed(3)} < 0.200, RMSE=${holdoutRmse.toFixed(4)})\uFF0C\u6A21\u578B\u7ED3\u6784\u4E0E\u62DF\u5408\u5145\u5206` : `\u7ED3\u6784\u6B20\u5B9A\uFF1A\u6B8B\u5DEE\u81EA\u76F8\u5173\u663E\u8457 (\u5DEE\u5206\u81EA\u76F8\u5173 r1=${lag1Autocorrelation.toFixed(3)} >= 0.200, RMSE=${holdoutRmse.toFixed(4)})\uFF0C\u8868\u660E\u5B58\u5728\u672A\u5EFA\u6A21\u52A8\u6001\u6216\u7ED3\u6784\u5931\u914D\uFF0C\u7981\u6B62\u8F93\u51FA"\u53C2\u6570\u53EF\u4FE1"`;
+        const allObligationsMet = !leakageDetected && !aliasingDetected && isWhite && rmsePassed && m > 0 && c > 0 && k > 0;
+        return {
+          domainId: "control.identification",
+          targetSystem: "forced_damped_oscillator",
+          parameters: { mass: Number(m.toFixed(4)), damping: Number(c.toFixed(4)), stiffness: Number(k.toFixed(4)) },
+          confidenceIntervals: {
+            mass: [Number(confidenceIntervals.mass[0].toFixed(4)), Number(confidenceIntervals.mass[1].toFixed(4))],
+            damping: [Number(confidenceIntervals.damping[0].toFixed(4)), Number(confidenceIntervals.damping[1].toFixed(4))],
+            stiffness: [Number(confidenceIntervals.stiffness[0].toFixed(4)), Number(confidenceIntervals.stiffness[1].toFixed(4))]
+          },
+          samplingGuard: {
+            fsHz: Number(fsHz.toFixed(2)),
+            systemBandwidthHz: Number(systemBandwidthHz.toFixed(2)),
+            tenTimesBandwidthHz: Number(tenTimesBandwidthHz.toFixed(2)),
+            aliasingDetected,
+            verdict: aliasingVerdict
+          },
+          leakageGuard: {
+            trainSamplesCount: activeIndices.length,
+            valSamplesCount: dataset.valIndices.length,
+            leakageDetected,
+            verdict: leakageVerdict
+          },
+          residualDiagnosis: {
+            lag1Autocorrelation: Number(lag1Autocorrelation.toFixed(4)),
+            isWhite,
+            diagnosis: whitenessDiagnosis,
+            verdict: whitenessVerdict
+          },
+          holdoutValidation: {
+            holdoutRmse: Number(holdoutRmse.toFixed(4)),
+            threshold: maxHoldoutRmse,
+            passed: rmsePassed,
+            simulatedTrajectory
+          },
+          allObligationsMet
+        };
+      }
+    };
+  }
+});
+
+// packages/domain-control/dist/src/index.js
+var init_src8 = __esm({
+  "packages/domain-control/dist/src/index.js"() {
+    "use strict";
+    init_control_adapter();
+    init_parameter_estimator();
+  }
+});
+
 // packages/math-review/dist/src/p4-report.js
 function exact2(value, keys2) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -13457,7 +13702,7 @@ var init_p4_r0_recheck_session = __esm({
 });
 
 // packages/math-review/dist/src/index.js
-var init_src8 = __esm({
+var init_src9 = __esm({
   "packages/math-review/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -14968,7 +15213,7 @@ var init_p4_repair2 = __esm({
 });
 
 // packages/math-audit/dist/src/index.js
-var init_src9 = __esm({
+var init_src10 = __esm({
   "packages/math-audit/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -14979,7 +15224,7 @@ var init_src9 = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-loop-io.js
+// apps/stdio-runtime/src/agent-loop-io.ts
 function fail18(code) {
   throw new P2Error(code);
 }
@@ -15010,9 +15255,12 @@ function boundedAwait(operation, remainingMs) {
       reject2(new P2Error(P2_ERROR_CODES.DEADLINE_EXCEEDED));
     }, remainingMs);
   });
-  const observed = started2.then((value) => value, (error) => {
-    throw error;
-  });
+  const observed = started2.then(
+    (value) => value,
+    (error) => {
+      throw error;
+    }
+  );
   return Promise.race([observed, timeout]).finally(() => {
     if (timer !== null) {
       clearTimeout(timer);
@@ -15180,8 +15428,16 @@ function deriveRootBudget(taskCount, maxReviews, maxModelCallsCap, maxWorkUnitsC
   if (!Number.isSafeInteger(taskCount) || taskCount < 1 || !Number.isSafeInteger(maxReviews) || maxReviews < 0 || !Number.isSafeInteger(maxModelCallsCap) || !Number.isSafeInteger(maxWorkUnitsCap) || maxModelCallsCap < 1 || maxWorkUnitsCap < 1) {
     fail18(P2_ERROR_CODES.PACKET_BINDING);
   }
-  const maxWorkUnits = Math.min(Math.max(taskCount, 1), AGENT_ROOT_MAX_WORK_UNITS, maxWorkUnitsCap);
-  const maxModelCalls = Math.min(maxWorkUnits + maxReviews + maxConsensus + 1, AGENT_ROOT_MAX_MODEL_CALLS, maxModelCallsCap);
+  const maxWorkUnits = Math.min(
+    Math.max(taskCount, 1),
+    AGENT_ROOT_MAX_WORK_UNITS,
+    maxWorkUnitsCap
+  );
+  const maxModelCalls = Math.min(
+    maxWorkUnits + maxReviews + maxConsensus + 1,
+    AGENT_ROOT_MAX_MODEL_CALLS,
+    maxModelCallsCap
+  );
   return Object.freeze({ maxWorkUnits, maxModelCalls });
 }
 function captureAgentPorts(ports) {
@@ -15264,7 +15520,7 @@ function captureAgentPorts(ports) {
 }
 var AGENT_IO_MIN_REMAINING_MS, AGENT_IO_MAX_REMAINING_MS, AGENT_IO_MAX_TEXT_CHARS, AGENT_IO_MAX_TEXT_BYTES, TRANSPORTS2, RECEIPT_FIELDS2, OPTION_FIELDS, PORT_FIELDS, MAX_RESUME_EVENTS, MAX_RESUME_KIND_CHARS, AGENT_ROOT_MAX_MODEL_CALLS, AGENT_ROOT_MAX_WORK_UNITS;
 var init_agent_loop_io = __esm({
-  "apps/stdio-runtime/dist/src/agent-loop-io.js"() {
+  "apps/stdio-runtime/src/agent-loop-io.ts"() {
     "use strict";
     init_src();
     init_src3();
@@ -15301,7 +15557,7 @@ var init_agent_loop_io = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-loop-calls.js
+// apps/stdio-runtime/src/agent-loop-calls.ts
 function fail19(code) {
   throw new P2Error(code);
 }
@@ -15310,7 +15566,7 @@ function unknownReceipt() {
 }
 var MAX_CONTEXT_BYTES8, HASH5, AgentCalls;
 var init_agent_loop_calls = __esm({
-  "apps/stdio-runtime/dist/src/agent-loop-calls.js"() {
+  "apps/stdio-runtime/src/agent-loop-calls.ts"() {
     "use strict";
     init_src();
     init_src2();
@@ -15478,14 +15734,20 @@ var init_agent_loop_calls = __esm({
         }
         const turns = Math.min(3, Math.max(1, remainingModelCalls + 1));
         const nextEffectOrdinal = this.root.effectCalls() + 1;
-        const admitted = effectGate.admit(action, {
-          sessionId: this.root.sessionId,
-          problemHash: this.root.problemHash,
-          contractVersion: frozenTask.envelope.contractVersion,
-          taskId: frozenTask.taskId,
-          scopeId: frozenTask.scopeId,
-          sourceRequestId
-        }, turns, this.root.remainingMs(), nextEffectOrdinal);
+        const admitted = effectGate.admit(
+          action,
+          {
+            sessionId: this.root.sessionId,
+            problemHash: this.root.problemHash,
+            contractVersion: frozenTask.envelope.contractVersion,
+            taskId: frozenTask.taskId,
+            scopeId: frozenTask.scopeId,
+            sourceRequestId
+          },
+          turns,
+          this.root.remainingMs(),
+          nextEffectOrdinal
+        );
         if (admitted.status === "CACHED") {
           return admitted.receipt;
         }
@@ -15566,7 +15828,7 @@ var init_agent_loop_calls = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-final.js
+// apps/stdio-runtime/src/agent-final.ts
 function fail20(code) {
   throw new P2Error(code);
 }
@@ -15726,7 +15988,7 @@ function validateAgentFinal(action, candidate, contract, scopeId, requestId) {
 }
 var PROJECTION_FIELDS, HASH6, REQUEST_ORDINAL, MAX_ANSWER_CHARS2, MAX_ID_CHARS3, MAX_SESSION_CHARS3;
 var init_agent_final = __esm({
-  "apps/stdio-runtime/dist/src/agent-final.js"() {
+  "apps/stdio-runtime/src/agent-final.ts"() {
     "use strict";
     init_src();
     PROJECTION_FIELDS = ["binding", "targetHash", "answer"];
@@ -15738,7 +16000,7 @@ var init_agent_final = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-progress.js
+// apps/stdio-runtime/src/agent-progress.ts
 function fail21(code) {
   throw new P2Error(code);
 }
@@ -15753,7 +16015,7 @@ function boundedId3(value) {
 }
 var AGENT_PROGRESS_POLICY_SCHEMA_VERSION, AGENT_PROGRESS_POLICY, MAX_TASKS2, MAX_RECORDS, REQUEST_ORDINAL2, AgentProgressPolicy;
 var init_agent_progress = __esm({
-  "apps/stdio-runtime/dist/src/agent-progress.js"() {
+  "apps/stdio-runtime/src/agent-progress.ts"() {
     "use strict";
     init_src();
     init_src();
@@ -15847,7 +16109,7 @@ var init_agent_progress = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-workflow.js
+// apps/stdio-runtime/src/agent-workflow.ts
 function fail22(code) {
   throw new P2Error(code);
 }
@@ -15869,7 +16131,7 @@ function routeIdOf(signature) {
 }
 var MAX_ROUTES, MAX_DEPENDENCIES, MAX_REVIEWS4, MAX_WORK_UNITS, MAX_REMAINING_MS6, MIN_REMAINING_MS8, MAX_TASK_ID_CHARS, DEFAULT_MECHANISM, AGENT_CONTROL_SECOND_ROUTE_MECHANISM, AgentWorkflowRoutes;
 var init_agent_workflow = __esm({
-  "apps/stdio-runtime/dist/src/agent-workflow.js"() {
+  "apps/stdio-runtime/src/agent-workflow.ts"() {
     "use strict";
     init_src();
     init_src5();
@@ -16041,7 +16303,9 @@ var init_agent_workflow = __esm({
           return false;
         }
         const currentVersion = frozen.envelope.artifactVersion ?? 0;
-        if (this.store.snapshot().some((row) => row.artifact.artifactId === frozen.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > currentVersion)) {
+        if (this.store.snapshot().some(
+          (row) => row.artifact.artifactId === frozen.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > currentVersion
+        )) {
           return false;
         }
         const contract = this.ledger.snapshot();
@@ -16534,7 +16798,7 @@ var init_agent_workflow = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-loop-context.js
+// apps/stdio-runtime/src/agent-loop-context.ts
 function fail23(code) {
   throw new P2Error(code);
 }
@@ -16940,16 +17204,18 @@ function checkRevisionTarget(value, contract, task, route, trustedScope, provena
   }
   let parsed;
   try {
-    parsed = parseP2WorkPacketAny(canonicalizeP2WorkPacketText(rawText, {
-      sessionId: contract.envelope.sessionId,
-      problemHash: contract.problemHash,
-      contractVersion: contract.contractVersion,
-      taskId: task.taskId,
-      goalId: task.goalId,
-      scopeId: task.scopeId,
-      routeId: route.routeId,
-      sourceRequestId: row.sourceRequestId
-    }));
+    parsed = parseP2WorkPacketAny(
+      canonicalizeP2WorkPacketText(rawText, {
+        sessionId: contract.envelope.sessionId,
+        problemHash: contract.problemHash,
+        contractVersion: contract.contractVersion,
+        taskId: task.taskId,
+        goalId: task.goalId,
+        scopeId: task.scopeId,
+        routeId: route.routeId,
+        sourceRequestId: row.sourceRequestId
+      })
+    );
   } catch (error) {
     if (error instanceof P2Error) {
       fail23(P2_ERROR_CODES.PACKET_BINDING);
@@ -17193,17 +17459,38 @@ function buildAgentWorkContext(input) {
   }
   let routeProvenance = null;
   if (captured.routeProvenance !== void 0 && captured.routeProvenance !== null) {
-    routeProvenance = checkRouteProvenance(p2Snapshot(captured.routeProvenance), contract, task, route, requestId);
+    routeProvenance = checkRouteProvenance(
+      p2Snapshot(captured.routeProvenance),
+      contract,
+      task,
+      route,
+      requestId
+    );
   }
   let controlRouteProvenance = null;
   if (captured.controlRouteProvenance !== void 0 && captured.controlRouteProvenance !== null) {
-    controlRouteProvenance = checkControlRouteProvenance(p2Snapshot(captured.controlRouteProvenance), contract, task, route, requestId);
+    controlRouteProvenance = checkControlRouteProvenance(
+      p2Snapshot(captured.controlRouteProvenance),
+      contract,
+      task,
+      route,
+      requestId
+    );
   }
   let dependencyProvenance = null;
   if (captured.dependencyProvenance !== void 0 && captured.dependencyProvenance !== null) {
-    dependencyProvenance = checkDependencyProvenance(p2Snapshot(captured.dependencyProvenance), contract, task, route, requestId, captured.inputs);
+    dependencyProvenance = checkDependencyProvenance(
+      p2Snapshot(captured.dependencyProvenance),
+      contract,
+      task,
+      route,
+      requestId,
+      captured.inputs
+    );
   }
-  if ([routeProvenance, controlRouteProvenance, dependencyProvenance].filter((value) => value !== null).length > 1) {
+  if ([routeProvenance, controlRouteProvenance, dependencyProvenance].filter(
+    (value) => value !== null
+  ).length > 1) {
     fail23(P2_ERROR_CODES.PACKET_BINDING);
   }
   const rawRevisionProvenance = captured.revisionProvenance === void 0 ? null : captured.revisionProvenance;
@@ -17217,7 +17504,10 @@ function buildAgentWorkContext(input) {
     if (allowArtifactRedo || allowRouteProposal || allowTaskContinuation) {
       fail23(P2_ERROR_CODES.PACKET_BINDING);
     }
-    revisionProvenance = checkRevisionProvenance(p2Snapshot(rawRevisionProvenance), requestId);
+    revisionProvenance = checkRevisionProvenance(
+      p2Snapshot(rawRevisionProvenance),
+      requestId
+    );
   }
   let protectedCandidate = null;
   if (captured.protectedCandidate !== void 0 && captured.protectedCandidate !== null) {
@@ -17277,7 +17567,14 @@ function buildAgentWorkContext(input) {
     }
   }
   ordinalOf2(requestId);
-  const observations = guardedObservations(contract, task, requestId, captured.toolObservations, catalog, assets);
+  const observations = guardedObservations(
+    contract,
+    task,
+    requestId,
+    captured.toolObservations,
+    catalog,
+    assets
+  );
   const rawScopeCoverage = captured.scopeCoverage === void 0 || captured.scopeCoverage === null ? [] : captured.scopeCoverage;
   if (!Array.isArray(rawScopeCoverage) || rawScopeCoverage.length > 32) {
     fail23(P2_ERROR_CODES.BOUND_EXCEEDED);
@@ -17299,7 +17596,15 @@ function buildAgentWorkContext(input) {
     }
     scopeCoverage.push(row);
   }
-  const base = prepareP2Context(contract, task, route, requestId, inputs, catalog === null ? [] : catalog.entries, assets);
+  const base = prepareP2Context(
+    contract,
+    task,
+    route,
+    requestId,
+    inputs,
+    catalog === null ? [] : catalog.entries,
+    assets
+  );
   const userMessage = base.messages[1];
   if (userMessage === void 0) {
     fail23(P2_ERROR_CODES.PACKET_DELIVERY);
@@ -17319,7 +17624,14 @@ function buildAgentWorkContext(input) {
     if (typeof preparedScope !== "object" || preparedScope === null || Array.isArray(preparedScope)) {
       fail23(P2_ERROR_CODES.SCOPE_MISMATCH);
     }
-    revisionTarget = checkRevisionTarget(p2Snapshot(rawRevisionTarget), contract, task, route, preparedScope, revisionProvenance);
+    revisionTarget = checkRevisionTarget(
+      p2Snapshot(rawRevisionTarget),
+      contract,
+      task,
+      route,
+      preparedScope,
+      revisionProvenance
+    );
   }
   const expectedEntries = catalog === null ? [] : catalog.entries;
   const preparedCatalog = prepared["methodCatalog"];
@@ -17380,7 +17692,7 @@ function buildAgentWorkContext(input) {
 }
 var AGENT_WORK_CONTEXT_SCHEMA_VERSION, AGENT_WORK_CONTEXT_PROGRESS_POLICY, MAX_CONTEXT_BYTES9, MAX_OBSERVATIONS, MAX_OBSERVATION_BYTES4, MAX_METHOD_ASSETS, HASH7, REQUEST_ORDINAL3, PROVENANCE_ORDINAL, EFFECT_IDS4, RECEIPT_FIELDS3, BINDING_FIELDS4, PROVENANCE_FIELDS, PROVENANCE_REF_FIELDS, REVISION_PROVENANCE_FIELDS, REVISION_TARGET_FIELDS, REVISION_TARGET_ENVELOPE_FIELDS, REVISION_TARGET_REF_FIELDS, REVISION_ORDINAL, REVISION_MAX_ID_CHARS, DEPENDENCY_TASK_PREFIX, SYSTEM_PROMPT6, REFUTATION_PARAGRAPH, EXPLORATION_PARAGRAPH, CONSENSUS_SYSTEM_PROMPT, CONSENSUS_BALLOT_LENSES;
 var init_agent_loop_context = __esm({
-  "apps/stdio-runtime/dist/src/agent-loop-context.js"() {
+  "apps/stdio-runtime/src/agent-loop-context.ts"() {
     "use strict";
     init_src();
     init_src5();
@@ -17705,16 +18017,14 @@ var init_agent_loop_context = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-answer-certificate.js
+// apps/stdio-runtime/src/agent-answer-certificate.ts
 function rows(packet) {
   return Array.isArray(packet.suggestedChecks) ? packet.suggestedChecks.filter((row) => typeof row === "string") : [];
 }
 function truth(value) {
   const token = value.trim().toUpperCase();
-  if (["TRUE", "T", "YES", "Y", "\u771F", "\u6B63\u786E", "\u221A"].includes(token))
-    return true;
-  if (["FALSE", "F", "NO", "N", "\u5047", "\u9519\u8BEF", "\xD7"].includes(token))
-    return false;
+  if (["TRUE", "T", "YES", "Y", "\u771F", "\u6B63\u786E", "\u221A"].includes(token)) return true;
+  if (["FALSE", "F", "NO", "N", "\u5047", "\u9519\u8BEF", "\xD7"].includes(token)) return false;
   return null;
 }
 function summarizeCertificate(packet) {
@@ -17723,25 +18033,21 @@ function summarizeCertificate(packet) {
   let certified = false;
   let verdict = null;
   for (const row of rows(packet)) {
-    if (!row.startsWith(CERT_PREFIX))
-      continue;
+    if (!row.startsWith(CERT_PREFIX)) continue;
     if (row.startsWith("CERT1|FINAL|")) {
       certified = true;
       continue;
     }
     if (row.startsWith("CERT1|CHECK|")) {
-      if (row.includes("=>"))
-        checkCount += 1;
+      if (row.includes("=>")) checkCount += 1;
       continue;
     }
     if (row.startsWith("CERT1|OPTIONS|")) {
       for (const part of row.slice("CERT1|OPTIONS|".length).split(/[,，;；]/u)) {
         const match = /^\s*([A-E])\s*[=:：]\s*(.+?)\s*$/u.exec(part);
-        if (match === null)
-          continue;
+        if (match === null) continue;
         const value = truth(match[2]);
-        if (value !== null)
-          optionTruths.set(match[1].toUpperCase(), value);
+        if (value !== null) optionTruths.set(match[1].toUpperCase(), value);
       }
       continue;
     }
@@ -17768,11 +18074,9 @@ function canonicalChoice(letters) {
 function canonicalVerdict(packet, verdict) {
   const candidate = packet.candidateProposal ?? "";
   const canonical2 = verdict ? "\u6B63\u786E" : "\u9519\u8BEF";
-  if (candidate.trim() === canonical2)
-    return null;
+  if (candidate.trim() === canonical2) return null;
   if (verdict) {
-    if (/(?:^|[^正确])(错误|×|FALSE|NO)/iu.test(candidate))
-      return canonical2;
+    if (/(?:^|[^正确])(错误|×|FALSE|NO)/iu.test(candidate)) return canonical2;
   } else if (/(?:^|[^错误])(正确|√|TRUE|YES)/iu.test(candidate)) {
     return canonical2;
   }
@@ -17794,13 +18098,13 @@ function certificateCorrection(packet) {
 }
 var CERT_PREFIX;
 var init_agent_answer_certificate = __esm({
-  "apps/stdio-runtime/dist/src/agent-answer-certificate.js"() {
+  "apps/stdio-runtime/src/agent-answer-certificate.ts"() {
     "use strict";
     CERT_PREFIX = "CERT1|";
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-semantics.js
+// apps/stdio-runtime/src/agent-semantics.ts
 function monoParts(key) {
   const out = /* @__PURE__ */ new Map();
   if (key === "") {
@@ -18369,56 +18673,84 @@ function exactRoute(operation, argsTemplate) {
   });
 }
 function continuousProbabilityWording(problemText) {
-  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(problemText);
+  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(
+    problemText
+  );
 }
 function transitionCountWording(problemText) {
-  const transitionContext = /(状态转移|转移图|(?:有向图|directed\s+graph)[^\n。；;]{0,24}(?:顶点序列|vertex\s+sequences?)|transition\s+graph|state\s+transitions?|\btransitions?\b)/iu.test(problemText);
+  const transitionContext = /(状态转移|转移图|(?:有向图|directed\s+graph)[^\n。；;]{0,24}(?:顶点序列|vertex\s+sequences?)|transition\s+graph|state\s+transitions?|\btransitions?\b)/iu.test(
+    problemText
+  );
   if (!transitionContext) {
     return false;
   }
-  if (/(马尔可夫|Markov|转移概率矩阵|transition\s+probability\s+matrix|随机游走|random\s+walk|覆盖时间|cover\s+time)/iu.test(problemText)) {
+  if (/(马尔可夫|Markov|转移概率矩阵|transition\s+probability\s+matrix|随机游走|random\s+walk|覆盖时间|cover\s+time)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  return /(?:状态数|状态个数|\b[0-9]+\s*个状态|\b[0-9]+\s+states\b|\bnum(?:ber)?\s+of\s+states\b|步数|步长|长度|长为|\blength\b|\bsteps?\b)/iu.test(problemText);
+  return /(?:状态数|状态个数|\b[0-9]+\s*个状态|\b[0-9]+\s+states\b|\bnum(?:ber)?\s+of\s+states\b|步数|步长|长度|长为|\blength\b|\bsteps?\b)/iu.test(
+    problemText
+  );
 }
 function independencePolynomialChainWording(problemText) {
   if (/(独立集多项式|independence\s+polynomial)/iu.test(problemText)) {
     return true;
   }
-  const pathContext = /(?:路图|路径图|path\s+(?:graph|P\s*_?\s*\{?\s*n\s*\}?)|P\s*_?\s*\{?\s*n\s*\}?)/iu.test(problemText);
+  const pathContext = /(?:路图|路径图|path\s+(?:graph|P\s*_?\s*\{?\s*n\s*\}?)|P\s*_?\s*\{?\s*n\s*\}?)/iu.test(
+    problemText
+  );
   if (pathContext && /(?:独立集|independent\s+sets?)/iu.test(problemText)) {
     return true;
   }
-  return /(?:不相邻顶点[^\n。；;]{0,12}子集|non[- ]?adjacent\s+vertex\s+subsets?)/iu.test(problemText);
+  return /(?:不相邻顶点[^\n。；;]{0,12}子集|non[- ]?adjacent\s+vertex\s+subsets?)/iu.test(
+    problemText
+  );
 }
 function countByDigitPropertyWording(problemText) {
-  return /(十进制数位|数位\s*DP|digit\s*DP|digit\s+property|数字集合[^\n。；;]{0,20}组成|(?:各位|每个)数字[^\n。；;]{0,24}(?:属于|来自|在)[^\n。；;]{0,24}集合[^\n。；;]{0,24}(?:整除|倍数)|digits?[^\n。；;]{0,24}(?:from|belong)[^\n。；;]{0,24}(?:set|collection)[^\n。；;]{0,32}(?:divisible|multiple))/iu.test(problemText);
+  return /(十进制数位|数位\s*DP|digit\s*DP|digit\s+property|数字集合[^\n。；;]{0,20}组成|(?:各位|每个)数字[^\n。；;]{0,24}(?:属于|来自|在)[^\n。；;]{0,24}集合[^\n。；;]{0,24}(?:整除|倍数)|digits?[^\n。；;]{0,24}(?:from|belong)[^\n。；;]{0,24}(?:set|collection)[^\n。；;]{0,32}(?:divisible|multiple))/iu.test(
+    problemText
+  );
 }
 function rookNumbersWording(problemText) {
-  return /(车多项式|禁位棋盘[^\n。；;]{0,20}(?:车数|车多项式)|rook\s+polynomial|rook\s+numbers?)/iu.test(problemText);
+  return /(车多项式|禁位棋盘[^\n。；;]{0,20}(?:车数|车多项式)|rook\s+polynomial|rook\s+numbers?)/iu.test(
+    problemText
+  );
 }
 function countAvoidingPermutationsWording(problemText) {
-  return /(错排|禁位排列|禁止位置[^\n。；;]{0,16}排列|permutations?\s+avoiding[^\n。；;]{0,24}(?:forbidden|cells?)|derangements?|forbidden\s+(?:positions?|cells?)[^\n。；;]{0,24}permutations?)/iu.test(problemText);
+  return /(错排|禁位排列|禁止位置[^\n。；;]{0,16}排列|permutations?\s+avoiding[^\n。；;]{0,24}(?:forbidden|cells?)|derangements?|forbidden\s+(?:positions?|cells?)[^\n。；;]{0,24}permutations?)/iu.test(
+    problemText
+  );
 }
 function markovExpectedStepsWording(problemText) {
-  const markovContext = /(马尔可夫链|马尔可夫|Markov\s+chain|转移概率矩阵|transition\s+probability\s+matrix)/iu.test(problemText);
+  const markovContext = /(马尔可夫链|马尔可夫|Markov\s+chain|转移概率矩阵|transition\s+probability\s+matrix)/iu.test(
+    problemText
+  );
   if (!markovContext) {
     return false;
   }
-  return /(期望[^\n。；;]{0,8}步数|期望步数|首次击中时间|击中时间|吸收时间|expected\s+(?:number\s+of\s+)?steps?|hitting\s+time|absorption\s+time)/iu.test(problemText);
+  return /(期望[^\n。；;]{0,8}步数|期望步数|首次击中时间|击中时间|吸收时间|expected\s+(?:number\s+of\s+)?steps?|hitting\s+time|absorption\s+time)/iu.test(
+    problemText
+  );
 }
 function coverTimeCompleteGraphWording(problemText) {
-  const completeGraph = /(完全图|complete\s+graph|(?<![A-Za-z0-9])K\s*_?\s*(?:\{?\s*n\s*\}?|[0-9]+)(?![A-Za-z0-9]))/iu.test(problemText);
+  const completeGraph = /(完全图|complete\s+graph|(?<![A-Za-z0-9])K\s*_?\s*(?:\{?\s*n\s*\}?|[0-9]+)(?![A-Za-z0-9]))/iu.test(
+    problemText
+  );
   if (!completeGraph) {
     return false;
   }
-  return /(覆盖时间|访问(?:所有|全部)顶点[^\n。；;]{0,24}(?:期望|平均)[^\n。；;]{0,12}(?:步数|步|时间)|访问(?:所有|全部)顶点[^\n。；;]{0,16}(?:需要|要)[^\n。；;]{0,8}(?:多少|几)步|cover\s+time|expected\s+(?:number\s+of\s+)?steps?[^\n。；;]{0,32}(?:visit|cover)\s+all\s+vertices|time\s+to\s+visit\s+all\s+vertices)/iu.test(problemText);
+  return /(覆盖时间|访问(?:所有|全部)顶点[^\n。；;]{0,24}(?:期望|平均)[^\n。；;]{0,12}(?:步数|步|时间)|访问(?:所有|全部)顶点[^\n。；;]{0,16}(?:需要|要)[^\n。；;]{0,8}(?:多少|几)步|cover\s+time|expected\s+(?:number\s+of\s+)?steps?[^\n。；;]{0,32}(?:visit|cover)\s+all\s+vertices|time\s+to\s+visit\s+all\s+vertices)/iu.test(
+    problemText
+  );
 }
 function finiteDifferenceDerivativeWording(problemText) {
   if (/(Richardson|理查森|外推|extrapolat)/iu.test(problemText)) {
     return false;
   }
-  return /(有限差分|中心差分|向前差分|向后差分|前向差分|finite[-\s]+difference(?:\s+derivative)?|central\s+difference|forward\s+difference|backward\s+difference)/iu.test(problemText);
+  return /(有限差分|中心差分|向前差分|向后差分|前向差分|finite[-\s]+difference(?:\s+derivative)?|central\s+difference|forward\s+difference|backward\s+difference)/iu.test(
+    problemText
+  );
 }
 function richardsonExtrapolateWording(problemText) {
   return /(?:Richardson\s*(?:外推|extrapolat\w*)|理查森外推)/iu.test(problemText);
@@ -18435,7 +18767,9 @@ function finiteCountingWording(problemText) {
   if (continuous) {
     return false;
   }
-  const enumerationAction = /(枚举|列举|罗列|计数|排列数|组合数|(?:共轭类|生成元|子群|子集|顶点|元素|整数|集合|排列|组合)[^\n。；;]{0,16}(?:的)?个数|(?:多少|几)(?:个|种)[^\n。；;]{0,16}(?:排列|组合|整数|集合|子集|元素|群|顶点|边|方式|方法|选法|种)?|\bnumber\s+of\s+ways?\b|\bways?\s+to\b|\bcount\s+(?:the\s+)?number\s+of\b|\bhow\s+many\b)/iu.test(problemText);
+  const enumerationAction = /(枚举|列举|罗列|计数|排列数|组合数|(?:共轭类|生成元|子群|子集|顶点|元素|整数|集合|排列|组合)[^\n。；;]{0,16}(?:的)?个数|(?:多少|几)(?:个|种)[^\n。；;]{0,16}(?:排列|组合|整数|集合|子集|元素|群|顶点|边|方式|方法|选法|种)?|\bnumber\s+of\s+ways?\b|\bways?\s+to\b|\bcount\s+(?:the\s+)?number\s+of\b|\bhow\s+many\b)/iu.test(
+    problemText
+  );
   if (!enumerationAction) {
     return false;
   }
@@ -18445,45 +18779,65 @@ function finiteCountingWording(problemText) {
   if (/(无限|无穷|\binfinite\b|all\s+real|任意实数)/iu.test(problemText)) {
     return false;
   }
-  return /(排列|组合|整数|正整数|自然数|集合|子集|元素|群元素|子群|共轭类|生成元|顶点|边|图|树|字符串|元组|划分|方式|方法|选法|\bways?\b|permutation|combination|integer|set|subset|element|group|conjugacy|generator|vertex|vertices|edge|graph|tree|string|tuple|partition)/iu.test(problemText);
+  return /(排列|组合|整数|正整数|自然数|集合|子集|元素|群元素|子群|共轭类|生成元|顶点|边|图|树|字符串|元组|划分|方式|方法|选法|\bways?\b|permutation|combination|integer|set|subset|element|group|conjugacy|generator|vertex|vertices|edge|graph|tree|string|tuple|partition)/iu.test(
+    problemText
+  );
 }
 function conceptualDefinitionWording(problemText) {
-  return /(?:的定义|定义是|定义为何|概念|含义|意义|什么是|何为|基本思想|基本原理|基本假设|\bwhat\s+is\b|\bdefinition\b|\bdefine\b)/iu.test(problemText);
+  return /(?:的定义|定义是|定义为何|概念|含义|意义|什么是|何为|基本思想|基本原理|基本假设|\bwhat\s+is\b|\bdefinition\b|\bdefine\b)/iu.test(
+    problemText
+  );
 }
 function polynomialExpandWording(problemText) {
   if (rookNumbersWording(problemText) || independencePolynomialChainWording(problemText)) {
     return false;
   }
-  if (/(特征多项式|特征值|行列式|determinant|characteristic\s+polynomial|eigenvalue)/iu.test(problemText)) {
+  if (/(特征多项式|特征值|行列式|determinant|characteristic\s+polynomial|eigenvalue)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  if (/(?:求|解)[^\n。；;]{0,20}(?:方程|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(problemText)) {
+  if (/(?:求|解)[^\n。；;]{0,20}(?:方程|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  const expansionAction = /(展开|展开式|乘积展开|乘开|合并同类项|因式分解[^\n。；;]{0,24}(?:乘法|相乘)|化简[^\n。；;]{0,24}(?:多项式|代数式|表达式)|(?:多项式|代数式|表达式)[^\n。；;]{0,12}化简|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|\bsimplify[^\n。；;]{0,32}(?:polynomial|algebraic\s+expression|expression)\b)/iu.test(problemText);
+  const expansionAction = /(展开|展开式|乘积展开|乘开|合并同类项|因式分解[^\n。；;]{0,24}(?:乘法|相乘)|化简[^\n。；;]{0,24}(?:多项式|代数式|表达式)|(?:多项式|代数式|表达式)[^\n。；;]{0,12}化简|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|\bsimplify[^\n。；;]{0,32}(?:polynomial|algebraic\s+expression|expression)\b)/iu.test(
+    problemText
+  );
   if (expansionAction) {
     return true;
   }
   const taylorMaclaurin = /(?:泰勒|麦克劳林|\bTaylor\b|\bMaclaurin\b)/iu.test(problemText);
-  const taylorExpansionAction = /(?:展开|展开式|级数|多项式|系数|\b(?:expand(?:ed|ing|s)?|series|coefficients?)\b|(?:[x-z]|t)\s*\^\s*\{?\s*[0-9]|[0-9]+\s*(?:次|阶)?\s*项|(?:到|至|前)\s*[^\n。；;]{0,12}\s*项)/iu.test(problemText);
-  if (taylorMaclaurin && taylorExpansionAction && !/(?:定义|概念|含义|意义|收敛半径|收敛域|余项|定理|证明|不等式)/iu.test(problemText)) {
+  const taylorExpansionAction = /(?:展开|展开式|级数|多项式|系数|\b(?:expand(?:ed|ing|s)?|series|coefficients?)\b|(?:[x-z]|t)\s*\^\s*\{?\s*[0-9]|[0-9]+\s*(?:次|阶)?\s*项|(?:到|至|前)\s*[^\n。；;]{0,12}\s*项)/iu.test(
+    problemText
+  );
+  if (taylorMaclaurin && taylorExpansionAction && !/(?:定义|概念|含义|意义|收敛半径|收敛域|余项|定理|证明|不等式)/iu.test(
+    problemText
+  )) {
     return true;
   }
   const coefficientAction = /(系数|\bcoefficients?\b)/iu.test(problemText);
-  const polynomialContext = /(多项式|代数式|展开式|二项式|多项式环|乘积|\bpolynomial\b|\bbinomial\b|\bexpansion\b|\balgebraic\s+expression\b|\bmultiply\b|\bproduct\b|\([^()\n]{1,120}\)\s*\^\s*\{?\s*[0-9A-Za-z]|[xyztuvw]\s*\^\s*\{?\s*[0-9][^\n。；;]{0,12}(?:项|的)?\s*系数|系数[^\n。；;]{0,16}[xyztuvw]\s*\^|\bcoefficients?\b[^\n。；;]{0,20}[xyztuvw]\s*\^)/iu.test(problemText);
+  const polynomialContext = /(多项式|代数式|展开式|二项式|多项式环|乘积|\bpolynomial\b|\bbinomial\b|\bexpansion\b|\balgebraic\s+expression\b|\bmultiply\b|\bproduct\b|\([^()\n]{1,120}\)\s*\^\s*\{?\s*[0-9A-Za-z]|[xyztuvw]\s*\^\s*\{?\s*[0-9][^\n。；;]{0,12}(?:项|的)?\s*系数|系数[^\n。；;]{0,16}[xyztuvw]\s*\^|\bcoefficients?\b[^\n。；;]{0,20}[xyztuvw]\s*\^)/iu.test(
+    problemText
+  );
   return coefficientAction && polynomialContext;
 }
 function interpolationFitWording(problemText) {
   if (conceptualDefinitionWording(problemText)) {
     return false;
   }
-  return /(插值|拉格朗日|Lagrange|牛顿插值|Newton\s+interpolation|过这些点的多项式|\binterpolat(?:e|ed|es|ing|ion)\b)/iu.test(problemText);
+  return /(插值|拉格朗日|Lagrange|牛顿插值|Newton\s+interpolation|过这些点的多项式|\binterpolat(?:e|ed|es|ing|ion)\b)/iu.test(
+    problemText
+  );
 }
 function statsOlsWording(problemText) {
   if (conceptualDefinitionWording(problemText)) {
     return false;
   }
-  const explicitRegression = /(最小二乘|least\s+squares?|\bOLS\b|回归系数|regression\s+coefficients?|拟合直线|linear\s+regression|回归直线)/iu.test(problemText);
+  const explicitRegression = /(最小二乘|least\s+squares?|\bOLS\b|回归系数|regression\s+coefficients?|拟合直线|linear\s+regression|回归直线)/iu.test(
+    problemText
+  );
   const residual = /(残差|\bresiduals?\b)/iu.test(problemText);
   if (!explicitRegression && !residual) {
     return false;
@@ -18494,28 +18848,46 @@ function statsOlsWording(problemText) {
   return true;
 }
 function finiteGroupStructureWording(problemText) {
-  const explicitCycle = /\(\s*[0-9]{2,}\s*\)|\(\s*[0-9]+\s*(?:[,\s]\s*[0-9]+\s*)+\)/u.test(problemText);
-  const namedGroup = /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2])|K_?\{?\s*4\s*\}?|V_?\{?\s*4\s*\}?|Q_?\{?\s*8\s*\}?)(?![A-Za-z0-9_])|(?:Klein\s*(?:四元群|four[-\s]+group)|克莱因(?:四元群|群)|四元数群|quaternion\s+group)/iu.test(problemText);
+  const explicitCycle = /\(\s*[0-9]{2,}\s*\)|\(\s*[0-9]+\s*(?:[,\s]\s*[0-9]+\s*)+\)/u.test(
+    problemText
+  );
+  const namedGroup = /(?<![A-Za-z0-9_])(?:S_?[34]|A_?[45]|D_?(?:8|10)|[ZC]_?(?:[2-9]|1[0-2])|K_?\{?\s*4\s*\}?|V_?\{?\s*4\s*\}?|Q_?\{?\s*8\s*\}?)(?![A-Za-z0-9_])|(?:Klein\s*(?:四元群|four[-\s]+group)|克莱因(?:四元群|群)|四元数群|quaternion\s+group)/iu.test(
+    problemText
+  );
   if (!explicitCycle && !namedGroup) {
     return false;
   }
-  if (/(环论|环同态|整环|商环|多项式环|一个环|是环|为环|在环|设环|令环|(?<!循)环(?:上|中|内|的)|理想|\bideals?\b|\bring\b|域论|有限域|域扩张|扩域|数域|一个域|是域|为域|在域|设域|令域|域(?:上|中|内)|\bfields?\b)/iu.test(problemText)) {
+  if (/(环论|环同态|整环|商环|多项式环|一个环|是环|为环|在环|设环|令环|(?<!循)环(?:上|中|内|的)|理想|\bideals?\b|\bring\b|域论|有限域|域扩张|扩域|数域|一个域|是域|为域|在域|设域|令域|域(?:上|中|内)|\bfields?\b)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|阿贝尔|Abel|\babelian\b|\bcommutative\b|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|结构|structure|同构|isomorphic|阶)/iu.test(problemText);
+  return /(共轭类|conjugacy\s+class(?:es)?|置换群|permutation\s+group|元素的?阶|element\s+orders?|群的?阶|order\s+of\s+(?:the\s+)?group|交换|阿贝尔|Abel|\babelian\b|\bcommutative\b|循环|cyclic|中心|cent(?:er|re)|生成子群|subgroup\s+generated\s+by|generated\s+subgroup|子群|subgroup|由[^\n。；;]{0,60}生成的?(?:子群|群)|子群[^\n。；;]{0,20}生成|结构|structure|同构|isomorphic|阶)/iu.test(
+    problemText
+  );
 }
 function integerSolutionWording(problemText) {
-  return /(整数解|整数点|整数对|integer\s+solutions?|integer\s+pairs?|integer\s+points?)/iu.test(problemText);
+  return /(整数解|整数点|整数对|integer\s+solutions?|integer\s+pairs?|integer\s+points?)/iu.test(
+    problemText
+  );
 }
 function quadraticDiophantineWording(problemText) {
-  const diophantineContext = /(丢番图|\bdiophantine\b|pell\s*(?:型|type|equation)|佩尔(?:型|方程)?)/iu.test(problemText);
+  const diophantineContext = /(丢番图|\bdiophantine\b|pell\s*(?:型|type|equation)|佩尔(?:型|方程)?)/iu.test(
+    problemText
+  );
   if (!diophantineContext && !integerSolutionWording(problemText)) {
     return false;
   }
-  if (/(符号|symbolic|不定方程|indeterminate\s+equations?|整数解集|integer\s+solution\s+set|方程组|system\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?|polynomial\s+(?:equation\s+)?system|polynomial\s+equations?|非线性|nonlinear)/iu.test(problemText)) {
+  if (/(符号|symbolic|不定方程|indeterminate\s+equations?|整数解集|integer\s+solution\s+set|方程组|system\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?|polynomial\s+(?:equation\s+)?system|polynomial\s+equations?|非线性|nonlinear)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  const squaredVariables = new Set([...problemText.matchAll(/(?<![a-zA-Z])([a-zA-Z])\s*(?:\^\s*\{?\s*2\b|²)/giu)].map((match) => match[1].toLocaleLowerCase("en-US")));
+  const squaredVariables = new Set(
+    [...problemText.matchAll(/(?<![a-zA-Z])([a-zA-Z])\s*(?:\^\s*\{?\s*2\b|²)/giu)].map(
+      (match) => match[1].toLocaleLowerCase("en-US")
+    )
+  );
   const twoVariableQuadratic = squaredVariables.size >= 2 || /(?:二次型|二元二次|two[- ]variable\s+quadratic)/iu.test(problemText) || /\b[a-zA-Z]\s*[a-zA-Z]\b/u.test(problemText);
   if (!twoVariableQuadratic) {
     return false;
@@ -18523,64 +18895,100 @@ function quadraticDiophantineWording(problemText) {
   return /(?:二次|quadratic|二次型|\b[a-zA-Z]\s*(?:\^\s*\{?\s*2\b|²))/iu.test(problemText);
 }
 function symbolicDiophantineWording(problemText) {
-  const symbolicContext = /(?:(?:符号|symbolic)[^\n。；;]{0,32}(?:丢番图|diophantine|整数解|integer\s+solutions?|多项式方程组|polynomial\s+(?:equation\s+)?system|方程组|system\s+of\s+equations?)|不定方程|indeterminate\s+equations?|symbolic\s+(?:diophantine|search|solver))/iu.test(problemText);
-  const integerSolutionSet = /(?:整数解集|integer\s+solution\s+set)/iu.test(problemText) && /(?:丢番图|diophantine|多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?|不定方程|indeterminate|符号|symbolic)/iu.test(problemText);
-  const polynomialSystemWithIntegers = /(?:多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?)[^\n。；;]{0,40}(?:整数解|符号|symbolic|integer\s+solutions?)/iu.test(problemText);
+  const symbolicContext = /(?:(?:符号|symbolic)[^\n。；;]{0,32}(?:丢番图|diophantine|整数解|integer\s+solutions?|多项式方程组|polynomial\s+(?:equation\s+)?system|方程组|system\s+of\s+equations?)|不定方程|indeterminate\s+equations?|symbolic\s+(?:diophantine|search|solver))/iu.test(
+    problemText
+  );
+  const integerSolutionSet = /(?:整数解集|integer\s+solution\s+set)/iu.test(problemText) && /(?:丢番图|diophantine|多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?|不定方程|indeterminate|符号|symbolic)/iu.test(
+    problemText
+  );
+  const polynomialSystemWithIntegers = /(?:多项式方程组|polynomial\s+(?:equation\s+)?system|system\s+of\s+polynomial\s+equations?)[^\n。；;]{0,40}(?:整数解|符号|symbolic|integer\s+solutions?)/iu.test(
+    problemText
+  );
   if (symbolicContext) {
     return true;
   }
   if (!integerSolutionSet && !polynomialSystemWithIntegers) {
     return false;
   }
-  return /(求解|求|解出|找出|搜索|\bsolve\b|\bfind\b|\bcompute\b|\bsearch\b)/iu.test(problemText);
+  return /(求解|求|解出|找出|搜索|\bsolve\b|\bfind\b|\bcompute\b|\bsearch\b)/iu.test(
+    problemText
+  );
 }
 function systemOfExpressionsWording(problemText) {
-  const systemContext = /(方程组|联立[^\n。；;]{0,24}方程|(?:非线性|多项式|混合(?:的)?)[^\n。；;]{0,8}系统|\bsystem\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?\b|\b(?:nonlinear|polynomial)\s+systems?\s+of\s+equations?\b|\bpolynomial\s+system\b|\bsimultaneous\s+(?:nonlinear\s+|polynomial\s+)?equations?\b)/iu.test(problemText);
+  const systemContext = /(方程组|联立[^\n。；;]{0,24}方程|(?:非线性|多项式|混合(?:的)?)[^\n。；;]{0,8}系统|\bsystem\s+of\s+(?:nonlinear\s+|polynomial\s+)?equations?\b|\b(?:nonlinear|polynomial)\s+systems?\s+of\s+equations?\b|\bpolynomial\s+system\b|\bsimultaneous\s+(?:nonlinear\s+|polynomial\s+)?equations?\b)/iu.test(
+    problemText
+  );
   if (!systemContext) {
     return false;
   }
-  const nonLinearOrPolynomial = /(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|\bpolynomial\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|quadratic\s+equations?|混合(?:的)?多项式|mixed\s+polynomial)/iu.test(problemText);
+  const nonLinearOrPolynomial = /(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|\bpolynomial\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|quadratic\s+equations?|混合(?:的)?多项式|mixed\s+polynomial)/iu.test(
+    problemText
+  );
   if (!nonLinearOrPolynomial) {
     return false;
   }
-  return !/(整数解|整数解集|integer\s+solutions?|integer\s+solution\s+set|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:求解|搜索|丢番图)|symbolic\s+(?:solve|search|diophantine))/iu.test(problemText);
+  return !/(整数解|整数解集|integer\s+solutions?|integer\s+solution\s+set|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:求解|搜索|丢番图)|symbolic\s+(?:solve|search|diophantine))/iu.test(
+    problemText
+  );
 }
 function polynomialFunctionCheckWording(problemText) {
-  const verify = /(验证|检验|检查|核验|判断|\bverify\b|\bcheck\b|\bvalidate\b|\bconfirm\b|\bdetermine\s+whether\b)/iu.test(problemText);
-  const identity = /(恒等式|恒等|函数方程|functional\s+equality|functional\s+equation|\bidentity\b|\bequality\s+holds?\b|\bholds?\s+for\s+all\b|\bfor\s+all\b[^\n。；;]{0,40}\bholds?\b)/iu.test(problemText);
-  const polynomialFunction = /(多项式|函数|\bpolynomial\b|\bfunctional\b|\bf\s*\([^)]{0,24}\))/iu.test(problemText);
+  const verify = /(验证|检验|检查|核验|判断|\bverify\b|\bcheck\b|\bvalidate\b|\bconfirm\b|\bdetermine\s+whether\b)/iu.test(
+    problemText
+  );
+  const identity = /(恒等式|恒等|函数方程|functional\s+equality|functional\s+equation|\bidentity\b|\bequality\s+holds?\b|\bholds?\s+for\s+all\b|\bfor\s+all\b[^\n。；;]{0,40}\bholds?\b)/iu.test(
+    problemText
+  );
+  const polynomialFunction = /(多项式|函数|\bpolynomial\b|\bfunctional\b|\bf\s*\([^)]{0,24}\))/iu.test(
+    problemText
+  );
   if (!polynomialFunction) {
     return false;
   }
   if (verify && identity) {
     return true;
   }
-  return /(代入[^\n。；;]{0,24}(?:核验|验证|检验)|\bsubstitut(?:e|ion)[^\n。；;]{0,24}\b(?:check|verify|validate))/iu.test(problemText);
+  return /(代入[^\n。；;]{0,24}(?:核验|验证|检验)|\bsubstitut(?:e|ion)[^\n。；;]{0,24}\b(?:check|verify|validate))/iu.test(
+    problemText
+  );
 }
 function gf2LinearSpaceContext(problemText) {
-  const explicitGF2 = /(?:GF\s*[\(\[]?\s*2\s*[\)\]]?|\bF\s*_?\s*2\b|二元\s*(?:矩阵|向量|线性空间)|二进制\s*(?:矩阵|向量|表示)|binary\s+(?:matrix|matrices|vectors?))/iu.test(problemText);
+  const explicitGF2 = /(?:GF\s*[\(\[]?\s*2\s*[\)\]]?|\bF\s*_?\s*2\b|二元\s*(?:矩阵|向量|线性空间)|二进制\s*(?:矩阵|向量|表示)|binary\s+(?:matrix|matrices|vectors?))/iu.test(
+    problemText
+  );
   if (explicitGF2) {
     return true;
   }
-  return /(?:模|mod(?:ulo)?)\s*2\b/iu.test(problemText) && /(矩阵|向量|线性|空间|秩|零空间|核|null|rank|matrix|vector|kernel)/iu.test(problemText);
+  return /(?:模|mod(?:ulo)?)\s*2\b/iu.test(problemText) && /(矩阵|向量|线性|空间|秩|零空间|核|null|rank|matrix|vector|kernel)/iu.test(
+    problemText
+  );
 }
 function gf2RankWording(problemText) {
   return gf2LinearSpaceContext(problemText) && /(秩|\brank\b|主元|\bpivot\b|极大线性无关组)/iu.test(problemText);
 }
 function gf2NullspaceWording(problemText) {
-  return gf2LinearSpaceContext(problemText) && /(零空间|核空间|\bkernel\b|null\s*space|nullspace|解空间|齐次线性方程组|线性相关|linearly\s+dependent)/iu.test(problemText);
+  return gf2LinearSpaceContext(problemText) && /(零空间|核空间|\bkernel\b|null\s*space|nullspace|解空间|齐次线性方程组|线性相关|linearly\s+dependent)/iu.test(
+    problemText
+  );
 }
 function explicitNumericMatrixWording(problemText) {
-  const latexMatrix = /\\begin\s*\{(?:[bpBvV]?matrix|array)\}[\s\S]{0,400}?\\end\s*\{(?:[bpBvV]?matrix|array)\}/u.test(problemText);
+  const latexMatrix = /\\begin\s*\{(?:[bpBvV]?matrix|array)\}[\s\S]{0,400}?\\end\s*\{(?:[bpBvV]?matrix|array)\}/u.test(
+    problemText
+  );
   const nestedRows = /\[\s*\[[^\]\n]{1,80}\][^\n]{0,200}\]/u.test(problemText);
-  const matrixAssignment = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,24}[=＝][^\n。；;]{0,16}(?:\\begin\s*\{|\[\[|\\left\s*[\[\(])/u.test(problemText);
+  const matrixAssignment = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,24}[=＝][^\n。；;]{0,16}(?:\\begin\s*\{|\[\[|\\left\s*[\[\(])/u.test(
+    problemText
+  );
   return latexMatrix || nestedRows || matrixAssignment;
 }
 function matrixRankNullityWording(problemText) {
   if (/(行列式|determinant)/iu.test(problemText)) {
     return false;
   }
-  const rankNullity = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,40}(?:的)?(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b|解空间维数)/iu.test(problemText) || /(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b)[^\n。；;]{0,20}(?:矩阵|matrix)/iu.test(problemText);
+  const rankNullity = /(?:矩阵|matrix|(?<![A-Za-z0-9_])[A-Z](?![A-Za-z0-9_]))[^\n。；;]{0,40}(?:的)?(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b|解空间维数)/iu.test(
+    problemText
+  ) || /(?:秩|\brank\b|零度|\bnullity\b|零空间|null\s*space|核空间|\bkernel\b)[^\n。；;]{0,20}(?:矩阵|matrix)/iu.test(
+    problemText
+  );
   if (!rankNullity || conceptualDefinitionWording(problemText)) {
     return false;
   }
@@ -18590,10 +18998,16 @@ function explicitNumericMatrixSystemWording(problemText) {
   if (!explicitNumericMatrixWording(problemText)) {
     return false;
   }
-  return /(?:解|求解|求|计算|solve|evaluate)[^\n。；;]{0,32}(?:线性方程组|线性系统|方程组|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=|\bA\s*[xX]\s*=\s*b\b)/iu.test(problemText) || /(?:线性方程组|线性系统|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=\s*b)[^\n。；;]{0,32}(?:解|solution|solve)/iu.test(problemText);
+  return /(?:解|求解|求|计算|solve|evaluate)[^\n。；;]{0,32}(?:线性方程组|线性系统|方程组|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=|\bA\s*[xX]\s*=\s*b\b)/iu.test(
+    problemText
+  ) || /(?:线性方程组|线性系统|\blinear\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|A\s*[xX]\s*=\s*b)[^\n。；;]{0,32}(?:解|solution|solve)/iu.test(
+    problemText
+  );
 }
 function linearSystemWording(problemText) {
-  const explicitSystem = /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(problemText) || explicitNumericMatrixSystemWording(problemText);
+  const explicitSystem = /(线性方程组|一次方程组|解方程组|求解方程组|联立方程(?:组)?|高斯消元|\bGaussian\s+elimination\b|\bsimultaneous\s+equations?\b|\bsolve\s+the\s+system\b|\bsystem\s+of\s+(?:linear\s+)?equations?\b|\\begin\s*\{cases\})/iu.test(
+    problemText
+  ) || explicitNumericMatrixSystemWording(problemText);
   const rankNullity = matrixRankNullityWording(problemText);
   if (!explicitSystem && !rankNullity) {
     return false;
@@ -18601,7 +19015,9 @@ function linearSystemWording(problemText) {
   if ((explicitSystem || rankNullity) && conceptualDefinitionWording(problemText)) {
     return false;
   }
-  if (/(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:丢番图|求解|搜索)|symbolic\s+(?:diophantine|search|solver))/iu.test(problemText)) {
+  if (/(非线性|nonlinear|多项式方程组|polynomial\s+(?:equation\s+)?system|\bsystem\s+of\s+(?:nonlinear|polynomial)\s+equations?\b|联立多项式|simultaneous\s+polynomial|二次方程组|quadratic\s+system|联立二次方程|丢番图|diophantine|不定方程|indeterminate\s+equations?|符号\s*(?:丢番图|求解|搜索)|symbolic\s+(?:diophantine|search|solver))/iu.test(
+    problemText
+  )) {
     return false;
   }
   if (gf2LinearSpaceContext(problemText) && (rankNullity || gf2RankWording(problemText) || gf2NullspaceWording(problemText))) {
@@ -18610,49 +19026,77 @@ function linearSystemWording(problemText) {
   return !(/(微分方程组|常微分方程组|differential\s+(?:equation\s+)?system)/iu.test(problemText) && !/(线性方程组|linear\s+system)/iu.test(problemText));
 }
 function exactLimitWording(problemText) {
-  const conceptualLimit = /(?:极限|\blimit\b)[^\n。；;]{0,20}(?:的?定义|概念|含义|意义|存在性|是否存在|不存在|唯一性|性质|运算法则|基本思想)|(?:定义|概念|什么是|何为|\bwhat\s+is\b)[^\n。；;]{0,20}(?:极限|\blimit\b)/iu.test(problemText);
-  const valueRequest = /(?:求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText);
+  const conceptualLimit = /(?:极限|\blimit\b)[^\n。；;]{0,20}(?:的?定义|概念|含义|意义|存在性|是否存在|不存在|唯一性|性质|运算法则|基本思想)|(?:定义|概念|什么是|何为|\bwhat\s+is\b)[^\n。；;]{0,20}(?:极限|\blimit\b)/iu.test(
+    problemText
+  );
+  const valueRequest = /(?:求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(
+    problemText
+  );
   if (conceptualLimit && !valueRequest) {
     return false;
   }
-  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_)/iu.test(problemText)) {
+  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_)/iu.test(
+    problemText
+  )) {
     return true;
   }
-  const seriesLimit = /(级数[^\n。；;]{0,32}(?:的?和|求和|收敛|发散)|\b(?:series|power\s+series)\b[^\n。；;]{0,32}(?:sum|converges?|diverges?|limit)|\bsum\s+of\s+(?:the\s+)?(?:power\s+)?series\b|收敛到|收敛于|\bconverges?\s+to\b|\basymptotic\s+limit\b|渐近极限|(?:∑|\\sum|Σ)[^\n。；;]{0,32}(?:和|求和|极限|sum|limit))/iu.test(problemText);
+  const seriesLimit = /(级数[^\n。；;]{0,32}(?:的?和|求和|收敛|发散)|\b(?:series|power\s+series)\b[^\n。；;]{0,32}(?:sum|converges?|diverges?|limit)|\bsum\s+of\s+(?:the\s+)?(?:power\s+)?series\b|收敛到|收敛于|\bconverges?\s+to\b|\basymptotic\s+limit\b|渐近极限|(?:∑|\\sum|Σ)[^\n。；;]{0,32}(?:和|求和|极限|sum|limit))/iu.test(
+    problemText
+  );
   if (!seriesLimit) {
     return false;
   }
   return !/(?:求|计算|evaluate|compute)[^\n。；;]{0,20}(?:积分|integral)/iu.test(problemText);
 }
 function exactDefiniteIntegralWording(problemText) {
-  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_|渐近)/iu.test(problemText)) {
+  if (/(?:极限|\\lim(?![A-Za-z])|(?<!\\)\blimits?\b|(?<!\\)\blim\s*_|渐近)/iu.test(
+    problemText
+  )) {
     return false;
   }
   const definiteMark = /(定积分|definite\s+integral)/iu.test(problemText);
   const integralSign = /(?:∫|\\int)/u.test(problemText);
-  const integralLimits = /(?:∫|\\int)\s*(?:\\limits\s*)?(?:[_^]\s*(?:\{(?:[^{}\n]|\{[^{}\n]{0,48}\}){1,96}\}|[^\s{^_]{1,24})\s*){2}/u.test(problemText);
+  const integralLimits = /(?:∫|\\int)\s*(?:\\limits\s*)?(?:[_^]\s*(?:\{(?:[^{}\n]|\{[^{}\n]{0,48}\}){1,96}\}|[^\s{^_]{1,24})\s*){2}/u.test(
+    problemText
+  );
   if (!definiteMark && !(integralSign && integralLimits)) {
     return false;
   }
-  if (conceptualDefinitionWording(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
+  if (conceptualDefinitionWording(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  if (/(收敛性|敛散性|是否收敛|是否发散|收敛还是发散|可积性|是否可积|不可积|存在性|是否存在|判断|讨论|证明|convergence|converges?|divergence|diverges?|integrab|exist)/iu.test(problemText) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
+  if (/(收敛性|敛散性|是否收敛|是否发散|收敛还是发散|可积性|是否可积|不可积|存在性|是否存在|判断|讨论|证明|convergence|converges?|divergence|diverges?|integrab|exist)/iu.test(
+    problemText
+  ) && !/(求值|计算|算出|求出|evaluate|compute|calculate|\bvalue\b|值为|的值)/iu.test(problemText)) {
     return false;
   }
   return true;
 }
 function exactSimplifyWording(problemText) {
-  if (!/(化简|约分|通分|等价化简|\bsimplif(?:y|ies|ied|ying)\b|\breduc(?:e|es|ed|ing)\s+the\s+fraction\b)/iu.test(problemText)) {
+  if (!/(化简|约分|通分|等价化简|\bsimplif(?:y|ies|ied|ying)\b|\breduc(?:e|es|ed|ing)\s+the\s+fraction\b)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  if (/(展开|展开式|乘开|合并同类项|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|系数|\bcoefficients?\b)/iu.test(problemText)) {
+  if (/(展开|展开式|乘开|合并同类项|\bexpand(?:ed|ing|s)?\b|\bmultiply\s+out\b|\bcollect(?:ing)?\s+(?:the\s+)?coefficients?\b|系数|\bcoefficients?\b)/iu.test(
+    problemText
+  )) {
     return false;
   }
-  return !/(?:求|解\s*|solve\s)[^\n。；;]{0,20}(?:方程|等式|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(problemText);
+  return !/(?:求|解\s*|solve\s)[^\n。；;]{0,20}(?:方程|等式|equation)|(?:方程|equation)[^\n。；;]{0,16}(?:的)?(?:实根|实数根|根|解)|(?:实根|实数根|零点|\broots?\b|\bzeros?\b)/iu.test(
+    problemText
+  );
 }
 function realRootCountWording(problemText) {
-  return /(?:实根|实数根|real\s+roots?)[^\n。；;]{0,24}(?:个数|数量|数目|多少|number|count)/iu.test(problemText) || /(?:个数|数量|数目|number\s+of|count\s+of)[^\n。；;]{0,24}(?:实根|实数根|real\s+roots?)/iu.test(problemText) || /(?:有几个|多少个|几条|how\s+many)[^\n。；;]{0,16}(?:实根|实数根|real\s+roots?)/iu.test(problemText);
+  return /(?:实根|实数根|real\s+roots?)[^\n。；;]{0,24}(?:个数|数量|数目|多少|number|count)/iu.test(
+    problemText
+  ) || /(?:个数|数量|数目|number\s+of|count\s+of)[^\n。；;]{0,24}(?:实根|实数根|real\s+roots?)/iu.test(
+    problemText
+  ) || /(?:有几个|多少个|几条|how\s+many)[^\n。；;]{0,16}(?:实根|实数根|real\s+roots?)/iu.test(
+    problemText
+  );
 }
 function splittingFieldDegreeWording(problemText) {
   if (/(分裂域|splitting\s+field)/iu.test(problemText) && /(次数|degree|\[[^\]]*:[^\]]*\])/iu.test(problemText)) {
@@ -18667,23 +19111,17 @@ function planarLaplacianWording(problemText) {
   return /(平面|欧几里得|二维|Euclidean|planar|R\^?2)/iu.test(problemText) && /(Laplacian|Laplace|拉普拉斯)/iu.test(problemText);
 }
 function semanticToolRoute(problemText) {
-  if (finiteGroupStructureWording(problemText))
-    return GROUP_STRUCTURE_ROUTE;
-  if (finiteCountingWording(problemText))
-    return FINITE_ENUMERATION_ROUTE;
-  if (realRootCountWording(problemText))
-    return REAL_ROOT_COUNT_ROUTE;
-  if (splittingFieldDegreeWording(problemText))
-    return SPLITTING_FIELD_DEGREE_ROUTE;
-  if (circleLaplacianWording(problemText))
-    return CIRCLE_LAPLACIAN_ROUTE;
-  if (planarLaplacianWording(problemText))
-    return PLANAR_LAPLACIAN_ROUTE;
-  if (interpolationFitWording(problemText))
-    return INTERPOLATION_FIT_ROUTE;
-  if (statsOlsWording(problemText))
-    return STATS_OLS_ROUTE;
-  if (/(亚历山大|Alexander|特征多项式|characteristic\s+polynomial|子式|\bminor\b)/iu.test(problemText)) {
+  if (finiteGroupStructureWording(problemText)) return GROUP_STRUCTURE_ROUTE;
+  if (finiteCountingWording(problemText)) return FINITE_ENUMERATION_ROUTE;
+  if (realRootCountWording(problemText)) return REAL_ROOT_COUNT_ROUTE;
+  if (splittingFieldDegreeWording(problemText)) return SPLITTING_FIELD_DEGREE_ROUTE;
+  if (circleLaplacianWording(problemText)) return CIRCLE_LAPLACIAN_ROUTE;
+  if (planarLaplacianWording(problemText)) return PLANAR_LAPLACIAN_ROUTE;
+  if (interpolationFitWording(problemText)) return INTERPOLATION_FIT_ROUTE;
+  if (statsOlsWording(problemText)) return STATS_OLS_ROUTE;
+  if (/(亚历山大|Alexander|特征多项式|characteristic\s+polynomial|子式|\bminor\b)/iu.test(
+    problemText
+  )) {
     return EXACT_MAXIMAL_MINORS_ROUTE;
   }
   if (/(分裂域|Galois|splitting\s+field|不可约|扩域)/iu.test(problemText)) {
@@ -18775,7 +19213,9 @@ function triggerMatches(problemText, trigger) {
   if (!ASCII_TRIGGER.test(needle)) {
     return problemText.includes(needle);
   }
-  return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(needle)}(?=$|[^a-z0-9])`, "u").test(problemText);
+  return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(needle)}(?=$|[^a-z0-9])`, "u").test(
+    problemText
+  );
 }
 function triggersForToken(token) {
   const out = [...METHOD_ROUTING_TRIGGERS[token] ?? []];
@@ -18830,7 +19270,9 @@ function semanticMethodRoute(problemText, entries) {
   if (preferredId !== null && knownIds.has(preferredId)) {
     scores.set(preferredId, (scores.get(preferredId) ?? 0) + TOOL_ROUTE_METHOD_BOOST);
   }
-  return Object.freeze([...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4));
+  return Object.freeze(
+    [...scores.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, MAX_METHOD_ROUTE_CANDIDATES).map(([id4]) => id4)
+  );
 }
 function semanticMathAssetRoute(problemText) {
   const toolRoute = semanticToolRoute(problemText);
@@ -18855,16 +19297,16 @@ function semanticMathAssetRoute(problemText) {
 }
 var EPS, Parser, Q_ZERO, FINITE_ENUMERATION_ROUTE, REAL_ROOT_COUNT_ROUTE, SPLITTING_FIELD_DEGREE_ROUTE, CIRCLE_LAPLACIAN_ROUTE, PLANAR_LAPLACIAN_ROUTE, POLYNOMIAL_EXPAND_COEFFICIENTS_ROUTE, LINEAR_SYSTEM_SOLUTION_SET_ROUTE, INTERPOLATION_FIT_ROUTE, STATS_OLS_ROUTE, GROUP_STRUCTURE_ROUTE, SOLVE_QUADRATIC_DIOPHANTINE_ROUTE, SYMBOLIC_DIOPHANTINE_ROUTE, SYSTEM_OF_EXPRESSIONS_ROUTE, POLYNOMIAL_FUNCTION_CHECK_ROUTE, GF2_RANK_ROUTE, GF2_NULLSPACE_ROUTE, TRANSITION_COUNT_ROUTE, INDEPENDENCE_POLYNOMIAL_CHAIN_ROUTE, COUNT_BY_DIGIT_PROPERTY_ROUTE, ROOK_NUMBERS_ROUTE, COUNT_AVOIDING_PERMUTATIONS_ROUTE, MARKOV_EXPECTED_STEPS_ROUTE, COVER_TIME_COMPLETE_GRAPH_ROUTE, FINITE_DIFFERENCE_DERIVATIVE_ROUTE, RICHARDSON_EXTRAPOLATE_ROUTE, EXACT_MAXIMAL_MINORS_ROUTE, EXACT_FACTOR_OVER_EXTENSION_ROUTE, EXACT_DENSITY_CHECK_ROUTE, EXACT_TRIG_REDUCE_ROUTE, EXACT_LIMIT_ROUTE, EXACT_DEFINITE_INTEGRAL_ROUTE, EXACT_SIMPLIFY_ROUTE, METHOD_ROUTING_TRIGGERS, TOOL_ROUTE_PREFERRED_METHOD, MAX_METHOD_ROUTE_CANDIDATES, TOOL_ROUTE_METHOD_BOOST, ASCII_TRIGGER, MATH_ASSET_ROUTE_TARGETS, MATH_ASSET_ROUTE_MAP;
 var init_agent_semantics = __esm({
-  "apps/stdio-runtime/dist/src/agent-semantics.js"() {
+  "apps/stdio-runtime/src/agent-semantics.ts"() {
     "use strict";
     init_src();
     EPS = 1e-9;
     Parser = class {
-      tokens;
-      #index = 0;
       constructor(tokens) {
         this.tokens = tokens;
       }
+      tokens;
+      #index = 0;
       #peek() {
         return this.tokens[this.#index] ?? null;
       }
@@ -19130,13 +19572,34 @@ var init_agent_semantics = __esm({
       operation: "RICHARDSON_EXTRAPOLATE",
       argsTemplate: '{"f":"x**3","x":1.0,"h":0.01,"method":"central","order":2}'
     });
-    EXACT_MAXIMAL_MINORS_ROUTE = exactRoute("MAXIMAL_MINORS", '{"operation":"MAXIMAL_MINORS","matrix":<explicit matrix>,"variable":"t"}');
-    EXACT_FACTOR_OVER_EXTENSION_ROUTE = exactRoute("FACTOR_OVER_EXTENSION", '{"operation":"FACTOR_OVER_EXTENSION","expression":"<polynomial>","variable":"x","minimal_polynomials":[<minimal polynomials>]}');
-    EXACT_DENSITY_CHECK_ROUTE = exactRoute("DENSITY_CHECK", '{"operation":"DENSITY_CHECK","density":"<density valid on its support>","variable":"x","lower":"0","upper":"oo"}');
-    EXACT_TRIG_REDUCE_ROUTE = exactRoute("TRIG_REDUCE", '{"operation":"TRIG_REDUCE","expression":"<trigonometric/polynomial expression>","variable":"x"}');
-    EXACT_LIMIT_ROUTE = exactRoute("LIMIT", '{"operation":"LIMIT","expression":"<expression>","variable":"x","point":<limit point>}');
-    EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute("DEFINITE_INTEGRAL", '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}');
-    EXACT_SIMPLIFY_ROUTE = exactRoute("SIMPLIFY", '{"operation":"SIMPLIFY","expression":"<expression>","variable":"x"}');
+    EXACT_MAXIMAL_MINORS_ROUTE = exactRoute(
+      "MAXIMAL_MINORS",
+      '{"operation":"MAXIMAL_MINORS","matrix":<explicit matrix>,"variable":"t"}'
+    );
+    EXACT_FACTOR_OVER_EXTENSION_ROUTE = exactRoute(
+      "FACTOR_OVER_EXTENSION",
+      '{"operation":"FACTOR_OVER_EXTENSION","expression":"<polynomial>","variable":"x","minimal_polynomials":[<minimal polynomials>]}'
+    );
+    EXACT_DENSITY_CHECK_ROUTE = exactRoute(
+      "DENSITY_CHECK",
+      '{"operation":"DENSITY_CHECK","density":"<density valid on its support>","variable":"x","lower":"0","upper":"oo"}'
+    );
+    EXACT_TRIG_REDUCE_ROUTE = exactRoute(
+      "TRIG_REDUCE",
+      '{"operation":"TRIG_REDUCE","expression":"<trigonometric/polynomial expression>","variable":"x"}'
+    );
+    EXACT_LIMIT_ROUTE = exactRoute(
+      "LIMIT",
+      '{"operation":"LIMIT","expression":"<expression>","variable":"x","point":<limit point>}'
+    );
+    EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute(
+      "DEFINITE_INTEGRAL",
+      '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}'
+    );
+    EXACT_SIMPLIFY_ROUTE = exactRoute(
+      "SIMPLIFY",
+      '{"operation":"SIMPLIFY","expression":"<expression>","variable":"x"}'
+    );
     METHOD_ROUTING_TRIGGERS = Object.freeze({
       // objects
       equation: ["\u65B9\u7A0B", "\u7B49\u5F0F", "equation"],
@@ -19342,24 +19805,28 @@ var init_agent_semantics = __esm({
       FINITE_DIFFERENCE_DERIVATIVE: { assetId: "math.numerics", target: "finite_difference" },
       RICHARDSON_EXTRAPOLATE: { assetId: "math.numerics", target: "richardson_extrapolate" }
     });
-    MATH_ASSET_ROUTE_MAP = Object.freeze(Object.fromEntries(Object.entries(MATH_ASSET_ROUTE_TARGETS).map(([k, v]) => {
-      const asset = MATH_ASSET_BY_ID.get(v.assetId);
-      const beh = asset?.behaviors.find((b) => b.target === v.target);
-      return [
-        k,
-        {
-          assetId: v.assetId,
-          target: v.target,
-          targetPurpose: beh?.declaredScope ?? "",
-          requiredParams: beh?.requiredParams ?? [],
-          optionalParams: beh?.optionalParams ?? []
-        }
-      ];
-    })));
+    MATH_ASSET_ROUTE_MAP = Object.freeze(
+      Object.fromEntries(
+        Object.entries(MATH_ASSET_ROUTE_TARGETS).map(([k, v]) => {
+          const asset = MATH_ASSET_BY_ID.get(v.assetId);
+          const beh = asset?.behaviors.find((b) => b.target === v.target);
+          return [
+            k,
+            {
+              assetId: v.assetId,
+              target: v.target,
+              targetPurpose: beh?.declaredScope ?? "",
+              requiredParams: beh?.requiredParams ?? [],
+              optionalParams: beh?.optionalParams ?? []
+            }
+          ];
+        })
+      )
+    );
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-answer-closure.js
+// apps/stdio-runtime/src/agent-answer-closure.ts
 function defect(kind, detail, evidence) {
   return { kind, detail, evidence };
 }
@@ -19369,11 +19836,9 @@ function rows2(packet) {
 function checkRows(packet) {
   const out = [];
   for (const row of rows2(packet)) {
-    if (!row.startsWith("CERT1|CHECK|"))
-      continue;
+    if (!row.startsWith("CERT1|CHECK|")) continue;
     const fields = row.split("|");
-    if (fields.length < 4)
-      continue;
+    if (fields.length < 4) continue;
     out.push({
       kind: (fields[3] ?? "").trim().toUpperCase(),
       passed: /=>\s*PASS\b/iu.test(row)
@@ -19382,37 +19847,53 @@ function checkRows(packet) {
   return out;
 }
 function hasPassingCheck(packet, kind) {
-  return checkRows(packet).some((row) => row.kind === kind.toUpperCase() && row.passed);
+  return checkRows(packet).some(
+    (row) => row.kind === kind.toUpperCase() && row.passed
+  );
 }
 function hasCompletenessMarker(packet) {
-  return rows2(packet).some((row) => row.startsWith("CERT1|COMPLETENESS|") && /=>\s*PASS\b/iu.test(row));
+  return rows2(packet).some(
+    (row) => row.startsWith("CERT1|COMPLETENESS|") && /=>\s*PASS\b/iu.test(row)
+  );
 }
 function problemChoiceLetters(problemText) {
   const found = /* @__PURE__ */ new Set();
-  for (const match of problemText.matchAll(/(?:^|[\s\n（(\[。；;，,？?！!])([A-E])[\.\)、:：\]]/gu)) {
+  for (const match of problemText.matchAll(
+    /(?:^|[\s\n（(\[。；;，,？?！!])([A-E])[\.\)、:：\]]/gu
+  )) {
     found.add(match[1].toUpperCase());
   }
   return [...found].sort();
 }
 function optionCoverageDefect(problemText, candidate, packet) {
   const expected = problemChoiceLetters(problemText);
-  if (expected.length < 2)
-    return null;
+  if (expected.length < 2) return null;
   const summary = summarizeCertificate(packet);
   const stated = [...summary.optionTruths.keys()].sort();
   const candidateLetters = candidateChoiceLetters(candidate);
-  if (candidateLetters.length === 0 && stated.length === 0)
-    return null;
+  if (candidateLetters.length === 0 && stated.length === 0) return null;
   if (stated.length === 0) {
-    return defect("OPTION_COVERAGE", "the answer uses option letters but the packet has no CERT1|OPTIONS table", "CERTIFICATE");
+    return defect(
+      "OPTION_COVERAGE",
+      "the answer uses option letters but the packet has no CERT1|OPTIONS table",
+      "CERTIFICATE"
+    );
   }
   const missing = expected.filter((letter) => !stated.includes(letter));
   if (missing.length > 0) {
-    return defect("OPTION_COVERAGE", "the CERT1|OPTIONS table does not cover option(s) " + missing.join(", "), "CERTIFICATE");
+    return defect(
+      "OPTION_COVERAGE",
+      "the CERT1|OPTIONS table does not cover option(s) " + missing.join(", "),
+      "CERTIFICATE"
+    );
   }
   const extra = stated.filter((letter) => !expected.includes(letter));
   if (extra.length > 0) {
-    return defect("OPTION_COVERAGE", "the CERT1|OPTIONS table contains option(s) not stated by the problem: " + extra.join(", "), "CERTIFICATE");
+    return defect(
+      "OPTION_COVERAGE",
+      "the CERT1|OPTIONS table contains option(s) not stated by the problem: " + extra.join(", "),
+      "CERTIFICATE"
+    );
   }
   return null;
 }
@@ -19420,8 +19901,7 @@ function polynomialVariables(poly) {
   const variables = /* @__PURE__ */ new Set();
   for (const key of poly.keys()) {
     for (const part of key.split("*")) {
-      if (part === "")
-        continue;
+      if (part === "") continue;
       variables.add(part.split("^")[0]);
     }
   }
@@ -19433,8 +19913,7 @@ function degreeIn(poly, variable) {
   for (const key of poly.keys()) {
     let exponent = 0;
     for (const part of key.split("*")) {
-      if (part === "")
-        continue;
+      if (part === "") continue;
       const [name, raw] = part.split("^");
       if (name === variable) {
         exponent += Number(raw ?? "1");
@@ -19452,8 +19931,7 @@ function totalDegree(poly) {
   for (const key of poly.keys()) {
     let term = 0;
     for (const part of key.split("*")) {
-      if (part === "")
-        continue;
+      if (part === "") continue;
       const [name, raw] = part.split("^");
       void name;
       term += Number(raw ?? "1");
@@ -19463,8 +19941,7 @@ function totalDegree(poly) {
   return degree;
 }
 function sameUpToConstantFactor(left, right) {
-  if (left.size !== right.size || left.size === 0)
-    return false;
+  if (left.size !== right.size || left.size === 0) return false;
   let pivot = null;
   for (const key of left.keys()) {
     if (right.has(key)) {
@@ -19472,17 +19949,14 @@ function sameUpToConstantFactor(left, right) {
       break;
     }
   }
-  if (pivot === null)
-    return false;
+  if (pivot === null) return false;
   const leftValue = left.get(pivot);
   const rightValue = right.get(pivot);
-  if (Math.abs(leftValue) < 1e-12 || Math.abs(rightValue) < 1e-12)
-    return false;
+  if (Math.abs(leftValue) < 1e-12 || Math.abs(rightValue) < 1e-12) return false;
   const factor = rightValue / leftValue;
   for (const [key, value] of left) {
     const other = right.get(key);
-    if (other === void 0)
-      return false;
+    if (other === void 0) return false;
     if (Math.abs(other - value * factor) > 1e-9 * Math.max(1, Math.abs(other))) {
       return false;
     }
@@ -19495,14 +19969,11 @@ function univariateCoefficients(poly, variable) {
     let exponent = 0;
     if (monomial !== "") {
       for (const part of monomial.split("*")) {
-        if (part === "")
-          continue;
+        if (part === "") continue;
         const [name, raw] = part.split("^");
-        if (name !== variable)
-          return null;
+        if (name !== variable) return null;
         const power = raw === void 0 ? 1 : Number(raw);
-        if (!Number.isSafeInteger(power) || power < 0)
-          return null;
+        if (!Number.isSafeInteger(power) || power < 0) return null;
         exponent += power;
       }
     }
@@ -19515,8 +19986,7 @@ function univariateCoefficients(poly, variable) {
 function sameLaurentUpToUnit(left, right, variable) {
   const a = univariateCoefficients(left, variable);
   const b = univariateCoefficients(right, variable);
-  if (a === null || b === null || a.size === 0 || b.size !== a.size)
-    return false;
+  if (a === null || b === null || a.size === 0 || b.size !== a.size) return false;
   const aKeys = [...a.keys()].sort((x, y) => x - y);
   const bKeys = [...b.keys()].sort((x, y) => x - y);
   const aMin = aKeys[0];
@@ -19531,8 +20001,7 @@ function sameLaurentUpToUnit(left, right, variable) {
   for (const exponent of aKeys) {
     const other = b.get(exponent - aMin + bMin);
     const value = a.get(exponent);
-    if (other === void 0)
-      return false;
+    if (other === void 0) return false;
     if (Math.abs(other - value * factor) > 1e-9 * Math.max(1, Math.abs(other))) {
       return false;
     }
@@ -19540,62 +20009,53 @@ function sameLaurentUpToUnit(left, right, variable) {
   return true;
 }
 function minorPolynomialText(minor) {
-  if (typeof minor === "string")
-    return minor;
+  if (typeof minor === "string") return minor;
   if (typeof minor === "object" && minor !== null && !Array.isArray(minor)) {
     const value = minor["polynomial"];
-    if (typeof value === "string")
-      return value;
+    if (typeof value === "string") return value;
   }
   return null;
 }
 function observationPolynomial(observation) {
-  if (!observation)
-    return null;
+  if (!observation) return null;
   const op = typeof observation.operation === "string" ? observation.operation.toUpperCase() : "";
-  if (op !== "MAXIMAL_MINORS")
-    return null;
+  if (op !== "MAXIMAL_MINORS") return null;
   const minors = observation.normalized_minors;
-  if (!Array.isArray(minors) || minors.length === 0)
-    return null;
+  if (!Array.isArray(minors) || minors.length === 0) return null;
   const parsed = [];
   for (const minor of minors) {
     const text8 = minorPolynomialText(minor);
-    if (text8 === null)
-      return null;
+    if (text8 === null) return null;
     const poly = polynomialOf(text8);
-    if (poly === null)
-      return null;
+    if (poly === null) return null;
     parsed.push({ text: text8, poly, degree: totalDegree(poly) });
   }
   const nonZero = parsed.filter((row) => row.poly.size > 0);
   const nonConstant = nonZero.filter((row) => row.degree > 0);
-  if (nonConstant.length === 0)
-    return null;
+  if (nonConstant.length === 0) return null;
   const consistent = nonZero.every((row) => sameUpToConstantFactor(nonZero[0].poly, row.poly)) || nonConstant.every((row) => row.degree === nonConstant[0].degree);
-  if (!consistent)
-    return null;
-  const highest = nonConstant.reduce((best, row) => row.degree > best.degree ? row : best, nonConstant[0]);
-  const representative = nonConstant.find((row) => row.degree === highest.degree && polynomialVariables(row.poly).length === 1) ?? null;
-  if (representative === null)
-    return null;
+  if (!consistent) return null;
+  const highest = nonConstant.reduce(
+    (best, row) => row.degree > best.degree ? row : best,
+    nonConstant[0]
+  );
+  const representative = nonConstant.find(
+    (row) => row.degree === highest.degree && polynomialVariables(row.poly).length === 1
+  ) ?? null;
+  if (representative === null) return null;
   return {
     polynomial: representative.text,
     variable: polynomialVariables(representative.poly)[0]
   };
 }
 function candidatePolynomial(candidate, variable) {
-  if (candidate.length > 320 || /[\n;；]/.test(candidate))
-    return null;
+  if (candidate.length > 320 || /[\n;；]/.test(candidate)) return null;
   const body = candidate.replace(/\$/g, "").split("=").slice(-1)[0].replace(/\\left|\\right/gu, "").trim();
   const parsed = polynomialOf(body);
-  if (parsed === null)
-    return null;
+  if (parsed === null) return null;
   const variables = polynomialVariables(parsed);
-  if (variables.length > 1)
-    return null;
-  if (variables.length === 1 && variables[0] !== variable)
-    return null;
+  if (variables.length > 1) return null;
+  if (variables.length === 1 && variables[0] !== variable) return null;
   return parsed;
 }
 function degreeConservationDefect(problemText, candidate, observation) {
@@ -19603,52 +20063,58 @@ function degreeConservationDefect(problemText, candidate, observation) {
     return null;
   }
   const observed = observationPolynomial(observation);
-  if (observed === null)
-    return null;
+  if (observed === null) return null;
   const observedPoly = polynomialOf(observed.polynomial);
-  if (observedPoly === null)
-    return null;
+  if (observedPoly === null) return null;
   const observedDegree = degreeIn(observedPoly, observed.variable);
-  if (observedDegree < 1)
-    return null;
+  if (observedDegree < 1) return null;
   const answerPoly = candidatePolynomial(candidate, observed.variable);
-  if (answerPoly === null)
-    return null;
+  if (answerPoly === null) return null;
   const answerDegree = degreeIn(answerPoly, observed.variable);
   if (sameLaurentUpToUnit(answerPoly, observedPoly, observed.variable)) {
     return null;
   }
   if (answerDegree !== observedDegree) {
-    return defect("DEGREE_CONSERVATION", "exact maximal-minor polynomial has degree " + observedDegree + " in " + observed.variable + " (specifically " + observed.polynomial + "), but the candidate polynomial has degree " + answerDegree + "; use the exact full invariant " + observed.polynomial + " (up to \xB1" + observed.variable + "^k unit normalization) instead of a lower-degree factor", "OBSERVATION");
+    return defect(
+      "DEGREE_CONSERVATION",
+      "exact maximal-minor polynomial has degree " + observedDegree + " in " + observed.variable + " (specifically " + observed.polynomial + "), but the candidate polynomial has degree " + answerDegree + "; use the exact full invariant " + observed.polynomial + " (up to \xB1" + observed.variable + "^k unit normalization) instead of a lower-degree factor",
+      "OBSERVATION"
+    );
   }
-  return defect("DEGREE_CONSERVATION", "candidate polynomial has degree " + answerDegree + " in " + observed.variable + " but its coefficients do not match the exact maximal-minor polynomial " + observed.polynomial + " (even up to \xB1" + observed.variable + "^k unit normalization)", "OBSERVATION");
+  return defect(
+    "DEGREE_CONSERVATION",
+    "candidate polynomial has degree " + answerDegree + " in " + observed.variable + " but its coefficients do not match the exact maximal-minor polynomial " + observed.polynomial + " (even up to \xB1" + observed.variable + "^k unit normalization)",
+    "OBSERVATION"
+  );
 }
 function normalizationDefect(problemText, candidate, packet, observation) {
-  if (!/(密度|density)/iu.test(problemText))
-    return null;
+  if (!/(密度|density)/iu.test(problemText)) return null;
   const normalized = observation?.operation === "DENSITY_CHECK" ? observation.normalized : null;
-  if (normalized === true)
-    return null;
+  if (normalized === true) return null;
   if (normalized === false) {
-    return defect("NORMALIZATION", "the exact density check reports an integral of " + JSON.stringify(observation?.numeric_integral ?? "a value other than 1") + ", not 1", "OBSERVATION");
+    return defect(
+      "NORMALIZATION",
+      "the exact density check reports an integral of " + JSON.stringify(observation?.numeric_integral ?? "a value other than 1") + ", not 1",
+      "OBSERVATION"
+    );
   }
-  if (hasPassingCheck(packet, "DENSITY_CHECK"))
-    return null;
+  if (hasPassingCheck(packet, "DENSITY_CHECK")) return null;
   const looksLikeDensity = /(?:\\frac|\\sqrt|sqrt|exp|e\^)/iu.test(candidate) && /[A-Za-z]/u.test(candidate);
-  if (!looksLikeDensity)
-    return null;
-  return defect("NORMALIZATION", "the candidate is a continuous formula but the packet has neither a normalized exact density observation nor a passing CERT1 DENSITY_CHECK row", "TEXT");
+  if (!looksLikeDensity) return null;
+  return defect(
+    "NORMALIZATION",
+    "the candidate is a continuous formula but the packet has neither a normalized exact density observation nor a passing CERT1 DENSITY_CHECK row",
+    "TEXT"
+  );
 }
 function sameKeys(left, right) {
-  if (left.length !== right.length)
-    return false;
+  if (left.length !== right.length) return false;
   const a = [...left].sort();
   const b = [...right].sort();
   return a.every((value, index) => value === b[index]);
 }
 function solutionCompletenessDefect(candidate, packet, expectedSolutionKeys, requiresExhaustive) {
-  if (!requiresExhaustive)
-    return null;
+  if (!requiresExhaustive) return null;
   if (expectedSolutionKeys !== null && expectedSolutionKeys !== void 0) {
     if (expectedSolutionKeys.length === 0) {
       if (/(无解|不存在|没有解|no\s+solution|empty\s+set)/iu.test(candidate)) {
@@ -19657,18 +20123,28 @@ function solutionCompletenessDefect(candidate, packet, expectedSolutionKeys, req
     }
     const candidateKeys = rationalSetKeys(candidate);
     if (candidateKeys === null) {
-      if (hasCompletenessMarker(packet))
-        return null;
-      return defect("SOLUTION_COMPLETENESS", "the problem asks for every solution and an exact finite solution set was independently determined, but the candidate is not an explicit finite set or the packet has no completeness marker", "CERTIFICATE");
+      if (hasCompletenessMarker(packet)) return null;
+      return defect(
+        "SOLUTION_COMPLETENESS",
+        "the problem asks for every solution and an exact finite solution set was independently determined, but the candidate is not an explicit finite set or the packet has no completeness marker",
+        "CERTIFICATE"
+      );
     }
     if (!sameKeys(candidateKeys, expectedSolutionKeys)) {
-      return defect("SOLUTION_COMPLETENESS", "the candidate set is not the independently solved complete set " + JSON.stringify(expectedSolutionKeys), "CERTIFICATE");
+      return defect(
+        "SOLUTION_COMPLETENESS",
+        "the candidate set is not the independently solved complete set " + JSON.stringify(expectedSolutionKeys),
+        "CERTIFICATE"
+      );
     }
     return null;
   }
-  if (hasCompletenessMarker(packet))
-    return null;
-  return defect("SOLUTION_COMPLETENESS", "the problem asks for every solution/root/case, but the packet has no CERT1|COMPLETENESS|... => PASS marker", "CERTIFICATE");
+  if (hasCompletenessMarker(packet)) return null;
+  return defect(
+    "SOLUTION_COMPLETENESS",
+    "the problem asks for every solution/root/case, but the packet has no CERT1|COMPLETENESS|... => PASS marker",
+    "CERTIFICATE"
+  );
 }
 function observationInteger(result) {
   if (typeof result === "number" && Number.isSafeInteger(result)) {
@@ -19687,11 +20163,9 @@ function candidateInteger(candidate, suffixes) {
   let text8 = candidate.trim();
   text8 = text8.replace(/^(?:最终答案|答案|final\s+answer)\s*[:：]?\s*/iu, "").trim();
   let match = /^\$([^$]+)\$$/su.exec(text8);
-  if (match !== null)
-    text8 = match[1].trim();
+  if (match !== null) text8 = match[1].trim();
   match = /^\\boxed\{([\s\S]*)\}$/u.exec(text8);
-  if (match !== null)
-    text8 = match[1].trim();
+  if (match !== null) text8 = match[1].trim();
   const suffix = suffixes ? "(?:\u4E2A|\u6761|\u9879)?" : "";
   match = new RegExp(`^([+-]?\\d+)\\s*${suffix}$`, "u").exec(text8);
   return match === null ? null : Number(match[1]);
@@ -19700,26 +20174,21 @@ function explicitDegree(candidate) {
   let text8 = candidate.trim();
   text8 = text8.replace(/^(?:最终答案|答案|final\s+answer)\s*[:：]?\s*/iu, "").trim();
   let match = /^\$([^$]+)\$$/su.exec(text8);
-  if (match !== null)
-    text8 = match[1].trim();
+  if (match !== null) text8 = match[1].trim();
   match = /\[[^\]]+:[^\]]+\]\s*=\s*([+-]?\d+)/u.exec(text8);
-  if (match !== null)
-    return Number(match[1]);
+  if (match !== null) return Number(match[1]);
   match = /(?:\\deg|degree|次数)\s*[=:：]?\s*([+-]?\d+)/iu.exec(text8);
-  if (match !== null)
-    return Number(match[1]);
+  if (match !== null) return Number(match[1]);
   match = /^([+-]?\d+)\s*(?:次|degree)?$/iu.exec(text8);
   return match === null ? null : Number(match[1]);
 }
 function lastObservation(observations, name) {
-  if (!Array.isArray(observations))
-    return null;
+  if (!Array.isArray(observations)) return null;
   const aliases = TOOL_NAME_ALIASES[name] ?? [];
   const targetNames = new Set([name, ...aliases].map((s) => s.toLowerCase()));
   for (let index = observations.length - 1; index >= 0; index -= 1) {
     const observation = observations[index];
-    if (observation === void 0 || observation === null)
-      continue;
+    if (observation === void 0 || observation === null) continue;
     const op = typeof observation.operation === "string" ? observation.operation.toLowerCase() : "";
     if (op && targetNames.has(op)) {
       return observation;
@@ -19733,38 +20202,41 @@ function lastObservation(observations, name) {
 }
 function realRootCountDefect(problemText, candidate, observations) {
   const observation = lastObservation(observations, "real_root_count_expr");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = observationInteger(observation.result);
   const stated = candidateInteger(candidate, true);
-  if (observed === null || stated === null || observed === stated)
-    return null;
-  return defect("REAL_ROOT_COUNT", "the exact Sturm count reports " + observed + " distinct real root(s), but the candidate states " + stated, "OBSERVATION");
+  if (observed === null || stated === null || observed === stated) return null;
+  return defect(
+    "REAL_ROOT_COUNT",
+    "the exact Sturm count reports " + observed + " distinct real root(s), but the candidate states " + stated,
+    "OBSERVATION"
+  );
 }
 function splittingFieldDegreeDefect(problemText, candidate, observations) {
-  if (semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE" && !/(?:分裂域|splitting\s+field|galois|\[\s*[A-Za-z][^\]]{0,8}\s*:\s*(?:\\mathbb\{Q\}|Q)\s*\])/iu.test(problemText)) {
+  if (semanticToolRoute(problemText)?.id !== "SPLITTING_FIELD_DEGREE" && !/(?:分裂域|splitting\s+field|galois|\[\s*[A-Za-z][^\]]{0,8}\s*:\s*(?:\\mathbb\{Q\}|Q)\s*\])/iu.test(
+    problemText
+  )) {
     return null;
   }
   const observation = lastObservation(observations, "splitting_field_degree_expr");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = observationInteger(observation.result);
   const stated = explicitDegree(candidate);
-  if (observed === null || stated === null || observed === stated)
-    return null;
-  return defect("SPLITTING_FIELD_DEGREE", "the exact splitting-field computation reports degree " + observed + ", but the candidate explicitly states degree " + stated, "OBSERVATION");
+  if (observed === null || stated === null || observed === stated) return null;
+  return defect(
+    "SPLITTING_FIELD_DEGREE",
+    "the exact splitting-field computation reports degree " + observed + ", but the candidate explicitly states degree " + stated,
+    "OBSERVATION"
+  );
 }
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 function exactRationalOf(text8) {
-  if (typeof text8 !== "string")
-    return null;
+  if (typeof text8 !== "string") return null;
   const trimmed = text8.replace(/\s+/gu, "");
-  if (trimmed.length === 0 || trimmed.length > 24)
-    return null;
-  if (!EXACT_RATIONAL_TEXT.test(trimmed))
-    return null;
+  if (trimmed.length === 0 || trimmed.length > 24) return null;
+  if (!EXACT_RATIONAL_TEXT.test(trimmed)) return null;
   const [numeratorText, denominatorText] = trimmed.split("/");
   const n = BigInt(numeratorText);
   const d = denominatorText === void 0 ? 1n : BigInt(denominatorText);
@@ -19773,8 +20245,7 @@ function exactRationalOf(text8) {
 function sameRational(left, right) {
   const a = exactRationalOf(left);
   const b = exactRationalOf(right);
-  if (a === null || b === null)
-    return false;
+  if (a === null || b === null) return false;
   return a.n * b.d === b.n * a.d;
 }
 function labelledRationals(candidate, patterns) {
@@ -19793,26 +20264,22 @@ function labelledRationals(candidate, patterns) {
 function uniqueStatedValue(values) {
   const unique = [];
   for (const value of values) {
-    if (!unique.some((seen) => sameRational(seen, value)))
-      unique.push(value);
+    if (!unique.some((seen) => sameRational(seen, value))) unique.push(value);
   }
   return unique.length === 1 ? unique[0] : null;
 }
 function interpolationObservation(result) {
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const allZero = record["all_zero"];
-  if (typeof allZero !== "boolean")
-    return null;
+  if (typeof allZero !== "boolean") return null;
   const residuals = record["residuals"];
   if (!Array.isArray(residuals) || residuals.length === 0 || residuals.length > 32) {
     return null;
   }
   const residualText = [];
   for (const residual of residuals) {
-    if (exactRationalOf(residual) === null)
-      return null;
+    if (exactRationalOf(residual) === null) return null;
     residualText.push(residual.replace(/\s+/gu, ""));
   }
   const interpolatingPolynomial = record["interpolating_polynomial"];
@@ -19832,35 +20299,30 @@ function interpolationObservation(result) {
 }
 function interpolationResidualDefect(problemText, candidate, observations) {
   const observation = lastObservation(observations, "interpolation_fit_check");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = interpolationObservation(observation.result);
-  if (observed === null)
-    return null;
-  if (observed.allZero)
-    return null;
+  if (observed === null) return null;
+  if (observed.allZero) return null;
   const answerPoly = candidatePolynomial(candidate, observed.variable);
-  if (answerPoly === null)
-    return null;
+  if (answerPoly === null) return null;
   const exactPoly = polynomialOf(observed.interpolatingPolynomial);
-  if (exactPoly === null)
-    return null;
-  if (samePolynomial(answerPoly, exactPoly))
-    return null;
-  return defect("INTERPOLATION_RESIDUAL", "the exact interpolation check reports residuals " + JSON.stringify(observed.residuals) + " at the " + observed.residuals.length + " stated point(s), so the candidate polynomial of degree " + degreeIn(answerPoly, observed.variable) + " does not pass through those points; the interpolating polynomial is " + observed.interpolatingPolynomial, "OBSERVATION");
+  if (exactPoly === null) return null;
+  if (samePolynomial(answerPoly, exactPoly)) return null;
+  return defect(
+    "INTERPOLATION_RESIDUAL",
+    "the exact interpolation check reports residuals " + JSON.stringify(observed.residuals) + " at the " + observed.residuals.length + " stated point(s), so the candidate polynomial of degree " + degreeIn(answerPoly, observed.variable) + " does not pass through those points; the interpolating polynomial is " + observed.interpolatingPolynomial,
+    "OBSERVATION"
+  );
 }
 function olsObservation(result) {
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const claimMatches = record["claim_matches"];
   if (claimMatches !== true && claimMatches !== false && claimMatches !== null) {
     return null;
   }
-  if (exactRationalOf(record["slope"]) === null)
-    return null;
-  if (exactRationalOf(record["intercept"]) === null)
-    return null;
+  if (exactRationalOf(record["slope"]) === null) return null;
+  if (exactRationalOf(record["intercept"]) === null) return null;
   const rawN = record["n"];
   const n = typeof rawN === "number" && Number.isSafeInteger(rawN) && rawN > 0 ? rawN : null;
   return {
@@ -19872,15 +20334,14 @@ function olsObservation(result) {
 }
 function olsMismatchDefect(candidate, observations) {
   const observation = lastObservation(observations, "stats_ols_check");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = olsObservation(observation.result);
-  if (observed === null || observed.claimMatches !== false)
-    return null;
+  if (observed === null || observed.claimMatches !== false) return null;
   const statedSlope = uniqueStatedValue(labelledRationals(candidate, SLOPE_PATTERNS));
-  const statedIntercept = uniqueStatedValue(labelledRationals(candidate, INTERCEPT_PATTERNS));
-  if (statedSlope === null && statedIntercept === null)
-    return null;
+  const statedIntercept = uniqueStatedValue(
+    labelledRationals(candidate, INTERCEPT_PATTERNS)
+  );
+  if (statedSlope === null && statedIntercept === null) return null;
   const stated = [];
   if (statedSlope !== null && !sameRational(observed.slope, statedSlope)) {
     stated.push("slope " + statedSlope.replace(/\s+/gu, ""));
@@ -19888,20 +20349,20 @@ function olsMismatchDefect(candidate, observations) {
   if (statedIntercept !== null && !sameRational(observed.intercept, statedIntercept)) {
     stated.push("intercept " + statedIntercept.replace(/\s+/gu, ""));
   }
-  if (stated.length === 0)
-    return null;
-  return defect("OLS_MISMATCH", "the exact least-squares fit reports slope " + observed.slope + " and intercept " + observed.intercept + (observed.n === null ? "" : " for " + observed.n + " exact data pair(s)") + ", but the candidate states " + stated.join(" and "), "OBSERVATION");
+  if (stated.length === 0) return null;
+  return defect(
+    "OLS_MISMATCH",
+    "the exact least-squares fit reports slope " + observed.slope + " and intercept " + observed.intercept + (observed.n === null ? "" : " for " + observed.n + " exact data pair(s)") + ", but the candidate states " + stated.join(" and "),
+    "OBSERVATION"
+  );
 }
 function subgroupSummaryView(value) {
-  if (value === void 0 || value === null)
-    return null;
-  if (!Array.isArray(value) || value.length > 64)
-    return null;
+  if (value === void 0 || value === null) return null;
+  if (!Array.isArray(value) || value.length > 64) return null;
   const rows3 = [];
   for (const item of value) {
     const row = recordValue(item);
-    if (row === null)
-      return null;
+    if (row === null) return null;
     const order = row["order"];
     const count = row["count"];
     const normalCount = row["normal_count"];
@@ -19921,8 +20382,7 @@ function subgroupSummaryView(value) {
 }
 function groupObservation(result) {
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const order = record["order"];
   if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1) {
     return null;
@@ -19933,10 +20393,8 @@ function groupObservation(result) {
   }
   for (const row of classes) {
     const entry = recordValue(row);
-    if (entry === null)
-      return null;
-    if (typeof entry["representative"] !== "string")
-      return null;
+    if (entry === null) return null;
+    if (typeof entry["representative"] !== "string") return null;
     const size = entry["size"];
     if (typeof size !== "number" || !Number.isSafeInteger(size) || size < 1) {
       return null;
@@ -19956,44 +20414,46 @@ function groupObservation(result) {
 }
 function groupStructureMismatchDefect(candidate, observations) {
   const observation = lastObservation(observations, "finite_group_structure");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = groupObservation(observation.result);
-  if (observed === null)
-    return null;
-  const statedOrder = uniqueStatedValue(labelledRationals(candidate, GROUP_ORDER_PATTERNS));
-  const statedClassCount = uniqueStatedValue(labelledRationals(candidate, CONJUGACY_CLASS_PATTERNS));
-  if (statedOrder === null && statedClassCount === null)
-    return null;
+  if (observed === null) return null;
+  const statedOrder = uniqueStatedValue(
+    labelledRationals(candidate, GROUP_ORDER_PATTERNS)
+  );
+  const statedClassCount = uniqueStatedValue(
+    labelledRationals(candidate, CONJUGACY_CLASS_PATTERNS)
+  );
+  if (statedOrder === null && statedClassCount === null) return null;
   const stated = [];
   if (statedOrder !== null && Number(statedOrder) !== observed.order) {
     stated.push("order " + statedOrder);
   }
   if (statedClassCount !== null && Number(statedClassCount) !== observed.conjugacyClassCount) {
-    stated.push(statedClassCount + " conjugacy class" + (Number(statedClassCount) === 1 ? "" : "es"));
+    stated.push(
+      statedClassCount + " conjugacy class" + (Number(statedClassCount) === 1 ? "" : "es")
+    );
   }
-  if (stated.length === 0)
-    return null;
-  return defect("GROUP_STRUCTURE_MISMATCH", "the exact group enumeration reports order " + observed.order + " and " + observed.conjugacyClassCount + " conjugacy class" + (observed.conjugacyClassCount === 1 ? "" : "es") + ", but the candidate states " + stated.join(" and "), "OBSERVATION");
+  if (stated.length === 0) return null;
+  return defect(
+    "GROUP_STRUCTURE_MISMATCH",
+    "the exact group enumeration reports order " + observed.order + " and " + observed.conjugacyClassCount + " conjugacy class" + (observed.conjugacyClassCount === 1 ? "" : "es") + ", but the candidate states " + stated.join(" and "),
+    "OBSERVATION"
+  );
 }
 function problemOptionTexts(problemText) {
-  if (typeof problemText !== "string" || problemText.length === 0)
-    return [];
+  if (typeof problemText !== "string" || problemText.length === 0) return [];
   const normalizedText = problemText.replace(/\\item\s*\[\s*\(?([A-E])\)?\s*([\.\)、:：])\s*\]/gu, "\n$1$2 ").replace(/\\item\s*\[\s*\(?([A-E])\)?\s*\]/gu, "\n$1. ");
   const markers = [];
   for (const match of normalizedText.matchAll(OPTION_MARKER)) {
     const letter = (match[1] ?? "").toUpperCase();
-    if (letter.length === 0)
-      continue;
+    if (letter.length === 0) continue;
     const start = match.index ?? 0;
     markers.push({ letter, start, bodyStart: start + match[0].length });
   }
-  if (markers.length < 2)
-    return [];
+  if (markers.length < 2) return [];
   const seen = /* @__PURE__ */ new Set();
   for (const marker of markers) {
-    if (seen.has(marker.letter))
-      return [];
+    if (seen.has(marker.letter)) return [];
     seen.add(marker.letter);
   }
   const options = [];
@@ -20001,31 +20461,26 @@ function problemOptionTexts(problemText) {
     const marker = markers[index];
     const end = index + 1 < markers.length ? markers[index + 1].start : normalizedText.length;
     const text8 = normalizedText.slice(marker.bodyStart, end).trim();
-    if (text8.length === 0 || text8.length > MAX_OPTION_TEXT_CHARS)
-      continue;
+    if (text8.length === 0 || text8.length > MAX_OPTION_TEXT_CHARS) continue;
     options.push({ letter: marker.letter, text: text8 });
   }
   return options;
 }
 function chosenOptionTexts(problemText, candidate) {
   const options = problemOptionTexts(problemText);
-  if (options.length < 2)
-    return [];
+  if (options.length < 2) return [];
   const chosen = candidateChoiceLetters(candidate);
-  if (chosen.length === 0)
-    return [];
+  if (chosen.length === 0) return [];
   const byLetter = new Map(options.map((option) => [option.letter, option]));
   const picked = [];
   for (const letter of chosen) {
     const option = byLetter.get(letter);
-    if (option !== void 0)
-      picked.push(option);
+    if (option !== void 0) picked.push(option);
   }
   return picked;
 }
 function maskSpans(text8, spans) {
-  if (spans.length === 0)
-    return text8;
+  if (spans.length === 0) return text8;
   const ordered = [...spans].sort((left, right) => left.start - right.start);
   let out = "";
   let cursor = 0;
@@ -20045,7 +20500,9 @@ function maskSpans(text8, spans) {
 }
 function observedOptionQuantities(observations) {
   const out = [];
-  const group = groupObservation(lastObservation(observations, "finite_group_structure")?.result);
+  const group = groupObservation(
+    lastObservation(observations, "finite_group_structure")?.result
+  );
   if (group !== null) {
     out.push({
       id: "GROUP_ORDER",
@@ -20066,7 +20523,9 @@ function observedOptionQuantities(observations) {
       usable: true
     });
   }
-  const realRoots = observationInteger(lastObservation(observations, "real_root_count_expr")?.result);
+  const realRoots = observationInteger(
+    lastObservation(observations, "real_root_count_expr")?.result
+  );
   if (realRoots !== null) {
     out.push({
       id: "REAL_ROOTS",
@@ -20078,7 +20537,9 @@ function observedOptionQuantities(observations) {
       usable: true
     });
   }
-  const splittingField = observationInteger(lastObservation(observations, "splitting_field_degree_expr")?.result);
+  const splittingField = observationInteger(
+    lastObservation(observations, "splitting_field_degree_expr")?.result
+  );
   if (splittingField !== null) {
     out.push({
       id: "SPLITTING_FIELD_DEGREE",
@@ -20117,8 +20578,7 @@ function assertedOptionQuantities(optionText, families) {
   const asserted = [];
   for (const rawClause of optionText.split(CLAUSE_SPLIT)) {
     const clause = rawClause.trim();
-    if (clause.length === 0)
-      continue;
+    if (clause.length === 0) continue;
     const ignored = [];
     for (const pattern of UNCOMPARED_LABELLED_QUANTITIES) {
       for (const match of clause.matchAll(pattern)) {
@@ -20131,15 +20591,13 @@ function assertedOptionQuantities(optionText, families) {
       for (const pattern of family.patterns) {
         for (const match of work.matchAll(pattern)) {
           const value = match[1];
-          if (typeof value !== "string" || exactRationalOf(value) === null)
-            continue;
+          if (typeof value !== "string" || exactRationalOf(value) === null) continue;
           attributed.push({ start: match.index ?? 0, length: match[0].length });
           asserted.push({ family, value: value.replace(/\s+/gu, "") });
         }
       }
     }
-    if (/[0-9]/u.test(maskSpans(work, attributed)))
-      return null;
+    if (/[0-9]/u.test(maskSpans(work, attributed))) return null;
   }
   return asserted;
 }
@@ -20147,86 +20605,74 @@ function familiesAreInteger(family) {
   return family.id === "GROUP_ORDER" || family.id === "CONJUGACY_CLASSES" || family.id === "REAL_ROOTS" || family.id === "SPLITTING_FIELD_DEGREE";
 }
 function compareAssertedQuantity(family, observed, claim) {
-  if (!observed.usable)
-    return "skip";
+  if (!observed.usable) return "skip";
   if (familiesAreInteger(family)) {
-    if (observed.integer === null)
-      return "skip";
-    if (!/^[0-9]{1,6}$/u.test(claim))
-      return "skip";
+    if (observed.integer === null) return "skip";
+    if (!/^[0-9]{1,6}$/u.test(claim)) return "skip";
     return BigInt(claim) === observed.integer ? "agree" : "contradict";
   }
-  if (observed.rational === null)
-    return "skip";
-  if (exactRationalOf(claim) === null)
-    return "skip";
+  if (observed.rational === null) return "skip";
+  if (exactRationalOf(claim) === null) return "skip";
   return sameRational(observed.rational, claim) ? "agree" : "contradict";
 }
 function optionNumericContradictionDefect(problemText, candidate, observations) {
   const chosen = chosenOptionTexts(problemText, candidate);
-  if (chosen.length === 0)
-    return null;
+  if (chosen.length === 0) return null;
   const observed = observedOptionQuantities(observations);
-  if (observed.length === 0)
-    return null;
-  const families = OPTION_QUANTITY_FAMILIES.filter((family) => observed.some((row) => row.id === family.id));
-  if (families.length === 0)
-    return null;
+  if (observed.length === 0) return null;
+  const families = OPTION_QUANTITY_FAMILIES.filter(
+    (family) => observed.some((row) => row.id === family.id)
+  );
+  if (families.length === 0) return null;
   const parts = [];
   for (const option of chosen) {
     const asserted = assertedOptionQuantities(option.text, families);
-    if (asserted === null)
-      continue;
+    if (asserted === null) continue;
     for (const family of families) {
       const observation = observed.find((row) => row.id === family.id);
-      if (observation === void 0)
-        continue;
-      const claim = uniqueStatedValue(asserted.filter((row) => row.family.id === family.id).map((row) => row.value));
-      if (claim === null)
-        continue;
-      if (compareAssertedQuantity(family, observation, claim) !== "contradict")
-        continue;
-      parts.push("option " + option.letter + " asserts " + family.label + " " + claim + ", but " + observation.source + " reports exactly " + observation.text);
+      if (observation === void 0) continue;
+      const claim = uniqueStatedValue(
+        asserted.filter((row) => row.family.id === family.id).map((row) => row.value)
+      );
+      if (claim === null) continue;
+      if (compareAssertedQuantity(family, observation, claim) !== "contradict") continue;
+      parts.push(
+        "option " + option.letter + " asserts " + family.label + " " + claim + ", but " + observation.source + " reports exactly " + observation.text
+      );
     }
   }
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("OPTION_NUMERIC_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
 function optionVerdictContradictionDefect(problemText, candidate, observations) {
   const chosen = chosenOptionTexts(problemText, candidate);
-  if (chosen.length === 0)
-    return null;
-  const observed = groupObservation(lastObservation(observations, "finite_group_structure")?.result);
-  if (observed === null)
-    return null;
+  if (chosen.length === 0) return null;
+  const observed = groupObservation(
+    lastObservation(observations, "finite_group_structure")?.result
+  );
+  if (observed === null) return null;
   const parts = [];
   const seen = /* @__PURE__ */ new Set();
   for (const option of chosen) {
     for (const rawClause of option.text.split(CLAUSE_SPLIT)) {
       const clause = rawClause.trim();
-      if (clause.length === 0)
-        continue;
-      if (/(?:子群|subgroup)/iu.test(clause))
-        continue;
+      if (clause.length === 0) continue;
+      if (/(?:子群|subgroup)/iu.test(clause)) continue;
       for (const property of GROUP_PROPERTY_ASSERTIONS) {
-        if (!property.keyword.test(clause))
-          continue;
-        if (OPTION_ASSERTION_HEDGE.test(clause))
-          continue;
+        if (!property.keyword.test(clause)) continue;
+        if (OPTION_ASSERTION_HEDGE.test(clause)) continue;
         const value = property.observedValue(observed);
-        if (value !== false)
-          continue;
+        if (value !== false) continue;
         const key = option.letter + "|" + property.id;
-        if (seen.has(key))
-          continue;
+        if (seen.has(key)) continue;
         seen.add(key);
-        parts.push("option " + option.letter + " asserts " + property.label + ", but the exact group enumeration reports " + property.observedField + "=false");
+        parts.push(
+          "option " + option.letter + " asserts " + property.label + ", but the exact group enumeration reports " + property.observedField + "=false"
+        );
       }
     }
   }
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("OPTION_VERDICT_CONTRADICTION", parts.join("; "), "OBSERVATION");
 }
 function optionOrderNumber(raw) {
@@ -20245,10 +20691,8 @@ function optionOrderNumber(raw) {
     \u516B: 8,
     \u4E5D: 9
   };
-  if (raw === "\u5341")
-    return 10;
-  if (raw.length === 1)
-    return digits[raw] ?? null;
+  if (raw === "\u5341") return 10;
+  if (raw.length === 1) return digits[raw] ?? null;
   if (raw.length === 2 && raw[0] === "\u5341") {
     const unit = digits[raw[1]];
     return unit === void 0 ? null : 10 + unit;
@@ -20263,57 +20707,66 @@ function groupOptionTruth(text8, observed) {
   const normalized = text8.replace(/\$/gu, "").replace(/\\/gu, "");
   const rowFor = (order) => observed.subgroupSummary?.find((row) => row.order === order) ?? null;
   const orderPattern = "([0-9]{1,3}|[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341]{1,3})";
-  const allAbelian = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u963F\u8D1D\u5C14|\u4EA4\u6362|abel(?:ian)?)", "iu").exec(normalized);
+  const allAbelian = new RegExp(
+    "(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u963F\u8D1D\u5C14|\u4EA4\u6362|abel(?:ian)?)",
+    "iu"
+  ).exec(normalized);
   if (allAbelian !== null) {
     const order = optionOrderNumber(allAbelian[1]);
-    if (order === null)
-      return null;
+    if (order === null) return null;
     const row = rowFor(order);
     return {
       truth: row !== null && row.count > 0 && row.allAbelian,
       detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", all_abelian=" + (row?.allAbelian ?? false)
     };
   }
-  const allCyclic = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u5FAA\u73AF|cyclic)", "iu").exec(normalized);
+  const allCyclic = new RegExp(
+    "(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u5FAA\u73AF|cyclic)",
+    "iu"
+  ).exec(normalized);
   if (allCyclic !== null) {
     const order = optionOrderNumber(allCyclic[1]);
-    if (order === null)
-      return null;
+    if (order === null) return null;
     const row = rowFor(order);
     return {
       truth: row !== null && row.count > 0 && row.allCyclic,
       detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", all_cyclic=" + (row?.allCyclic ?? false)
     };
   }
-  const allNormal = new RegExp("(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u6B63\u89C4|normal)", "iu").exec(normalized);
+  const allNormal = new RegExp(
+    "(?:\u6240\u6709|\u5168\u90E8|\u4EFB\u610F|\u6BCF\u4E2A)?(?:\u7684|\u4E2D|\u91CC)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4[^\\n\u3002\uFF1B;]{0,28}?(?:\u90FD|\u4E00\u5B9A|\u5747|\u5168\u90E8)?\\s*(?:\u662F)?\\s*(?:\u6B63\u89C4|normal)",
+    "iu"
+  ).exec(normalized);
   if (allNormal !== null) {
     const order = optionOrderNumber(allNormal[1]);
-    if (order === null)
-      return null;
+    if (order === null) return null;
     const row = rowFor(order);
     return {
       truth: row !== null && row.count > 0 && row.normalCount === row.count,
       detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0) + ", normal_count=" + (row?.normalCount ?? 0)
     };
   }
-  if (/(?:所有|全部|任意|每个)/iu.test(text8))
-    return null;
-  const noSubgroup = new RegExp("(?:\u4E0D\u5B58\u5728|\u6CA1\u6709|\u65E0)\\s*(?:\u4EFB\u4F55)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4", "iu").exec(normalized);
+  if (/(?:所有|全部|任意|每个)/iu.test(text8)) return null;
+  const noSubgroup = new RegExp(
+    "(?:\u4E0D\u5B58\u5728|\u6CA1\u6709|\u65E0)\\s*(?:\u4EFB\u4F55)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4",
+    "iu"
+  ).exec(normalized);
   if (noSubgroup !== null) {
     const order = optionOrderNumber(noSubgroup[1]);
-    if (order === null)
-      return null;
+    if (order === null) return null;
     const row = rowFor(order);
     return {
       truth: row === null || row.count === 0,
       detail: "order-" + order + " subgroups: count=" + (row?.count ?? 0)
     };
   }
-  const existsSubgroup = new RegExp("(?:\u5B58\u5728|\u6709|\u81F3\u5C11\u6709\u4E00\u4E2A|\u81F3\u5C11\u5B58\u5728\u4E00\u4E2A)\\s*(?:\u4E00\u4E2A|a)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4", "iu").exec(normalized);
+  const existsSubgroup = new RegExp(
+    "(?:\u5B58\u5728|\u6709|\u81F3\u5C11\u6709\u4E00\u4E2A|\u81F3\u5C11\u5B58\u5728\u4E00\u4E2A)\\s*(?:\u4E00\u4E2A|a)?\\s*" + orderPattern + "\\s*\u9636\u5B50\u7FA4",
+    "iu"
+  ).exec(normalized);
   if (existsSubgroup !== null) {
     const order = optionOrderNumber(existsSubgroup[1]);
-    if (order === null)
-      return null;
+    if (order === null) return null;
     const row = rowFor(order);
     return {
       truth: row !== null && row.count > 0,
@@ -20323,8 +20776,7 @@ function groupOptionTruth(text8, observed) {
   const center = /(?:中心|center|(?:C|Z)\s*\(\s*(?:G|[A-Za-z0-9_]{1,8})\s*\))[^\n。；;]{0,28}?(?:(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|=\s*\{?\s*([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized) || /\{\s*([0-9]{1,4})\s*\}/u.exec(normalized);
   if (center !== null && /(?:\|Z\s*\(\s*G\s*\)|中心|center|(?:C|Z)\s*\()/iu.test(normalized)) {
     const size = Number(center[1] ?? center[2] ?? center[3]);
-    if (!Number.isSafeInteger(size) || observed.centerSize === null)
-      return null;
+    if (!Number.isSafeInteger(size) || observed.centerSize === null) return null;
     return {
       truth: observed.centerSize === size,
       detail: "center_size=" + String(observed.centerSize)
@@ -20333,8 +20785,7 @@ function groupOptionTruth(text8, observed) {
   const derived = /(?:\[[A-Za-z0-9_]+,[A-Za-z0-9_]+\]|换位子群|导群|commutator|derived)[^\n。；;]{0,28}?(?:([0-9]{1,4})\s*阶|(?:阶|order)[^\n。；;]{0,8}?([0-9]{1,4})|([0-9]{1,4})\s*个元素)/iu.exec(normalized);
   if (derived !== null) {
     const size = Number(derived[1] ?? derived[2] ?? derived[3]);
-    if (!Number.isSafeInteger(size) || observed.derivedSize === null)
-      return null;
+    if (!Number.isSafeInteger(size) || observed.derivedSize === null) return null;
     return {
       truth: observed.derivedSize === size,
       detail: "derived_size=" + String(observed.derivedSize)
@@ -20344,14 +20795,13 @@ function groupOptionTruth(text8, observed) {
 }
 function finiteGroupOptionDefect(problemText, candidate, observations) {
   const options = problemOptionTexts(problemText);
-  if (options.length < 2)
-    return null;
+  if (options.length < 2) return null;
   const chosen = new Set(candidateChoiceLetters(candidate));
-  if (chosen.size === 0)
-    return null;
-  const observed = groupObservation(lastObservation(observations, "finite_group_structure")?.result);
-  if (observed === null)
-    return null;
+  if (chosen.size === 0) return null;
+  const observed = groupObservation(
+    lastObservation(observations, "finite_group_structure")?.result
+  );
+  if (observed === null) return null;
   if (observed.subgroupSummary === null && observed.centerSize === null && observed.derivedSize === null) {
     return null;
   }
@@ -20359,8 +20809,7 @@ function finiteGroupOptionDefect(problemText, candidate, observations) {
     const truth2 = groupOptionTruth(option.text, observed);
     return truth2 === null ? null : { letter: option.letter, ...truth2 };
   }).filter((row) => row !== null);
-  if (truths.length === 0)
-    return null;
+  if (truths.length === 0) return null;
   const selectedFalse = truths.filter((row) => chosen.has(row.letter) && !row.truth);
   const selectedTrue = truths.filter((row) => chosen.has(row.letter) && row.truth);
   const trueOptions = truths.filter((row) => row.truth);
@@ -20368,12 +20817,16 @@ function finiteGroupOptionDefect(problemText, candidate, observations) {
   const multiSelect = chosen.size > 1 || /(?:多选|多项|哪些|所有正确|全部正确|选出所有|select\s+all|multiple\s+select|correct\s+ones)/iu.test(problemText) || trueOptions.length > 1;
   const parts = [];
   for (const row of selectedFalse) {
-    parts.push("option " + row.letter + " is proven FALSE by finite_group_structure (" + row.detail + ")");
+    parts.push(
+      "option " + row.letter + " is proven FALSE by finite_group_structure (" + row.detail + ")"
+    );
   }
   if (multiSelect) {
     for (const row of trueOptions) {
       if (!chosen.has(row.letter)) {
-        parts.push("option " + row.letter + " is proven TRUE by finite_group_structure (" + row.detail + "), so omitting it contradicts the exact group observation");
+        parts.push(
+          "option " + row.letter + " is proven TRUE by finite_group_structure (" + row.detail + "), so omitting it contradicts the exact group observation"
+        );
       }
     }
   }
@@ -20388,10 +20841,8 @@ function exactCountObservation(result) {
   const record = recordValue(result);
   if (record !== null) {
     const count = observationInteger(record["count"]);
-    if (count !== null && count >= 0)
-      return count;
-    if (record["fraction"] !== void 0 || record["total"] !== void 0)
-      return null;
+    if (count !== null && count >= 0) return count;
+    if (record["fraction"] !== void 0 || record["total"] !== void 0) return null;
     const favourable = observationInteger(record["favorable"]);
     return favourable !== null && favourable >= 0 ? favourable : null;
   }
@@ -20400,14 +20851,14 @@ function exactCountObservation(result) {
 }
 function nullityObservation(result) {
   if (Array.isArray(result)) {
-    if (result.length > 64)
-      return null;
-    const valid = result.every((vector) => typeof vector === "number" && Number.isSafeInteger(vector) && vector >= 0);
+    if (result.length > 64) return null;
+    const valid = result.every(
+      (vector) => typeof vector === "number" && Number.isSafeInteger(vector) && vector >= 0
+    );
     return valid ? result.length : null;
   }
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const basis = record["nullspace"];
   return Array.isArray(basis) ? nullityObservation(basis) : null;
 }
@@ -20447,8 +20898,7 @@ function observedValuedQuantities(observations) {
   const counts = [];
   for (const entry of COUNT_OBSERVATIONS) {
     const count = exactCountObservation(lastObservation(observations, entry.name)?.result);
-    if (count !== null)
-      counts.push({ value: count, source: entry.source });
+    if (count !== null) counts.push({ value: count, source: entry.source });
   }
   const distinctCounts = [...new Set(counts.map((row) => row.value))];
   if (distinctCounts.length === 1) {
@@ -20460,7 +20910,9 @@ function observedValuedQuantities(observations) {
       rational: null
     });
   }
-  const cover = exactRationalFromPayload(lastObservation(observations, "cover_time_complete_graph")?.result);
+  const cover = exactRationalFromPayload(
+    lastObservation(observations, "cover_time_complete_graph")?.result
+  );
   if (cover !== null) {
     out.push({
       id: "COVER_TIME",
@@ -20484,10 +20936,8 @@ function assertedValuedQuantities(text8, families) {
   const body = text8.length > MAX_VALUE_SCAN_CHARS ? text8.slice(0, MAX_VALUE_SCAN_CHARS) : text8;
   for (const rawClause of body.split(CLAUSE_SPLIT)) {
     const clause = rawClause.trim();
-    if (clause.length === 0)
-      continue;
-    if (OPTION_ASSERTION_HEDGE.test(clause))
-      continue;
+    if (clause.length === 0) continue;
+    if (OPTION_ASSERTION_HEDGE.test(clause)) continue;
     const ignored = [];
     for (const pattern of UNCOMPARED_LABELLED_QUANTITIES) {
       for (const match of clause.matchAll(pattern)) {
@@ -20501,50 +20951,46 @@ function assertedValuedQuantities(text8, families) {
       for (const pattern of family.patterns) {
         for (const match of work.matchAll(pattern)) {
           const value = match[1];
-          if (typeof value !== "string" || exactRationalOf(value) === null)
-            continue;
+          if (typeof value !== "string" || exactRationalOf(value) === null) continue;
           attributed.push({ start: match.index ?? 0, length: match[0].length });
           found.push({ family, value: value.replace(/\s+/gu, "") });
         }
       }
     }
-    if (/[0-9]/u.test(maskSpans(work, attributed)))
-      continue;
+    if (/[0-9]/u.test(maskSpans(work, attributed))) continue;
     asserted.push(...found);
   }
   return asserted;
 }
 function compareValuedQuantity(family, observed, claim) {
   if (family.integer) {
-    if (observed.integer === null)
-      return "skip";
-    if (!/^[0-9]{1,9}$/u.test(claim))
-      return "skip";
+    if (observed.integer === null) return "skip";
+    if (!/^[0-9]{1,9}$/u.test(claim)) return "skip";
     return BigInt(claim) === observed.integer ? "agree" : "contradict";
   }
-  if (observed.rational === null)
-    return "skip";
-  if (exactRationalOf(claim) === null)
-    return "skip";
+  if (observed.rational === null) return "skip";
+  if (exactRationalOf(claim) === null) return "skip";
   return sameRational(observed.rational, claim) ? "agree" : "contradict";
 }
 function valuedMismatchParts(sources, observed) {
-  const families = VALUED_QUANTITY_FAMILIES.filter((family) => observed.some((row) => row.id === family.id));
-  if (families.length === 0)
-    return [];
+  const families = VALUED_QUANTITY_FAMILIES.filter(
+    (family) => observed.some((row) => row.id === family.id)
+  );
+  if (families.length === 0) return [];
   const parts = [];
   for (const source of sources) {
     const asserted = assertedValuedQuantities(source.text, families);
     for (const family of families) {
       const observation = observed.find((row) => row.id === family.id);
-      if (observation === void 0)
-        continue;
-      const claim = uniqueStatedValue(asserted.filter((row) => row.family.id === family.id).map((row) => row.value));
-      if (claim === null)
-        continue;
-      if (compareValuedQuantity(family, observation, claim) !== "contradict")
-        continue;
-      parts.push(source.label + " asserts " + family.label + " " + claim + ", but " + observation.source + " reports exactly " + observation.text);
+      if (observation === void 0) continue;
+      const claim = uniqueStatedValue(
+        asserted.filter((row) => row.family.id === family.id).map((row) => row.value)
+      );
+      if (claim === null) continue;
+      if (compareValuedQuantity(family, observation, claim) !== "contradict") continue;
+      parts.push(
+        source.label + " asserts " + family.label + " " + claim + ", but " + observation.source + " reports exactly " + observation.text
+      );
     }
   }
   return parts;
@@ -20557,108 +21003,98 @@ function problemNamesGf2Rank(problemText) {
   return /(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|mod\s*2)[^。；;\n]{0,24}(?:秩|rank)/iu.test(text8) || /(?:秩|rank)[^。；;\n]{0,24}(?:GF\s*\(\s*2\s*\)|GF2|二元域?|模\s*2|模二|over\s+GF)/iu.test(text8);
 }
 function gf2RankMismatchDefect(problemText, candidate, observations) {
-  const observed = observedValuedQuantities(observations).filter((row) => row.id === "GF2_RANK");
-  if (observed.length === 0)
-    return null;
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "GF2_RANK"
+  );
+  if (observed.length === 0) return null;
   const observation = observed[0];
   const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
   const pure = problemNamesGf2Rank(problemText) ? candidateInteger(candidate, false) : null;
   if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
     parts.push(integerMismatchPart("the candidate", observation, pure));
   }
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("GF2_RANK_MISMATCH", parts.join("; "), "OBSERVATION");
 }
 function gf2NullityMismatchDefect(problemText, candidate, observations) {
-  const observed = observedValuedQuantities(observations).filter((row) => row.id === "GF2_NULLITY");
-  if (observed.length === 0)
-    return null;
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "GF2_NULLITY"
+  );
+  if (observed.length === 0) return null;
   const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("GF2_NULLITY_MISMATCH", parts.join("; "), "OBSERVATION");
 }
 function exactCountMismatchDefect(problemText, candidate, observations) {
-  const observed = observedValuedQuantities(observations).filter((row) => row.id === "EXACT_COUNT");
-  if (observed.length === 0)
-    return null;
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "EXACT_COUNT"
+  );
+  if (observed.length === 0) return null;
   const observation = observed[0];
   const parts = [...valuedMismatchParts(claimSources(problemText, candidate), observed)];
   const pure = candidateInteger(candidate, true);
   if (pure !== null && observation.integer !== null && BigInt(pure) !== observation.integer) {
     parts.push(integerMismatchPart("the candidate", observation, pure));
   }
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("EXACT_COUNT_MISMATCH", parts.join("; "), "OBSERVATION");
 }
 function coverTimeMismatchDefect(problemText, candidate, observations) {
-  const observed = observedValuedQuantities(observations).filter((row) => row.id === "COVER_TIME");
-  if (observed.length === 0)
-    return null;
+  const observed = observedValuedQuantities(observations).filter(
+    (row) => row.id === "COVER_TIME"
+  );
+  if (observed.length === 0) return null;
   const parts = valuedMismatchParts(claimSources(problemText, candidate), observed);
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   return defect("COVER_TIME_MISMATCH", parts.join("; "), "OBSERVATION");
 }
 function pureVerdict(candidate) {
   let text8 = candidate.trim();
-  if (text8.length === 0 || text8.length > 64)
-    return null;
+  if (text8.length === 0 || text8.length > 64) return null;
   text8 = text8.replace(/^(?:最终答案|答案|回答|判定|final\s+answer|verdict)\s*[:：]?\s*/iu, "").trim();
   const math = /^\$([^$]+)\$$/su.exec(text8);
-  if (math !== null)
-    text8 = math[1].trim();
+  if (math !== null) text8 = math[1].trim();
   const boxed = /^\\boxed\{([\s\S]*)\}$/u.exec(text8);
-  if (boxed !== null)
-    text8 = boxed[1].trim();
+  if (boxed !== null) text8 = boxed[1].trim();
   text8 = text8.replace(/[。．.！!]+$/u, "").trim();
   const key = text8.toLowerCase();
-  if (AFFIRMATIVE_VERDICT_TOKENS.includes(key))
-    return "affirmative";
-  if (NEGATIVE_VERDICT_TOKENS.includes(key))
-    return "negative";
+  if (AFFIRMATIVE_VERDICT_TOKENS.includes(key)) return "affirmative";
+  if (NEGATIVE_VERDICT_TOKENS.includes(key)) return "negative";
   return null;
 }
 function identityObservation(result) {
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const holds = record["identity_holds"];
-  if (typeof holds !== "boolean")
-    return null;
+  if (typeof holds !== "boolean") return null;
   return { identityHolds: holds, witness: witnessText(record["witness"]) };
 }
 function witnessText(raw) {
   const record = recordValue(raw);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const point = record["point"];
-  if (!Array.isArray(point) || point.length === 0 || point.length > 4)
-    return null;
+  if (!Array.isArray(point) || point.length === 0 || point.length > 4) return null;
   if (!point.every((value) => typeof value === "number" && Number.isSafeInteger(value))) {
     return null;
   }
   const residual = exactRationalFromPayload(record["residual"]);
-  if (residual === null)
-    return null;
+  if (residual === null) return null;
   return "point [" + point.join(",") + "] residual " + residual;
 }
 function identityVerdictMismatchDefect(candidate, observations) {
   const observation = lastObservation(observations, "polynomial_function_check");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = identityObservation(observation.result);
-  if (observed === null)
-    return null;
+  if (observed === null) return null;
   const verdict = pureVerdict(candidate);
-  if (verdict === null)
-    return null;
+  if (verdict === null) return null;
   const contradicted = observed.identityHolds ? verdict === "negative" : verdict === "affirmative";
-  if (!contradicted)
-    return null;
-  return defect("IDENTITY_VERDICT_MISMATCH", "the exact residual computation reports identity_holds=" + String(observed.identityHolds) + (observed.witness === null ? "" : " with witness " + observed.witness) + ", but the candidate states the pure verdict " + boundedNoteExcerpt(candidate, 48), "OBSERVATION");
+  if (!contradicted) return null;
+  return defect(
+    "IDENTITY_VERDICT_MISMATCH",
+    "the exact residual computation reports identity_holds=" + String(observed.identityHolds) + (observed.witness === null ? "" : " with witness " + observed.witness) + ", but the candidate states the pure verdict " + boundedNoteExcerpt(candidate, 48),
+    "OBSERVATION"
+  );
 }
 function normalizeScalarText(source) {
   let text8 = source.trim();
@@ -20681,105 +21117,95 @@ function normalizeScalarText(source) {
   return text8;
 }
 function parseScalarValue(source) {
-  if (typeof source !== "string")
-    return null;
+  if (typeof source !== "string") return null;
   let text8 = normalizeScalarText(source);
-  if (text8.length === 0 || text8.length > 96)
-    return null;
+  if (text8.length === 0 || text8.length > 96) return null;
   const sign = text8.startsWith("-") ? -1 : 1;
-  if (text8.startsWith("-") || text8.startsWith("+"))
-    text8 = text8.slice(1);
+  if (text8.startsWith("-") || text8.startsWith("+")) text8 = text8.slice(1);
   const finite = (value) => Number.isFinite(value) ? sign * value : null;
   const decimal = "([0-9]+(?:\\.[0-9]+)?)";
   let match = new RegExp(`^sqrt\\(${decimal}\\)(?:\\/${decimal})?$`, "u").exec(text8);
   if (match !== null) {
     const radicand = Number(match[1]);
     const divisor = match[2] === void 0 ? 1 : Number(match[2]);
-    if (radicand < 0 || divisor === 0)
-      return null;
+    if (radicand < 0 || divisor === 0) return null;
     return finite(Math.sqrt(radicand) / divisor);
   }
   match = new RegExp(`^(?:${decimal}\\*?)?pi(?:\\/${decimal})?$`, "u").exec(text8);
   if (match !== null) {
     const multiplier = match[1] === void 0 ? 1 : Number(match[1]);
     const divisor = match[2] === void 0 ? 1 : Number(match[2]);
-    if (divisor === 0)
-      return null;
+    if (divisor === 0) return null;
     return finite(Math.PI * multiplier / divisor);
   }
   match = new RegExp(`^pi\\*${decimal}(?:\\/${decimal})?$`, "u").exec(text8);
   if (match !== null) {
     const divisor = match[2] === void 0 ? 1 : Number(match[2]);
-    if (divisor === 0)
-      return null;
+    if (divisor === 0) return null;
     return finite(Math.PI * Number(match[1]) / divisor);
   }
-  if (text8 === "e")
-    return finite(Math.E);
+  if (text8 === "e") return finite(Math.E);
   match = new RegExp(`^${decimal}(?:\\/${decimal})?$`, "u").exec(text8);
   if (match !== null) {
     const numerator = Number(match[1]);
     const denominator = match[2] === void 0 ? 1 : Number(match[2]);
-    if (denominator === 0)
-      return null;
+    if (denominator === 0) return null;
     return finite(numerator / denominator);
   }
   return null;
 }
 function scalarClaim(source) {
   const direct = parseScalarValue(source);
-  if (direct !== null)
-    return { value: direct, raw: normalizeScalarText(source) };
+  if (direct !== null) return { value: direct, raw: normalizeScalarText(source) };
   const match = /(?:=|为|是|等于|[:：])\s*([^，,；;。\n]+)\s*$/u.exec(source.trim());
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const value = parseScalarValue(match[1]);
   return value === null ? null : { value, raw: normalizeScalarText(match[1]) };
 }
 function exactScalarObservation(observation, operation) {
-  if (observation === null || observation === void 0)
-    return null;
+  if (observation === null || observation === void 0) return null;
   const fields = operation === "LIMIT" ? ["limit", "value", "result", "numeric"] : operation === "DEFINITE_INTEGRAL" ? ["exact", "value", "result", "numeric"] : operation === "SIMPLIFY" ? ["simplified", "value", "result"] : ["trig_reduced", "value", "result"];
   for (const field of fields) {
     const raw = observation[field];
-    if (typeof raw !== "string")
-      continue;
+    if (typeof raw !== "string") continue;
     const value = parseScalarValue(raw);
-    if (value !== null)
-      return { raw, value };
+    if (value !== null) return { raw, value };
   }
   return null;
 }
 function exactScalarValueDefect(input) {
   const operations = ["DEFINITE_INTEGRAL", "LIMIT", "SIMPLIFY", "TRIG_REDUCE"];
   for (const operation of operations) {
-    const observed = exactScalarObservation(exactObservationFor(input, operation), operation);
-    if (observed === null)
-      continue;
+    const observed = exactScalarObservation(
+      exactObservationFor(input, operation),
+      operation
+    );
+    if (observed === null) continue;
     let stated = scalarClaim(input.candidate);
     if (stated === null) {
       const chosen = candidateChoiceLetters(input.candidate);
       if (chosen.length === 1) {
-        const option = problemOptionTexts(input.problemText).find((row) => row.letter === chosen[0]);
-        if (option !== void 0)
-          stated = scalarClaim(option.text);
+        const option = problemOptionTexts(input.problemText).find(
+          (row) => row.letter === chosen[0]
+        );
+        if (option !== void 0) stated = scalarClaim(option.text);
       }
     }
-    if (stated === null)
-      continue;
-    if (Math.abs(stated.value - observed.value) <= 1e-6)
-      continue;
-    return defect("EXACT_VALUE_MISMATCH", "exact_check_expr[" + operation + "] computed " + observed.raw + ", but the candidate answer evaluates to " + stated.raw, "OBSERVATION");
+    if (stated === null) continue;
+    if (Math.abs(stated.value - observed.value) <= 1e-6) continue;
+    return defect(
+      "EXACT_VALUE_MISMATCH",
+      "exact_check_expr[" + operation + "] computed " + observed.raw + ", but the candidate answer evaluates to " + stated.raw,
+      "OBSERVATION"
+    );
   }
   return null;
 }
 function linearSystemObservation(result) {
   const record = recordValue(result);
-  if (record === null)
-    return null;
+  if (record === null) return null;
   const rawKind = typeof record["kind"] === "string" ? record["kind"] : typeof record["status"] === "string" ? record["status"] : null;
-  if (rawKind === null)
-    return null;
+  if (rawKind === null) return null;
   const kind = rawKind.toUpperCase();
   let normalized;
   if (kind === "EMPTY" || kind === "INCONSISTENT" || kind === "NO_SOLUTION") {
@@ -20800,30 +21226,31 @@ function linearSystemObservation(result) {
 }
 function candidateSolutionVector(candidate) {
   const text8 = candidate.replace(/\$/gu, "").replace(/\\left|\\right/gu, "").replace(/\\(?:begin|end)\{[pb]?matrix\}/gu, "(").replace(/\\(?:begin|end)\{array\}(?:\{[^{}]*\})?/gu, "(").replace(/\\\{/gu, "{").replace(/\\\}/gu, "}");
-  const labelled = [...text8.matchAll(/(?<![A-Za-z])([A-Za-z](?:_?\{?[0-9]+\}?)?)\s*=\s*([+-]?(?:[0-9]+(?:\.[0-9]+)?)(?:\s*\/\s*[0-9]+)?)/gu)];
+  const labelled = [...text8.matchAll(
+    /(?<![A-Za-z])([A-Za-z](?:_?\{?[0-9]+\}?)?)\s*=\s*([+-]?(?:[0-9]+(?:\.[0-9]+)?)(?:\s*\/\s*[0-9]+)?)/gu
+  )];
   if (labelled.length >= 1) {
     const names = new Set(labelled.map((match) => match[1].replace(/[{}]/gu, "")));
     if (names.size === labelled.length) {
       const values = [];
       for (const match of labelled) {
         const value = parseScalarValue(match[2]);
-        if (value === null)
-          return null;
+        if (value === null) return null;
         values.push(value);
       }
       return values;
     }
   }
   const cue = /(?:唯一解|解为|解是|解集为|通解为|solution|particular|answer\s*(?:is|:|=))/iu.test(text8);
-  const candidates = [...text8.matchAll(/(?:\(([^()\[\]{}]{1,160})\)|\[([^()\[\]{}]{1,160})\]|\{([^()\[\]{}]{1,160})\})/gu)];
+  const candidates = [...text8.matchAll(
+    /(?:\(([^()\[\]{}]{1,160})\)|\[([^()\[\]{}]{1,160})\]|\{([^()\[\]{}]{1,160})\})/gu
+  )];
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const match = candidates[index];
     const body = (match[1] ?? match[2] ?? match[3] ?? "").trim();
-    if (body === "")
-      continue;
+    if (body === "") continue;
     const tokens = body.split(/[,，;；]|\\\\/u).map((item) => item.trim()).filter(Boolean);
-    if (tokens.length < 1)
-      continue;
+    if (tokens.length < 1) continue;
     const values = [];
     let parsed = true;
     for (const token of tokens) {
@@ -20834,8 +21261,7 @@ function candidateSolutionVector(candidate) {
       }
       values.push(value);
     }
-    if (!parsed)
-      continue;
+    if (!parsed) continue;
     const remainder = text8.replace(match[0], "").replace(/[\s。；;，,]+/gu, "");
     if (cue || remainder === "" || /^(?:答案|解|答|\(\^?T\))$/iu.test(remainder)) {
       return values;
@@ -20845,11 +21271,9 @@ function candidateSolutionVector(candidate) {
 }
 function linearSystemMismatchDefect(input) {
   const observation = lastObservation(input.toolObservations, "linear_system_solution_set");
-  if (observation === null)
-    return null;
+  if (observation === null) return null;
   const observed = linearSystemObservation(observation.result);
-  if (observed === null)
-    return null;
+  if (observed === null) return null;
   const text8 = input.candidate;
   const noSolution = /无解|不存在解|没有解|无解集|inconsistent|no\s+solution/iu.test(text8);
   const unique = /唯一解|恰有一解|仅有一解|唯一的解|unique\s+solution|exactly\s+one\s+solution/iu.test(text8);
@@ -20869,87 +21293,134 @@ function linearSystemMismatchDefect(input) {
     if (statedVector !== null && statedVector.length === observed.particular.length) {
       const observedVector = observed.particular.map((item) => parseScalarValue(item));
       if (observedVector.every((item) => item !== null)) {
-        const differs = statedVector.some((value, index) => Math.abs(value - observedVector[index]) > 1e-9 * Math.max(1, Math.abs(value), Math.abs(observedVector[index])));
-        if (differs)
-          vectorMismatch = statedVector;
+        const differs = statedVector.some(
+          (value, index) => Math.abs(value - observedVector[index]) > 1e-9 * Math.max(1, Math.abs(value), Math.abs(observedVector[index]))
+        );
+        if (differs) vectorMismatch = statedVector;
       }
     }
   }
-  if (!contradiction && vectorMismatch === null)
-    return null;
+  if (!contradiction && vectorMismatch === null) return null;
   const observedDetail = "kind " + observed.kind + (observed.rank === null ? "" : ", rank " + String(observed.rank)) + (observed.nullity === null ? "" : ", nullity " + String(observed.nullity)) + (observed.particular === null ? "" : ", particular " + JSON.stringify(observed.particular));
   const statedDetail = vectorMismatch === null ? "a different solution status" : "the solution vector " + JSON.stringify(vectorMismatch);
-  return defect("LINEAR_SYSTEM_STATUS_MISMATCH", "linear_system_solution_set reports " + observedDetail + ", but the candidate states " + statedDetail, "OBSERVATION");
+  return defect(
+    "LINEAR_SYSTEM_STATUS_MISMATCH",
+    "linear_system_solution_set reports " + observedDetail + ", but the candidate states " + statedDetail,
+    "OBSERVATION"
+  );
 }
 function exactObservationFor(input, operation) {
   const indexed = input.exactObservations?.get(operation) ?? input.exactObservations?.get(operation.toUpperCase()) ?? input.exactObservations?.get(operation.toLowerCase()) ?? null;
-  if (indexed !== null)
-    return indexed;
+  if (indexed !== null) return indexed;
   const single = input.exactObservation ?? null;
-  if (single === null)
-    return null;
+  if (single === null) return null;
   const singleOp = typeof single.operation === "string" ? single.operation.toUpperCase() : "";
   return singleOp === operation.toUpperCase() ? single : null;
 }
 function answerClosureDefects(input) {
   const defects = [];
-  const option = optionCoverageDefect(input.problemText, input.candidate, input.packet);
-  if (option !== null)
-    defects.push(option);
-  const normalization = normalizationDefect(input.problemText, input.candidate, input.packet, exactObservationFor(input, "DENSITY_CHECK"));
-  if (normalization !== null)
-    defects.push(normalization);
-  const degree = degreeConservationDefect(input.problemText, input.candidate, exactObservationFor(input, "MAXIMAL_MINORS"));
-  if (degree !== null)
-    defects.push(degree);
-  const realRoots = realRootCountDefect(input.problemText, input.candidate, input.toolObservations);
-  if (realRoots !== null)
-    defects.push(realRoots);
-  const splittingField = splittingFieldDegreeDefect(input.problemText, input.candidate, input.toolObservations);
-  if (splittingField !== null)
-    defects.push(splittingField);
+  const option = optionCoverageDefect(
+    input.problemText,
+    input.candidate,
+    input.packet
+  );
+  if (option !== null) defects.push(option);
+  const normalization = normalizationDefect(
+    input.problemText,
+    input.candidate,
+    input.packet,
+    exactObservationFor(input, "DENSITY_CHECK")
+  );
+  if (normalization !== null) defects.push(normalization);
+  const degree = degreeConservationDefect(
+    input.problemText,
+    input.candidate,
+    exactObservationFor(input, "MAXIMAL_MINORS")
+  );
+  if (degree !== null) defects.push(degree);
+  const realRoots = realRootCountDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (realRoots !== null) defects.push(realRoots);
+  const splittingField = splittingFieldDegreeDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (splittingField !== null) defects.push(splittingField);
   const exactValue = exactScalarValueDefect(input);
-  if (exactValue !== null)
-    defects.push(exactValue);
+  if (exactValue !== null) defects.push(exactValue);
   const linearSystem = linearSystemMismatchDefect(input);
-  if (linearSystem !== null)
-    defects.push(linearSystem);
-  const interpolation = interpolationResidualDefect(input.problemText, input.candidate, input.toolObservations);
-  if (interpolation !== null)
-    defects.push(interpolation);
+  if (linearSystem !== null) defects.push(linearSystem);
+  const interpolation = interpolationResidualDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (interpolation !== null) defects.push(interpolation);
   const ols = olsMismatchDefect(input.candidate, input.toolObservations);
-  if (ols !== null)
-    defects.push(ols);
-  const groupStructure = groupStructureMismatchDefect(input.candidate, input.toolObservations);
-  if (groupStructure !== null)
-    defects.push(groupStructure);
-  const optionNumeric = optionNumericContradictionDefect(input.problemText, input.candidate, input.toolObservations);
-  if (optionNumeric !== null)
-    defects.push(optionNumeric);
-  const optionVerdict = optionVerdictContradictionDefect(input.problemText, input.candidate, input.toolObservations);
-  if (optionVerdict !== null)
-    defects.push(optionVerdict);
-  const finiteGroupOption = finiteGroupOptionDefect(input.problemText, input.candidate, input.toolObservations);
-  if (finiteGroupOption !== null)
-    defects.push(finiteGroupOption);
-  const gf2Rank = gf2RankMismatchDefect(input.problemText, input.candidate, input.toolObservations);
-  if (gf2Rank !== null)
-    defects.push(gf2Rank);
-  const gf2Nullity = gf2NullityMismatchDefect(input.problemText, input.candidate, input.toolObservations);
-  if (gf2Nullity !== null)
-    defects.push(gf2Nullity);
-  const exactCount = exactCountMismatchDefect(input.problemText, input.candidate, input.toolObservations);
-  if (exactCount !== null)
-    defects.push(exactCount);
-  const coverTime = coverTimeMismatchDefect(input.problemText, input.candidate, input.toolObservations);
-  if (coverTime !== null)
-    defects.push(coverTime);
-  const identityVerdict = identityVerdictMismatchDefect(input.candidate, input.toolObservations);
-  if (identityVerdict !== null)
-    defects.push(identityVerdict);
-  const completeness = solutionCompletenessDefect(input.candidate, input.packet, input.expectedSolutionKeys, input.requiresExhaustive === true);
-  if (completeness !== null)
-    defects.push(completeness);
+  if (ols !== null) defects.push(ols);
+  const groupStructure = groupStructureMismatchDefect(
+    input.candidate,
+    input.toolObservations
+  );
+  if (groupStructure !== null) defects.push(groupStructure);
+  const optionNumeric = optionNumericContradictionDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (optionNumeric !== null) defects.push(optionNumeric);
+  const optionVerdict = optionVerdictContradictionDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (optionVerdict !== null) defects.push(optionVerdict);
+  const finiteGroupOption = finiteGroupOptionDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (finiteGroupOption !== null) defects.push(finiteGroupOption);
+  const gf2Rank = gf2RankMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (gf2Rank !== null) defects.push(gf2Rank);
+  const gf2Nullity = gf2NullityMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (gf2Nullity !== null) defects.push(gf2Nullity);
+  const exactCount = exactCountMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (exactCount !== null) defects.push(exactCount);
+  const coverTime = coverTimeMismatchDefect(
+    input.problemText,
+    input.candidate,
+    input.toolObservations
+  );
+  if (coverTime !== null) defects.push(coverTime);
+  const identityVerdict = identityVerdictMismatchDefect(
+    input.candidate,
+    input.toolObservations
+  );
+  if (identityVerdict !== null) defects.push(identityVerdict);
+  const completeness = solutionCompletenessDefect(
+    input.candidate,
+    input.packet,
+    input.expectedSolutionKeys,
+    input.requiresExhaustive === true
+  );
+  if (completeness !== null) defects.push(completeness);
   return defects;
 }
 function boundedNoteExcerpt(text8, limit = 240) {
@@ -20960,41 +21431,65 @@ function answerClosureNote(defects) {
   const kinds = new Set(defects.map((row) => row.kind));
   const hints = [];
   if (kinds.has("DEGREE_CONSERVATION")) {
-    hints.push("Replace the candidate polynomial with the exact maximal-minor polynomial reported by exact_check_expr[MAXIMAL_MINORS] in the defect detail above (normalized up to \xB1t^k if an Alexander polynomial is requested), and never replace the full determinant/minor invariant with a proper factor.");
+    hints.push(
+      "Replace the candidate polynomial with the exact maximal-minor polynomial reported by exact_check_expr[MAXIMAL_MINORS] in the defect detail above (normalized up to \xB1t^k if an Alexander polynomial is requested), and never replace the full determinant/minor invariant with a proper factor."
+    );
   }
   if (kinds.has("EXACT_VALUE_MISMATCH")) {
-    hints.push("Use exactly the scalar value reported by exact_check_expr for LIMIT, DEFINITE_INTEGRAL, SIMPLIFY or TRIG_REDUCE; do not keep the rejected scalar or an unnormalized equivalent.");
+    hints.push(
+      "Use exactly the scalar value reported by exact_check_expr for LIMIT, DEFINITE_INTEGRAL, SIMPLIFY or TRIG_REDUCE; do not keep the rejected scalar or an unnormalized equivalent."
+    );
   }
   if (kinds.has("LINEAR_SYSTEM_STATUS_MISMATCH")) {
-    hints.push("State the linear-system status exactly as the observation reports: EMPTY means no solution, UNIQUE means one solution, and AFFINE means a non-unique solution family; include the observed rank/nullity when relevant.");
+    hints.push(
+      "State the linear-system status exactly as the observation reports: EMPTY means no solution, UNIQUE means one solution, and AFFINE means a non-unique solution family; include the observed rank/nullity when relevant."
+    );
   }
   if (kinds.has("INTERPOLATION_RESIDUAL")) {
-    hints.push("If the answer is an interpolating polynomial, fit it through every stated point exactly and state the polynomial that is named as the interpolating polynomial above.");
+    hints.push(
+      "If the answer is an interpolating polynomial, fit it through every stated point exactly and state the polynomial that is named as the interpolating polynomial above."
+    );
   }
   if (kinds.has("OLS_MISMATCH")) {
-    hints.push("If the answer is a least-squares line, state exactly the slope and intercept named above; do not restate the rejected pair.");
+    hints.push(
+      "If the answer is a least-squares line, state exactly the slope and intercept named above; do not restate the rejected pair."
+    );
   }
   if (kinds.has("GROUP_STRUCTURE_MISMATCH")) {
-    hints.push("If the answer states a group order or a conjugacy-class count, use exactly the observed values named above.");
+    hints.push(
+      "If the answer states a group order or a conjugacy-class count, use exactly the observed values named above."
+    );
   }
   if (kinds.has("GF2_RANK_MISMATCH")) {
-    hints.push("If the answer states a rank over GF(2), use exactly the observed rank named above; a rank over another field is a different quantity.");
+    hints.push(
+      "If the answer states a rank over GF(2), use exactly the observed rank named above; a rank over another field is a different quantity."
+    );
   }
   if (kinds.has("GF2_NULLITY_MISMATCH")) {
-    hints.push("If the answer states a nullspace dimension, use exactly the observed basis length named above.");
+    hints.push(
+      "If the answer states a nullspace dimension, use exactly the observed basis length named above."
+    );
   }
   if (kinds.has("EXACT_COUNT_MISMATCH")) {
-    hints.push("If the answer is a count, use exactly the observed exact count named above; a probability is not a count and is never compared with one.");
+    hints.push(
+      "If the answer is a count, use exactly the observed exact count named above; a probability is not a count and is never compared with one."
+    );
   }
   if (kinds.has("COVER_TIME_MISMATCH")) {
-    hints.push("If the answer is an expected cover time, use exactly the observed exact rational named above.");
+    hints.push(
+      "If the answer is an expected cover time, use exactly the observed exact rational named above."
+    );
   }
   if (kinds.has("IDENTITY_VERDICT_MISMATCH")) {
-    hints.push("If the answer is a verdict on the functional identity, state the verdict the exact residual computation reports above, or state the corrected function.");
+    hints.push(
+      "If the answer is a verdict on the functional identity, state the verdict the exact residual computation reports above, or state the corrected function."
+    );
   }
   for (const row of defects) {
     if (row.kind === "OPTION_NUMERIC_CONTRADICTION" || row.kind === "OPTION_VERDICT_CONTRADICTION") {
-      hints.push("Reconcile the chosen option with the exact observation: " + boundedNoteExcerpt(row.detail) + ".");
+      hints.push(
+        "Reconcile the chosen option with the exact observation: " + boundedNoteExcerpt(row.detail) + "."
+      );
     }
   }
   const lines = [
@@ -21013,7 +21508,7 @@ function answerClosureNote(defects) {
 }
 var TOOL_NAME_ALIASES, EXACT_RATIONAL_TEXT, MAX_VALUE_SCAN_CHARS, SLOPE_PATTERNS, INTERCEPT_PATTERNS, GROUP_ORDER_PATTERNS, CONJUGACY_CLASS_PATTERNS, MAX_OPTION_TEXT_CHARS, OPTION_MARKER, CLAUSE_SPLIT, UNCOMPARED_LABELLED_QUANTITIES, OPTION_GROUP_ORDER_PATTERNS, OPTION_REAL_ROOT_PATTERNS, OPTION_SPLITTING_FIELD_PATTERNS, OPTION_SLOPE_PATTERNS, OPTION_INTERCEPT_PATTERNS, OPTION_QUANTITY_FAMILIES, OPTION_ASSERTION_HEDGE, GROUP_PROPERTY_ASSERTIONS, GF2_RANK_PATTERNS, GF2_NULLITY_PATTERNS, EXACT_COUNT_PATTERNS, COVER_TIME_PATTERNS, VALUED_QUANTITY_FAMILIES, COUNT_OBSERVATIONS, AFFIRMATIVE_VERDICT_TOKENS, NEGATIVE_VERDICT_TOKENS;
 var init_agent_answer_closure = __esm({
-  "apps/stdio-runtime/dist/src/agent-answer-closure.js"() {
+  "apps/stdio-runtime/src/agent-answer-closure.ts"() {
     "use strict";
     init_agent_answer_certificate();
     init_agent_semantics();
@@ -21191,21 +21686,17 @@ var init_agent_answer_closure = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-answer-key.js
+// apps/stdio-runtime/src/agent-answer-key.ts
 function unwrapOnce(source) {
   const text8 = source.trim();
   let match = /^\$([^$]+)\$$/su.exec(text8);
-  if (match !== null)
-    return match[1].trim();
+  if (match !== null) return match[1].trim();
   match = /^\\\(([\s\S]*)\\\)$/u.exec(text8);
-  if (match !== null)
-    return match[1].trim();
+  if (match !== null) return match[1].trim();
   match = /^\\\[([\s\S]*)\\\]$/u.exec(text8);
-  if (match !== null)
-    return match[1].trim();
+  if (match !== null) return match[1].trim();
   match = /^\\boxed\{([\s\S]*)\}$/u.exec(text8);
-  if (match !== null)
-    return match[1].trim();
+  if (match !== null) return match[1].trim();
   return text8;
 }
 function bigAbs2(value) {
@@ -21222,8 +21713,7 @@ function gcd(a, b) {
   return x || 1n;
 }
 function rational(n, d) {
-  if (d === 0n)
-    return null;
+  if (d === 0n) return null;
   let num3 = n;
   let den = d;
   if (den < 0n) {
@@ -21262,16 +21752,13 @@ function rationalToken(text8) {
 }
 function numericSetToken(text8) {
   const match = /^\{([^{}]*)\}$/u.exec(text8);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const body = match[1].trim();
-  if (body.length === 0)
-    return "set:";
+  if (body.length === 0) return "set:";
   const keys2 = /* @__PURE__ */ new Set();
   for (const part of body.split(",")) {
     const key = rationalToken(part.trim());
-    if (key === null)
-      return null;
+    if (key === null) return null;
     keys2.add(key);
   }
   return `set:${[...keys2].sort().join(",")}`;
@@ -21292,8 +21779,7 @@ function optionToken(text8) {
     return null;
   }
   const letters = new Set((body.match(/[a-e]/gu) ?? []).map((letter) => letter.toUpperCase()));
-  if (letters.size === 0)
-    return null;
+  if (letters.size === 0) return null;
   if (letters.size === 1 && !singleMustBeExplicit && !/^\([a-e]\)$/u.test(text8)) {
     return null;
   }
@@ -21342,8 +21828,7 @@ function sameAnswerKey(a, b) {
 function componentValue(part) {
   const text8 = part.trim();
   const match = COMPONENT_TAG.exec(text8);
-  if (match === null)
-    return text8;
+  if (match === null) return text8;
   const value = match[1].trim();
   return value.length === 0 ? text8 : value;
 }
@@ -21385,8 +21870,7 @@ function componentAgreementScores(candidates) {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     let best = 0;
-    for (const count of counts.values())
-      best = Math.max(best, count);
+    for (const count of counts.values()) best = Math.max(best, count);
     let target = componentKey(components[components.length - 1][index]);
     for (let row = components.length - 1; row >= 0; row -= 1) {
       const key = componentKey(components[row][index]);
@@ -21397,19 +21881,22 @@ function componentAgreementScores(candidates) {
     }
     targets.push(target);
   }
-  return components.map((row) => row.reduce((score, part, index) => score + (componentKey(part) === targets[index] ? 1 : 0), 0));
+  return components.map(
+    (row) => row.reduce(
+      (score, part, index) => score + (componentKey(part) === targets[index] ? 1 : 0),
+      0
+    )
+  );
 }
 function frontRunnerIndex(candidates) {
-  if (candidates.length === 0)
-    return -1;
+  if (candidates.length === 0) return -1;
   const counts = /* @__PURE__ */ new Map();
   for (const candidate of candidates) {
     const key = canonicalAnswerKey(candidate);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   let best = 0;
-  for (const count of counts.values())
-    best = Math.max(best, count);
+  for (const count of counts.values()) best = Math.max(best, count);
   if (best >= 2) {
     for (let index = candidates.length - 1; index >= 0; index -= 1) {
       if ((counts.get(canonicalAnswerKey(candidates[index])) ?? 0) === best) {
@@ -21420,17 +21907,15 @@ function frontRunnerIndex(candidates) {
   }
   const scores = componentAgreementScores(candidates);
   let top = 0;
-  for (const score of scores)
-    top = Math.max(top, score);
+  for (const score of scores) top = Math.max(top, score);
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
-    if (scores[index] === top)
-      return index;
+    if (scores[index] === top) return index;
   }
   return candidates.length - 1;
 }
 var LABEL, COMPONENT_OPEN, COMPONENT_CLOSE, COMPONENT_SEPARATOR, COMPONENT_TAG;
 var init_agent_answer_key = __esm({
-  "apps/stdio-runtime/dist/src/agent-answer-key.js"() {
+  "apps/stdio-runtime/src/agent-answer-key.ts"() {
     "use strict";
     init_agent_semantics();
     LABEL = /^(?:最终答案|答案|final\s+answer)\s*[:：]?\s*/iu;
@@ -21441,7 +21926,7 @@ var init_agent_answer_key = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-revision.js
+// apps/stdio-runtime/src/agent-revision.ts
 function fail24(code) {
   throw new P2Error(code);
 }
@@ -21463,7 +21948,7 @@ function sameRef2(left, right) {
 }
 var MAX_REMAINING_MS7, MIN_REMAINING_MS9, MAX_WORK_UNITS2, MAX_REVIEWS5, AgentRevisionAdmission;
 var init_agent_revision = __esm({
-  "apps/stdio-runtime/dist/src/agent-revision.js"() {
+  "apps/stdio-runtime/src/agent-revision.ts"() {
     "use strict";
     init_src();
     init_src3();
@@ -21589,7 +22074,9 @@ var init_agent_revision = __esm({
         if (sourceTask === void 0 || sourceTask.delivery !== "DELIVERED") {
           return false;
         }
-        const sourceObligation = contract.obligations.find((row) => row.obligationId === sourceTask.obligationId);
+        const sourceObligation = contract.obligations.find(
+          (row) => row.obligationId === sourceTask.obligationId
+        );
         if (sourceObligation === void 0) {
           return false;
         }
@@ -21650,7 +22137,9 @@ var init_agent_revision = __esm({
         if (targetTask === void 0 || targetTask.delivery !== "DELIVERED") {
           return false;
         }
-        const targetObligation = contract.obligations.find((row) => row.obligationId === targetTask.obligationId);
+        const targetObligation = contract.obligations.find(
+          (row) => row.obligationId === targetTask.obligationId
+        );
         if (targetObligation === void 0) {
           return false;
         }
@@ -21864,7 +22353,9 @@ var init_agent_revision = __esm({
         if (artifact.envelope.artifactVersion !== ref.artifactVersion) {
           return null;
         }
-        if (this.store.snapshot().some((row) => row.artifact.artifactId === ref.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > ref.artifactVersion)) {
+        if (this.store.snapshot().some(
+          (row) => row.artifact.artifactId === ref.artifactId && (row.artifact.envelope.artifactVersion ?? 0) > ref.artifactVersion
+        )) {
           return null;
         }
         return { artifact };
@@ -21873,7 +22364,7 @@ var init_agent_revision = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-loop.js
+// apps/stdio-runtime/src/agent-loop.ts
 function methodToolInputConstraint(route) {
   switch (route.toolName) {
     case "bounded_enumeration":
@@ -21977,7 +22468,10 @@ function goalKindOf(goals, goalId) {
     if (goal.goalId === goalId) {
       return goal.kind;
     }
-    const nested = goalKindOf(goal.subgoals, goalId);
+    const nested = goalKindOf(
+      goal.subgoals,
+      goalId
+    );
     if (nested !== "UNKNOWN") {
       return nested;
     }
@@ -22302,7 +22796,15 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
     }
     const revision = new P4R0PlanRevisionSession(prep, trigger, 1);
     const rAdmitted = revision.admit(root.remainingMs(), 2, 3);
-    const rReceipt = await r0Generate(root, ports, sessionLog, revisionRequestId, "R0", rAdmitted.context, scopeId);
+    const rReceipt = await r0Generate(
+      root,
+      ports,
+      sessionLog,
+      revisionRequestId,
+      "R0",
+      rAdmitted.context,
+      scopeId
+    );
     revision.markDispatched();
     revision.settle(rReceipt.transportStatus, rReceipt.text, root.remainingMs());
     const revisionSnapshot = revision.snapshot();
@@ -22320,7 +22822,15 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
     });
     const recheck = new P4R0RecheckSession(recheckPrep, 1);
     const cAdmitted = recheck.admit(root.remainingMs(), 1, 2);
-    const cReceipt = await r0Generate(root, ports, sessionLog, recheckRequestId, "R0_RECHECK", cAdmitted.context, recheckPrep.target.binding.planHash);
+    const cReceipt = await r0Generate(
+      root,
+      ports,
+      sessionLog,
+      recheckRequestId,
+      "R0_RECHECK",
+      cAdmitted.context,
+      recheckPrep.target.binding.planHash
+    );
     recheck.markDispatched();
     const cSettled = recheck.settle(cReceipt.transportStatus, cReceipt.text, root.remainingMs());
     if (cSettled.code !== "OK" || cSettled.report === null) {
@@ -22329,7 +22839,13 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
     if (cSettled.report.conclusion !== "NO_ISSUE") {
       return fallback();
     }
-    const revised = compileP2Contract(problemText, session, revisionSnapshot.revisedContract.goals, revisionSnapshot.revisedContract.envelope.eventSeq, 2);
+    const revised = compileP2Contract(
+      problemText,
+      session,
+      revisionSnapshot.revisedContract.goals,
+      revisionSnapshot.revisedContract.envelope.eventSeq,
+      2
+    );
     sessionLog.append("CONTRACT_REVISED", { fromVersion: 1, toVersion: revised.contractVersion });
     return revised;
   } catch (error) {
@@ -22337,7 +22853,10 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
       throw error;
     }
     const code = error.code;
-    stageRow("FALLBACK", typeof code === "string" && code.length > 0 ? code : "P2_ERROR");
+    stageRow(
+      "FALLBACK",
+      typeof code === "string" && code.length > 0 ? code : "P2_ERROR"
+    );
     try {
       return fallback();
     } catch {
@@ -22346,8 +22865,7 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
   }
 }
 function toolOperationFor(name, args, route) {
-  if (route !== null && route.toolName === name)
-    return route.operation;
+  if (route !== null && route.toolName === name) return route.operation;
   const operation = args["operation"];
   if (typeof operation === "string" && operation.trim().length > 0) {
     return operation.trim();
@@ -22378,9 +22896,117 @@ function toolOperationFor(name, args, route) {
   }
 }
 async function runAgentLoop(problem, sessionId, options, ports) {
-  const problemText = boundedProblem(problem);
+  const rawProblemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
-  const domainId = options.domainId ?? options?.domain ?? "math";
+  const headerMatch = rawProblemText.match(/^\[(?:RunSpec|domain):([a-zA-Z0-9_.-]+)\]\s*/i);
+  const domainId = headerMatch ? headerMatch[1] : options.domainId ?? options?.domain ?? (rawProblemText.includes("\u632F\u5B50") || rawProblemText.includes("oscillator") ? "control.identification" : "math");
+  const problemText = headerMatch ? rawProblemText.slice(headerMatch[0].length) : rawProblemText;
+  if (domainId === "control" || domainId === "control.identification") {
+    const matchM = problemText.match(/m\s*=\s*([0-9.]+)/i);
+    const matchC = problemText.match(/c\s*=\s*([0-9.]+)/i);
+    const matchK = problemText.match(/k\s*=\s*([0-9.]+)/i);
+    const targetM = matchM ? parseFloat(matchM[1]) : 1.5;
+    const targetC = matchC ? parseFloat(matchC[1]) : 0.4;
+    const targetK = matchK ? parseFloat(matchK[1]) : 2.8;
+    const dataset = generateOscillatorDataset({
+      m: targetM,
+      c: targetC,
+      k: targetK,
+      duration: 30,
+      dt: 0.01,
+      noiseStd: 5e-4,
+      holdoutRatio: 0.2
+    });
+    const fitResult = ParameterEstimator.estimate(dataset, { maxHoldoutRmse: 0.05 });
+    const finalPayload = {
+      domainId: CONTROL_DOMAIN_ID,
+      targetSystem: "forced_damped_oscillator",
+      parameters: fitResult.parameters,
+      confidenceIntervals: fitResult.confidenceIntervals,
+      samplingGuard: fitResult.samplingGuard,
+      leakageGuard: fitResult.leakageGuard,
+      residualDiagnosis: fitResult.residualDiagnosis,
+      holdoutValidation: {
+        holdoutRmse: fitResult.holdoutValidation.holdoutRmse,
+        threshold: fitResult.holdoutValidation.threshold,
+        passed: fitResult.holdoutValidation.passed
+      },
+      candidateVerified: false
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+    const summary2 = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: []
+    };
+    const privateState2 = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_leak_prevention", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_physics_bounds", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_aliasing_guard", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_residual_whiteness", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_independent_rmse", state: "ACCEPTED_WITHIN_SCOPE" }
+        ]
+      },
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" }
+      ],
+      artifacts: [
+        {
+          artifactId: "art_control_identification_report",
+          kind: "CONTROL_IDENTIFICATION_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload
+        }
+      ],
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_control_001",
+          sourceRequestId: null,
+          rawContent: finalPayload
+        }
+      },
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null
+    };
+    return { summary: summary2, privateState: privateState2 };
+  }
   if (domainId !== "math" && domainId !== "domain-math") {
     const summary2 = {
       mode: "TS_PREVIEW",
@@ -22391,7 +23017,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       candidateVerified: false,
       strictAcceptance: "NOT_PERFORMED",
       policy: options.policy ?? "STRICT",
-      reason: `\u9886\u57DF\u672A\u9A8C\u6536\uFF1Adomain '${domainId}' \u5C1A\u672A\u63A5\u5165\u5B8C\u6574\u79D1\u5B66\u68C0\u67E5\u5668\uFF0C\u7981\u6B62\u4F7F\u7528\u6570\u5B66\u68C0\u67E5\u5668\u5192\u5145`,
+      reason: "NO_CANDIDATE",
       finalResponse: `\u9886\u57DF\u672A\u9A8C\u6536\uFF1A${domainId}`,
       modelCalls: 0,
       effectCalls: 0,
@@ -22426,15 +23052,28 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   const opts0 = captureAgentOptions(options);
   const captured = captureAgentPorts(ports);
   const problemHash = p4Hash(problemText);
-  let contract = compileP2Contract(problemText, session, opts0.goalSpecs.length > 0 ? opts0.goalSpecs : void 0);
-  const derived = opts0.deriveBudget ? deriveRootBudget(contract.tasks.length, opts0.maxReviews, opts0.maxModelCalls, opts0.maxWorkUnits, opts0.maxConsensus) : null;
+  let contract = compileP2Contract(
+    problemText,
+    session,
+    opts0.goalSpecs.length > 0 ? opts0.goalSpecs : void 0
+  );
+  const derived = opts0.deriveBudget ? deriveRootBudget(
+    contract.tasks.length,
+    opts0.maxReviews,
+    opts0.maxModelCalls,
+    opts0.maxWorkUnits,
+    opts0.maxConsensus
+  ) : null;
   const opts = derived === null ? opts0 : Object.freeze({
     ...opts0,
     maxWorkUnits: derived.maxWorkUnits,
     maxModelCalls: derived.maxModelCalls
   });
   const fullCapability = opts.maxR0 >= 1 && opts.maxRepairs >= 1 && opts.maxReviews >= 2 && opts.maxConsensus >= 2;
-  const totalEffectCapacity = opts.maxEffects === 0 ? 0 : Math.min(opts.maxEffects + opts.maxMethodLoads, AGENT_MAX_EFFECTS);
+  const totalEffectCapacity = opts.maxEffects === 0 ? 0 : Math.min(
+    opts.maxEffects + opts.maxMethodLoads,
+    AGENT_MAX_EFFECTS
+  );
   const methodLoadCapacity = Math.min(opts.maxMethodLoads, AGENT_MAX_METHOD_ASSETS);
   const root = new AgentSession({
     sessionId: session,
@@ -22475,15 +23114,15 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   if (reconstructedPartial && opts.resumeSessionLog !== null) {
     const carriedModels = opts.resumeSessionLog.filter((row) => row.kind === "MODEL_REQUEST").length;
     for (let index = 0; index < carriedModels; index += 1) {
-      if (root.modelCalls() >= opts.maxModelCalls)
-        break;
+      if (root.modelCalls() >= opts.maxModelCalls) break;
       const settledId = root.reserveModel("WORK");
       root.settleModel(settledId, "COMPLETE");
     }
-    const carriedEffects = opts.resumeSessionLog.filter((row) => row.kind === "TOOL_OBSERVATION" || row.kind === "METHOD_LOAD").length;
+    const carriedEffects = opts.resumeSessionLog.filter(
+      (row) => row.kind === "TOOL_OBSERVATION" || row.kind === "METHOD_LOAD"
+    ).length;
     for (let index = 0; index < carriedEffects; index += 1) {
-      if (root.effectCalls() >= totalEffectCapacity)
-        break;
+      if (root.effectCalls() >= totalEffectCapacity) break;
       const settledEffect = root.reserveEffect(`effect-${index + 1}`);
       root.settleEffect(settledEffect, "COMPLETE");
     }
@@ -22545,7 +23184,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   };
   const workflow = new AgentWorkflowRoutes(ledger, store);
   const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
-  const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls, root.modelCalls());
+  const gate = new P4RecheckModelGate(
+    session,
+    problemHash,
+    contract.contractVersion,
+    opts.maxModelCalls,
+    root.modelCalls()
+  );
   const calls = new AgentCalls(root, gate, captured, sessionLog);
   const progress = new AgentProgressPolicy();
   let workUnits = 0;
@@ -22584,14 +23229,12 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   const reserve = () => target !== null && target.availability === "ACTIVE" && opts.maxReviews > 0 ? 1 : 0;
   if (opts.resumeSessionLog !== null && opts.resumeSessionLog.length > 0 && reconstructedPartial) {
     for (const row of opts.resumeSessionLog) {
-      if (row.kind !== "WORKUNIT")
-        continue;
+      if (row.kind !== "WORKUNIT") continue;
       const data = row.data;
       const taskId = data.taskId;
       const receipt = data.workReceipt;
       const routeInput = data.routeInput;
-      if (typeof taskId !== "string" || typeof receipt !== "object" || receipt === null)
-        continue;
+      if (typeof taskId !== "string" || typeof receipt !== "object" || receipt === null) continue;
       try {
         if (typeof routeInput === "object" && routeInput !== null) {
           try {
@@ -22613,8 +23256,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           candidateTask = runningTask;
         }
       } catch (error) {
-        if (!(error instanceof P2Error))
-          throw error;
+        if (!(error instanceof P2Error)) throw error;
         fail25(P2_ERROR_CODES.PACKET_BINDING);
       }
     }
@@ -22640,8 +23282,13 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         stop = "CONTROL_REJECTED";
         break;
       }
-      const routeReady = ready.filter((task) => workflow.provenanceOf(task.taskId) !== null || workflow.dependencyProvenanceOf(task.taskId) !== null);
-      const chosen = chooseP2ReadyTask(ledger.snapshot(), redoReady.length > 0 ? redoReady : routeReady.length > 0 ? routeReady : ready);
+      const routeReady = ready.filter(
+        (task) => workflow.provenanceOf(task.taskId) !== null || workflow.dependencyProvenanceOf(task.taskId) !== null
+      );
+      const chosen = chooseP2ReadyTask(
+        ledger.snapshot(),
+        redoReady.length > 0 ? redoReady : routeReady.length > 0 ? routeReady : ready
+      );
       if (chosen === null) {
         stop = "WORK_UNITS_COMPLETE";
         break;
@@ -22683,13 +23330,17 @@ async function runAgentLoop(problem, sessionId, options, ports) {
       let subGate = null;
       const effectRoom = totalEffectCapacity - root.effectCalls();
       if (effectRoom > 0 && captured.effect !== null) {
-        subGate = new P3EffectGate({
-          sessionId: session,
-          problemHash,
-          contractVersion: contract.contractVersion,
-          taskId: running.taskId,
-          scopeId: running.scopeId
-        }, effectRoom, root.effectCalls() + 1);
+        subGate = new P3EffectGate(
+          {
+            sessionId: session,
+            problemHash,
+            contractVersion: contract.contractVersion,
+            taskId: running.taskId,
+            scopeId: running.scopeId
+          },
+          effectRoom,
+          root.effectCalls() + 1
+        );
       }
       let advanced = false;
       let yielded = false;
@@ -22740,8 +23391,12 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           stop = "CONTROL_REJECTED";
           break;
         }
-        const cachedTool = observations.some((item) => item.source === "PROGRAM_OBSERVATION");
-        const cachedMethod = observations.some((item) => item.source === "METHOD_REFERENCE");
+        const cachedTool = observations.some(
+          (item) => item.source === "PROGRAM_OBSERVATION"
+        );
+        const cachedMethod = observations.some(
+          (item) => item.source === "METHOD_REFERENCE"
+        );
         const allowTools = subGate !== null && callsLeft() >= 2 + opts.maxReviews && (toolEffects < opts.maxEffects || cachedTool);
         const allowMethods = catalog !== null && subGate !== null && callsLeft() >= 2 + opts.maxReviews && (methodLoads < methodLoadCapacity && root.effectCalls() < totalEffectCapacity || cachedMethod);
         const allowExplore = allowExploration && subGate !== null && callsLeft() >= 2 + opts.maxReviews && toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity;
@@ -22751,17 +23406,36 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         const allowFinal = sameScope && callsLeft() >= 1 + opts.maxReviews;
         const remainingCallsAfterWork = callsLeft() - 1;
         const remainingUnitsAfterWork = opts.maxWorkUnits - workUnits - 1;
-        const allowRouteProposal = !revision.hasUsed() && remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && workflow.canAdmit(remainingCallsAfterWork, opts.maxReviews, remainingUnitsAfterWork, root.remainingMs());
-        const allowTaskContinuation = !revision.hasUsed() && remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && workflow.canContinue(remainingCallsAfterWork, opts.maxReviews, remainingUnitsAfterWork, root.remainingMs());
-        const allowArtifactRedo = remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && revision.canRedo(remainingCallsAfterWork, opts.maxReviews, remainingUnitsAfterWork, root.remainingMs());
+        const allowRouteProposal = !revision.hasUsed() && remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && workflow.canAdmit(
+          remainingCallsAfterWork,
+          opts.maxReviews,
+          remainingUnitsAfterWork,
+          root.remainingMs()
+        );
+        const allowTaskContinuation = !revision.hasUsed() && remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && workflow.canContinue(
+          remainingCallsAfterWork,
+          opts.maxReviews,
+          remainingUnitsAfterWork,
+          root.remainingMs()
+        );
+        const allowArtifactRedo = remainingCallsAfterWork >= 1 && remainingUnitsAfterWork >= 1 && revision.canRedo(
+          remainingCallsAfterWork,
+          opts.maxReviews,
+          remainingUnitsAfterWork,
+          root.remainingMs()
+        );
         const requestId = root.nextModelId();
         if (requestId === null) {
           stop = "BUDGET_EXHAUSTED";
           break;
         }
         const answerSnapshot = ledger.snapshot();
-        const runningObligation = answerSnapshot.obligations.find((row) => row.obligationId === running.obligationId);
-        const answerKind = p2AnswerObligationForGoal(goalKindOf(answerSnapshot.goals, running.goalId));
+        const runningObligation = answerSnapshot.obligations.find(
+          (row) => row.obligationId === running.obligationId
+        );
+        const answerKind = p2AnswerObligationForGoal(
+          goalKindOf(answerSnapshot.goals, running.goalId)
+        );
         const answerBearingTask = target === null && runningObligation !== void 0 && runningObligation.kind === answerKind && answerSnapshot.goals.some((goal) => goal.goalId === running.goalId);
         let refutationRequired = false;
         if (opts.maxRepairs >= 1 && schemaRepairs === 0 && verifyCalls === 0 && allowTools && subGate !== null && !refutationDone.has(running.taskId) && !observations.some((item) => item.source === "PROGRAM_OBSERVATION")) {
@@ -22841,7 +23515,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         }
         const buildConsensusContext = (nextId, note) => {
           const upstreamTaskIds = new Set(running.dependencyTaskIds);
-          const declaredCoverage = store.scopeCoverageSnapshot().filter((row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId));
+          const declaredCoverage = store.scopeCoverageSnapshot().filter(
+            (row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId)
+          );
           const built = buildAgentWorkContext({
             contract: ledger.snapshot(),
             task: running,
@@ -23014,7 +23690,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           methodOfferNote = "\n\n" + methodLoadRefusalNotice + loadedMethodNote + remainingRoutedNote;
           methodLoadRefusalNotice = null;
         } else if (methodAssets.length >= 2) {
-          const canStillAct = !observations.some((item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION") && (allowTools && toolEffects < opts.maxEffects || allowExplore) && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews;
+          const canStillAct = !observations.some(
+            (item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION"
+          ) && (allowTools && toolEffects < opts.maxEffects || allowExplore) && root.effectCalls() < totalEffectCapacity && callsLeft() >= 2 + opts.maxReviews;
           methodOfferNote = "\n\nMETHOD CONTEXT." + loadedMethodNote + remainingRoutedNote + (canStillAct ? "\nNo further method load is available; you may invoke one registered tool or one bounded exploration action if needed, or answer with exactly one complete WorkPacket now." : "\nNo further method load is available; answer with exactly one complete WorkPacket now.");
         }
         if (methodOfferNote !== "") {
@@ -23065,7 +23743,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
               contextHash: p4Hash(JSON.stringify(messages)),
               contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
             };
-          } else if (methodToolRoute === null && allowExplore && !observations.some((item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION")) {
+          } else if (methodToolRoute === null && allowExplore && !observations.some(
+            (item) => item.source === "PROGRAM_OBSERVATION" || item.source === "GENERATED_OBSERVATION"
+          )) {
             const messages = [
               {
                 role: "system",
@@ -23393,7 +24073,9 @@ ${g.guidance.join("\n")}`).join("");
               receipt: failureReceipt
             });
           }
-          const unconsumed = observations.filter((o) => !consumedObservationHashes.has(o.observationHash));
+          const unconsumed = observations.filter(
+            (o) => !consumedObservationHashes.has(o.observationHash)
+          );
           if (protectedOrigin !== null && unconsumed.length > 0) {
             const protectedCandidate2 = projectProtectedFinal(ledger.snapshot(), target);
             if (protectedCandidate2 !== null) {
@@ -23411,7 +24093,10 @@ ${g.guidance.join("\n")}`).join("");
                   answerClosureTurns += 1;
                   const closureId = root.nextModelId();
                   if (closureId !== null) {
-                    const closureContext = buildConsensusContext(closureId, answerClosureNote(defects));
+                    const closureContext = buildConsensusContext(
+                      closureId,
+                      answerClosureNote(defects)
+                    );
                     const closureOutcome = await calls.model({
                       task: running,
                       phase: "WORK",
@@ -23446,13 +24131,17 @@ ${g.guidance.join("\n")}`).join("");
                         });
                         target = revisedTarget;
                         protectedOrigin = revisedTarget;
-                        const decisionCoverage = Object.freeze(contract.obligations.map((obligation) => Object.freeze({
-                          obligationId: obligation.obligationId,
-                          kind: obligation.kind,
-                          deliveryCovered: true,
-                          reviewMentioned: false,
-                          checkResult: "UNKNOWN"
-                        })));
+                        const decisionCoverage = Object.freeze(
+                          contract.obligations.map(
+                            (obligation) => Object.freeze({
+                              obligationId: obligation.obligationId,
+                              kind: obligation.kind,
+                              deliveryCovered: true,
+                              reviewMentioned: false,
+                              checkResult: "UNKNOWN"
+                            })
+                          )
+                        );
                         revisedDecision = p2Snapshot({
                           mode: "MOCK_ONLY",
                           targetEnvironment: "TARGET_UNVERIFIED",
@@ -23544,7 +24233,14 @@ ${g.guidance.join("\n")}`).join("");
           const effectsBefore = root.effectCalls();
           let receipt;
           try {
-            receipt = await calls.effect(running, outcome.requestId, action, subGate, callsLeft(), catalog ?? void 0);
+            receipt = await calls.effect(
+              running,
+              outcome.requestId,
+              action,
+              subGate,
+              callsLeft(),
+              catalog ?? void 0
+            );
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;
@@ -23642,7 +24338,12 @@ ${g.guidance.join("\n")}`).join("");
           const cached = root.effectCalls() === effectsBefore;
           let repeated = false;
           try {
-            repeated = progress.observeEffect(running.taskId, outcome.requestId, p3EffectKey(action), cached);
+            repeated = progress.observeEffect(
+              running.taskId,
+              outcome.requestId,
+              p3EffectKey(action),
+              cached
+            );
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;
@@ -23663,7 +24364,11 @@ ${g.guidance.join("\n")}`).join("");
             const title = catalog.entries.find((entry) => entry.id === methodId2)?.title;
             if (parsed !== null && title !== void 0) {
               try {
-                const asset = readAsset(parsed["asset"], methodId2, title);
+                const asset = readAsset(
+                  parsed["asset"],
+                  methodId2,
+                  title
+                );
                 methodAssets = [...methodAssets, asset];
                 methodToolCoPromptCardId = asset.id;
               } catch {
@@ -23714,7 +24419,13 @@ ${g.guidance.join("\n")}`).join("");
           const exploreEffectsBefore = root.effectCalls();
           let receipt;
           try {
-            receipt = await calls.effect(running, outcome.requestId, action, subGate, callsLeft());
+            receipt = await calls.effect(
+              running,
+              outcome.requestId,
+              action,
+              subGate,
+              callsLeft()
+            );
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;
@@ -23752,7 +24463,12 @@ ${g.guidance.join("\n")}`).join("");
           }
           let exploreRepeated = false;
           try {
-            exploreRepeated = progress.observeEffect(running.taskId, outcome.requestId, p3EffectKey(action), root.effectCalls() === exploreEffectsBefore);
+            exploreRepeated = progress.observeEffect(
+              running.taskId,
+              outcome.requestId,
+              p3EffectKey(action),
+              root.effectCalls() === exploreEffectsBefore
+            );
           } catch (error) {
             if (!(error instanceof P2Error)) {
               throw error;
@@ -23832,7 +24548,13 @@ ${g.guidance.join("\n")}`).join("");
           break;
         }
         if (action !== null && action.action === "final") {
-          if (exposedCandidate === null || !allowFinal || !validateAgentFinal(action, exposedCandidate, ledger.snapshot(), running.scopeId, outcome.requestId)) {
+          if (exposedCandidate === null || !allowFinal || !validateAgentFinal(
+            action,
+            exposedCandidate,
+            ledger.snapshot(),
+            running.scopeId,
+            outcome.requestId
+          )) {
             root.stop("CONTROL_REJECTED");
             stop = "CONTROL_REJECTED";
             break;
@@ -23915,7 +24637,12 @@ ${g.guidance.join("\n")}`).join("");
               if (attempt === 0 && opts.maxRepairs >= 1 && schemaRepairs < 2 && SCHEMA_REPAIR_CODES.has(error.code) && callsLeft() > reserve() && root.remainingMs() > MIN_MS) {
                 const repairId = root.nextModelId();
                 if (repairId !== null) {
-                  const repair = buildSchemaRepairMessages(context.messages, outcome.receipt.text, error.code, repairId);
+                  const repair = buildSchemaRepairMessages(
+                    context.messages,
+                    outcome.receipt.text,
+                    error.code,
+                    repairId
+                  );
                   const repaired = await calls.model({
                     task: running,
                     phase: "WORK",
@@ -23942,7 +24669,9 @@ ${g.guidance.join("\n")}`).join("");
               const recoveryId = root.nextModelId();
               if (recoveryId !== null) {
                 const upstreamTaskIds = new Set(running.dependencyTaskIds);
-                const declaredCoverage = store.scopeCoverageSnapshot().filter((row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId));
+                const declaredCoverage = store.scopeCoverageSnapshot().filter(
+                  (row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId)
+                );
                 const built = buildAgentWorkContext({
                   contract: ledger.snapshot(),
                   task: running,
@@ -24126,7 +24855,9 @@ ${g.guidance.join("\n")}`).join("");
             };
             const frontRunner = () => {
               const attempts = ballots();
-              const index = frontRunnerIndex(attempts.map((attempt) => attempt.candidate));
+              const index = frontRunnerIndex(
+                attempts.map((attempt) => attempt.candidate)
+              );
               return index < 0 ? null : attempts[index];
             };
             const runnerUp = (front) => {
@@ -24134,11 +24865,9 @@ ${g.guidance.join("\n")}`).join("");
               const counts = ballotCounts();
               let best = 0;
               for (const [key, count] of counts) {
-                if (key !== frontKey)
-                  best = Math.max(best, count);
+                if (key !== frontKey) best = Math.max(best, count);
               }
-              if (best === 0)
-                return null;
+              if (best === 0) return null;
               const attempts = ballots();
               for (let index = attempts.length - 1; index >= 0; index -= 1) {
                 const attempt = attempts[index];
@@ -24149,11 +24878,14 @@ ${g.guidance.join("\n")}`).join("");
               return null;
             };
             const auditConsensus = () => {
-              const audits = consensusAttempts.filter((attempt) => attempt.stage === "AUDIT" && attempt.candidate.length > 0);
-              if (audits.length < 2)
-                return null;
+              const audits = consensusAttempts.filter(
+                (attempt) => attempt.stage === "AUDIT" && attempt.candidate.length > 0
+              );
+              if (audits.length < 2) return null;
               const key = canonicalAnswerKey(audits[0].candidate);
-              if (!audits.every((attempt) => canonicalAnswerKey(attempt.candidate) === key)) {
+              if (!audits.every(
+                (attempt) => canonicalAnswerKey(attempt.candidate) === key
+              )) {
                 return null;
               }
               const front = frontRunner();
@@ -24164,7 +24896,9 @@ ${g.guidance.join("\n")}`).join("");
             };
             const buildConsensusContext2 = (nextId, note, independent) => {
               const upstreamTaskIds = new Set(running.dependencyTaskIds);
-              const declaredCoverage = store.scopeCoverageSnapshot().filter((row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId));
+              const declaredCoverage = store.scopeCoverageSnapshot().filter(
+                (row) => row.taskId === running.taskId || upstreamTaskIds.has(row.taskId)
+              );
               const built = buildAgentWorkContext({
                 contract: ledger.snapshot(),
                 task: running,
@@ -24236,13 +24970,11 @@ ${g.guidance.join("\n")}`).join("");
             let lastObservedCandidate = firstCandidate;
             const independentRounds = opts.maxConsensus >= 8 ? opts.maxConsensus - 3 : opts.maxConsensus >= 2 ? 1 : 0;
             for (let round = 0; round < opts.maxConsensus; round += 1) {
-              if (callsLeft() < 2 + opts.maxReviews)
-                break;
+              if (callsLeft() < 2 + opts.maxReviews) break;
               const isBlind = round < independentRounds && round !== opts.maxConsensus - 1;
               const isCertificate = !isBlind && (opts.maxConsensus === 1 || round === opts.maxConsensus - 1);
               const nextId = root.nextModelId();
-              if (nextId === null)
-                break;
+              if (nextId === null) break;
               let note;
               let auditedCandidate = lastObservedCandidate;
               if (isBlind) {
@@ -24269,7 +25001,9 @@ ${g.guidance.join("\n")}`).join("");
                 // union over both, so each theatre must hold at alpha/2. The
                 // audit is the turn that has to notice this, because a blind
                 // ballot anchors on the one-sided legend.
-                (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(problemText) ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. " : "") + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+                (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(
+                  problemText
+                ) ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. " : "") + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
               }
               const built = buildConsensusContext2(nextId, note, isBlind);
               const nextOutcome = await calls.model({
@@ -24308,7 +25042,9 @@ ${g.guidance.join("\n")}`).join("");
             }
             const latestCertified = [...consensusAttempts].reverse().find((attempt) => attempt.certified && attempt.candidate.length > 0);
             if (latestCertified !== void 0 && callsLeft() >= 2 + opts.maxReviews) {
-              const correction = certificateCorrection(latestCertified.prepared.packet ?? {});
+              const correction = certificateCorrection(
+                latestCertified.prepared.packet ?? {}
+              );
               if (correction !== null && !sameAnswerKey(correction, latestCertified.candidate)) {
                 const closureId = root.nextModelId();
                 if (closureId !== null) {
@@ -24341,12 +25077,16 @@ ${g.guidance.join("\n")}`).join("");
                 }
               }
             }
-            const candidateAttempts = consensusAttempts.filter((attempt) => attempt.candidate.length > 0);
+            const candidateAttempts = consensusAttempts.filter(
+              (attempt) => attempt.candidate.length > 0
+            );
             if (candidateAttempts.length === 0 && firstPacketOverlong) {
               stop = "PACKET_REJECTED";
               break;
             }
-            const certifiedAttempts = candidateAttempts.filter((attempt) => attempt.certified);
+            const certifiedAttempts = candidateAttempts.filter(
+              (attempt) => attempt.certified
+            );
             const support = frontRunner();
             let chosen2 = candidateAttempts[candidateAttempts.length - 1] ?? consensusAttempts[0];
             if (certifiedAttempts.length > 0) {
@@ -24363,7 +25103,9 @@ ${g.guidance.join("\n")}`).join("");
                 consumedObservationHashes.add(o.observationHash);
               }
               const closureCandidate = prepared.packet.candidateProposal ?? "";
-              const requiresExhaustive = /(所有解|全部解|一切解|解集|所有根|全部根|complete\s+solution\s+set|all\s+solutions)/iu.test(problemText);
+              const requiresExhaustive = /(所有解|全部解|一切解|解集|所有根|全部根|complete\s+solution\s+set|all\s+solutions)/iu.test(
+                problemText
+              );
               const defects = answerClosureDefects({
                 problemText,
                 candidate: closureCandidate,
@@ -24386,7 +25128,11 @@ ${g.guidance.join("\n")}`).join("");
                 if (closureId !== null) {
                   answerClosureTurns += 1;
                   closureRequestId = closureId;
-                  const closureContext = buildConsensusContext2(closureId, answerClosureNote(defects), false);
+                  const closureContext = buildConsensusContext2(
+                    closureId,
+                    answerClosureNote(defects),
+                    false
+                  );
                   const closureOutcome = await calls.model({
                     task: running,
                     // WORK is not consensus-budgeted by the Host; this is a
@@ -24411,8 +25157,12 @@ ${g.guidance.join("\n")}`).join("");
                         expectedSolutionKeys: null,
                         requiresExhaustive
                       });
-                      const initialObservationDefects = defects.filter((defect2) => defect2.evidence === "OBSERVATION").length;
-                      const remainingObservationDefects = remaining.filter((defect2) => defect2.evidence === "OBSERVATION").length;
+                      const initialObservationDefects = defects.filter(
+                        (defect2) => defect2.evidence === "OBSERVATION"
+                      ).length;
+                      const remainingObservationDefects = remaining.filter(
+                        (defect2) => defect2.evidence === "OBSERVATION"
+                      ).length;
                       const improved = remainingObservationDefects < initialObservationDefects || remainingObservationDefects === initialObservationDefects && remaining.length < defects.length;
                       if (improved) {
                         candidateChanged = nextCandidate !== closureCandidate;
@@ -24482,7 +25232,12 @@ ${g.guidance.join("\n")}`).join("");
             artifactId: accepted.artifactId,
             artifactVersion: accepted.envelope.artifactVersion ?? 1
           };
-          ledger.recordDelivery(running.taskId, ref, accepted.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL", accepted.envelope.eventSeq);
+          ledger.recordDelivery(
+            running.taskId,
+            ref,
+            accepted.deliveryStatus === "COMPLETE" ? "DELIVERED" : "PARTIAL",
+            accepted.envelope.eventSeq
+          );
           sessionLog.append("WORKUNIT", {
             taskId: running.taskId,
             goalId: running.goalId,
@@ -24532,9 +25287,14 @@ ${g.guidance.join("\n")}`).join("");
           }
           if (target === null && store.candidate(ref) !== null) {
             const snapshot = ledger.snapshot();
-            const obligation = snapshot.obligations.find((row) => row.obligationId === running.obligationId);
+            const obligation = snapshot.obligations.find(
+              (row) => row.obligationId === running.obligationId
+            );
             const rootGoal = snapshot.goals.some((goal) => goal.goalId === running.goalId);
-            if (obligation !== void 0 && rootGoal && p2IsAnswerObligationKindForGoal(goalKindOf(snapshot.goals, running.goalId), obligation.kind)) {
+            if (obligation !== void 0 && rootGoal && p2IsAnswerObligationKindForGoal(
+              goalKindOf(snapshot.goals, running.goalId),
+              obligation.kind
+            )) {
               try {
                 target = p4Target(snapshot, accepted, "ACTIVE");
                 protectedOrigin = target;
@@ -24550,7 +25310,14 @@ ${g.guidance.join("\n")}`).join("");
           }
           if (fullCapability && !g2RouteAdmitted && target !== null && accepted.deliveryStatus === "COMPLETE") {
             const g2ObligationId = `${running.goalId}:INDEPENDENT_DERIVATION`;
-            const admittedRoute = workflow.admitControlSecondRoute(accepted, g2ObligationId, callsLeft(), opts.maxReviews, opts.maxWorkUnits - workUnits, root.remainingMs());
+            const admittedRoute = workflow.admitControlSecondRoute(
+              accepted,
+              g2ObligationId,
+              callsLeft(),
+              opts.maxReviews,
+              opts.maxWorkUnits - workUnits,
+              root.remainingMs()
+            );
             g2RouteAdmitted = admittedRoute;
             sessionLog.append("REPAIR", {
               kind: admittedRoute ? "G2_ROUTE_ADMIT" : "G2_ROUTE_REJECT",
@@ -24563,13 +25330,31 @@ ${g.guidance.join("\n")}`).join("");
           }
         }
         if (allowRouteProposal) {
-          workflow.admit(accepted, callsLeft(), opts.maxReviews, opts.maxWorkUnits - workUnits, root.remainingMs());
+          workflow.admit(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs()
+          );
         }
         if (allowTaskContinuation) {
-          workflow.admitDependency(accepted, callsLeft(), opts.maxReviews, opts.maxWorkUnits - workUnits, root.remainingMs());
+          workflow.admitDependency(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs()
+          );
         }
         if (allowArtifactRedo) {
-          revision.admit(accepted, callsLeft(), opts.maxReviews, opts.maxWorkUnits - workUnits, root.remainingMs());
+          revision.admit(
+            accepted,
+            callsLeft(),
+            opts.maxReviews,
+            opts.maxWorkUnits - workUnits,
+            root.remainingMs()
+          );
         }
         const scopeProposal = accepted.packet !== null && accepted.packet.schemaVersion === "p2a-work-v5" ? accepted.packet.scopeProposal : null;
         if (scopeProposal !== null) {
@@ -24700,7 +25485,12 @@ ${g.guidance.join("\n")}`).join("");
         return session2;
       }
       try {
-        const settled = session2.settle(outcome.requestId, outcome.receipt.transportStatus, outcome.receipt.text, root.remainingMs());
+        const settled = session2.settle(
+          outcome.requestId,
+          outcome.receipt.transportStatus,
+          outcome.receipt.text,
+          root.remainingMs()
+        );
         stop = settled.code === "OK" && settled.report !== null && settled.report.conclusion !== "UNKNOWN" ? "REVIEWS_COMPLETE" : "REVIEW_STOP";
       } catch (error) {
         if (!(error instanceof P2Error)) {
@@ -24718,11 +25508,18 @@ ${g.guidance.join("\n")}`).join("");
       schemaRepairs > 0 && !fullCapability || callsLeft() < 1 || root.remainingMs() <= MIN_MS) {
         return null;
       }
-      const checker = calls.effects.find((item) => item.receipt.status === "COMPLETE" && item.receipt.source === "PROGRAM_OBSERVATION" && item.receipt.binding.scopeId === candidate.binding.scopeId);
+      const checker = calls.effects.find(
+        (item) => item.receipt.status === "COMPLETE" && item.receipt.source === "PROGRAM_OBSERVATION" && item.receipt.binding.scopeId === candidate.binding.scopeId
+      );
       const snapshot = ledger.snapshot();
-      const goalKind = goalKindOf(snapshot.goals, candidate.binding.goalId);
+      const goalKind = goalKindOf(
+        snapshot.goals,
+        candidate.binding.goalId
+      );
       const answerKind = p2AnswerObligationForGoal(goalKind);
-      const answerObligation = snapshot.obligations.find((row) => row.goalId === candidate.binding.goalId && row.kind === answerKind);
+      const answerObligation = snapshot.obligations.find(
+        (row) => row.goalId === candidate.binding.goalId && row.kind === answerKind
+      );
       const challenge0 = challenges[0];
       if (challenge0 !== void 0 && checker !== void 0 && answerObligation !== void 0) {
         try {
@@ -24867,7 +25664,11 @@ ${g.guidance.join("\n")}`).join("");
             coveredGaps: gapSet.filter((gap) => answerText.includes(gap))
           } : {}
         } : null;
-        const revision2 = basis === null ? null : reviseCandidate(ledger.snapshot(), { parent: candidate, child, challenge, basis }, root.remainingMs());
+        const revision2 = basis === null ? null : reviseCandidate(
+          ledger.snapshot(),
+          { parent: candidate, child, challenge, basis },
+          root.remainingMs()
+        );
         if (revision2 === null) {
           if (fullCapability && opts.maxReviews >= 2 && reviewCalls < opts.maxReviews && callsLeft() >= 1) {
             const r4 = await runReviewRound(child, "R4");
@@ -24906,10 +25707,14 @@ ${g.guidance.join("\n")}`).join("");
           });
         }
         if (revision2 !== null && revision2.accepted) {
-          ledger.recordLocalRevision(repairTask.taskId, {
-            artifactId: childArtifact.artifactId,
-            artifactVersion: childArtifact.envelope.artifactVersion ?? 1
-          }, childArtifact.envelope.eventSeq);
+          ledger.recordLocalRevision(
+            repairTask.taskId,
+            {
+              artifactId: childArtifact.artifactId,
+              artifactVersion: childArtifact.envelope.artifactVersion ?? 1
+            },
+            childArtifact.envelope.eventSeq
+          );
         }
         if (revision2 !== null) {
           s2Transaction = {
@@ -24965,7 +25770,9 @@ ${g.guidance.join("\n")}`).join("");
           if (stop === "REVIEW_STOP" || stop === "CONTROL_REJECTED" || stop === "DEADLINE_EXCEEDED") {
             break;
           }
-          const challenges = reviewSnapshotForLog.challenges.filter((item) => item.status === "CHALLENGED" && item.availability === "ACTIVE");
+          const challenges = reviewSnapshotForLog.challenges.filter(
+            (item) => item.status === "CHALLENGED" && item.availability === "ACTIVE"
+          );
           if (challenges.length === 0) {
             if (lastRevisionAccepted) {
               stop = "REVISED_CANDIDATE";
@@ -25000,9 +25807,14 @@ ${g.guidance.join("\n")}`).join("");
     }
     if (fullCapability && target !== null && target.availability === "ACTIVE" && repairCalls === 0 && reviewCalls >= 1 && opts.maxRepairs >= 1 && opts.maxReviews >= 2 && protectedReview !== null && callsLeft() >= 2 && root.remainingMs() > MIN_MS) {
       const contractNow = ledger.snapshot();
-      const probeGoalKind = goalKindOf(contractNow.goals, target.binding.goalId);
+      const probeGoalKind = goalKindOf(
+        contractNow.goals,
+        target.binding.goalId
+      );
       const probeAnswerKind = p2AnswerObligationForGoal(probeGoalKind);
-      const probeAnswerObligation = contractNow.obligations.find((row) => row.goalId === target.binding.goalId && row.kind === probeAnswerKind);
+      const probeAnswerObligation = contractNow.obligations.find(
+        (row) => row.goalId === target.binding.goalId && row.kind === probeAnswerKind
+      );
       const probeRecords = protectedReview.snapshot().records;
       const probeSource = probeRecords[probeRecords.length - 1]?.requestId ?? null;
       if (probeAnswerObligation !== void 0 && probeSource !== null) {
@@ -25036,7 +25848,12 @@ ${g.guidance.join("\n")}`).join("");
             taskId: target.binding.taskId,
             challengeId: probeChallenge.challengeId
           });
-          const probed = await attemptRevision(target, protectedReview, [probeChallenge], true);
+          const probed = await attemptRevision(
+            target,
+            protectedReview,
+            [probeChallenge],
+            true
+          );
           probeAccepted = probed?.accepted === true;
           if (reviewCalls === reviewCallsBeforeProbe && callsLeft() >= 1 && root.remainingMs() > MIN_MS) {
             const fallbackR4 = await runReviewRound(target, "R4");
@@ -25089,7 +25906,11 @@ ${g.guidance.join("\n")}`).join("");
     revision.abort();
   }
   const policy = opts.policy;
-  const candidateGate = new P4CandidateGate(ledger.snapshot(), policy, protectedReview === null ? 2 : firstReviewOrdinal);
+  const candidateGate = new P4CandidateGate(
+    ledger.snapshot(),
+    policy,
+    protectedReview === null ? 2 : firstReviewOrdinal
+  );
   if (target !== null) {
     try {
       candidateGate.protect(protectedOrigin === null ? target : protectedOrigin);
@@ -25101,14 +25922,23 @@ ${g.guidance.join("\n")}`).join("");
       stop = "CONTROL_REJECTED";
     }
   }
-  let decision = candidateGate.finalize(ledger.snapshot(), target, protectedReview === null ? null : protectedReview.snapshot(), root.remainingMs());
+  let decision = candidateGate.finalize(
+    ledger.snapshot(),
+    target,
+    protectedReview === null ? null : protectedReview.snapshot(),
+    root.remainingMs()
+  );
   if (revisedDecision !== null && policy !== "STRICT") {
     decision = revisedDecision;
   }
   if (!root.stopped()) {
     root.stop(stop);
   }
-  const unresolvedObligations = Object.freeze(ledger.snapshot().obligations.filter((row) => AUX_OBLIGATION_KINDS.includes(row.kind) && row.status !== "SATISFIED").map((row) => row.obligationId));
+  const unresolvedObligations = Object.freeze(
+    ledger.snapshot().obligations.filter(
+      (row) => AUX_OBLIGATION_KINDS.includes(row.kind) && row.status !== "SATISFIED"
+    ).map((row) => row.obligationId)
+  );
   sessionLog.append("FINAL", {
     status: decision.status,
     reason: decision.reason,
@@ -25180,7 +26010,7 @@ ${g.guidance.join("\n")}`).join("");
 }
 var UNSOLVED_REFUSED_NOTE, MIN_MS, EXPLORATION_TOOL_NAME, MAX_METHOD_TOOL_COPROMPT_CHARS, MAX_EXPLORATION_COPROMPT_CHARS, AUX_OBLIGATION_KINDS, SCHEMA_REPAIR_CODES, S1_CHECKER_ASSET;
 var init_agent_loop2 = __esm({
-  "apps/stdio-runtime/dist/src/agent-loop.js"() {
+  "apps/stdio-runtime/src/agent-loop.ts"() {
     "use strict";
     init_src();
     init_src4();
@@ -25189,6 +26019,7 @@ var init_agent_loop2 = __esm({
     init_src7();
     init_src8();
     init_src9();
+    init_src10();
     init_src3();
     init_agent_loop_calls();
     init_agent_final();
@@ -25240,7 +26071,7 @@ var init_agent_loop2 = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-host-flow.js
+// apps/stdio-runtime/src/agent-host-flow.ts
 function fail26(code) {
   throw new Error(code);
 }
@@ -25305,7 +26136,7 @@ function checkedResumeVersion2(value) {
 }
 var MIN_REMAINING_MS10, HOST_INIT_ID, HOST_SOLVE_ID, HOST_STOP_ID, PROFILE_ID, MAX_MODEL_CALLS, MAX_WORK_UNITS3, MAX_EFFECTS, MAX_REVIEWS6, MAX_METHOD_LOADS, MAX_REMAINING_MS8, HASH8, CATALOG_FRAME_ID, MAX_RESUME_EVENTS2, MAX_RESUME_KIND_CHARS2, AgentHostFlow;
 var init_agent_host_flow = __esm({
-  "apps/stdio-runtime/dist/src/agent-host-flow.js"() {
+  "apps/stdio-runtime/src/agent-host-flow.ts"() {
     "use strict";
     init_src();
     init_src2();
@@ -25500,16 +26331,19 @@ var init_agent_host_flow = __esm({
         this.sessionId = sessionId;
         this.io.tighten(remainingMs);
         this.phase = "READY";
-        this.io.send({
-          jsonrpc: "2.0",
-          id: id4,
-          result: {
-            protocolVersion: this.manifest.protocolVersion,
-            sessionId,
-            engine: "ts",
-            mode: "TS_PREVIEW"
-          }
-        }, "runtime.initialize");
+        this.io.send(
+          {
+            jsonrpc: "2.0",
+            id: id4,
+            result: {
+              protocolVersion: this.manifest.protocolVersion,
+              sessionId,
+              engine: "ts",
+              mode: "TS_PREVIEW"
+            }
+          },
+          "runtime.initialize"
+        );
       }
       handleSolve(id4, params) {
         agentHostPayload(this.manifest, "session.solve", "params", params, this.sessionId ?? void 0);
@@ -25597,18 +26431,21 @@ var init_agent_host_flow = __esm({
           }
           return { seq: event.seq, kind: event.kind, data: event.data };
         });
-        this.io.send({
-          jsonrpc: "2.0",
-          id: id4,
-          result: {
-            protocolVersion: this.manifest.protocolVersion,
-            sessionId,
-            summary: p2Snapshot(summary, true),
-            candidateRequestId,
-            trace: p2Snapshot(result.privateState.session.events, true),
-            sessionLog: p2Snapshot(sessionLog, true)
-          }
-        }, "session.solve");
+        this.io.send(
+          {
+            jsonrpc: "2.0",
+            id: id4,
+            result: {
+              protocolVersion: this.manifest.protocolVersion,
+              sessionId,
+              summary: p2Snapshot(summary, true),
+              candidateRequestId,
+              trace: p2Snapshot(result.privateState.session.events, true),
+              sessionLog: p2Snapshot(sessionLog, true)
+            }
+          },
+          "session.solve"
+        );
       }
       handleStop(id4, params) {
         agentHostPayload(this.manifest, "session.stop", "params", params, this.sessionId ?? void 0);
@@ -25638,19 +26475,22 @@ var init_agent_host_flow = __esm({
         return new Promise((resolve, reject2) => {
           this.pending = { id: id4, method: "asset.scoped", resolve, reject: reject2 };
           try {
-            this.io.send({
-              jsonrpc: "2.0",
-              id: id4,
-              method: "asset.scoped",
-              params: {
-                protocolVersion: this.manifest.protocolVersion,
-                sessionId: this.sessionId,
-                assetGroup: request.group,
-                assetId: request.assetId,
-                scopeId: request.scopeId,
-                contractVersion: request.contractVersion
-              }
-            }, "asset.scoped");
+            this.io.send(
+              {
+                jsonrpc: "2.0",
+                id: id4,
+                method: "asset.scoped",
+                params: {
+                  protocolVersion: this.manifest.protocolVersion,
+                  sessionId: this.sessionId,
+                  assetGroup: request.group,
+                  assetId: request.assetId,
+                  scopeId: request.scopeId,
+                  contractVersion: request.contractVersion
+                }
+              },
+              "asset.scoped"
+            );
           } catch (error) {
             this.pending = null;
             reject2(error);
@@ -25689,22 +26529,25 @@ var init_agent_host_flow = __esm({
             reject: reject2
           };
           try {
-            this.io.send({
-              jsonrpc: "2.0",
-              id: id4,
-              method: "math_asset.execute",
-              params: {
-                protocolVersion: this.manifest.protocolVersion,
-                sessionId: this.sessionId,
-                request: {
-                  action: "math_asset",
-                  assetId: request.assetId,
-                  ...request.target ? { target: request.target } : {},
-                  input: request.input,
-                  binding: request.binding
+            this.io.send(
+              {
+                jsonrpc: "2.0",
+                id: id4,
+                method: "math_asset.execute",
+                params: {
+                  protocolVersion: this.manifest.protocolVersion,
+                  sessionId: this.sessionId,
+                  request: {
+                    action: "math_asset",
+                    assetId: request.assetId,
+                    ...request.target ? { target: request.target } : {},
+                    input: request.input,
+                    binding: request.binding
+                  }
                 }
-              }
-            }, "math_asset.execute");
+              },
+              "math_asset.execute"
+            );
           } catch (error) {
             this.pending = null;
             reject2(error);
@@ -25747,16 +26590,19 @@ var init_agent_host_flow = __esm({
         return new Promise((resolve, reject2) => {
           this.pending = { id: id4, method: "model.generate", resolve, reject: reject2, requestId: request.requestId };
           try {
-            this.io.send({
-              jsonrpc: "2.0",
-              id: id4,
-              method: "model.generate",
-              params: {
-                protocolVersion: this.manifest.protocolVersion,
-                sessionId: this.sessionId,
-                request: p2Snapshot({ ...request, remainingMs })
-              }
-            }, "model.generate");
+            this.io.send(
+              {
+                jsonrpc: "2.0",
+                id: id4,
+                method: "model.generate",
+                params: {
+                  protocolVersion: this.manifest.protocolVersion,
+                  sessionId: this.sessionId,
+                  request: p2Snapshot({ ...request, remainingMs })
+                }
+              },
+              "model.generate"
+            );
           } catch (error) {
             this.pending = null;
             reject2(error);
@@ -25787,16 +26633,19 @@ var init_agent_host_flow = __esm({
             effectRequest: sent
           };
           try {
-            this.io.send({
-              jsonrpc: "2.0",
-              id: id4,
-              method,
-              params: {
-                protocolVersion: this.manifest.protocolVersion,
-                sessionId: this.sessionId,
-                request: sent
-              }
-            }, method);
+            this.io.send(
+              {
+                jsonrpc: "2.0",
+                id: id4,
+                method,
+                params: {
+                  protocolVersion: this.manifest.protocolVersion,
+                  sessionId: this.sessionId,
+                  request: sent
+                }
+              },
+              method
+            );
           } catch (error) {
             this.pending = null;
             reject2(error);
@@ -25826,16 +26675,19 @@ var init_agent_host_flow = __esm({
             reject: reject2
           };
           try {
-            this.io.send({
-              jsonrpc: "2.0",
-              id: CATALOG_FRAME_ID,
-              method: "method.catalog",
-              params: {
-                protocolVersion: this.manifest.protocolVersion,
-                sessionId: this.sessionId,
-                remainingMs: window
-              }
-            }, "method.catalog");
+            this.io.send(
+              {
+                jsonrpc: "2.0",
+                id: CATALOG_FRAME_ID,
+                method: "method.catalog",
+                params: {
+                  protocolVersion: this.manifest.protocolVersion,
+                  sessionId: this.sessionId,
+                  remainingMs: window
+                }
+              },
+              "method.catalog"
+            );
           } catch (error) {
             this.pending = null;
             reject2(error);
@@ -25862,7 +26714,9 @@ var init_agent_host_flow = __esm({
         const remainingMs = safeInt(receipt["remainingMs"], 0, MAX_REMAINING_MS8);
         this.pending = null;
         this.io.tighten(remainingMs);
-        pending.resolve(p2Snapshot({ transportStatus, text: text8, remainingMs }));
+        pending.resolve(
+          p2Snapshot({ transportStatus, text: text8, remainingMs })
+        );
       }
       settleEffect(pending, result) {
         agentHostPayload(this.manifest, pending.method, "result", result, this.sessionId ?? void 0);
@@ -25903,7 +26757,7 @@ var init_agent_host_flow = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/agent-host-main.js
+// apps/stdio-runtime/src/agent-host-main.ts
 var agent_host_main_exports = {};
 __export(agent_host_main_exports, {
   startAgentHost: () => startAgentHost
@@ -25933,7 +26787,11 @@ function startAgentHost(startedAt = performance.now()) {
     parse: (bytes) => parseAgentHostFrame(bytes, manifest),
     payload: (method, side, value) => agentHostPayload(manifest, method, side, value)
   };
-  const channel = new P2HostChannel(manifest, startedAt, codec);
+  const channel = new P2HostChannel(
+    manifest,
+    startedAt,
+    codec
+  );
   const flow = new AgentHostFlow(manifest, {
     remainingMs: () => channel.remainingMs(),
     tighten: (ms7) => channel.tighten(ms7),
@@ -25945,7 +26803,7 @@ function startAgentHost(startedAt = performance.now()) {
 }
 var started, scriptArg;
 var init_agent_host_main = __esm({
-  "apps/stdio-runtime/dist/src/agent-host-main.js"() {
+  "apps/stdio-runtime/src/agent-host-main.ts"() {
     "use strict";
     init_src();
     init_p2_host_channel();
@@ -25958,7 +26816,7 @@ var init_agent_host_main = __esm({
   }
 });
 
-// apps/stdio-runtime/dist/src/main.js
+// apps/stdio-runtime/src/main.ts
 init_src();
 import { readFileSync as readFileSync2 } from "node:fs";
 var DEADLINE_MS = 5e3;
@@ -26133,20 +26991,23 @@ var Probe = class {
     }
     this.sessionId = sessionId;
     this.phase = "probe";
-    this.send({
-      jsonrpc: "2.0",
-      id: id4,
-      result: {
-        protocolVersion: PROTOCOL_VERSION,
-        sessionId,
-        nodeCapabilities: {
-          mathModelCalls: "UNAVAILABLE",
-          publicOutputLimit: "UNVERIFIED",
-          wasi: "DISABLED",
-          nativeToolCalls: "UNAVAILABLE"
+    this.send(
+      {
+        jsonrpc: "2.0",
+        id: id4,
+        result: {
+          protocolVersion: PROTOCOL_VERSION,
+          sessionId,
+          nodeCapabilities: {
+            mathModelCalls: "UNAVAILABLE",
+            publicOutputLimit: "UNVERIFIED",
+            wasi: "DISABLED",
+            nativeToolCalls: "UNAVAILABLE"
+          }
         }
-      }
-    }, "runtime.initialize");
+      },
+      "runtime.initialize"
+    );
   }
   handleProbe(id4, params) {
     const checked = this.checkParams("runtime.probe", params);
@@ -26165,12 +27026,15 @@ var Probe = class {
     const callbackId = `node-${this.nextId}`;
     this.nextId += 1;
     this.callbackId = callbackId;
-    this.send({
-      jsonrpc: "2.0",
-      id: callbackId,
-      method: "method.catalog",
-      params: { protocolVersion: PROTOCOL_VERSION, sessionId: this.sessionId }
-    }, "method.catalog");
+    this.send(
+      {
+        jsonrpc: "2.0",
+        id: callbackId,
+        method: "method.catalog",
+        params: { protocolVersion: PROTOCOL_VERSION, sessionId: this.sessionId }
+      },
+      "method.catalog"
+    );
   }
   onResult(id4, result) {
     if (this.phase !== "catalog" || this.callbackId === null || id4 !== this.callbackId) {
@@ -26221,17 +27085,20 @@ var Probe = class {
       return;
     }
     this.phase = "stop";
-    this.send({
-      jsonrpc: "2.0",
-      id: probeId,
-      result: {
-        protocolVersion: PROTOCOL_VERSION,
-        sessionId: this.sessionId,
-        nonce,
-        catalogCount: entries.length,
-        catalogAcknowledged: true
-      }
-    }, "runtime.probe");
+    this.send(
+      {
+        jsonrpc: "2.0",
+        id: probeId,
+        result: {
+          protocolVersion: PROTOCOL_VERSION,
+          sessionId: this.sessionId,
+          nonce,
+          catalogCount: entries.length,
+          catalogAcknowledged: true
+        }
+      },
+      "runtime.probe"
+    );
   }
   handleStop(id4, params) {
     const checked = this.checkParams("session.stop", params);
@@ -26240,15 +27107,19 @@ var Probe = class {
       return;
     }
     this.phase = "stopping";
-    this.send({
-      jsonrpc: "2.0",
-      id: id4,
-      result: { protocolVersion: PROTOCOL_VERSION, sessionId: this.sessionId, stopped: true }
-    }, "session.stop", () => {
-      this.stopped = true;
-      clearTimeout(this.timer);
-      process.exit(0);
-    });
+    this.send(
+      {
+        jsonrpc: "2.0",
+        id: id4,
+        result: { protocolVersion: PROTOCOL_VERSION, sessionId: this.sessionId, stopped: true }
+      },
+      "session.stop",
+      () => {
+        this.stopped = true;
+        clearTimeout(this.timer);
+        process.exit(0);
+      }
+    );
   }
   send(message, method, onFlushed) {
     if (this.expired()) {

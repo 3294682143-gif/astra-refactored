@@ -13,21 +13,23 @@ test("compileContract: 自动生成受迫振子系统辨识与独立预测契约
 
   assert.deepEqual(contract.goals, ["SYSTEM_IDENTIFICATION", "INDEPENDENT_PREDICTION"]);
   assert.equal(contract.scope.validationSplitRatio, 0.2);
-  assert.equal(contract.proposedObligations.length, 3);
+  assert.equal(contract.proposedObligations.length, 5);
   assert.equal(contract.proposedObligations[0].id, "ob_leak_prevention");
 });
 
-test("proposeChecks: 生成数据泄漏检测器、特征值稳定性评估器与 RMSE 验证器", () => {
+test("proposeChecks: 生成数据泄漏检测器、特征值稳定性、抗混叠、残差白性与 RMSE 验证器", () => {
   const checks = adapter.proposeChecks({
     candidateId: "cand_ctl_1",
     rawContent: { mass: 1.0, damping: 0.2, stiffness: 10.0, rmseHoldout: 0.02 },
     artifacts: [],
   });
 
-  assert.equal(checks.length, 3);
+  assert.equal(checks.length, 5);
   assert.equal(checks[0].validatorId, "control_leak_detector");
   assert.equal(checks[1].validatorId, "control_eigenvalue_stability");
-  assert.equal(checks[2].validatorId, "control_rmse_evaluator");
+  assert.equal(checks[2].validatorId, "control_aliasing_guard");
+  assert.equal(checks[3].validatorId, "control_whiteness_evaluator");
+  assert.equal(checks[4].validatorId, "control_rmse_evaluator");
 });
 
 test("assessObligation: 数据泄露被检查器识别并判定 REFUTED (T36)", () => {

@@ -28,6 +28,7 @@ class StopReason(str, Enum):
     命名采用 SCREAMING_SNAKE_CASE, 与 solve() 内核返回字段保持字节一致.
     """
     SOLVED = "SOLVED"
+    STOPPED = "STOPPED"
     REVIEWS_COMPLETE = "REVIEWS_COMPLETE"
     REVIEW_STOP = "REVIEW_STOP"
     REVISE_REJECTED = "REVISE_REJECTED"

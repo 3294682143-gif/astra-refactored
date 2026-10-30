@@ -7,6 +7,7 @@
   "include": ["src/**/*.ts", "tests/**/*.ts"],
   "references": [
     { "path": "../../packages/domain-contract" },
+    { "path": "../../packages/domain-control" },
     { "path": "../../packages/agent-kernel" },
     { "path": "../../packages/protocol" },
     { "path": "../../packages/runtime-core" },

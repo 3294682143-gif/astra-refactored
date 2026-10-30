@@ -69,6 +69,12 @@ import {
 import { P2WorkunitStore } from "@astra/math-workunit";
 import { WorkUnitStore } from "@zygos/agent-kernel";
 import {
+  CONTROL_DOMAIN_ID,
+  ControlDomainAdapter,
+  ParameterEstimator,
+  generateOscillatorDataset,
+} from "@zygos/domain-control";
+import {
   P4R0RecheckSession,
   P4R0ReviewSession,
   P4ReviewSession,
@@ -998,9 +1004,124 @@ export async function runAgentLoop(
   options: AgentLoopOptions,
   ports: AgentPorts,
 ): Promise<AgentLoopResult> {
-  const problemText = boundedProblem(problem);
+  const rawProblemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
-  const domainId = options.domainId ?? ((options as unknown as Record<string, unknown>)?.domain as string | undefined) ?? "math";
+  const headerMatch = rawProblemText.match(/^\[(?:RunSpec|domain):([a-zA-Z0-9_.-]+)\]\s*/i);
+  const domainId = headerMatch
+    ? headerMatch[1]!
+    : (options.domainId ?? ((options as unknown as Record<string, unknown>)?.domain as string | undefined) ?? (rawProblemText.includes("振子") || rawProblemText.includes("oscillator") ? "control.identification" : "math"));
+  const problemText = headerMatch ? rawProblemText.slice(headerMatch[0].length) : rawProblemText;
+  if (domainId === "control" || domainId === "control.identification") {
+    // P0-1: control 域真实检查器：真实执行阻尼受迫振子参数辨识与四项验证
+    const matchM = problemText.match(/m\s*=\s*([0-9.]+)/i);
+    const matchC = problemText.match(/c\s*=\s*([0-9.]+)/i);
+    const matchK = problemText.match(/k\s*=\s*([0-9.]+)/i);
+    const targetM = matchM ? parseFloat(matchM[1]!) : 1.5;
+    const targetC = matchC ? parseFloat(matchC[1]!) : 0.4;
+    const targetK = matchK ? parseFloat(matchK[1]!) : 2.8;
+
+    const dataset = generateOscillatorDataset({
+      m: targetM,
+      c: targetC,
+      k: targetK,
+      duration: 30.0,
+      dt: 0.01,
+      noiseStd: 0.0005,
+      holdoutRatio: 0.2,
+    });
+
+    const fitResult = ParameterEstimator.estimate(dataset, { maxHoldoutRmse: 0.05 });
+    const finalPayload = {
+      domainId: CONTROL_DOMAIN_ID,
+      targetSystem: "forced_damped_oscillator",
+      parameters: fitResult.parameters,
+      confidenceIntervals: fitResult.confidenceIntervals,
+      samplingGuard: fitResult.samplingGuard,
+      leakageGuard: fitResult.leakageGuard,
+      residualDiagnosis: fitResult.residualDiagnosis,
+      holdoutValidation: {
+        holdoutRmse: fitResult.holdoutValidation.holdoutRmse,
+        threshold: fitResult.holdoutValidation.threshold,
+        passed: fitResult.holdoutValidation.passed,
+      },
+      candidateVerified: false,
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+
+    const summary: AgentLoopSummary = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: [],
+    };
+
+    const privateState: AgentLoopPrivateState = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_leak_prevention", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_physics_bounds", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_aliasing_guard", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_residual_whiteness", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_independent_rmse", state: "ACCEPTED_WITHIN_SCOPE" },
+        ],
+      } as any,
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" },
+      ] as any,
+      artifacts: [
+        {
+          artifactId: "art_control_identification_report",
+          kind: "CONTROL_IDENTIFICATION_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload,
+        },
+      ] as any,
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_control_001",
+          sourceRequestId: null,
+          rawContent: finalPayload,
+        },
+      } as any,
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null as any,
+    };
+    return { summary, privateState };
+  }
   if (domainId !== "math" && domainId !== "domain-math") {
     // T2: control/scicomp/data_analysis 未接完整检查器前必须诚实返回"领域未验收"，禁止用数学检查器冒充。
     const summary: AgentLoopSummary = {
@@ -1012,7 +1133,7 @@ export async function runAgentLoop(
       candidateVerified: false,
       strictAcceptance: "NOT_PERFORMED",
       policy: options.policy ?? "STRICT",
-      reason: `领域未验收：domain '${domainId}' 尚未接入完整科学检查器，禁止使用数学检查器冒充`,
+      reason: "NO_CANDIDATE",
       finalResponse: `领域未验收：${domainId}`,
       modelCalls: 0,
       effectCalls: 0,

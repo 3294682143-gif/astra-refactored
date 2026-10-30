@@ -80,6 +80,16 @@ export class ControlDomainAdapter implements DomainAdapter {
           description: "Identified parameters must strictly satisfy m > 0, c > 0, k > 0",
         },
         {
+          id: "ob_aliasing_guard",
+          kind: "SAMPLING_ALIASING_GUARD",
+          description: "Sampling frequency must satisfy fs >= 10 * system_bandwidth to prevent aliasing",
+        },
+        {
+          id: "ob_residual_whiteness",
+          kind: "RESIDUAL_WHITENESS_CHECK",
+          description: "Residual autocorrelation must pass whiteness test; non-white residuals trigger structure underdetermined",
+        },
+        {
           id: "ob_independent_rmse",
           kind: "INDEPENDENT_ERROR_BOUND",
           description: "Forward simulation on hold-out validation set must yield RMSE <= 0.05",
@@ -140,6 +150,18 @@ export class ControlDomainAdapter implements DomainAdapter {
       {
         checkId: `chk_stability_${candidate.candidateId}`,
         validatorId: "control_eigenvalue_stability",
+        parameters: { target: candidate.candidateId },
+        timeoutMs: 3000,
+      },
+      {
+        checkId: `chk_aliasing_${candidate.candidateId}`,
+        validatorId: "control_aliasing_guard",
+        parameters: { target: candidate.candidateId },
+        timeoutMs: 3000,
+      },
+      {
+        checkId: `chk_whiteness_${candidate.candidateId}`,
+        validatorId: "control_whiteness_evaluator",
         parameters: { target: candidate.candidateId },
         timeoutMs: 3000,
       },
@@ -220,6 +242,22 @@ export class ControlDomainAdapter implements DomainAdapter {
         return { newState: "ACCEPTED_WITHIN_SCOPE", rationale: "Physical parameters m, c, k strictly positive" };
       }
       return { newState: "REFUTED", rationale: "Negative mass/damping or unstable eigenvalues" };
+    }
+
+    if (obId === "ob_aliasing_guard") {
+      const aliasReceipt = receipts.find((r) => r.validatorId === "control_aliasing_guard");
+      if (aliasReceipt && aliasReceipt.outcome === "PASS") {
+        return { newState: "ACCEPTED_WITHIN_SCOPE", rationale: "Sampling rate fs >= 10x system bandwidth verified" };
+      }
+      return { newState: "REFUTED", rationale: "欠采样混叠违规：采样率低于 10x 系统带宽，义务不可关闭" };
+    }
+
+    if (obId === "ob_residual_whiteness") {
+      const whiteReceipt = receipts.find((r) => r.validatorId === "control_whiteness_evaluator");
+      if (whiteReceipt && whiteReceipt.outcome === "PASS") {
+        return { newState: "ACCEPTED_WITHIN_SCOPE", rationale: "Residual whiteness verified, no significant autocorrelation" };
+      }
+      return { newState: "REFUTED", rationale: "结构欠定：残差自相关显著，表明存在未建模动态或结构失配，禁止输出参数可信" };
     }
 
     if (obId === "ob_independent_rmse") {

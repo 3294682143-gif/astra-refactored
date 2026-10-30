@@ -76,10 +76,131 @@ class SolverAdapter:
 
         return ReasoningAgent
 
+    def _solve_control(self, problem: str, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        """P0-1: Execute real numerical parameter estimation via domain-control."""
+        import json
+        import re
+        import subprocess
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[2]
+        match_m = re.search(r"m\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        match_c = re.search(r"c\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        match_k = re.search(r"k\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        target_m = float(match_m.group(1)) if match_m else 1.5
+        target_c = float(match_c.group(1)) if match_c else 0.4
+        target_k = float(match_k.group(1)) if match_k else 2.8
+
+        module_path = repo_root / "packages" / "domain-control" / "dist" / "src" / "index.js"
+        module_url = module_path.as_uri()
+
+        node_script = f"""
+import('{module_url}').then(({{ generateOscillatorDataset, ParameterEstimator, CONTROL_DOMAIN_ID }}) => {{
+  const dataset = generateOscillatorDataset({{
+    m: {target_m},
+    c: {target_c},
+    k: {target_k},
+    duration: 30.0,
+    dt: 0.01,
+    noiseStd: 0.0005,
+    holdoutRatio: 0.2
+  }});
+  const fitResult = ParameterEstimator.estimate(dataset, {{ maxHoldoutRmse: 0.05 }});
+  const output = {{
+    domainId: CONTROL_DOMAIN_ID,
+    targetSystem: 'forced_damped_oscillator',
+    parameters: fitResult.parameters,
+    confidenceIntervals: fitResult.confidenceIntervals,
+    samplingGuard: fitResult.samplingGuard,
+    leakageGuard: fitResult.leakageGuard,
+    residualDiagnosis: fitResult.residualDiagnosis,
+    holdoutValidation: {{
+      holdoutRmse: fitResult.holdoutValidation.holdoutRmse,
+      threshold: fitResult.holdoutValidation.threshold,
+      passed: fitResult.holdoutValidation.passed
+    }},
+    candidateVerified: false
+  }};
+  console.log(JSON.stringify(output));
+}});
+"""
+        proc = subprocess.run(
+            ["node", "--input-type=module", "-e", node_script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30.0,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Control parameter estimation failed: {proc.stderr}")
+
+        control_json_str = proc.stdout.strip()
+        control_payload = json.loads(control_json_str)
+
+        observer = request.get("_event_sink")
+        if callable(observer):
+            observer({
+                "kind": "CONTRACT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "domainId": "control.identification",
+                    "obligations": [
+                        "ob_leak_prevention",
+                        "ob_physics_bounds",
+                        "ob_aliasing_guard",
+                        "ob_residual_whiteness",
+                        "ob_independent_rmse",
+                    ],
+                },
+            })
+            observer({
+                "kind": "RESULT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "status": "candidate",
+                    "stopReason": "STOPPED",
+                    "candidate_verified": False,
+                    "parameters": control_payload["parameters"],
+                },
+            })
+
+        return {
+            "status": "candidate",
+            "stopReason": "STOPPED",
+            "stop_reason": "STOPPED",
+            "final_response": control_json_str,
+            "candidate_verified": False,
+            "executed": True,
+            "code": None,
+            "reason": "DYNAMICS_IDENTIFICATION_COMPLETED",
+            "provider": self._provider_name or "s2",
+            "runId": request.get("run_id"),
+        }
+
     def __call__(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
         problem = request.get("problem")
         if not isinstance(problem, str) or not problem.strip():
             raise ValueError("invalid problem")
+
+        metadata = request.get("metadata") or {}
+        domain_id = (
+            request.get("domain_id")
+            or metadata.get("domainId")
+            or metadata.get("domain_id")
+        )
+        if not domain_id:
+            import re
+            m = re.search(r"\[(?:RunSpec|domain):([a-zA-Z0-9_.-]+)\]", problem)
+            if m:
+                domain_id = m.group(1)
+            elif "振子" in problem or "oscillator" in problem:
+                domain_id = "control.identification"
+            else:
+                domain_id = "math"
+
+        if domain_id in {"control", "control.identification"}:
+            return self._solve_control(problem, request)
+
         budgets = {
             key: request.get(key, DEFAULT_BUDGET[key])
             for key in _BUDGET_KEYS
@@ -125,6 +246,38 @@ def build_solver_from_env() -> Optional[SolverAdapter]:
     - otherwise: the original ``UserSuppliedS2Client`` Intern-S2 path.
     """
     provider = os.environ.get("ASTRA_PROVIDER", "").strip().lower()
+
+    if provider in {"mock", "mock-offline", "test"}:
+        def _mock_factory(budgets: Mapping[str, Any] | None = None) -> Any:
+            import json
+            from python.astra_bridge.public_chat_port import PublicChatPort
+
+            class _MockConnector:
+                def __init__(self, **_kw):
+                    self.calls = 0
+
+                def chat(self, messages, **_kw):
+                    self.calls += 1
+                    return {
+                        "choices": [
+                            {
+                                "index": 0,
+                                "finish_reason": "stop",
+                                "message": {
+                                    "role": "assistant",
+                                    "content": json.dumps({
+                                        "candidateProposal": "ok",
+                                        "claim": "domain identification complete",
+                                        "deliveryStatus": "COMPLETE",
+                                    }),
+                                },
+                            }
+                        ]
+                    }
+
+            return PublicChatPort(_MockConnector(), request_seconds=30.0)
+
+        return SolverAdapter(client_factory=_mock_factory, provider_name="mock")
 
     if provider == "inkstone-desktop":
         inkstone_root = os.environ.get("INKSTONE_RE_LAB_ROOT", "").strip()

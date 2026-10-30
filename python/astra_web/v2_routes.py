@@ -123,8 +123,13 @@ async def create_v2_run(request: Request) -> JSONResponse:
     manager, store = _get_manager_and_store(request)
 
     # Dispatch to ExecutionManager
+    wrapped_problem = (
+        raw_text
+        if raw_text.startswith("[RunSpec:") or raw_text.startswith("[domain:")
+        else f"[RunSpec:{canonical_domain_id}]\n{raw_text}"
+    )
     run_payload = {
-        "problem": raw_text,
+        "problem": wrapped_problem,
         "domain_id": canonical_domain_id,
         "metadata": {
             "domainId": canonical_domain_id,
@@ -145,30 +150,34 @@ async def create_v2_run(request: Request) -> JSONResponse:
     await manager.wait_idle(timeout=10.0)
 
     run_record = store.get_run(run_id) or {}
+    summary = run_record.get("summary") or {}
     status = run_record.get("status", "running")
-    code = run_record.get("code") or run_record.get("stopReason")
+    stop_reason = summary.get("stopReason") or run_record.get("stopReason") or summary.get("stop_reason")
+    code = run_record.get("code") or summary.get("code") or stop_reason
     if manager._solver is None and status == "error":
         code = "SOLVER_NOT_CONFIGURED"
 
     events = manager.get_history_events(run_id)
+    executed = run_record.get("executed") if run_record.get("executed") is not None else summary.get("executed", False)
+    final_resp = run_record.get("final_response") or summary.get("final_response")
 
     response_payload = {
         "runId": run_id,
         "domainId": canonical_domain_id,
         "domainVersion": matched_domain["version"],
         "status": status,
-        "stopReason": run_record.get("stopReason") or run_record.get("stop_reason"),
+        "stopReason": stop_reason,
         "code": code,
         "rawText": raw_text,
         "idempotencyKey": idempotency_key,
         "candidateVerified": False,
-        "executed": run_record.get("executed", False),
+        "executed": executed,
         "unresolvedObligations": [f"ob_{canonical_domain_id}_primary"],
         "evidenceCount": len(events),
         "createdAt": run_record.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    if run_record.get("final_response"):
-        response_payload["final_response"] = run_record["final_response"]
+    if final_resp:
+        response_payload["final_response"] = final_resp
 
     status_code = 200 if enqueue_res.get("idempotent_replay") else 201
     return JSONResponse(response_payload, status_code=status_code)
