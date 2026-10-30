@@ -844,21 +844,22 @@ async function runBoundedR0(
       ) {
         const retryId = root.nextModelId();
         if (retryId !== null) {
+          const retryMessages = [
+            admitted.context.messages[0]!,
+            {
+              role: "user" as const,
+              content:
+                admitted.context.messages[1]!.content +
+                "\n\nPREVIOUS_MALFORMED_REVIEW_RESPONSE=" +
+                receipt.text.slice(0, 1000) +
+                "\n\nNOTE: Previous review response had JSON formatting errors. Please output strictly valid JSON matching schema p4-r0-review-v1 with no markdown, ensuring valid commas and delimiters.",
+            },
+          ];
           const retryContext = {
             ...admitted.context,
-            messages: [
-              admitted.context.messages[0]!,
-              {
-                role: "user" as const,
-                content:
-                  admitted.context.messages[1]!.content +
-                  "\n\nPREVIOUS_MALFORMED_REVIEW_RESPONSE=" +
-                  receipt.text.slice(0, 1000) +
-                  "\n\nNOTE: Previous review response had JSON formatting errors. Please output strictly valid JSON matching schema p4-r0-review-v1 with no markdown, ensuring valid commas and delimiters.",
-              },
-            ],
-            contextHash: p4Hash(receipt.text),
-            contextBytes: Buffer.byteLength(receipt.text, "utf8"),
+            messages: retryMessages,
+            contextHash: p4Hash(JSON.stringify(retryMessages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(retryMessages), "utf8"),
           };
           receipt = await r0Generate(root, ports, sessionLog, retryId, "R0", retryContext, scopeId);
         }
@@ -904,8 +905,11 @@ async function runBoundedR0(
       rationale: `R0 规划聚合评审: ${aggregate.conclusion}`,
     });
     if (aggregate.conclusion === "UNKNOWN") {
-      stageRow("FAILED", "AGGREGATE_CONCLUSION_UNKNOWN");
-      root.stop("CONTROL_REJECTED");
+      // R0 is a planning precheck, not an acceptance gate: an UNKNOWN
+      // aggregate (e.g. every role report rejected on span precision) must
+      // never abort the run. Record it and return the initial contract so
+      // the main loop still enters WORK exactly as the pre-R0 path does.
+      stageRow("FALLBACK", "AGGREGATE_CONCLUSION_UNKNOWN");
       return initial;
     }
     if (aggregate.conclusion !== "ISSUES") {
