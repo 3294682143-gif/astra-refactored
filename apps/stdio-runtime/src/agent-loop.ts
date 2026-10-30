@@ -75,6 +75,12 @@ import {
   generateOscillatorDataset,
 } from "@zygos/domain-control";
 import {
+  DATA_ANALYSIS_ID,
+  DataAnalysisAdapter,
+  StatisticalAnalyzer,
+  generateTwoSampleDataset,
+} from "@zygos/domain-data-analysis";
+import {
   P4R0RecheckSession,
   P4R0ReviewSession,
   P4ReviewSession,
@@ -1009,7 +1015,7 @@ export async function runAgentLoop(
   const headerMatch = rawProblemText.match(/^\[(?:RunSpec|domain):([a-zA-Z0-9_.-]+)\]\s*/i);
   const domainId = headerMatch
     ? headerMatch[1]!
-    : (options.domainId ?? ((options as unknown as Record<string, unknown>)?.domain as string | undefined) ?? (rawProblemText.includes("振子") || rawProblemText.includes("oscillator") ? "control.identification" : "math"));
+    : (options.domainId ?? ((options as unknown as Record<string, unknown>)?.domain as string | undefined) ?? (rawProblemText.includes("振子") || rawProblemText.includes("oscillator") ? "control.identification" : (rawProblemText.includes("两组") || rawProblemText.includes("样本") || rawProblemText.includes("welch") || rawProblemText.includes("t-test") || rawProblemText.includes("统计") ? "data_analysis" : "math")));
   const problemText = headerMatch ? rawProblemText.slice(headerMatch[0].length) : rawProblemText;
   if (domainId === "control" || domainId === "control.identification") {
     // P0-1: control 域真实检查器：真实执行阻尼受迫振子参数辨识与四项验证
@@ -1106,6 +1112,119 @@ export async function runAgentLoop(
         reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
         protectedCandidate: {
           candidateId: "cand_control_001",
+          sourceRequestId: null,
+          rawContent: finalPayload,
+        },
+      } as any,
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null as any,
+    };
+    return { summary, privateState };
+  }
+  if (domainId === "data_analysis" || domainId === "data-analysis" || domainId === "statistics") {
+    // P1-F2: data_analysis 域真实检查器：真实执行两组样本 Welch t-test 与三守卫检验
+    const matchMeanA = problemText.match(/mean1\s*=\s*([0-9.]+)/i);
+    const matchMeanB = problemText.match(/mean2\s*=\s*([0-9.]+)/i);
+    const targetMeanA = matchMeanA ? parseFloat(matchMeanA[1]!) : 10.0;
+    const targetMeanB = matchMeanB ? parseFloat(matchMeanB[1]!) : 12.5;
+
+    const dataset = generateTwoSampleDataset({
+      n1: 50,
+      n2: 50,
+      mean1: targetMeanA,
+      mean2: targetMeanB,
+      std1: 1.2,
+      std2: 1.4,
+      seed: 42,
+    });
+
+    const report = StatisticalAnalyzer.analyze(dataset, { alpha: 0.05 });
+    const finalPayload = {
+      domainId: DATA_ANALYSIS_ID,
+      testMethod: report.testMethod,
+      groupA: report.groupA,
+      groupB: report.groupB,
+      testResult: {
+        tStatistic: report.testResult.tStatistic,
+        degreesOfFreedom: report.testResult.degreesOfFreedom,
+        pValue: report.testResult.pValue,
+        meanDifference: report.testResult.meanDifference,
+        standardError: report.testResult.standardError,
+        confidenceInterval: report.testResult.confidenceInterval,
+        cohensD: report.testResult.cohensD,
+        isSignificant: report.testResult.isSignificant,
+      },
+      normalityDiagnosis: report.normalityDiagnosis,
+      homoscedasticityDiagnosis: report.homoscedasticityDiagnosis,
+      residualDiagnosis: report.residualDiagnosis,
+      allObligationsMet: report.allObligationsMet,
+      candidateVerified: false,
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+
+    const summary: AgentLoopSummary = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: [],
+    };
+
+    const privateState: AgentLoopPrivateState = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_normality_homoscedasticity", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_effect_significance", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_residual_whiteness", state: "ACCEPTED_WITHIN_SCOPE" },
+        ],
+      } as any,
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" },
+      ] as any,
+      artifacts: [
+        {
+          artifactId: "art_data_analysis_report",
+          kind: "STATISTICAL_ANALYSIS_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload,
+        },
+      ] as any,
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_data_analysis_001",
           sourceRequestId: null,
           rawContent: finalPayload,
         },

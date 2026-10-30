@@ -28,3 +28,5 @@ scripts/dispatch_d*.py
 tests/web_review/baseline/
 tests/web_review/baseline_*.zip
 datasets/
+_audit_*.log
+_audit_p1.log

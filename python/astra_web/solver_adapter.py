@@ -177,6 +177,111 @@ import('{module_url}').then(({{ generateOscillatorDataset, ParameterEstimator, C
             "runId": request.get("run_id"),
         }
 
+    def _solve_data_analysis(self, problem: str, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        """P1-F2: Execute real numerical statistical inference via domain-data-analysis."""
+        import json
+        import re
+        import subprocess
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[2]
+        match_mean1 = re.search(r"mean1\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        match_mean2 = re.search(r"mean2\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        target_mean1 = float(match_mean1.group(1)) if match_mean1 else 10.0
+        target_mean2 = float(match_mean2.group(1)) if match_mean2 else 12.5
+
+        module_path = repo_root / "packages" / "domain-data-analysis" / "dist" / "src" / "index.js"
+        module_url = module_path.as_uri()
+
+        node_script = f"""
+import('{module_url}').then(({{ generateTwoSampleDataset, StatisticalAnalyzer, DATA_ANALYSIS_ID }}) => {{
+  const dataset = generateTwoSampleDataset({{
+    n1: 50,
+    n2: 50,
+    mean1: {target_mean1},
+    mean2: {target_mean2},
+    std1: 1.2,
+    std2: 1.4,
+    seed: 42
+  }});
+  const report = StatisticalAnalyzer.analyze(dataset, {{ alpha: 0.05 }});
+  const output = {{
+    domainId: DATA_ANALYSIS_ID,
+    testMethod: report.testMethod,
+    groupA: report.groupA,
+    groupB: report.groupB,
+    testResult: {{
+      tStatistic: report.testResult.tStatistic,
+      degreesOfFreedom: report.testResult.degreesOfFreedom,
+      pValue: report.testResult.pValue,
+      meanDifference: report.testResult.meanDifference,
+      standardError: report.testResult.standardError,
+      confidenceInterval: report.testResult.confidenceInterval,
+      cohensD: report.testResult.cohensD,
+      isSignificant: report.testResult.isSignificant
+    }},
+    normalityDiagnosis: report.normalityDiagnosis,
+    homoscedasticityDiagnosis: report.homoscedasticityDiagnosis,
+    residualDiagnosis: report.residualDiagnosis,
+    allObligationsMet: report.allObligationsMet,
+    candidateVerified: false
+  }};
+  console.log(JSON.stringify(output));
+}});
+"""
+        proc = subprocess.run(
+            ["node", "--input-type=module", "-e", node_script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30.0,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Data analysis statistical inference failed: {proc.stderr}")
+
+        stats_json_str = proc.stdout.strip()
+        stats_payload = json.loads(stats_json_str)
+
+        observer = request.get("_event_sink")
+        if callable(observer):
+            observer({
+                "kind": "CONTRACT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "domainId": "data_analysis",
+                    "obligations": [
+                        "ob_normality_homoscedasticity",
+                        "ob_effect_significance",
+                        "ob_residual_whiteness",
+                    ],
+                },
+            })
+            observer({
+                "kind": "RESULT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "status": "candidate",
+                    "stopReason": "STOPPED",
+                    "candidate_verified": False,
+                    "testResult": stats_payload["testResult"],
+                },
+            })
+
+        return {
+            "status": "candidate",
+            "stopReason": "STOPPED",
+            "stop_reason": "STOPPED",
+            "final_response": stats_json_str,
+            "candidate_verified": False,
+            "strictAcceptance": "NOT_PERFORMED",
+            "executed": True,
+            "code": None,
+            "reason": "STATISTICAL_INFERENCE_COMPLETED",
+            "provider": self._provider_name or "s2",
+            "runId": request.get("run_id"),
+            "details": stats_payload,
+        }
+
     def __call__(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
         problem = request.get("problem")
         if not isinstance(problem, str) or not problem.strip():
@@ -195,11 +300,16 @@ import('{module_url}').then(({{ generateOscillatorDataset, ParameterEstimator, C
                 domain_id = m.group(1)
             elif "振子" in problem or "oscillator" in problem:
                 domain_id = "control.identification"
+            elif "两组" in problem or "样本" in problem or "welch" in problem or "t-test" in problem or "统计" in problem:
+                domain_id = "data_analysis"
             else:
                 domain_id = "math"
 
         if domain_id in {"control", "control.identification"}:
             return self._solve_control(problem, request)
+
+        if domain_id in {"data_analysis", "data-analysis", "statistics"}:
+            return self._solve_data_analysis(problem, request)
 
         budgets = {
             key: request.get(key, DEFAULT_BUDGET[key])

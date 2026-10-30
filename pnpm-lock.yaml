@@ -50,6 +50,9 @@ importers:
       '@zygos/domain-control':
         specifier: workspace:*
         version: link:../../packages/domain-control
+      '@zygos/domain-data-analysis':
+        specifier: workspace:*
+        version: link:../../packages/domain-data-analysis
 
   apps/web-demo:
     dependencies:

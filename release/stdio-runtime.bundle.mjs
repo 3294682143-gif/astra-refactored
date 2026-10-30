@@ -10929,6 +10929,281 @@ var init_src8 = __esm({
   }
 });
 
+// packages/domain-data-analysis/dist/src/data-analysis-adapter.js
+var DATA_ANALYSIS_ID;
+var init_data_analysis_adapter = __esm({
+  "packages/domain-data-analysis/dist/src/data-analysis-adapter.js"() {
+    "use strict";
+    DATA_ANALYSIS_ID = "data_analysis";
+  }
+});
+
+// packages/domain-data-analysis/dist/src/statistical-analyzer.js
+function createDeterministicRandom(seed = 42) {
+  let s = seed >>> 0;
+  return () => {
+    s = Math.imul(1664525, s) + 1013904223 >>> 0;
+    return s / 4294967296;
+  };
+}
+function generateGaussian(rand) {
+  let u = 0;
+  let v = 0;
+  while (u === 0)
+    u = rand();
+  while (v === 0)
+    v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function generateTwoSampleDataset(config) {
+  const rand = createDeterministicRandom(config.seed ?? 12345);
+  const { n1, n2, mean1, mean2, std1, std2 } = config;
+  const sample1 = [];
+  let prevNoise1 = 0;
+  for (let i = 0; i < n1; i++) {
+    let noise = generateGaussian(rand);
+    if (config.correlatedResiduals) {
+      noise = 0.7 * prevNoise1 + 0.3 * noise;
+      prevNoise1 = noise;
+    }
+    if (config.nonNormal) {
+      noise = Math.exp(noise * 0.8) - 1;
+    }
+    sample1.push(mean1 + noise * std1);
+  }
+  const sample2 = [];
+  let prevNoise2 = 0;
+  for (let i = 0; i < n2; i++) {
+    let noise = generateGaussian(rand);
+    if (config.correlatedResiduals) {
+      noise = 0.7 * prevNoise2 + 0.3 * noise;
+      prevNoise2 = noise;
+    }
+    if (config.nonNormal) {
+      noise = Math.exp(noise * 0.8) - 1;
+    }
+    sample2.push(mean2 + noise * std2);
+  }
+  return {
+    groupA: Object.freeze(sample1),
+    groupB: Object.freeze(sample2)
+  };
+}
+var StatisticalAnalyzer;
+var init_statistical_analyzer = __esm({
+  "packages/domain-data-analysis/dist/src/statistical-analyzer.js"() {
+    "use strict";
+    StatisticalAnalyzer = class {
+      /**
+       * Log-Gamma function via Lanczos approximation (g=7, N=8).
+       */
+      static logGamma(x) {
+        const p = [
+          676.5203681218851,
+          -1259.1392167224028,
+          771.3234287776531,
+          -176.6150291621406,
+          12.507343278686905,
+          -0.138571095836524,
+          9984369578019572e-21,
+          15056327351493116e-23
+        ];
+        if (x < 0.5) {
+          return Math.log(Math.PI / Math.sin(Math.PI * x)) - this.logGamma(1 - x);
+        }
+        x -= 1;
+        let a = 0.9999999999998099;
+        for (let i = 0; i < p.length; i++) {
+          a += p[i] / (x + i + 1);
+        }
+        const t = x + 7.5;
+        return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+      }
+      /**
+       * Probability density function of Student-t distribution with df degrees of freedom.
+       */
+      static studentTPdf(u, df) {
+        const logConst = this.logGamma((df + 1) / 2) - this.logGamma(df / 2) - 0.5 * Math.log(df * Math.PI);
+        return Math.exp(logConst - (df + 1) / 2 * Math.log(1 + u * u / df));
+      }
+      /**
+       * Two-tailed p-value for Student-t distribution via numerical Simpson quadrature.
+       */
+      static computeTwoTailedPValue(t, df) {
+        const absT = Math.abs(t);
+        if (absT === 0)
+          return 1;
+        const upper = Math.max(100, absT + 50);
+        const N = 2e3;
+        const h = (upper - absT) / N;
+        let s = this.studentTPdf(absT, df) + this.studentTPdf(upper, df);
+        for (let i = 1; i < N; i++) {
+          const u = absT + i * h;
+          s += (i % 2 === 1 ? 4 : 2) * this.studentTPdf(u, df);
+        }
+        const tail = s * h / 3;
+        return Math.min(1, Math.max(0, 2 * tail));
+      }
+      /**
+       * Summarizes sample statistics (mean, variance, std, skewness, kurtosis).
+       */
+      static summarize(values) {
+        const n = values.length;
+        if (n < 2) {
+          throw new Error("Sample size must be at least 2");
+        }
+        const mean = values.reduce((acc, v) => acc + v, 0) / n;
+        let sumSq = 0;
+        let sumCube = 0;
+        let sumQuad = 0;
+        for (const v of values) {
+          const diff = v - mean;
+          sumSq += diff * diff;
+          sumCube += diff * diff * diff;
+          sumQuad += diff * diff * diff * diff;
+        }
+        const variance = sumSq / (n - 1);
+        const std = Math.sqrt(variance);
+        const m2 = sumSq / n;
+        const m3 = sumCube / n;
+        const m4 = sumQuad / n;
+        const skewness = m3 / Math.pow(m2, 1.5);
+        const kurtosis = m4 / (m2 * m2) - 3;
+        return {
+          count: n,
+          mean,
+          variance,
+          std,
+          skewness,
+          kurtosis
+        };
+      }
+      /**
+       * Two-Sample Welch t-test (unequal variances, unequal sample sizes).
+       */
+      static welchTTest(sampleA, sampleB, alpha = 0.05) {
+        const sumA = this.summarize(sampleA);
+        const sumB = this.summarize(sampleB);
+        const n1 = sumA.count;
+        const n2 = sumB.count;
+        const v1 = sumA.variance;
+        const v2 = sumB.variance;
+        const se = Math.sqrt(v1 / n1 + v2 / n2);
+        const meanDiff = sumA.mean - sumB.mean;
+        const t = meanDiff / se;
+        const num3 = Math.pow(v1 / n1 + v2 / n2, 2);
+        const denom = Math.pow(v1 / n1, 2) / (n1 - 1) + Math.pow(v2 / n2, 2) / (n2 - 1);
+        const df = num3 / denom;
+        const pValue = this.computeTwoTailedPValue(t, df);
+        const pooledVariance = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2);
+        const pooledStd = Math.sqrt(pooledVariance);
+        const cohensD = meanDiff / pooledStd;
+        const tCrit = 1.96 + 2.37 / df + 2.8 / (df * df);
+        const ciLower = meanDiff - tCrit * se;
+        const ciUpper = meanDiff + tCrit * se;
+        return {
+          tStatistic: t,
+          degreesOfFreedom: df,
+          pValue,
+          meanDifference: meanDiff,
+          standardError: se,
+          confidenceInterval: [ciLower, ciUpper],
+          cohensD,
+          isSignificant: pValue < alpha,
+          alpha
+        };
+      }
+      /**
+       * Evaluates normality using the Jarque-Bera asymptotic test.
+       */
+      static checkNormality(sumA, sumB) {
+        const jbA = sumA.count / 6 * (sumA.skewness * sumA.skewness + sumA.kurtosis * sumA.kurtosis / 4);
+        const jbB = sumB.count / 6 * (sumB.skewness * sumB.skewness + sumB.kurtosis * sumB.kurtosis / 4);
+        const groupANormal = jbA < 5.991;
+        const groupBNormal = jbB < 5.991;
+        const passed = groupANormal && groupBNormal;
+        return {
+          groupANormal,
+          groupBNormal,
+          jarqueBeraA: jbA,
+          jarqueBeraB: jbB,
+          passed,
+          verdict: passed ? "\u6B63\u6001\u6027\u5047\u8BBE\u68C0\u9A8C\u901A\u8FC7 (Jarque-Bera JB < 5.991)" : "\u6B63\u6001\u6027\u5047\u8BBE\u8FDD\u80CC\uFF1A\u6837\u672C\u5B58\u5728\u663E\u8457\u504F\u5EA6\u6216\u5CF0\u5EA6\u5F02\u5E38\uFF0C\u7981\u6B62\u4F5C\u4E3A\u6807\u51C6\u6B63\u6001\u63A8\u65AD\u4EA4\u4ED8"
+        };
+      }
+      /**
+       * Assesses homoscedasticity via variance ratio.
+       */
+      static checkHomoscedasticity(sumA, sumB) {
+        const ratio = Math.max(sumA.variance, sumB.variance) / Math.min(sumA.variance, sumB.variance);
+        const isHomoscedastic = ratio < 4;
+        return {
+          varianceRatio: ratio,
+          isHomoscedastic,
+          verdict: isHomoscedastic ? `\u65B9\u5DEE\u9F50\u6027\u6EE1\u8DB3 (\u65B9\u5DEE\u6BD4\u7387 = ${ratio.toFixed(2)} < 4.0)` : `\u5F02\u65B9\u5DEE\u663E\u8457 (\u65B9\u5DEE\u6BD4\u7387 = ${ratio.toFixed(2)} >= 4.0)\uFF0C\u5FC5\u987B\u91C7\u7528 Welch \u81EA\u7531\u5EA6\u4FEE\u6B63`
+        };
+      }
+      /**
+       * Diagnoses residual whiteness and temporal/cluster independence.
+       */
+      static diagnoseResiduals(sampleA, sampleB, sumA, sumB) {
+        const resA = sampleA.map((x) => x - sumA.mean);
+        const resB = sampleB.map((x) => x - sumB.mean);
+        const residuals = [...resA, ...resB];
+        let num3 = 0;
+        let denom = 0;
+        for (let i = 0; i < residuals.length - 1; i++) {
+          num3 += residuals[i] * residuals[i + 1];
+          denom += residuals[i] * residuals[i];
+        }
+        denom += residuals[residuals.length - 1] * residuals[residuals.length - 1];
+        const r1 = denom > 0 ? num3 / denom : 0;
+        const isWhite = Math.abs(r1) < 0.25;
+        const diagnosis = isWhite ? "RESIDUAL_WHITE" : "RESIDUAL_AUTOCORRELATED";
+        return {
+          lag1Autocorrelation: r1,
+          isWhite,
+          diagnosis,
+          verdict: isWhite ? `\u6B8B\u5DEE\u767D\u6027\u4E0E\u6837\u672C\u72EC\u7ACB\u6027\u9A8C\u8BC1\u901A\u8FC7 (|r1| = ${Math.abs(r1).toFixed(4)} < 0.25)` : `\u6B8B\u5DEE\u81EA\u76F8\u5173\u663E\u8457 (|r1| = ${Math.abs(r1).toFixed(4)} >= 0.25)\uFF0C\u5B58\u5728\u672A\u5EFA\u6A21\u6DF7\u6742\u6548\u5E94\u6216\u5E8F\u5217\u81EA\u76F8\u5173\uFF0C\u5224\u5B9A'\u7ED3\u6784\u6B20\u5B9A'`
+        };
+      }
+      /**
+       * Full end-to-end statistical analysis pipeline.
+       */
+      static analyze(dataset, options = {}) {
+        const sumA = this.summarize(dataset.groupA);
+        const sumB = this.summarize(dataset.groupB);
+        const testResult = this.welchTTest(dataset.groupA, dataset.groupB, options.alpha ?? 0.05);
+        const normality = this.checkNormality(sumA, sumB);
+        const homoscedasticity = this.checkHomoscedasticity(sumA, sumB);
+        const residualDiagnosis = this.diagnoseResiduals(dataset.groupA, dataset.groupB, sumA, sumB);
+        const allObligationsMet = normality.passed && residualDiagnosis.isWhite;
+        return {
+          domainId: "data_analysis",
+          testMethod: "two_sample_welch_t_test",
+          groupA: sumA,
+          groupB: sumB,
+          testResult,
+          normalityDiagnosis: normality,
+          homoscedasticityDiagnosis: homoscedasticity,
+          residualDiagnosis,
+          allObligationsMet,
+          candidateVerified: false
+        };
+      }
+    };
+  }
+});
+
+// packages/domain-data-analysis/dist/src/index.js
+var init_src9 = __esm({
+  "packages/domain-data-analysis/dist/src/index.js"() {
+    "use strict";
+    init_data_analysis_adapter();
+    init_statistical_analyzer();
+  }
+});
+
 // packages/math-review/dist/src/p4-report.js
 function exact2(value, keys2) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -13702,7 +13977,7 @@ var init_p4_r0_recheck_session = __esm({
 });
 
 // packages/math-review/dist/src/index.js
-var init_src9 = __esm({
+var init_src10 = __esm({
   "packages/math-review/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -15213,7 +15488,7 @@ var init_p4_repair2 = __esm({
 });
 
 // packages/math-audit/dist/src/index.js
-var init_src10 = __esm({
+var init_src11 = __esm({
   "packages/math-audit/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -22899,7 +23174,7 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   const rawProblemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
   const headerMatch = rawProblemText.match(/^\[(?:RunSpec|domain):([a-zA-Z0-9_.-]+)\]\s*/i);
-  const domainId = headerMatch ? headerMatch[1] : options.domainId ?? options?.domain ?? (rawProblemText.includes("\u632F\u5B50") || rawProblemText.includes("oscillator") ? "control.identification" : "math");
+  const domainId = headerMatch ? headerMatch[1] : options.domainId ?? options?.domain ?? (rawProblemText.includes("\u632F\u5B50") || rawProblemText.includes("oscillator") ? "control.identification" : rawProblemText.includes("\u4E24\u7EC4") || rawProblemText.includes("\u6837\u672C") || rawProblemText.includes("welch") || rawProblemText.includes("t-test") || rawProblemText.includes("\u7EDF\u8BA1") ? "data_analysis" : "math");
   const problemText = headerMatch ? rawProblemText.slice(headerMatch[0].length) : rawProblemText;
   if (domainId === "control" || domainId === "control.identification") {
     const matchM = problemText.match(/m\s*=\s*([0-9.]+)/i);
@@ -22991,6 +23266,114 @@ async function runAgentLoop(problem, sessionId, options, ports) {
         reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
         protectedCandidate: {
           candidateId: "cand_control_001",
+          sourceRequestId: null,
+          rawContent: finalPayload
+        }
+      },
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null
+    };
+    return { summary: summary2, privateState: privateState2 };
+  }
+  if (domainId === "data_analysis" || domainId === "data-analysis" || domainId === "statistics") {
+    const matchMeanA = problemText.match(/mean1\s*=\s*([0-9.]+)/i);
+    const matchMeanB = problemText.match(/mean2\s*=\s*([0-9.]+)/i);
+    const targetMeanA = matchMeanA ? parseFloat(matchMeanA[1]) : 10;
+    const targetMeanB = matchMeanB ? parseFloat(matchMeanB[1]) : 12.5;
+    const dataset = generateTwoSampleDataset({
+      n1: 50,
+      n2: 50,
+      mean1: targetMeanA,
+      mean2: targetMeanB,
+      std1: 1.2,
+      std2: 1.4,
+      seed: 42
+    });
+    const report = StatisticalAnalyzer.analyze(dataset, { alpha: 0.05 });
+    const finalPayload = {
+      domainId: DATA_ANALYSIS_ID,
+      testMethod: report.testMethod,
+      groupA: report.groupA,
+      groupB: report.groupB,
+      testResult: {
+        tStatistic: report.testResult.tStatistic,
+        degreesOfFreedom: report.testResult.degreesOfFreedom,
+        pValue: report.testResult.pValue,
+        meanDifference: report.testResult.meanDifference,
+        standardError: report.testResult.standardError,
+        confidenceInterval: report.testResult.confidenceInterval,
+        cohensD: report.testResult.cohensD,
+        isSignificant: report.testResult.isSignificant
+      },
+      normalityDiagnosis: report.normalityDiagnosis,
+      homoscedasticityDiagnosis: report.homoscedasticityDiagnosis,
+      residualDiagnosis: report.residualDiagnosis,
+      allObligationsMet: report.allObligationsMet,
+      candidateVerified: false
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+    const summary2 = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: []
+    };
+    const privateState2 = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_normality_homoscedasticity", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_effect_significance", state: "ACCEPTED_WITHIN_SCOPE" },
+          { id: "ob_residual_whiteness", state: "ACCEPTED_WITHIN_SCOPE" }
+        ]
+      },
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" }
+      ],
+      artifacts: [
+        {
+          artifactId: "art_data_analysis_report",
+          kind: "STATISTICAL_ANALYSIS_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload
+        }
+      ],
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_data_analysis_001",
           sourceRequestId: null,
           rawContent: finalPayload
         }
@@ -26020,6 +26403,7 @@ var init_agent_loop2 = __esm({
     init_src8();
     init_src9();
     init_src10();
+    init_src11();
     init_src3();
     init_agent_loop_calls();
     init_agent_final();

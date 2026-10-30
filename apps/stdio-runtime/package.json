@@ -21,6 +21,7 @@
   "dependencies": {
     "@zygos/domain-contract": "workspace:*",
     "@zygos/domain-control": "workspace:*",
+    "@zygos/domain-data-analysis": "workspace:*",
     "@zygos/agent-kernel": "workspace:*",
     "@astra/protocol": "workspace:*",
     "@astra/runtime-core": "workspace:*",

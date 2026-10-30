@@ -14,6 +14,9 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { MathDomainAdapter } from "../../domain-math/dist/src/math-adapter.js";
 import { runUniversalAgentLoop } from "../dist/src/generic-loop.js";
@@ -423,4 +426,70 @@ test("P1-1 预算配额拦截等价：零模型预算双向均不派发模型调
   assert.equal(legacy.status, "FAILED");
   assert.equal(kernel.status, "FAILED");
   assert.equal(legacy.status, kernel.status);
+});
+
+test("P1-F1 核心门禁：生产入口级等价对照 (Production Bundle stdio-runtime vs Universal Kernel)", async () => {
+  const problemText = "求二次代数方程 x^2 - 5x + 6 = 0 的所有实数解";
+  const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+  const scriptPath = resolve(repoRoot, "scripts/run_production_bundle_math.py");
+
+  // 1. 真实运行生产环境 bundle (release/stdio-runtime.bundle.mjs) 驱动旧入口
+  const pythonCmd = process.platform === "win32" ? "python" : "python3";
+  const procStdout = execFileSync(pythonCmd, [scriptPath, problemText], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+    timeout: 30000,
+  });
+  const prodResult = JSON.parse(procStdout.trim());
+
+  // 2. 真实运行新通用内核 (runUniversalAgentLoop + MathDomainAdapter)
+  const kernelPorts = createDeterministicHostPorts({
+    modelContent: "Factorization: (x-2)(x-3)=0 => roots x=2, x=3",
+  });
+  const kernelResult = await runKernelMath(
+    { rawText: problemText },
+    {
+      runId: "run_parity_f1_production_001",
+      domainId: "math",
+      domainVersion: "1.4.0",
+      inputRefs: ["ref_quad_prob"],
+      profileId: "prod",
+      createdAt: new Date().toISOString(),
+    },
+    { maxModelCalls: 6, maxToolCalls: 5, deadlineMonotonicMs: 60000 },
+    kernelPorts
+  );
+
+  // === 维度 1：最终投递等价 (Final Delivery Equivalence) ===
+  // 生产 bundle 输出与通用内核投递状态均为候选交付，且包含相同的解提案
+  assert.equal(prodResult.status, "candidate", "Production bundle must deliver candidate status");
+  assert.equal(kernelResult.delivery, "CANDIDATE_AVAILABLE", "Kernel loop must deliver CANDIDATE_AVAILABLE");
+  assert.match(prodResult.finalResponse, /x=2/);
+  assert.match(prodResult.finalResponse, /x=3/);
+  assert.match(kernelResult.deliveryCertificateText, /CERT1 MATHEMATICAL AUDIT CERTIFICATE/);
+
+  // === 维度 2：义务与评审序列等价 (Obligation & Review Sequence Equivalence) ===
+  // 生产 bundle 完成 R2 独立评审且 0 challenges；内核循环全部 4 项义务有序收敛至 ACCEPTED_WITHIN_SCOPE
+  assert.equal(prodResult.metrics.r2_review_calls, 1, "Production bundle must execute R2 review");
+  assert.equal(prodResult.metrics.r2_challenges, 0, "Production bundle R2 review must have 0 challenges");
+  assert.deepEqual(kernelResult.obligationSequence, [
+    "ob_domain",
+    "ob_candidate",
+    "ob_derivation",
+    "ob_coverage",
+  ]);
+  assert.deepEqual(kernelResult.unresolvedObligations, [], "Kernel loop unresolved obligations must be empty");
+
+  // === 维度 3：预算消耗与配额可审计性等价 (Budget Auditability Equivalence) ===
+  // 双侧均受控于单调递增预算，逻辑调用计数严格非负且不超额
+  assert.ok(prodResult.metrics.logical_model_calls >= 1, "Production bundle must record logical model calls");
+  assert.ok(kernelResult.metrics.modelCalls >= 1, "Kernel loop must record model calls");
+  assert.ok(prodResult.metrics.work_units >= 1, "Production bundle must track work units");
+
+  // === 维度 4：终止状态与诚实守卫等价 (Terminal Status & Invariant I15 Equivalence) ===
+  // 核心不变量：两端真实运行产物中 candidateVerified 严格恒为 false，绝无冒充完全验证
+  assert.equal(prodResult.candidateVerified, false, "Production bundle candidateVerified must be false");
+  assert.equal(kernelResult.candidateVerified, false, "Kernel loop candidateVerified must be false");
+  assert.equal(prodResult.candidateVerified, kernelResult.candidateVerified, "Invariant I15 must match exactly");
+  assert.equal(prodResult.strictAcceptance, "NOT_PERFORMED", "Production bundle strictAcceptance must be NOT_PERFORMED");
 });

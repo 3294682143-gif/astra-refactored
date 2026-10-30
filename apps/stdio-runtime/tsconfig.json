@@ -8,6 +8,7 @@
   "references": [
     { "path": "../../packages/domain-contract" },
     { "path": "../../packages/domain-control" },
+    { "path": "../../packages/domain-data-analysis" },
     { "path": "../../packages/agent-kernel" },
     { "path": "../../packages/protocol" },
     { "path": "../../packages/runtime-core" },
