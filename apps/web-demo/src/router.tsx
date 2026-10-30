@@ -10,6 +10,7 @@ import { BatchPage } from "./pages/batch/BatchPage";
 import { ComparePage } from "./pages/batch/ComparePage";
 import { ProtocolPage } from "./pages/protocol/ProtocolPage";
 import { ResiliencePage } from "./pages/protocol/ResiliencePage";
+import { DomainsPage } from "./pages/domains/DomainsPage";
 import { AssetsPage } from "./pages/assets/AssetsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: "batch/compare", element: <ComparePage /> },
       { path: "protocol", element: <ProtocolPage /> },
       { path: "protocol/resilience", element: <ResiliencePage /> },
+      { path: "domains", element: <DomainsPage /> },
       { path: "assets", element: <AssetsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <Navigate to="/home" replace /> },

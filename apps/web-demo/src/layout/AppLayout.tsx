@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router";
 import {
   Activity,
   Boxes,
+  FlaskConical,
   Home,
   Layers,
   MessageSquareText,
@@ -25,6 +26,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: "/runs", label: "运行详情", icon: Activity },
   { to: "/batch", label: "批量评测", icon: Layers },
   { to: "/protocol", label: "协议观测", icon: Waypoints },
+  { to: "/domains", label: "领域场景", icon: FlaskConical, end: true },
   { to: "/assets", label: "能力资产", icon: Boxes, end: true },
   { to: "/settings", label: "系统设置", icon: Settings, end: true },
 ];
