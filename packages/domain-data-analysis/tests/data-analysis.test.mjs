@@ -6,11 +6,13 @@ import { runUniversalAgentLoop } from "../../agent-kernel/dist/src/generic-loop.
 
 const adapter = new DataAnalysisAdapter();
 
-test("compileContract: 建立统计推断与正态性/方差齐性检查契约", () => {
+test("compileContract: 建立统计推断、正态性/方差齐性与残差白性检查契约", () => {
   const contract = adapter.compileContract({ rawText: "对比两组生物医学样本表达量差异并进行假设检验" });
   assert.deepEqual(contract.goals, ["STATISTICAL_INFERENCE", "DATA_QUALITY_ASSURANCE"]);
-  assert.equal(contract.proposedObligations.length, 2);
+  assert.equal(contract.proposedObligations.length, 3);
   assert.equal(contract.proposedObligations[0].id, "ob_normality_homoscedasticity");
+  assert.equal(contract.proposedObligations[1].id, "ob_effect_significance");
+  assert.equal(contract.proposedObligations[2].id, "ob_residual_whiteness");
 });
 
 test("第 20.4 节案例 D 硬验收：第三领域零调度核心改动接入并完成推断", async () => {

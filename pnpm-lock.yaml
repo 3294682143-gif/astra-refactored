@@ -47,6 +47,9 @@ importers:
       '@zygos/domain-contract':
         specifier: workspace:*
         version: link:../../packages/domain-contract
+      '@zygos/domain-control':
+        specifier: workspace:*
+        version: link:../../packages/domain-control
 
   apps/web-demo:
     dependencies:
