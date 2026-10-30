@@ -22028,7 +22028,7 @@ function buildSchemaRepairMessages(base, previousText, code, requestId) {
   const messages = [
     {
       role: "system",
-      content: base[0].content + " Your previous WorkPacket was rejected by the control schema. Return ONE corrected WorkPacket and nothing else. candidateProposal MUST be a JSON string or null (never an object); deliveryStatus MUST be exactly COMPLETE, INCOMPLETE, TRUNCATED or ERROR. If the answer is complete, use deliveryStatus=COMPLETE, pendingObligations=[] and candidateProposal as the answer string. Keep the current task and scope; use sourceRequestId exactly as the value given below. If claim, derivation or candidateProposal exceeded 4096 Unicode code points, shorten each field; do not paste the rejected derivation again. assumptions MUST be an empty array unless each entry is already a declared scope assumption; never invent a new assumption.\n\nSCHEMA_REPAIR_CONTROL\nrejectedCode=" + code + "\n" + bindingLines + "\nPREVIOUS_REJECTED_WORKPACKET=" + clipped
+      content: base[0].content + " Your previous WorkPacket was rejected by the control schema. Return ONE corrected WorkPacket and nothing else. candidateProposal MUST be a JSON string or null (never an object); deliveryStatus MUST be exactly COMPLETE, INCOMPLETE, TRUNCATED or ERROR. If the answer is complete, use deliveryStatus=COMPLETE, pendingObligations=[] and candidateProposal as the answer string. Keep the current task and scope; use sourceRequestId exactly as the value given below. If claim, derivation or candidateProposal exceeded 4096 Unicode code points, shorten each field and compress derivation within 3500 code points; do not paste the rejected derivation again. assumptions MUST be an empty array unless each entry is already a declared scope assumption; never invent a new assumption.\n\nSCHEMA_REPAIR_CONTROL\nrejectedCode=" + code + "\n" + bindingLines + "\nPREVIOUS_REJECTED_WORKPACKET=" + clipped
     },
     { role: "user", content: JSON.stringify(repairBody) }
   ];
@@ -22121,7 +22121,32 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
         break;
       }
       const admitted = review.admit(role, requestId, root.remainingMs(), r0RootCalls);
-      const receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
+      let receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
+      let isJsonValid = false;
+      try {
+        JSON.parse(receipt.text);
+        isJsonValid = true;
+      } catch {
+        isJsonValid = false;
+      }
+      if ((!isJsonValid || receipt.transportStatus !== "COMPLETE") && root.remainingMs() > MIN_MS && opts.maxModelCalls - root.modelCalls() > 10) {
+        const retryId = root.nextModelId();
+        if (retryId !== null) {
+          const retryContext = {
+            ...admitted.context,
+            messages: [
+              admitted.context.messages[0],
+              {
+                role: "user",
+                content: admitted.context.messages[1].content + "\n\nPREVIOUS_MALFORMED_REVIEW_RESPONSE=" + receipt.text.slice(0, 1e3) + "\n\nNOTE: Previous review response had JSON formatting errors. Please output strictly valid JSON matching schema p4-r0-review-v1 with no markdown, ensuring valid commas and delimiters."
+              }
+            ],
+            contextHash: p4Hash(receipt.text),
+            contextBytes: Buffer.byteLength(receipt.text, "utf8")
+          };
+          receipt = await r0Generate(root, ports, sessionLog, retryId, "R0", retryContext, scopeId);
+        }
+      }
       review.markDispatched(role);
       review.settle(role, receipt.transportStatus, receipt.text, root.remainingMs());
       const verdict = roleVerdictOf(review.snapshot(role));
@@ -22162,6 +22187,11 @@ async function runBoundedR0(initial, root, ports, opts, problemText, session, se
       issueDimensions: aggregate.issueDimensions,
       rationale: `R0 \u89C4\u5212\u805A\u5408\u8BC4\u5BA1: ${aggregate.conclusion}`
     });
+    if (aggregate.conclusion === "UNKNOWN") {
+      stageRow("FAILED", "AGGREGATE_CONCLUSION_UNKNOWN");
+      root.stop("CONTROL_REJECTED");
+      return initial;
+    }
     if (aggregate.conclusion !== "ISSUES") {
       return initial;
     }
@@ -22955,6 +22985,21 @@ ${g.guidance.join("\n")}`).join("");
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
           };
           unsolvedRefusals += 1;
+        } else if (workRetries > 0) {
+          const retryNote = "PREVIOUS RESPONSE OVERLONG OR TRUNCATED: Please return ONE complete, valid JSON WorkPacket. Keep claim, derivation and candidateProposal each strictly under 3500 Unicode code points.";
+          const messages = [
+            {
+              role: "system",
+              content: context.messages[0].content + "\n\n" + retryNote
+            },
+            context.messages[1]
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8")
+          };
         }
         let outcome = await calls.model({
           task: running,
@@ -22972,7 +23017,8 @@ ${g.guidance.join("\n")}`).join("");
         }
         if (outcome.receipt.transportStatus !== "COMPLETE" || outcome.code !== "WORK" || root.remainingMs() <= MIN_MS) {
           const transient = outcome.code !== "WORK" && outcome.code !== "DEADLINE_EXCEEDED";
-          if (transient && workRetries < 2 && callsLeft() > reserve() && root.remainingMs() > MIN_MS) {
+          const isOverlongOrTruncated = outcome.receipt.transportStatus === "TRUNCATED" && outcome.code === "WORK";
+          if ((transient || isOverlongOrTruncated) && workRetries < 2 && callsLeft() > reserve() && root.remainingMs() > MIN_MS) {
             workRetries += 1;
             continue;
           }
@@ -24069,7 +24115,7 @@ ${g.guidance.join("\n")}`).join("");
               let auditedCandidate = lastObservedCandidate;
               if (isBlind) {
                 const lens = CONSENSUS_BALLOT_LENSES[round % CONSENSUS_BALLOT_LENSES.length];
-                note = `INDEPENDENT SOLVE ${round + 1} OF ${independentRounds}. Solve the same problem from scratch, as if no earlier attempt existed. ` + lens + " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn.";
+                note = `INDEPENDENT SOLVE ${round + 1} OF ${independentRounds}. Solve the same problem from scratch, as if no earlier attempt existed. ` + lens + " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn. Keep claim, derivation and candidateProposal each within 3500 Unicode code points; put only the final answer in candidateProposal.";
               } else if (isCertificate) {
                 auditedCandidate = auditConsensus()?.candidate ?? frontRunner()?.candidate ?? lastObservedCandidate;
                 note = "CERTIFICATE SELF-CHECK. This is the final independent check. The current candidate answer is supplied below; its earlier reasoning is deliberately withheld. Audit it against the problem, do not assume it is correct. Return exactly one complete WorkPacket and nothing else. In suggestedChecks include at least two rows of the form `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` (or FAIL), and at least one marker row `CERT1|FINAL|OK` (if the exact final answer fits in 200 code points, use `CERT1|FINAL|<answer>` instead). Each suggestedChecks row must be at most 200 Unicode code points; keep derivation under 3500 code points and do not paste long computations into it. " + (choiceProblem ? "Also include one row `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option exactly once, and set candidateProposal to exactly the options marked TRUE. " : "") + "For a true/false statement also include `CERT1|VERDICT|TRUE` or `CERT1|VERDICT|FALSE`, and make candidateProposal the canonical verdict token alone. Checks must be explicit computations, not words such as verified or correct: substitute into every defining equation, initial condition, boundary condition, normalization and quantifier; for a field list every root and check containment and degree; for a CDF/density check endpoints, nonnegativity, total mass and F'=f; for finite counting enumerate the sample space and every favorable case; for a determinant or expansion recompute it exactly; for a limit identify the scaling and a dominating function. A statement of the form 'if P, then X is called Y' or '\u5219\u79F0' is definitional: accept it when it agrees with the stated definition and no counterexample exists; do not demand a theorem proof. For a universal statement, one concrete counterexample makes the verdict FALSE; a statement that is only typical or needs an extra condition is FALSE, never TRUE with a qualification. If a check fails or is inconclusive, correct candidateProposal; otherwise return the same answer. " + // The certificate audits the answer the audits converged on when
@@ -25127,6 +25173,7 @@ var init_agent_loop2 = __esm({
       "PACKET_BINDING",
       "PACKET_DELIVERY",
       "PACKET_FORBIDDEN_FIELD",
+      "BOUND_EXCEEDED",
       // The model may add explanatory assumptions that are not declared in the
       // trusted scope. That is a repairable shape/scope mistake for this one
       // bounded turn; the same task and scope are retained.

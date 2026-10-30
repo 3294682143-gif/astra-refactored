@@ -354,6 +354,7 @@ const SCHEMA_REPAIR_CODES: ReadonlySet<string> = new Set([
   "PACKET_BINDING",
   "PACKET_DELIVERY",
   "PACKET_FORBIDDEN_FIELD",
+  "BOUND_EXCEEDED",
   // The model may add explanatory assumptions that are not declared in the
   // trusted scope. That is a repairable shape/scope mistake for this one
   // bounded turn; the same task and scope are retained.
@@ -675,7 +676,7 @@ function buildSchemaRepairMessages(
         " candidateProposal MUST be a JSON string or null (never an object); deliveryStatus MUST be exactly COMPLETE, INCOMPLETE, TRUNCATED or ERROR." +
         " If the answer is complete, use deliveryStatus=COMPLETE, pendingObligations=[] and candidateProposal as the answer string." +
         " Keep the current task and scope; use sourceRequestId exactly as the value given below." +
-        " If claim, derivation or candidateProposal exceeded 4096 Unicode code points, shorten each field; do not paste the rejected derivation again." +
+        " If claim, derivation or candidateProposal exceeded 4096 Unicode code points, shorten each field and compress derivation within 3500 code points; do not paste the rejected derivation again." +
         " assumptions MUST be an empty array unless each entry is already a declared scope assumption; never invent a new assumption." +
         "\n\nSCHEMA_REPAIR_CONTROL\n" +
         "rejectedCode=" + code + "\n" +
@@ -828,7 +829,40 @@ async function runBoundedR0(
         break;
       }
       const admitted = review.admit(role, requestId, root.remainingMs(), r0RootCalls);
-      const receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
+      let receipt = await r0Generate(root, ports, sessionLog, requestId, "R0", admitted.context, scopeId);
+      let isJsonValid = false;
+      try {
+        JSON.parse(receipt.text);
+        isJsonValid = true;
+      } catch {
+        isJsonValid = false;
+      }
+      if (
+        (!isJsonValid || receipt.transportStatus !== "COMPLETE") &&
+        root.remainingMs() > MIN_MS &&
+        opts.maxModelCalls - root.modelCalls() > 10
+      ) {
+        const retryId = root.nextModelId();
+        if (retryId !== null) {
+          const retryContext = {
+            ...admitted.context,
+            messages: [
+              admitted.context.messages[0]!,
+              {
+                role: "user" as const,
+                content:
+                  admitted.context.messages[1]!.content +
+                  "\n\nPREVIOUS_MALFORMED_REVIEW_RESPONSE=" +
+                  receipt.text.slice(0, 1000) +
+                  "\n\nNOTE: Previous review response had JSON formatting errors. Please output strictly valid JSON matching schema p4-r0-review-v1 with no markdown, ensuring valid commas and delimiters.",
+              },
+            ],
+            contextHash: p4Hash(receipt.text),
+            contextBytes: Buffer.byteLength(receipt.text, "utf8"),
+          };
+          receipt = await r0Generate(root, ports, sessionLog, retryId, "R0", retryContext, scopeId);
+        }
+      }
       review.markDispatched(role);
       review.settle(role, receipt.transportStatus, receipt.text, root.remainingMs());
       const verdict = roleVerdictOf(review.snapshot(role));
@@ -869,6 +903,11 @@ async function runBoundedR0(
       issueDimensions: aggregate.issueDimensions,
       rationale: `R0 规划聚合评审: ${aggregate.conclusion}`,
     });
+    if (aggregate.conclusion === "UNKNOWN") {
+      stageRow("FAILED", "AGGREGATE_CONCLUSION_UNKNOWN");
+      root.stop("CONTROL_REJECTED");
+      return initial;
+    }
     if (aggregate.conclusion !== "ISSUES") {
       return initial;
     }
@@ -2124,6 +2163,23 @@ export async function runAgentLoop(
             contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
           };
           unsolvedRefusals += 1;
+        } else if (workRetries > 0) {
+          const retryNote =
+            "PREVIOUS RESPONSE OVERLONG OR TRUNCATED: Please return ONE complete, valid JSON WorkPacket. " +
+            "Keep claim, derivation and candidateProposal each strictly under 3500 Unicode code points.";
+          const messages = [
+            {
+              role: "system" as const,
+              content: context.messages[0]!.content + "\n\n" + retryNote,
+            },
+            context.messages[1]!,
+          ];
+          context = {
+            ...context,
+            messages,
+            contextHash: p4Hash(JSON.stringify(messages)),
+            contextBytes: Buffer.byteLength(JSON.stringify(messages), "utf8"),
+          };
         }
         let outcome = await calls.model({
           task: running,
@@ -2153,8 +2209,10 @@ export async function runAgentLoop(
         ) {
           const transient =
             outcome.code !== "WORK" && outcome.code !== "DEADLINE_EXCEEDED";
+          const isOverlongOrTruncated =
+            outcome.receipt.transportStatus === "TRUNCATED" && outcome.code === "WORK";
           if (
-            transient &&
+            (transient || isOverlongOrTruncated) &&
             workRetries < 2 &&
             callsLeft() > reserve() &&
             root.remainingMs() > MIN_MS
@@ -3749,7 +3807,9 @@ export async function runAgentLoop(
                   `INDEPENDENT SOLVE ${round + 1} OF ${independentRounds}. ` +
                   "Solve the same problem from scratch, as if no earlier attempt existed. " +
                   lens +
-                  " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn.";
+                  " Return exactly one JSON WorkPacket and nothing else, and do not call a tool in this turn. " +
+                  "Keep claim, derivation and candidateProposal each within 3500 Unicode code points; " +
+                  "put only the final answer in candidateProposal.";
               } else if (isCertificate) {
                 auditedCandidate =
                   auditConsensus()?.candidate ??
