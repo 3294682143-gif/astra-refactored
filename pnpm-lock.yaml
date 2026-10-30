@@ -53,6 +53,9 @@ importers:
       '@zygos/domain-data-analysis':
         specifier: workspace:*
         version: link:../../packages/domain-data-analysis
+      '@zygos/domain-scientific-computing':
+        specifier: workspace:*
+        version: link:../../packages/domain-scientific-computing
 
   apps/web-demo:
     dependencies:

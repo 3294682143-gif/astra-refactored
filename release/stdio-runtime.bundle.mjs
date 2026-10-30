@@ -11204,6 +11204,164 @@ var init_src9 = __esm({
   }
 });
 
+// packages/domain-scientific-computing/dist/src/scientific-computing-adapter.js
+var SCI_COMPUTING_ID;
+var init_scientific_computing_adapter = __esm({
+  "packages/domain-scientific-computing/dist/src/scientific-computing-adapter.js"() {
+    "use strict";
+    SCI_COMPUTING_ID = "scientific_computing";
+  }
+});
+
+// packages/domain-scientific-computing/dist/src/heat-equation-solver.js
+var HeatEquationSolver;
+var init_heat_equation_solver = __esm({
+  "packages/domain-scientific-computing/dist/src/heat-equation-solver.js"() {
+    "use strict";
+    HeatEquationSolver = class {
+      /**
+       * Analytical reference solution for 1D diffusion with homogeneous Dirichlet BCs
+       * and sinusoidal initial condition.
+       */
+      static analyticalSolution(x, t, alpha) {
+        return Math.sin(Math.PI * x) * Math.exp(-alpha * Math.PI * Math.PI * t);
+      }
+      /**
+       * Run finite difference solver for a specific spatial grid resolution.
+       */
+      static solve(params = {}) {
+        const alpha = params.alpha ?? 0.1;
+        const length = params.length ?? 1;
+        const tFinal = params.tFinal ?? 0.2;
+        const nx = params.nx ?? 40;
+        const dx = length / nx;
+        let dt = params.dt ?? 1e-4;
+        if (params.fault === "CFL_VIOLATION") {
+          dt = 0.01;
+        }
+        const cfl = alpha * dt / (dx * dx);
+        const xGrid = new Array(nx + 1);
+        const u = new Array(nx + 1);
+        for (let i = 0; i <= nx; i++) {
+          const x = i * dx;
+          xGrid[i] = x;
+          u[i] = Math.sin(Math.PI * x);
+        }
+        const enforceBoundary = params.fault !== "MISSING_BOUNDARY";
+        let t = 0;
+        const uNext = new Array(nx + 1);
+        while (t < tFinal - 1e-12) {
+          const currentDt = Math.min(dt, tFinal - t);
+          const r = alpha * currentDt / (dx * dx);
+          for (let i = 1; i < nx; i++) {
+            uNext[i] = u[i] + r * (u[i + 1] - 2 * u[i] + u[i - 1]);
+          }
+          if (enforceBoundary) {
+            uNext[0] = 0;
+            uNext[nx] = 0;
+          } else {
+            uNext[0] = u[0] + r * (u[1] - u[0]);
+            uNext[nx] = u[nx] + r * (u[nx - 1] - u[nx]);
+          }
+          for (let i = 0; i <= nx; i++) {
+            u[i] = uNext[i];
+          }
+          t += currentDt;
+        }
+        const exactValues = new Array(nx + 1);
+        let sumSqErr = 0;
+        let maxErr = 0;
+        for (let i = 0; i <= nx; i++) {
+          const exact11 = this.analyticalSolution(xGrid[i], tFinal, alpha);
+          exactValues[i] = exact11;
+          const err = Math.abs(u[i] - exact11);
+          sumSqErr += err * err;
+          if (err > maxErr)
+            maxErr = err;
+        }
+        const l2Error = Math.sqrt(sumSqErr / (nx + 1));
+        return {
+          nx,
+          dx,
+          dt,
+          cfl,
+          xGrid,
+          numericalValues: u,
+          exactValues,
+          l2Error,
+          maxError: maxErr
+        };
+      }
+      /**
+       * Perform Richardson extrapolation over multi-mesh refinement (e.g. nx=20, 40, 80)
+       * to strictly verify theoretical O(dx^2) spatial convergence and CFL stability.
+       */
+      static verifyConvergence(baseParams = {}, meshCounts = [20, 40, 80]) {
+        const alpha = baseParams.alpha ?? 0.1;
+        const tFinal = baseParams.tFinal ?? 0.2;
+        const gridResults = meshCounts.map((nx) => {
+          const dx = 1 / nx;
+          const targetCfl = 0.16;
+          const dt = targetCfl * dx * dx / alpha;
+          return this.solve({
+            ...baseParams,
+            nx,
+            dt: baseParams.fault === "CFL_VIOLATION" ? 0.01 : dt
+          });
+        });
+        const e1 = gridResults[0]?.l2Error ?? 1e-4;
+        const e2 = gridResults[1]?.l2Error ?? 1e-4;
+        const e3 = gridResults[2]?.l2Error ?? 1e-4;
+        const ratio1 = e2 > 0 ? e1 / e2 : 1;
+        const ratio2 = e3 > 0 ? e2 / e3 : 1;
+        const observedOrder = (Math.log2(Math.max(1e-12, ratio1)) + Math.log2(Math.max(1e-12, ratio2))) / 2;
+        const maxCfl = Math.max(...gridResults.map((g) => g.cfl));
+        const isStable = maxCfl <= 0.5 && !gridResults.some((g) => isNaN(g.l2Error) || g.l2Error > 10);
+        const boundaryError = Math.max(...gridResults.map((g) => Math.max(Math.abs(g.numericalValues[0] ?? 0), Math.abs(g.numericalValues[g.numericalValues.length - 1] ?? 0))));
+        const dirichletMatched = boundaryError < 1e-6;
+        const isOrderConsistent = Math.abs(observedOrder - 2) <= 0.25;
+        const allObligationsMet = isStable && dirichletMatched && isOrderConsistent && baseParams.fault == null;
+        return {
+          scheme: "forward_euler_finite_difference",
+          alpha,
+          tFinal,
+          grids: gridResults.map((g) => ({
+            nx: g.nx,
+            dx: g.dx,
+            l2Error: g.l2Error,
+            maxError: g.maxError,
+            cfl: g.cfl
+          })),
+          observedOrder,
+          expectedOrder: 2,
+          isOrderConsistent,
+          cflDiagnosis: {
+            maxCfl,
+            threshold: 0.5,
+            isStable,
+            verdict: isStable ? `CFL \u6761\u4EF6\u6EE1\u8DB3 (max CFL = ${maxCfl.toFixed(4)} <= 0.5)\uFF0C\u6570\u503C\u663E\u5F0F\u683C\u5F0F\u7A33\u5B9A` : `CFL \u6761\u4EF6\u8FDD\u4F8B (max CFL = ${maxCfl.toFixed(4)} > 0.5)\uFF0C\u663E\u5F0F\u65F6\u95F4\u683C\u5F0F\u6570\u503C\u53D1\u6563`
+          },
+          boundaryDiagnosis: {
+            dirichletMatched,
+            verdict: dirichletMatched ? "Dirichlet \u9F50\u6B21\u8FB9\u754C\u6761\u4EF6\u7CBE\u786E\u6EE1\u8DB3 (u(0)=u(L)=0)" : "\u8FB9\u754C\u6761\u4EF6\u8FDD\u4F8B\uFF1A\u672A\u6EE1\u8DB3\u7269\u7406\u8FB9\u754C\u7EA6\u675F"
+          },
+          allObligationsMet,
+          candidateVerified: false
+        };
+      }
+    };
+  }
+});
+
+// packages/domain-scientific-computing/dist/src/index.js
+var init_src10 = __esm({
+  "packages/domain-scientific-computing/dist/src/index.js"() {
+    "use strict";
+    init_scientific_computing_adapter();
+    init_heat_equation_solver();
+  }
+});
+
 // packages/math-review/dist/src/p4-report.js
 function exact2(value, keys2) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -13977,7 +14135,7 @@ var init_p4_r0_recheck_session = __esm({
 });
 
 // packages/math-review/dist/src/index.js
-var init_src10 = __esm({
+var init_src11 = __esm({
   "packages/math-review/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -15488,7 +15646,7 @@ var init_p4_repair2 = __esm({
 });
 
 // packages/math-audit/dist/src/index.js
-var init_src11 = __esm({
+var init_src12 = __esm({
   "packages/math-audit/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -23390,6 +23548,104 @@ async function runAgentLoop(problem, sessionId, options, ports) {
     };
     return { summary: summary2, privateState: privateState2 };
   }
+  if (domainId === "scientific_computing" || domainId === "scicomp") {
+    const matchAlpha = problemText.match(/alpha\s*=\s*([0-9.]+)/i);
+    const matchTFinal = problemText.match(/tFinal\s*=\s*([0-9.]+)/i);
+    const alpha = matchAlpha ? parseFloat(matchAlpha[1]) : 0.1;
+    const tFinal = matchTFinal ? parseFloat(matchTFinal[1]) : 0.2;
+    let fault = null;
+    if (problemText.includes("MISSING_BOUNDARY") || problemText.includes("\u9057\u6F0F\u8FB9\u754C")) {
+      fault = "MISSING_BOUNDARY";
+    } else if (problemText.includes("CFL_VIOLATION") || problemText.includes("CFL\u8FDD\u4F8B") || problemText.includes("\u7A33\u5B9A\u6027\u7834\u574F")) {
+      fault = "CFL_VIOLATION";
+    }
+    const report = HeatEquationSolver.verifyConvergence({ alpha, tFinal, fault }, [20, 40, 80]);
+    const finalPayload = {
+      domainId: SCI_COMPUTING_ID,
+      scheme: report.scheme,
+      alpha: report.alpha,
+      tFinal: report.tFinal,
+      observedOrder: report.observedOrder,
+      expectedOrder: report.expectedOrder,
+      isOrderConsistent: report.isOrderConsistent,
+      grids: report.grids,
+      cflDiagnosis: report.cflDiagnosis,
+      boundaryDiagnosis: report.boundaryDiagnosis,
+      allObligationsMet: report.allObligationsMet,
+      candidateVerified: false
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+    const summary2 = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: []
+    };
+    const privateState2 = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_mesh_convergence", state: report.isOrderConsistent ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" },
+          { id: "ob_boundary_conservation", state: report.boundaryDiagnosis.dirichletMatched ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" },
+          { id: "ob_cfl_stability", state: report.cflDiagnosis.isStable ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" }
+        ]
+      },
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" }
+      ],
+      artifacts: [
+        {
+          artifactId: "art_scicomp_case_b_report",
+          kind: "SCIENTIFIC_COMPUTING_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload
+        }
+      ],
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_scicomp_001",
+          sourceRequestId: null,
+          rawContent: finalPayload
+        }
+      },
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null
+    };
+    return { summary: summary2, privateState: privateState2 };
+  }
   if (domainId !== "math" && domainId !== "domain-math") {
     const summary2 = {
       mode: "TS_PREVIEW",
@@ -26404,6 +26660,7 @@ var init_agent_loop2 = __esm({
     init_src9();
     init_src10();
     init_src11();
+    init_src12();
     init_src3();
     init_agent_loop_calls();
     init_agent_final();

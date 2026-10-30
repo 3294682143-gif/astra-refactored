@@ -1,0 +1,7 @@
+{
+  "domainId": "math",
+  "problemId": "math_quadratic_001",
+  "title": "一元二次多项式精确因式分解与实数根判定",
+  "rawText": "求解多项式方程 x^2 - 5x + 6 = 0 的所有实数根，并给出因式分解形式",
+  "polynomial": "x^2 - 5x + 6"
+}

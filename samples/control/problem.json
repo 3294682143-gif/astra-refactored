@@ -1,0 +1,11 @@
+{
+  "domainId": "control.identification",
+  "problemId": "control_oscillator_001",
+  "title": "单自由度机械阻尼振子参数辨识与白噪声残差检验",
+  "rawText": "针对受迫阻尼振子系统 m*x'' + c*x' + k*x = u(t)，输入激励为方波与正弦叠加信号，辨识物理参数 m, c, k",
+  "nominalParameters": {
+    "m": 1.0,
+    "c": 0.2,
+    "k": 1.5
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "run_golden_data_analysis_001",
+  "domainId": "data_analysis",
+  "problem": "分析实验组与对照组各50例生物样本基因表达量，执行两样本 Welch's t-test，计算 Cohen's d 效应量与 95% 置信区间",
+  "recordedResult": {
+    "status": "candidate",
+    "candidateVerified": false,
+    "stopReason": "STOPPED",
+    "domainId": "data_analysis",
+    "testMethod": "two_sample_welch_t_test",
+    "expectedStatRanges": {
+      "tStatistic": {
+        "min": -12.0,
+        "max": -7.0
+      },
+      "degreesOfFreedom": {
+        "min": 92.0,
+        "max": 98.0
+      },
+      "pValue": {
+        "max": 0.001
+      },
+      "isSignificant": true,
+      "meanDifference": {
+        "expected": -2.5,
+        "min": -3.0,
+        "max": -2.0
+      },
+      "cohensD": {
+        "min": -2.5,
+        "max": -1.5
+      }
+    },
+    "expectedGuards": {
+      "normalityPassed": true,
+      "residualWhitenessPassed": true
+    },
+    "invariants": {
+      "candidateVerified": false
+    }
+  },
+  "isDeterministic": true
+}

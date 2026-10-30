@@ -1,0 +1,11 @@
+{
+  "domainId": "scientific_computing",
+  "problemId": "scicomp_heat_fdm_001",
+  "title": "一维非齐次热传导方程显式差分求解与 Richardson 空间二阶收敛验证",
+  "rawText": "针对热扩散方程 du/dt = 0.1 * d^2u/dx^2, x in [0, 1], t in [0, 0.2]，采用前向显式差分格式，验证空间收敛阶接近 2.0",
+  "parameters": {
+    "alpha": 0.1,
+    "tFinal": 0.2,
+    "length": 1.0
+  }
+}

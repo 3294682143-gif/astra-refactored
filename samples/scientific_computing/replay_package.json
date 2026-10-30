@@ -1,0 +1,29 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "run_golden_scicomp_001",
+  "domainId": "scientific_computing",
+  "problem": "针对热扩散方程 du/dt = 0.1 * d^2u/dx^2, x in [0, 1], t in [0, 0.2]，采用前向显式差分格式，验证空间收敛阶接近 2.0",
+  "recordedResult": {
+    "status": "candidate",
+    "candidateVerified": false,
+    "stopReason": "STOPPED",
+    "domainId": "scientific_computing",
+    "scheme": "forward_euler_finite_difference",
+    "expectedConvergenceRanges": {
+      "observedOrder": {
+        "expected": 2.0,
+        "min": 1.85,
+        "max": 2.15
+      },
+      "cflMax": {
+        "max": 0.5
+      },
+      "isOrderConsistent": true,
+      "dirichletMatched": true
+    },
+    "invariants": {
+      "candidateVerified": false
+    }
+  },
+  "isDeterministic": true
+}

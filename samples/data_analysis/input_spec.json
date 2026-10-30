@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "domainId",
+    "datasetFile",
+    "testType"
+  ],
+  "properties": {
+    "domainId": {
+      "const": "data_analysis"
+    },
+    "datasetFile": {
+      "type": "string"
+    },
+    "testType": {
+      "type": "string",
+      "enum": [
+        "two_sample_welch_t_test",
+        "student_t_test"
+      ]
+    },
+    "alpha": {
+      "type": "number",
+      "default": 0.05
+    }
+  }
+}

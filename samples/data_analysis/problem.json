@@ -1,0 +1,18 @@
+{
+  "domainId": "data_analysis",
+  "problemId": "data_analysis_welch_001",
+  "title": "两独立组高通量基因表达水平显著性差异分析与残差诊断",
+  "rawText": "分析实验组与对照组各50例生物样本基因表达量，执行两样本 Welch's t-test，计算 Cohen's d 效应量与 95% 置信区间",
+  "nominalParameters": {
+    "groupA": {
+      "n": 50,
+      "mean": 10.0,
+      "std": 1.2
+    },
+    "groupB": {
+      "n": 50,
+      "mean": 12.5,
+      "std": 1.4
+    }
+  }
+}

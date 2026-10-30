@@ -1,0 +1,29 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "run_golden_math_001",
+  "domainId": "math",
+  "problem": "求解多项式方程 x^2 - 5x + 6 = 0 的所有实数根，并给出因式分解形式",
+  "recordedResult": {
+    "status": "candidate",
+    "candidateVerified": false,
+    "stopReason": "STOPPED",
+    "domainId": "math",
+    "expectedResults": {
+      "roots": [
+        2.0,
+        3.0
+      ],
+      "factors": [
+        "(x - 2)",
+        "(x - 3)"
+      ],
+      "discriminant": 1.0,
+      "rootCount": 2
+    },
+    "invariants": {
+      "candidateVerified": false,
+      "strictAcceptance": "NOT_PERFORMED"
+    }
+  },
+  "isDeterministic": true
+}

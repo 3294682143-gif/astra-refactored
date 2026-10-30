@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "domainId",
+    "parameters",
+    "meshGrids"
+  ],
+  "properties": {
+    "domainId": {
+      "const": "scientific_computing"
+    },
+    "parameters": {
+      "alpha": {
+        "type": "number",
+        "default": 0.1
+      },
+      "tFinal": {
+        "type": "number",
+        "default": 0.2
+      }
+    },
+    "meshGrids": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "default": [
+        20,
+        40,
+        80
+      ]
+    }
+  }
+}

@@ -81,6 +81,11 @@ import {
   generateTwoSampleDataset,
 } from "@zygos/domain-data-analysis";
 import {
+  HeatEquationSolver,
+  SCI_COMPUTING_ID,
+  ScientificComputingAdapter,
+} from "@zygos/domain-scientific-computing";
+import {
   P4R0RecheckSession,
   P4R0ReviewSession,
   P4ReviewSession,
@@ -1225,6 +1230,109 @@ export async function runAgentLoop(
         reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
         protectedCandidate: {
           candidateId: "cand_data_analysis_001",
+          sourceRequestId: null,
+          rawContent: finalPayload,
+        },
+      } as any,
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null as any,
+    };
+    return { summary, privateState };
+  }
+  if (domainId === "scientific_computing" || domainId === "scicomp") {
+    // F-11: scientific_computing 域真实检查器：真实执行一维热传导方程有限差分与 Richardson 多网格验证
+    const matchAlpha = problemText.match(/alpha\s*=\s*([0-9.]+)/i);
+    const matchTFinal = problemText.match(/tFinal\s*=\s*([0-9.]+)/i);
+    const alpha = matchAlpha ? parseFloat(matchAlpha[1]!) : 0.1;
+    const tFinal = matchTFinal ? parseFloat(matchTFinal[1]!) : 0.2;
+
+    let fault: "MISSING_BOUNDARY" | "CFL_VIOLATION" | null = null;
+    if (problemText.includes("MISSING_BOUNDARY") || problemText.includes("遗漏边界")) {
+      fault = "MISSING_BOUNDARY";
+    } else if (problemText.includes("CFL_VIOLATION") || problemText.includes("CFL违例") || problemText.includes("稳定性破坏")) {
+      fault = "CFL_VIOLATION";
+    }
+
+    const report = HeatEquationSolver.verifyConvergence({ alpha, tFinal, fault }, [20, 40, 80]);
+    const finalPayload = {
+      domainId: SCI_COMPUTING_ID,
+      scheme: report.scheme,
+      alpha: report.alpha,
+      tFinal: report.tFinal,
+      observedOrder: report.observedOrder,
+      expectedOrder: report.expectedOrder,
+      isOrderConsistent: report.isOrderConsistent,
+      grids: report.grids,
+      cflDiagnosis: report.cflDiagnosis,
+      boundaryDiagnosis: report.boundaryDiagnosis,
+      allObligationsMet: report.allObligationsMet,
+      candidateVerified: false,
+    };
+    const finalJson = JSON.stringify(finalPayload, null, 2);
+
+    const summary: AgentLoopSummary = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "candidate",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+      finalResponse: finalJson,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 1,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: [],
+    };
+
+    const privateState: AgentLoopPrivateState = {
+      contract: {
+        contractVersion: 1,
+        problemHash: p4Hash(problemText),
+        tasks: [],
+        obligations: [
+          { id: "ob_mesh_convergence", state: report.isOrderConsistent ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" },
+          { id: "ob_boundary_conservation", state: report.boundaryDiagnosis.dirichletMatched ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" },
+          { id: "ob_cfl_stability", state: report.cflDiagnosis.isStable ? "ACCEPTED_WITHIN_SCOPE" : "REJECTED" },
+        ],
+      } as any,
+      events: [
+        { seq: 1, kind: "CONTRACT", id: "c1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 2, kind: "EFFECT", id: "e1", state: "COMMITTED", code: "STOPPED" },
+        { seq: 3, kind: "RESULT", id: "r1", state: "COMMITTED", code: "STOPPED" },
+      ] as any,
+      artifacts: [
+        {
+          artifactId: "art_scicomp_case_b_report",
+          kind: "SCIENTIFIC_COMPUTING_REPORT",
+          rawResponseHash: p4Hash(finalJson),
+          rawResponseText: finalJson,
+          payload: finalPayload,
+        },
+      ] as any,
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: {
+        status: "candidate",
+        finalResponse: finalJson,
+        reason: options.policy === "STRICT" ? "STRICT_NOT_VERIFIED" : "BEST_EFFORT_CANDIDATE",
+        protectedCandidate: {
+          candidateId: "cand_scicomp_001",
           sourceRequestId: null,
           rawContent: finalPayload,
         },

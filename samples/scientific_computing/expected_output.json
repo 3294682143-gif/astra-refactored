@@ -1,0 +1,22 @@
+{
+  "status": "candidate",
+  "candidateVerified": false,
+  "stopReason": "STOPPED",
+  "domainId": "scientific_computing",
+  "scheme": "forward_euler_finite_difference",
+  "expectedConvergenceRanges": {
+    "observedOrder": {
+      "expected": 2.0,
+      "min": 1.85,
+      "max": 2.15
+    },
+    "cflMax": {
+      "max": 0.5
+    },
+    "isOrderConsistent": true,
+    "dirichletMatched": true
+  },
+  "invariants": {
+    "candidateVerified": false
+  }
+}

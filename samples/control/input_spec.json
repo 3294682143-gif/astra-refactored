@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "domainId",
+    "timeseriesFile",
+    "algorithm"
+  ],
+  "properties": {
+    "domainId": {
+      "const": "control.identification"
+    },
+    "timeseriesFile": {
+      "type": "string"
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": [
+        "least_squares",
+        "recursive_least_squares"
+      ]
+    },
+    "dt": {
+      "type": "number",
+      "default": 0.01
+    }
+  }
+}

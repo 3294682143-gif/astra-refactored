@@ -22,6 +22,7 @@
     "@zygos/domain-contract": "workspace:*",
     "@zygos/domain-control": "workspace:*",
     "@zygos/domain-data-analysis": "workspace:*",
+    "@zygos/domain-scientific-computing": "workspace:*",
     "@zygos/agent-kernel": "workspace:*",
     "@astra/protocol": "workspace:*",
     "@astra/runtime-core": "workspace:*",

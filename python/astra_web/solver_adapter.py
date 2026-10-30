@@ -282,6 +282,106 @@ import('{module_url}').then(({{ generateTwoSampleDataset, StatisticalAnalyzer, D
             "details": stats_payload,
         }
 
+    def _solve_scientific_computing(self, problem: str, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        """F-11: Execute real numerical finite difference & Richardson verification via domain-scientific-computing."""
+        import json
+        import re
+        import subprocess
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[2]
+        match_alpha = re.search(r"alpha\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        match_t = re.search(r"tFinal\s*=\s*([0-9.]+)", problem, re.IGNORECASE)
+        target_alpha = float(match_alpha.group(1)) if match_alpha else 0.1
+        target_t = float(match_t.group(1)) if match_t else 0.2
+
+        fault_code = "null"
+        if "MISSING_BOUNDARY" in problem or "遗漏边界" in problem:
+            fault_code = '"MISSING_BOUNDARY"'
+        elif "CFL_VIOLATION" in problem or "CFL违例" in problem:
+            fault_code = '"CFL_VIOLATION"'
+
+        module_path = repo_root / "packages" / "domain-scientific-computing" / "dist" / "src" / "index.js"
+        module_url = module_path.as_uri()
+
+        node_script = f"""
+import('{module_url}').then(({{ HeatEquationSolver, SCI_COMPUTING_ID }}) => {{
+  const report = HeatEquationSolver.verifyConvergence({{
+    alpha: {target_alpha},
+    tFinal: {target_t},
+    fault: {fault_code}
+  }}, [20, 40, 80]);
+  const output = {{
+    domainId: SCI_COMPUTING_ID,
+    scheme: report.scheme,
+    alpha: report.alpha,
+    tFinal: report.tFinal,
+    observedOrder: report.observedOrder,
+    expectedOrder: report.expectedOrder,
+    isOrderConsistent: report.isOrderConsistent,
+    grids: report.grids,
+    cflDiagnosis: report.cflDiagnosis,
+    boundaryDiagnosis: report.boundaryDiagnosis,
+    allObligationsMet: report.allObligationsMet,
+    candidateVerified: false
+  }};
+  console.log(JSON.stringify(output));
+}});
+"""
+        proc = subprocess.run(
+            ["node", "--input-type=module", "-e", node_script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30.0,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Scientific computing simulation failed: {proc.stderr}")
+
+        sci_json_str = proc.stdout.strip()
+        sci_payload = json.loads(sci_json_str)
+
+        observer = request.get("_event_sink")
+        if callable(observer):
+            observer({
+                "kind": "CONTRACT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "domainId": "scientific_computing",
+                    "obligations": [
+                        "ob_mesh_convergence",
+                        "ob_boundary_conservation",
+                        "ob_cfl_stability",
+                    ],
+                },
+            })
+            observer({
+                "kind": "RESULT",
+                "sourceKind": "official_result",
+                "payload": {
+                    "status": "candidate",
+                    "stopReason": "STOPPED",
+                    "candidate_verified": False,
+                    "observedOrder": sci_payload["observedOrder"],
+                    "allObligationsMet": sci_payload["allObligationsMet"],
+                },
+            })
+
+        return {
+            "status": "candidate",
+            "stopReason": "STOPPED",
+            "stop_reason": "STOPPED",
+            "final_response": sci_json_str,
+            "candidate_verified": False,
+            "strictAcceptance": "NOT_PERFORMED",
+            "executed": True,
+            "code": None,
+            "reason": "SCIENTIFIC_COMPUTATION_COMPLETED",
+            "provider": self._provider_name or "s2",
+            "runId": request.get("run_id"),
+            "details": sci_payload,
+        }
+
     def __call__(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
         problem = request.get("problem")
         if not isinstance(problem, str) or not problem.strip():
@@ -302,6 +402,8 @@ import('{module_url}').then(({{ generateTwoSampleDataset, StatisticalAnalyzer, D
                 domain_id = "control.identification"
             elif "两组" in problem or "样本" in problem or "welch" in problem or "t-test" in problem or "统计" in problem:
                 domain_id = "data_analysis"
+            elif "热传导" in problem or "heat" in problem or "pde" in problem or "scicomp" in problem or "有限差分" in problem:
+                domain_id = "scientific_computing"
             else:
                 domain_id = "math"
 
@@ -310,6 +412,9 @@ import('{module_url}').then(({{ generateTwoSampleDataset, StatisticalAnalyzer, D
 
         if domain_id in {"data_analysis", "data-analysis", "statistics"}:
             return self._solve_data_analysis(problem, request)
+
+        if domain_id in {"scientific_computing", "scicomp", "domain-scientific-computing"}:
+            return self._solve_scientific_computing(problem, request)
 
         budgets = {
             key: request.get(key, DEFAULT_BUDGET[key])
