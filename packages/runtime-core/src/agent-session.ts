@@ -328,8 +328,11 @@ export class AgentSession {
   }
 
   /**
-   * Settle the pending model call. Any status other than COMPLETE stops the
-   * session permanently; a repeated settle of the same id is refused.
+   * Settle the pending model call. Only an UNKNOWN outcome stops the session
+   * permanently: a TRUNCATED or ERROR receipt is a known, determinate terminal
+   * state (the provider answered), so the stage logic above may retry it or
+   * skip it instead of aborting the whole run. A repeated settle of the same
+   * id is refused.
    */
   settleModel(requestId: string, transport: P2TransportStatus): void {
     const id = boundedId(requestId, 256);
@@ -344,9 +347,6 @@ export class AgentSession {
       return;
     }
     this.append("MODEL", id, "RETURNED", status);
-    if (status !== "COMPLETE") {
-      this.#stopped = true;
-    }
   }
 
   /**

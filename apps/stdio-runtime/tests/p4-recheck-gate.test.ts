@@ -183,22 +183,37 @@ test("skipped ids, replays and a pending record never advance the shared ledger"
   assert.equal(gate.admit(task, "model-2", 4000).ordinal, 2);
 });
 
-test("non-COMPLETE transports stop the shared ledger permanently", () => {
-  const cases: readonly (readonly [string, string])[] = [
-    ["UNKNOWN", "OUTCOME_UNKNOWN"],
-    ["TRUNCATED", "RETURNED"],
-    ["ERROR", "RETURNED"],
-  ];
-  for (const [transport, expectedState] of cases) {
+test("only UNKNOWN stops the shared ledger; determinate failures allow a retry", () => {
+  // UNKNOWN means the request's terminal state is not known to the Host, so
+  // the gate stays fail-closed: no further admit is ever allowed.
+  {
     const ledger = ledgerFor();
     const task = runningTask(ledger);
     const gate = gateFor(ledger, 4);
     gate.admit(task, "model-1", 4000);
     gate.markDispatched("model-1");
-    const settled = gate.settle("model-1", transport as never);
-    assert.equal(settled.state, expectedState);
-    assert.equal(settled.transport, transport);
+    const settled = gate.settle("model-1", "UNKNOWN");
+    assert.equal(settled.state, "OUTCOME_UNKNOWN");
+    assert.equal(settled.transport, "UNKNOWN");
     assert.throws(() => gate.admit(task, "model-2", 4000), expectCode("ILLEGAL_TRANSITION"));
     assert.equal(gate.snapshot().length, 1);
+  }
+  // TRUNCATED and ERROR are determinate terminal answers from the provider:
+  // the record settles as RETURNED and the next bounded admit proceeds, so the
+  // stage above can retry or skip the failed turn instead of aborting the run.
+  for (const transport of ["TRUNCATED", "ERROR"] as const) {
+    const ledger = ledgerFor();
+    const task = runningTask(ledger);
+    const gate = gateFor(ledger, 4);
+    gate.admit(task, "model-1", 4000);
+    gate.markDispatched("model-1");
+    const settled = gate.settle("model-1", transport);
+    assert.equal(settled.state, "RETURNED");
+    assert.equal(settled.transport, transport);
+    const next = gate.admit(task, "model-2", 4000);
+    assert.equal(next.ordinal, 2);
+    gate.markDispatched("model-2");
+    assert.equal(gate.settle("model-2", "COMPLETE").state, "RETURNED");
+    assert.equal(gate.snapshot().length, 2);
   }
 });

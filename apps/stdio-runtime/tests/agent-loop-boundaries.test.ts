@@ -56,15 +56,16 @@ function faultPorts(first: (request: AgentModelRequest) => Promise<AgentModelRec
   };
 }
 
-test("a first WORK port fault stops the root with one call and no effect or unit", async () => {
+test("a first WORK unknown fault stops the root with one call and no effect or unit", async () => {
+  // Faults whose terminal state is unknown to the Host (a thrown port, an
+  // invalid receipt envelope, an explicit UNKNOWN) stay fail-closed: the root
+  // stops after exactly one call, and no provider error text ever leaks.
   const cases: readonly ((request: AgentModelRequest) => Promise<AgentModelReceipt>)[] = [
     async () => {
       throw new Error("provider exploded: secret-token");
     },
     async () => Promise.reject(new Error("rejected: secret-token")),
     async () => ({ transportStatus: "COMPLETE", text: "{}", extra: 1 } as unknown as AgentModelReceipt),
-    async () => ({ transportStatus: "TRUNCATED", text: "{}" }),
-    async () => ({ transportStatus: "ERROR", text: "{}" }),
     async () => ({ transportStatus: "UNKNOWN", text: "{}" }),
   ];
   for (const first of cases) {
@@ -88,6 +89,34 @@ test("a first WORK port fault stops the root with one call and no effect or unit
     assert.equal(result.privateState.session.stopped, true);
     const last = result.privateState.modelGate.at(-1) as { readonly state: string };
     assert.ok(last.state === "OUTCOME_UNKNOWN" || last.state === "RETURNED");
+    assert.equal(JSON.stringify(result.summary).includes("secret-token"), false);
+    assert.equal(JSON.stringify(result.privateState.session).includes("secret-token"), false);
+  }
+});
+
+test("a first WORK determinate fault is retried and the run recovers to a candidate", async () => {
+  // TRUNCATED/ERROR are determinate terminal answers from the provider: the
+  // turn is retried under the same bounded budget instead of aborting the run,
+  // so a healthy follow-up reply still delivers a candidate.
+  const cases: readonly ((request: AgentModelRequest) => Promise<AgentModelReceipt>)[] = [
+    async () => ({ transportStatus: "TRUNCATED", text: "{}" }),
+    async () => ({ transportStatus: "ERROR", text: "{}" }),
+  ];
+  for (const first of cases) {
+    const ports = faultPorts(first);
+    const result = await runAgentLoop(
+      PROBLEM,
+      SESSION,
+      { remainingMs: 5000, now: () => 0 },
+      portsOf(ports),
+    );
+    assert.equal(result.summary.status, "candidate");
+    assert.equal(result.summary.candidateVerified, false);
+    assert.ok(result.summary.modelCalls > 1);
+    assert.ok(result.summary.workUnits > 0);
+    assert.equal(result.summary.effectCalls, 0);
+    assert.equal(result.privateState.session.pendingModel, null);
+    assert.equal(result.privateState.session.pendingEffect, null);
     assert.equal(JSON.stringify(result.summary).includes("secret-token"), false);
     assert.equal(JSON.stringify(result.privateState.session).includes("secret-token"), false);
   }

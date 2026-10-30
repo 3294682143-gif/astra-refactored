@@ -141,7 +141,10 @@ export class P4RecheckModelGate {
       throw new P2Error("ILLEGAL_TRANSITION");
     }
     for (const record of this.records) {
-      if (record.state !== "RETURNED" || record.transport !== "COMPLETE") {
+      // Only an unknown outcome poisons the session: a returned record with a
+      // determinate terminal transport (TRUNCATED/ERROR) is a known failure the
+      // caller may retry or skip, never a reason to refuse the next admit.
+      if (record.state !== "RETURNED") {
         throw new P2Error("ILLEGAL_TRANSITION");
       }
     }
@@ -188,8 +191,9 @@ export class P4RecheckModelGate {
 
   /**
    * Settle the current last DISPATCHED record. `UNKNOWN` becomes
-   * OUTCOME_UNKNOWN; every other status becomes RETURNED. Any status other
-   * than COMPLETE stops the gate permanently.
+   * OUTCOME_UNKNOWN; every other status becomes RETURNED. Only `UNKNOWN`
+   * stops the gate permanently: a returned TRUNCATED/ERROR record is a known
+   * terminal answer, and the stage above decides whether to retry or skip it.
    */
   settle(requestId: string, transport: P2TransportStatus): P2ModelRecord {
     const request = requireShortString(requestId);
@@ -201,7 +205,7 @@ export class P4RecheckModelGate {
     const state = status === "UNKNOWN" ? "OUTCOME_UNKNOWN" : "RETURNED";
     const next: P2ModelRecord = p2Snapshot({ ...last, state, transport: status });
     this.records[this.records.length - 1] = next;
-    if (status !== "COMPLETE") {
+    if (status === "UNKNOWN") {
       this.stopped = true;
     }
     return next;

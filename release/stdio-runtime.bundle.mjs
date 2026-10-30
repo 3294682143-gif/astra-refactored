@@ -5335,7 +5335,7 @@ var P4RecheckModelGate = class {
       throw new P2Error("ILLEGAL_TRANSITION");
     }
     for (const record2 of this.records) {
-      if (record2.state !== "RETURNED" || record2.transport !== "COMPLETE") {
+      if (record2.state !== "RETURNED") {
         throw new P2Error("ILLEGAL_TRANSITION");
       }
     }
@@ -5367,8 +5367,9 @@ var P4RecheckModelGate = class {
   }
   /**
    * Settle the current last DISPATCHED record. `UNKNOWN` becomes
-   * OUTCOME_UNKNOWN; every other status becomes RETURNED. Any status other
-   * than COMPLETE stops the gate permanently.
+   * OUTCOME_UNKNOWN; every other status becomes RETURNED. Only `UNKNOWN`
+   * stops the gate permanently: a returned TRUNCATED/ERROR record is a known
+   * terminal answer, and the stage above decides whether to retry or skip it.
    */
   settle(requestId, transport) {
     const request = requireShortString2(requestId);
@@ -5380,7 +5381,7 @@ var P4RecheckModelGate = class {
     const state = status === "UNKNOWN" ? "OUTCOME_UNKNOWN" : "RETURNED";
     const next = p2Snapshot({ ...last, state, transport: status });
     this.records[this.records.length - 1] = next;
-    if (status !== "COMPLETE") {
+    if (status === "UNKNOWN") {
       this.stopped = true;
     }
     return next;
@@ -5858,8 +5859,11 @@ var AgentSession = class {
     return requestId;
   }
   /**
-   * Settle the pending model call. Any status other than COMPLETE stops the
-   * session permanently; a repeated settle of the same id is refused.
+   * Settle the pending model call. Only an UNKNOWN outcome stops the session
+   * permanently: a TRUNCATED or ERROR receipt is a known, determinate terminal
+   * state (the provider answered), so the stage logic above may retry it or
+   * skip it instead of aborting the whole run. A repeated settle of the same
+   * id is refused.
    */
   settleModel(requestId, transport) {
     const id4 = boundedId2(requestId, 256);
@@ -5874,9 +5878,6 @@ var AgentSession = class {
       return;
     }
     this.append("MODEL", id4, "RETURNED", status);
-    if (status !== "COMPLETE") {
-      this.#stopped = true;
-    }
   }
   /**
    * Reserve one root effect. A tool must leave at least one model call for the
