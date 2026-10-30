@@ -10542,6 +10542,148 @@ var init_src5 = __esm({
   }
 });
 
+// packages/agent-kernel/dist/src/ledger.js
+var init_ledger = __esm({
+  "packages/agent-kernel/dist/src/ledger.js"() {
+    "use strict";
+  }
+});
+
+// packages/agent-kernel/dist/src/workunit-store.js
+var WorkUnitStore;
+var init_workunit_store = __esm({
+  "packages/agent-kernel/dist/src/workunit-store.js"() {
+    "use strict";
+    WorkUnitStore = class {
+      _runId;
+      _workUnits = /* @__PURE__ */ new Map();
+      _artifacts = /* @__PURE__ */ new Map();
+      _artifactDependencies = /* @__PURE__ */ new Map();
+      // parentId -> childIds
+      constructor(runId) {
+        this._runId = runId;
+      }
+      get runId() {
+        return this._runId;
+      }
+      get artifacts() {
+        return Array.from(this._artifacts.values());
+      }
+      /**
+       * T06: Propose task with cycle detection.
+       */
+      addTask(task) {
+        if (this._workUnits.has(task.taskId)) {
+          throw new Error(`Task already registered: ${task.taskId}`);
+        }
+        for (const dep of task.dependencies) {
+          if (dep === task.taskId) {
+            throw new Error(`Circular dependency detected: task ${task.taskId} cannot depend on itself`);
+          }
+        }
+        this._workUnits.set(task.taskId, task);
+      }
+      /**
+       * I03 & I09: Register a versioned research artifact.
+       * Registers dependency graph edges and tracks lineage.
+       */
+      registerArtifact(artifact) {
+        const existing = this._artifacts.get(artifact.artifactId);
+        if (existing && existing.version >= artifact.version) {
+          throw new Error(`Cannot overwrite artifact ${artifact.artifactId} version ${existing.version} with version ${artifact.version}`);
+        }
+        this._artifacts.set(artifact.artifactId, artifact);
+        for (const parentId of artifact.dependencyRefs) {
+          if (!this._artifactDependencies.has(parentId)) {
+            this._artifactDependencies.set(parentId, /* @__PURE__ */ new Set());
+          }
+          this._artifactDependencies.get(parentId).add(artifact.artifactId);
+        }
+        if (existing) {
+          this._propagateStale(artifact.artifactId);
+        }
+      }
+      /**
+       * Invariant I09: Invalidate downstream conclusions when upstream changes.
+       */
+      _propagateStale(changedArtifactId) {
+        const queue = [changedArtifactId];
+        const visited = /* @__PURE__ */ new Set();
+        while (queue.length > 0) {
+          const current = queue.shift();
+          if (visited.has(current))
+            continue;
+          visited.add(current);
+          const dependents = this._artifactDependencies.get(current);
+          if (dependents) {
+            for (const childId of dependents) {
+              const childArtifact = this._artifacts.get(childId);
+              if (childArtifact && !childArtifact.isStale) {
+                this._artifacts.set(childId, {
+                  ...childArtifact,
+                  isStale: true
+                });
+                queue.push(childId);
+              }
+            }
+          }
+        }
+      }
+      getArtifact(artifactId) {
+        return this._artifacts.get(artifactId);
+      }
+      isArtifactStale(artifactId) {
+        const art = this._artifacts.get(artifactId);
+        return art ? art.isStale : false;
+      }
+    };
+  }
+});
+
+// packages/domain-contract/dist/src/types.js
+var init_types = __esm({
+  "packages/domain-contract/dist/src/types.js"() {
+    "use strict";
+  }
+});
+
+// packages/domain-contract/dist/src/index.js
+var init_src6 = __esm({
+  "packages/domain-contract/dist/src/index.js"() {
+    "use strict";
+    init_types();
+  }
+});
+
+// packages/agent-kernel/dist/src/candidate-gate.js
+var init_candidate_gate = __esm({
+  "packages/agent-kernel/dist/src/candidate-gate.js"() {
+    "use strict";
+    init_src6();
+  }
+});
+
+// packages/agent-kernel/dist/src/generic-loop.js
+var init_generic_loop = __esm({
+  "packages/agent-kernel/dist/src/generic-loop.js"() {
+    "use strict";
+    init_ledger();
+    init_workunit_store();
+    init_candidate_gate();
+  }
+});
+
+// packages/agent-kernel/dist/src/index.js
+var init_src7 = __esm({
+  "packages/agent-kernel/dist/src/index.js"() {
+    "use strict";
+    init_ledger();
+    init_workunit_store();
+    init_candidate_gate();
+    init_generic_loop();
+  }
+});
+
 // packages/math-review/dist/src/p4-report.js
 function exact2(value, keys2) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -13315,7 +13457,7 @@ var init_p4_r0_recheck_session = __esm({
 });
 
 // packages/math-review/dist/src/index.js
-var init_src6 = __esm({
+var init_src8 = __esm({
   "packages/math-review/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -14826,7 +14968,7 @@ var init_p4_repair2 = __esm({
 });
 
 // packages/math-audit/dist/src/index.js
-var init_src7 = __esm({
+var init_src9 = __esm({
   "packages/math-audit/dist/src/index.js"() {
     "use strict";
     init_src();
@@ -15133,6 +15275,7 @@ var init_agent_loop_io = __esm({
     TRANSPORTS2 = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"];
     RECEIPT_FIELDS2 = ["transportStatus", "text", "remainingMs"];
     OPTION_FIELDS = [
+      "domainId",
       "maxModelCalls",
       "maxWorkUnits",
       "maxEffects",
@@ -22237,6 +22380,49 @@ function toolOperationFor(name, args, route) {
 async function runAgentLoop(problem, sessionId, options, ports) {
   const problemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
+  const domainId = options.domainId ?? options?.domain ?? "math";
+  if (domainId !== "math" && domainId !== "domain-math") {
+    const summary2 = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "unsolved",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: `\u9886\u57DF\u672A\u9A8C\u6536\uFF1Adomain '${domainId}' \u5C1A\u672A\u63A5\u5165\u5B8C\u6574\u79D1\u5B66\u68C0\u67E5\u5668\uFF0C\u7981\u6B62\u4F7F\u7528\u6570\u5B66\u68C0\u67E5\u5668\u5192\u5145`,
+      finalResponse: `\u9886\u57DF\u672A\u9A8C\u6536\uFF1A${domainId}`,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 0,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: []
+    };
+    const privateState2 = {
+      contract: { contractVersion: 1, problemHash: p4Hash(problemText), tasks: [], obligations: [] },
+      events: [],
+      artifacts: [],
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: { status: "unsolved", finalResponse: `\u9886\u57DF\u672A\u9A8C\u6536\uFF1A${domainId}`, reason: "DOMAIN_NOT_VALIDATED" },
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null
+    };
+    return { summary: summary2, privateState: privateState2 };
+  }
   const opts0 = captureAgentOptions(options);
   const captured = captureAgentPorts(ports);
   const problemHash = p4Hash(problemText);
@@ -22337,6 +22523,26 @@ async function runAgentLoop(problem, sessionId, options, ports) {
   });
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
+  const kernelStore = new WorkUnitStore(session);
+  const originalStoreAccept = store.accept.bind(store);
+  store.accept = (task, receiptInput) => {
+    const art = originalStoreAccept(task, receiptInput);
+    if (art && art.artifactId) {
+      try {
+        kernelStore.registerArtifact({
+          artifactId: art.artifactId,
+          version: art.version ?? 1,
+          kind: art.kind ?? "derivation",
+          payloadRef: art.rawResponseRef || art.artifactId,
+          dependencyRefs: (art.dependencies || []).map((d) => typeof d === "string" ? d : d.artifactId || String(d)),
+          digest: art.rawResponseHash || "",
+          isStale: false
+        });
+      } catch {
+      }
+    }
+    return art;
+  };
   const workflow = new AgentWorkflowRoutes(ledger, store);
   const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
   const gate = new P4RecheckModelGate(session, problemHash, contract.contractVersion, opts.maxModelCalls, root.modelCalls());
@@ -24980,8 +25186,9 @@ var init_agent_loop2 = __esm({
     init_src4();
     init_src2();
     init_src5();
-    init_src6();
     init_src7();
+    init_src8();
+    init_src9();
     init_src3();
     init_agent_loop_calls();
     init_agent_final();
@@ -25324,13 +25531,14 @@ var init_agent_host_flow = __esm({
         if (this.io.remainingMs() <= MIN_REMAINING_MS10) {
           fail26(ERROR_CODES.FIELD_VALUE);
         }
+        const domainId = typeof params["domainId"] === "string" ? params["domainId"] : typeof params["domain"] === "string" ? params["domain"] : "math";
         this.phase = "SOLVING";
         this.solveStarted = true;
-        this.runSolve(id4, problem).catch(() => {
+        this.runSolve(id4, problem, domainId).catch(() => {
           this.io.fail(new Error(ERROR_CODES.FIELD_VALUE));
         });
       }
-      async runSolve(id4, problem) {
+      async runSolve(id4, problem, domainId = "math") {
         const sessionId = this.sessionId;
         const options = this.options;
         if (sessionId === null || options === null) {
@@ -25350,6 +25558,7 @@ var init_agent_host_flow = __esm({
         let result;
         try {
           result = await runAgentLoop(problem, sessionId, {
+            domainId,
             maxModelCalls: options.maxModelCalls,
             maxWorkUnits: options.maxWorkUnits,
             maxEffects: options.maxEffects,

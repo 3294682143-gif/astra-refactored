@@ -29,6 +29,7 @@ export const AGENT_IO_MAX_TEXT_BYTES = 65536;
 const TRANSPORTS = ["COMPLETE", "TRUNCATED", "ERROR", "UNKNOWN"] as const;
 const RECEIPT_FIELDS = ["transportStatus", "text", "remainingMs"] as const;
 const OPTION_FIELDS = [
+  "domainId",
   "maxModelCalls",
   "maxWorkUnits",
   "maxEffects",

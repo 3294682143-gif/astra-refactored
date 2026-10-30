@@ -170,6 +170,7 @@ export interface AgentLoopOptions {
   readonly policy?: P4DeliveryPolicy;
   readonly now?: () => number;
   readonly goalSpecs?: readonly P2GoalSpec[];
+  readonly domainId?: string;
   /** Derive the root budget from the compiled task graph instead of the caller. */
   readonly deriveBudget?: boolean;
   /**

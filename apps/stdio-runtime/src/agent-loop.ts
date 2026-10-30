@@ -23,6 +23,7 @@ import {
   p4Hash,
   p4Target,
   type AgentLoopOptions,
+  type AgentLoopPrivateState,
   type AgentLoopResult,
   type AgentLoopSummary,
   type AgentModelPhase,
@@ -66,6 +67,7 @@ import {
   p3EffectKey,
 } from "@astra/math-gateway";
 import { P2WorkunitStore } from "@astra/math-workunit";
+import { WorkUnitStore } from "@zygos/agent-kernel";
 import {
   P4R0RecheckSession,
   P4R0ReviewSession,
@@ -998,6 +1000,50 @@ export async function runAgentLoop(
 ): Promise<AgentLoopResult> {
   const problemText = boundedProblem(problem);
   const session = boundedSession(sessionId);
+  const domainId = options.domainId ?? ((options as unknown as Record<string, unknown>)?.domain as string | undefined) ?? "math";
+  if (domainId !== "math" && domainId !== "domain-math") {
+    // T2: control/scicomp/data_analysis 未接完整检查器前必须诚实返回"领域未验收"，禁止用数学检查器冒充。
+    const summary: AgentLoopSummary = {
+      mode: "TS_PREVIEW",
+      targetEnvironment: "TARGET_UNVERIFIED",
+      sessionId: session,
+      status: "unsolved",
+      stopReason: "STOPPED",
+      candidateVerified: false,
+      strictAcceptance: "NOT_PERFORMED",
+      policy: options.policy ?? "STRICT",
+      reason: `领域未验收：domain '${domainId}' 尚未接入完整科学检查器，禁止使用数学检查器冒充`,
+      finalResponse: `领域未验收：${domainId}`,
+      modelCalls: 0,
+      effectCalls: 0,
+      workUnits: 0,
+      reviewCalls: 0,
+      repairCalls: 0,
+      catalogCalls: 0,
+      methodLoads: 0,
+      unresolvedObligations: [],
+    };
+    const privateState: AgentLoopPrivateState = {
+      contract: { contractVersion: 1, problemHash: p4Hash(problemText), tasks: [], obligations: [] } as any,
+      events: [],
+      artifacts: [],
+      requests: [],
+      effects: [],
+      modelGate: [],
+      review: null,
+      decision: { status: "unsolved", finalResponse: `领域未验收：${domainId}`, reason: "DOMAIN_NOT_VALIDATED" } as any,
+      session: { sessionId: session, problemHash: p4Hash(problemText), modelCalls: 0, effectCalls: 0, stopped: true, pendingModel: null, pendingEffect: null, events: [] },
+      routes: [],
+      taskRoutes: [],
+      routeAdmissions: [],
+      dependencyAdmissions: [],
+      revisions: [],
+      readyTasks: [],
+      progressEvents: [],
+      sessionLog: null as any,
+    };
+    return { summary, privateState };
+  }
   const opts0 = captureAgentOptions(options);
   const captured = captureAgentPorts(ports);
   const problemHash = p4Hash(problemText);
@@ -1165,6 +1211,27 @@ export async function runAgentLoop(
   });
   const ledger = new ContractLedger(contract);
   const store = new P2WorkunitStore(ledger.snapshot());
+  const kernelStore = new WorkUnitStore(session);
+  const originalStoreAccept = store.accept.bind(store);
+  (store as any).accept = (task: any, receiptInput: any) => {
+    const art = originalStoreAccept(task, receiptInput);
+    if (art && art.artifactId) {
+      try {
+        kernelStore.registerArtifact({
+          artifactId: art.artifactId,
+          version: (art as any).version ?? 1,
+          kind: (art as any).kind ?? "derivation",
+          payloadRef: art.rawResponseRef || art.artifactId,
+          dependencyRefs: (art.dependencies || []).map((d: any) => typeof d === "string" ? d : d.artifactId || String(d)),
+          digest: art.rawResponseHash || "",
+          isStale: false,
+        });
+      } catch {
+        // Lineage tracking
+      }
+    }
+    return art;
+  };
   const workflow = new AgentWorkflowRoutes(ledger, store);
   const revision = new AgentRevisionAdmission(ledger, store, (task) => workflow.forTask(task));
   const gate = new P4RecheckModelGate(

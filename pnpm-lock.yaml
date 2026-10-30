@@ -41,6 +41,12 @@ importers:
       '@astra/runtime-core':
         specifier: workspace:*
         version: link:../../packages/runtime-core
+      '@zygos/agent-kernel':
+        specifier: workspace:*
+        version: link:../../packages/agent-kernel
+      '@zygos/domain-contract':
+        specifier: workspace:*
+        version: link:../../packages/domain-contract
 
   apps/web-demo:
     dependencies:

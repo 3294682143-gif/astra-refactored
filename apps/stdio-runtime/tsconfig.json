@@ -6,6 +6,8 @@
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
   "references": [
+    { "path": "../../packages/domain-contract" },
+    { "path": "../../packages/agent-kernel" },
     { "path": "../../packages/protocol" },
     { "path": "../../packages/runtime-core" },
     { "path": "../../packages/math-contract" },

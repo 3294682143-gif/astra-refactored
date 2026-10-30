@@ -19,6 +19,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@zygos/domain-contract": "workspace:*",
+    "@zygos/agent-kernel": "workspace:*",
     "@astra/protocol": "workspace:*",
     "@astra/runtime-core": "workspace:*",
     "@astra/math-contract": "workspace:*",

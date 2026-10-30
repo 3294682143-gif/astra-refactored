@@ -401,14 +401,15 @@ export class AgentHostFlow {
     if (this.io.remainingMs() <= MIN_REMAINING_MS) {
       fail(ERROR_CODES.FIELD_VALUE);
     }
+    const domainId = typeof params["domainId"] === "string" ? params["domainId"] : (typeof params["domain"] === "string" ? params["domain"] : "math");
     this.phase = "SOLVING";
     this.solveStarted = true;
-    this.runSolve(id, problem).catch(() => {
+    this.runSolve(id, problem, domainId).catch(() => {
       this.io.fail(new Error(ERROR_CODES.FIELD_VALUE));
     });
   }
 
-  private async runSolve(id: string, problem: string): Promise<void> {
+  private async runSolve(id: string, problem: string, domainId: string = "math"): Promise<void> {
     const sessionId = this.sessionId;
     const options = this.options;
     if (sessionId === null || options === null) {
@@ -430,6 +431,7 @@ export class AgentHostFlow {
     let result: Awaited<ReturnType<typeof runAgentLoop>>;
     try {
       result = await runAgentLoop(problem, sessionId, {
+        domainId,
         maxModelCalls: options.maxModelCalls,
         maxWorkUnits: options.maxWorkUnits,
         maxEffects: options.maxEffects,
