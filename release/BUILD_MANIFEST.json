@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "1407549ef84aa3ecb16bb9d0734723465f99ce8b",
-    "tree": "3ca0ba0511859e4c9860c52bddebb5b97ac57b0d"
+    "commit": "e9d6cb19b576feb6d7ac1549a67e358c0022e5a4",
+    "tree": "575f0ec8516647ded00ade02afcf69b910a0534d"
   },
   "js": [
     {
@@ -78,7 +78,7 @@
   "bundle": {
     "bundle": {
       "path": "release/stdio-runtime.bundle.mjs",
-      "sha256": "d39ce93ecf142048708f985492bad54ffb01e71ae05eca1652d8813c165ec3d5"
+      "sha256": "b912591ba8e9409fef979a903e8a648bf3d12b050f726c84c48c11e4c274fee8"
     },
     "bundleSchema": {
       "path": "release/schema/agent-host-v14.schema.json",
