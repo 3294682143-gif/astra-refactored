@@ -1,0 +1,65 @@
+{
+  "events": [
+    {
+      "at": 1793375355186,
+      "detailLevel": "partial_observed",
+      "kind": "CONTRACT",
+      "payload": {
+        "domainId": "scientific_computing",
+        "obligations": [
+          "ob_mesh_convergence",
+          "ob_boundary_conservation",
+          "ob_cfl_stability"
+        ]
+      },
+      "runId": "golden_scicomp_20261030",
+      "seq": 1,
+      "sourceKind": "official_result"
+    },
+    {
+      "at": 1793375355187,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "allObligationsMet": true,
+        "candidate_verified": false,
+        "observedOrder": 1.9969525045238188,
+        "status": "candidate",
+        "stopReason": "STOPPED"
+      },
+      "runId": "golden_scicomp_20261030",
+      "seq": 2,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "",
+    "childReaped": null,
+    "code": null,
+    "elapsedMs": 72,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "{\"domainId\":\"scientific_computing\",\"scheme\":\"forward_euler_finite_difference\",\"alpha\":0.1,\"tFinal\":0.2,\"observedOrder\":1.9969525045238188,\"expectedOrder\":2,\"isOrderConsistent\":true,\"grids\":[{\"nx\":20,\"dx\":0.05,\"l2Error\":0.000009334284716981376,\"maxError\":0.000013526663649177095,\"cfl\":0.15999999999999998},{\"nx\":40,\"dx\":0.025,\"l2Error\":0.0000023356560463283967,\"maxError\":0.000003344150533712842,\"cfl\":0.15999999999999998},{\"nx\":80,\"dx\":0.0125,\"l2Error\":5.858626830263234e-7,\"maxError\":8.336972137090726e-7,\"cfl\":0.15999999999999998}],\"cflDiagnosis\":{\"maxCfl\":0.15999999999999998,\"threshold\":0.5,\"isStable\":true,\"verdict\":\"CFL 条件满足 (max CFL = 0.1600 <= 0.5)，数值显式格式稳定\"},\"boundaryDiagnosis\":{\"dirichletMatched\":true,\"verdict\":\"Dirichlet 齐次边界条件精确满足 (u(0)=u(L)=0)\"},\"allObligationsMet\":true,\"candidateVerified\":false}",
+    "finishReason": null,
+    "metadata": {
+      "domainId": "scientific_computing",
+      "inputRefs": [],
+      "rawText": "一维热传导方程有限差分复现 (alpha=0.1, tFinal=0.2) 与 Richardson 外推网格收敛阶验证"
+    },
+    "mode": "TS_PREVIEW",
+    "problem": "[RunSpec:scientific_computing]\n一维热传导方程有限差分复现 (alpha=0.1, tFinal=0.2) 与 Richardson 外推网格收敛阶验证",
+    "provider": "mock",
+    "reason": "SCIENTIFIC_COMPUTATION_COMPLETED",
+    "requestFingerprint": "7b2495dda649af42a99d042b04ad6023e9fe12ba1bdfb3c18d8a078a1540c241",
+    "runId": "golden_scicomp_20261030",
+    "sessionId": "",
+    "status": "candidate",
+    "stopReason": "STOPPED",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [],
+    "unresolvedObligations": []
+  }
+}

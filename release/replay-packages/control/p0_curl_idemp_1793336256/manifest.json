@@ -1,0 +1,17 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "p0_curl_idemp_1793336256",
+  "domainId": "control.identification",
+  "problem": "[RunSpec:control.identification]\n辨识非线性阻尼受迫振子质量阻尼刚度三参数 (m=1.5, c=0.4, k=2.8)",
+  "status": "candidate",
+  "stopReason": "STOPPED",
+  "provider": "mock",
+  "candidateVerified": false,
+  "exportedAt": "2026-10-30T16:04:57Z",
+  "sourcePath": "var\\astra\\runs\\p0_curl_idemp_1793336256\\details.json",
+  "detailsSha256": "120b82ce418e42b1dfe0f41f52fbc1608ce7343159b2cb1586b5372a4f45356b",
+  "replay": {
+    "web": "启动 BFF 后访问 /runs/p0_curl_idemp_1793336256/replay",
+    "verify": "python -c \"import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('details.json').read_bytes()).hexdigest())\""
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "events": [
+    {
+      "at": 1793341428782,
+      "detailLevel": "partial_observed",
+      "kind": "CONTRACT",
+      "payload": {
+        "domainId": "data_analysis",
+        "obligations": [
+          "ob_normality_homoscedasticity",
+          "ob_effect_significance",
+          "ob_residual_whiteness"
+        ]
+      },
+      "runId": "p1_curl_da_idemp_20261030",
+      "seq": 1,
+      "sourceKind": "official_result"
+    },
+    {
+      "at": 1793341428783,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "status": "candidate",
+        "stopReason": "STOPPED",
+        "testResult": {
+          "cohensD": -1.7301448606784178,
+          "confidenceInterval": [
+            -2.609362949872938,
+            -1.6354797183289738
+          ],
+          "degreesOfFreedom": 97.06733588027758,
+          "isSignificant": true,
+          "meanDifference": -2.122421334100956,
+          "pValue": 1.0861351842997318e-13,
+          "standardError": 0.2453460842890023,
+          "tStatistic": -8.650724303392089
+        }
+      },
+      "runId": "p1_curl_da_idemp_20261030",
+      "seq": 2,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "",
+    "childReaped": null,
+    "code": null,
+    "elapsedMs": 56,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "{\"domainId\":\"data_analysis\",\"testMethod\":\"two_sample_welch_t_test\",\"groupA\":{\"count\":50,\"mean\":10.196318612267367,\"variance\":1.357356546160732,\"std\":1.1650564562117718,\"skewness\":-0.5672854933658462,\"kurtosis\":0.725340570941146},\"groupB\":{\"count\":50,\"mean\":12.318739946368323,\"variance\":1.6523785076365785,\"std\":1.2854487572970688,\"skewness\":0.04909725374014538,\"kurtosis\":-0.4703117815833999},\"testResult\":{\"tStatistic\":-8.650724303392089,\"degreesOfFreedom\":97.06733588027758,\"pValue\":1.0861351842997318e-13,\"meanDifference\":-2.122421334100956,\"standardError\":0.2453460842890023,\"confidenceInterval\":[-2.609362949872938,-1.6354797183289738],\"cohensD\":-1.7301448606784178,\"isSignificant\":true},\"normalityDiagnosis\":{\"groupANormal\":true,\"groupBNormal\":true,\"jarqueBeraA\":3.777854724555321,\"jarqueBeraB\":0.4809069441571845,\"passed\":true,\"verdict\":\"正态性假设检验通过 (Jarque-Bera JB < 5.991)\"},\"homoscedasticityDiagnosis\":{\"varianceRatio\":1.2173503802743006,\"isHomoscedastic\":true,\"verdict\":\"方差齐性满足 (方差比率 = 1.22 < 4.0)\"},\"residualDiagnosis\":{\"lag1Autocorrelation\":-0.13325315941761987,\"isWhite\":true,\"diagnosis\":\"RESIDUAL_WHITE\",\"verdict\":\"残差白性与样本独立性验证通过 (|r1| = 0.1333 < 0.25)\"},\"allObligationsMet\":true,\"candidateVerified\":false}",
+    "finishReason": null,
+    "metadata": {
+      "domainId": "data_analysis",
+      "inputRefs": [],
+      "rawText": "两组生物医学样本表达量显著性差异检验 (mean1=10.0, mean2=12.5) 与残差诊断"
+    },
+    "mode": "TS_PREVIEW",
+    "problem": "[RunSpec:data_analysis]\n两组生物医学样本表达量显著性差异检验 (mean1=10.0, mean2=12.5) 与残差诊断",
+    "provider": "mock",
+    "reason": "STATISTICAL_INFERENCE_COMPLETED",
+    "requestFingerprint": "9317e05c7e637c2752fbe467303f6db899d55c479848edfb9955bada6828e245",
+    "runId": "p1_curl_da_idemp_20261030",
+    "sessionId": "",
+    "status": "candidate",
+    "stopReason": "STOPPED",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [],
+    "unresolvedObligations": []
+  }
+}

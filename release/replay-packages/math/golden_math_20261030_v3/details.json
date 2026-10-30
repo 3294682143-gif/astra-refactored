@@ -1,0 +1,196 @@
+{
+  "events": [
+    {
+      "at": 1793376018379,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "childReaped": true,
+        "code": null,
+        "elapsedMs": 535,
+        "executed": true,
+        "final_response": "x=2, x=3",
+        "reason": "BEST_EFFORT_CANDIDATE",
+        "sessionId": "f2de902e45c84c259a83b9e65731045b",
+        "status": "candidate",
+        "stopReason": "REVIEWS_COMPLETE",
+        "terminalKind": null
+      },
+      "runId": "golden_math_20261030_v3",
+      "seq": 1,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "platform",
+    "childReaped": true,
+    "code": null,
+    "elapsedMs": 535,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "x=2, x=3",
+    "finishReason": "stop",
+    "metadata": {
+      "domainId": "math",
+      "inputRefs": [],
+      "rawText": "求二次代数方程 x^2 - 5x + 6 = 0 的所有实数解"
+    },
+    "metrics": {
+      "asset_calls": 0,
+      "capability_probe_accepted": 0,
+      "capability_probe_calls": 0,
+      "capability_profile": "CUSTOM",
+      "catalog_calls": 0,
+      "client_method_calls": 5,
+      "closure_defects": 0,
+      "closure_evaluations": 0,
+      "consensus_audit_ballots": 0,
+      "consensus_audit_calls": 0,
+      "consensus_certificate_ballots": 0,
+      "consensus_certificate_calls": 0,
+      "consensus_closure_calls": 0,
+      "consensus_independent_ballots": 0,
+      "consensus_independent_calls": 0,
+      "effect_calls": 0,
+      "exploration_calls": 0,
+      "forced": 0,
+      "frames": 16,
+      "front_budget": 2,
+      "front_spent": 1,
+      "g2_route_agreements": 0,
+      "g2_route_attempts": 0,
+      "g2_route_candidates": 0,
+      "g2_route_context_rejected": 0,
+      "g2_route_picks": 0,
+      "g2_route_workunits": 0,
+      "g2_routes_admitted": 0,
+      "g2_routes_rejected": 0,
+      "known_http_attempts": null,
+      "logical_model_calls": 5,
+      "method_effect_calls": 0,
+      "method_ids": [],
+      "method_loads": 0,
+      "obeyed": 0,
+      "observation_used": 0,
+      "observation_views": 0,
+      "r0_aggregates": 0,
+      "r0_model_calls": 0,
+      "r0_plan_revisions": 0,
+      "r0_recheck_calls": 0,
+      "r0_role_reviews": 0,
+      "r2_challenges": 0,
+      "r2_review_calls": 1,
+      "r2_review_records": 1,
+      "r4_challenges": 0,
+      "r4_review_calls": 0,
+      "remote_outcome_unknown": false,
+      "repair_accepted": 0,
+      "repair_decisions": 0,
+      "repair_model_calls": 0,
+      "repair_packet_rejected": 0,
+      "repair_rejected": 0,
+      "reported_tokens": null,
+      "review_calls": 1,
+      "routed": 0,
+      "tail_reserve": 1,
+      "tool_effect_calls": 0,
+      "tool_names": [],
+      "unknown_usage_requests": 5,
+      "work_units": 4
+    },
+    "mode": "TS_PREVIEW",
+    "problem": "[RunSpec:math]\n求二次代数方程 x^2 - 5x + 6 = 0 的所有实数解",
+    "provider": "s2",
+    "reason": "BEST_EFFORT_CANDIDATE",
+    "requestFingerprint": "98ab75dcf916de7cf30b40a8393ec00f3a72619d951ace650629ab634046eb5d",
+    "runId": "golden_math_20261030_v3",
+    "sessionId": "f2de902e45c84c259a83b9e65731045b",
+    "status": "candidate",
+    "stopReason": "REVIEWS_COMPLETE",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [
+      {
+        "code": "WORK",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 1,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 2,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 3,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 4,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 5,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 6,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 7,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 8,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R2",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 9,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 10,
+        "state": "RETURNED"
+      },
+      {
+        "code": "REVIEWS_COMPLETE",
+        "id": "control",
+        "kind": "CONTROL",
+        "seq": 11,
+        "state": "RECORDED"
+      }
+    ],
+    "unresolvedObligations": []
+  }
+}

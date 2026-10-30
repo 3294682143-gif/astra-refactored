@@ -1,0 +1,17 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "golden_math_20261030_v3",
+  "domainId": "math",
+  "problem": "[RunSpec:math]\n求二次代数方程 x^2 - 5x + 6 = 0 的所有实数解",
+  "status": "candidate",
+  "stopReason": "REVIEWS_COMPLETE",
+  "provider": "s2",
+  "candidateVerified": false,
+  "exportedAt": "2026-10-30T16:04:57Z",
+  "sourcePath": "var\\astra\\runs\\golden_math_20261030_v3\\details.json",
+  "detailsSha256": "6406a6c2fe387321c9d3700a72def46ad0699055c329f2a6dafc49a43d0cac43",
+  "replay": {
+    "web": "启动 BFF 后访问 /runs/golden_math_20261030_v3/replay",
+    "verify": "python -c \"import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('details.json').read_bytes()).hexdigest())\""
+  }
+}

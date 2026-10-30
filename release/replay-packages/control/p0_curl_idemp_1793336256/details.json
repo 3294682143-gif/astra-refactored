@@ -1,0 +1,70 @@
+{
+  "events": [
+    {
+      "at": 1793336256177,
+      "detailLevel": "partial_observed",
+      "kind": "CONTRACT",
+      "payload": {
+        "domainId": "control.identification",
+        "obligations": [
+          "ob_leak_prevention",
+          "ob_physics_bounds",
+          "ob_aliasing_guard",
+          "ob_residual_whiteness",
+          "ob_independent_rmse"
+        ]
+      },
+      "runId": "p0_curl_idemp_1793336256",
+      "seq": 1,
+      "sourceKind": "official_result"
+    },
+    {
+      "at": 1793336256178,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "parameters": {
+          "damping": 0.3981,
+          "mass": 1.4915,
+          "stiffness": 2.7856
+        },
+        "status": "candidate",
+        "stopReason": "STOPPED"
+      },
+      "runId": "p0_curl_idemp_1793336256",
+      "seq": 2,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "",
+    "childReaped": null,
+    "code": null,
+    "elapsedMs": 59,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "{\"domainId\":\"control.identification\",\"targetSystem\":\"forced_damped_oscillator\",\"parameters\":{\"mass\":1.4915,\"damping\":0.3981,\"stiffness\":2.7856},\"confidenceIntervals\":{\"mass\":[1.4912,1.4919],\"damping\":[0.3977,0.3985],\"stiffness\":[2.7854,2.7858]},\"samplingGuard\":{\"fsHz\":100,\"systemBandwidthHz\":0.22,\"tenTimesBandwidthHz\":2.18,\"aliasingDetected\":false,\"verdict\":\"采样率满足抗混叠准则 (fs=100.00Hz >= 10×带宽 2.18Hz)\"},\"leakageGuard\":{\"trainSamplesCount\":2400,\"valSamplesCount\":600,\"leakageDetected\":false,\"verdict\":\"训练/验证集物理隔离严格成立 (训练样本数=2400, 独立验证样本数=600)\"},\"residualDiagnosis\":{\"lag1Autocorrelation\":-0.4798,\"isWhite\":true,\"diagnosis\":\"RESIDUAL_WHITE\",\"verdict\":\"残差呈现白噪声特征 (差分自相关 r1=-0.480 < 0.200, RMSE=0.0046)，模型结构与拟合充分\"},\"holdoutValidation\":{\"holdoutRmse\":0.0046,\"threshold\":0.05,\"passed\":true},\"candidateVerified\":false}",
+    "finishReason": null,
+    "metadata": {
+      "domainId": "control.identification",
+      "inputRefs": [],
+      "rawText": "辨识非线性阻尼受迫振子质量阻尼刚度三参数 (m=1.5, c=0.4, k=2.8)"
+    },
+    "mode": "TS_PREVIEW",
+    "problem": "[RunSpec:control.identification]\n辨识非线性阻尼受迫振子质量阻尼刚度三参数 (m=1.5, c=0.4, k=2.8)",
+    "provider": "mock",
+    "reason": "DYNAMICS_IDENTIFICATION_COMPLETED",
+    "requestFingerprint": "8a98f066e3e6f71ff1d991c9b0821173544e99837614eebc824cfa8636b64eb3",
+    "runId": "p0_curl_idemp_1793336256",
+    "sessionId": "",
+    "status": "candidate",
+    "stopReason": "STOPPED",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [],
+    "unresolvedObligations": []
+  }
+}

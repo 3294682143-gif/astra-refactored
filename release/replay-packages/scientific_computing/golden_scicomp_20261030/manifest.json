@@ -1,0 +1,17 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "golden_scicomp_20261030",
+  "domainId": "scientific_computing",
+  "problem": "[RunSpec:scientific_computing]\n一维热传导方程有限差分复现 (alpha=0.1, tFinal=0.2) 与 Richardson 外推网格收敛阶验证",
+  "status": "candidate",
+  "stopReason": "STOPPED",
+  "provider": "mock",
+  "candidateVerified": false,
+  "exportedAt": "2026-10-30T16:04:57Z",
+  "sourcePath": "var\\astra\\runs\\golden_scicomp_20261030\\details.json",
+  "detailsSha256": "e75bde9c797d3d49e1c45b620367291c2a1d43a10bc18adcf4f9b060da1d78a8",
+  "replay": {
+    "web": "启动 BFF 后访问 /runs/golden_scicomp_20261030/replay",
+    "verify": "python -c \"import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('details.json').read_bytes()).hexdigest())\""
+  }
+}

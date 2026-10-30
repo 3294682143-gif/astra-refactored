@@ -1,0 +1,17 @@
+{
+  "replayVersion": "1.0.0",
+  "runId": "p1_curl_da_idemp_20261030",
+  "domainId": "data_analysis",
+  "problem": "[RunSpec:data_analysis]\n两组生物医学样本表达量显著性差异检验 (mean1=10.0, mean2=12.5) 与残差诊断",
+  "status": "candidate",
+  "stopReason": "STOPPED",
+  "provider": "mock",
+  "candidateVerified": false,
+  "exportedAt": "2026-10-30T16:04:57Z",
+  "sourcePath": "var\\astra\\runs\\p1_curl_da_idemp_20261030\\details.json",
+  "detailsSha256": "f88ab2eee2d0f5fc7509e44d2a03d047b499da67d55a4954ffad0a9085c85446",
+  "replay": {
+    "web": "启动 BFF 后访问 /runs/p1_curl_da_idemp_20261030/replay",
+    "verify": "python -c \"import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('details.json').read_bytes()).hexdigest())\""
+  }
+}
