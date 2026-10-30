@@ -4,8 +4,8 @@
   "engine": "ts",
   "schemaVersion": "1.4-unified-math-assets",
   "source": {
-    "commit": "0e1645f66c5c000fcb22afd99947ecf14e21630a",
-    "tree": "0b7648725daff4eb936c5f9dd661da887619c699"
+    "commit": "398977bcc87446f7d437b98f86c788dfc1158730",
+    "tree": "672a5744ca840f5e8b2f02c989973749111d90c7"
   },
   "js": [
     {
