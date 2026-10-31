@@ -182,10 +182,16 @@ def test_incomplete_final_keeps_old_candidate_and_blocks(mode, process_tracker):
     client = FinalClient(mode=mode)
     agent = user_agent.ReasoningAgent(client=client, engine="ts", max_model_calls=4, max_work_units=2, max_effects=0)
     result = agent.solve(PROBLEM, {"source": "e2e"})
-    assert client.calls == 2
-    assert len(client.texts) == 1
+    # A TRUNCATED final action is a determinate terminal state: its truncated
+    # payload is never executed, and the bounded retry re-asks the turn, so the
+    # run recovers and delivers the protected candidate. Two final turns are
+    # observed (the truncated one plus the retried one), never a wrong action.
+    assert client.calls == (4 if mode == "length" else 2)
+    assert len(client.texts) == (2 if mode == "length" else 1)
     assert json.loads(client.texts[0])["action"] == "final"
-    assert result["metrics"]["review_calls"] == 0
+    # The truncated turn is retried, so the recovered run may then spend its
+    # one bounded review; a nofinish (unknown-outcome) turn still stops first.
+    assert result["metrics"]["review_calls"] == (1 if mode == "length" else 0)
     assert result["metrics"]["work_units"] == 1
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True

@@ -310,7 +310,10 @@ def test_incomplete_method_reply_never_loads(mode, process_tracker, spy_catalog)
     client = _IncompleteClient()
     agent = user_agent.ReasoningAgent(client=client, engine="ts", max_method_loads=1)
     result = agent.solve(PROBLEM, {"source": "e2e"})
-    assert result["status"] == "unsolved"
+    # A TRUNCATED method-load action is a determinate terminal state: the
+    # truncated action never loads a method card, and the bounded retry
+    # re-asks the turn so a healthy follow-up reply delivers a candidate.
+    assert result["status"] == ("candidate" if mode == "length" else "unsolved")
     assert result["metrics"]["method_loads"] == 0
     assert result["metrics"]["effect_calls"] == 0
     assert spy_catalog.loads == 0

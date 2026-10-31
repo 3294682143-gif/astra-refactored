@@ -83,12 +83,20 @@ def test_incomplete_first_reply_blocks_tools_and_unknown(mode, process_tracker):
     client = _MutatingClient(mode)
     agent = user_agent.ReasoningAgent(client=client, engine="ts")
     result = agent.solve(PROBLEM, {"source": "e2e"})
-    assert result["status"] == "unsolved"
-    assert result["final_response"] == "Unsolved."
+    # A TRUNCATED first reply is a determinate terminal state: its truncated
+    # tool text is never executed and never leaks, and the bounded retry
+    # re-asks the turn so a healthy follow-up delivers a candidate. The other
+    # modes stay fail-closed with exactly one call.
+    assert result["status"] == ("candidate" if mode == "length" else "unsolved")
+    assert result["final_response"] == ("4" if mode == "length" else "Unsolved.")
     assert result["candidate_verified"] is False
     assert result["metrics"]["effect_calls"] == 0
-    assert result["metrics"]["client_method_calls"] == 1
-    assert client.calls == 1
+    if mode == "length":
+        assert result["metrics"]["client_method_calls"] == 6
+        assert client.calls == 6
+    else:
+        assert result["metrics"]["client_method_calls"] == 1
+        assert client.calls == 1
     blob = json.dumps(result)
     assert SENTINEL not in blob
     assert TOOL_TEXT not in blob

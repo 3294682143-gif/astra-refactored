@@ -247,9 +247,12 @@ def test_incomplete_unsolved_never_yields(mode, process_tracker):
                                       max_model_calls=4, max_work_units=3,
                                       max_effects=0)
     result = agent.solve(PROBLEM, {"source": "e2e"})
-    assert result["status"] == "unsolved"
+    # A TRUNCATED "unsolved" action is a determinate terminal state: the
+    # truncated action is never executed (nothing unsolved is yielded), and the
+    # bounded retry re-asks the turn, so a healthy follow-up reply delivers.
+    assert result["status"] == ("candidate" if mode == "length" else "unsolved")
     assert result["childReaped"] is True
-    assert client.calls == 1
+    assert client.calls == (4 if mode == "length" else 1)
     if mode == "nofinish":
         assert result["metrics"]["remote_outcome_unknown"] is True
         second = agent.solve(PROBLEM, {"source": "e2e"})

@@ -295,9 +295,13 @@ def test_incomplete_v3_never_starts_child(mode, process_tracker):
     result = agent.solve(PROBLEM, {"source": "e2e"})
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
-    assert client.calls == 1
+    # A TRUNCATED proposal reply is a determinate terminal state: its truncated
+    # payload never drives control flow, so the truncated first turn (model-1)
+    # starts no child. The bounded retry re-asks the turn, and a complete
+    # DEPENDENT_TASK answer may then legitimately start its child task.
+    assert client.calls == (4 if mode == "length" else 1)
     for body in _work_bodies(client):
-        assert not body["task"]["taskId"].startswith("dep-task-")
+        assert not body["task"]["taskId"].startswith("dep-task-model-1")
     if mode == "nofinish":
         assert result["metrics"]["remote_outcome_unknown"] is True
         second = agent.solve(PROBLEM, {"source": "e2e"})

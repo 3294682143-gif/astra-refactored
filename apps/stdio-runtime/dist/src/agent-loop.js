@@ -4134,11 +4134,17 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 contextHash: p4Hash(JSON.stringify(messages)),
                 contextBytes,
             });
+            // The Host counts one REPAIR the moment the dispatched call returns, at
+            // any transport; keep the summary counter on the same "dispatched and
+            // returned" basis or the final summary audit mismatches on a TRUNCATED
+            // or ERROR repair turn.
+            if (root.modelCalls() > before) {
+                repairCalls += 1;
+            }
             if (!(root.modelCalls() > before && outcome.receipt.transportStatus === "COMPLETE")) {
                 stop = outcome.receipt.transportStatus === "COMPLETE" ? outcome.code : "PACKET_REJECTED";
                 return null;
             }
-            repairCalls += 1;
             try {
                 const childArtifact = store.accept(repairTask, {
                     // Match the Host projection's artifact identity for a REPAIR row:

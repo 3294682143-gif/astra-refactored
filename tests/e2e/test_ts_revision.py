@@ -180,7 +180,10 @@ def test_failed_redo_keeps_old_versions(mode, monkeypatch, process_tracker):
         max_effects=0, max_reviews=0,
     )
     result = agent.solve(PROBLEM, {"source": "e2e"})
-    assert client.calls == 3
+    # A TRUNCATED redo reply is a determinate terminal state: the bounded retry
+    # spends one more call instead of stopping, while the redo still fails
+    # closed and the two accepted versions are kept exactly as before.
+    assert client.calls == (4 if mode == "length" else 3)
     assert result["childReaped"] is True
     assert result["candidate_verified"] is False
     assert result["metrics"]["work_units"] == 2

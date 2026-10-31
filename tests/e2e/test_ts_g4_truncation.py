@@ -94,5 +94,8 @@ def test_null_content_with_length_is_truncated_not_unknown(process_tracker):
     assert result["final_response"] == "Unsolved."
     assert result["metrics"]["effect_calls"] == 0
     assert result["metrics"]["remote_outcome_unknown"] is False
-    assert client.calls == 1
+    # A null-content length reply is a determinate TRUNCATED turn, never an
+    # unknown outcome: the bounded WORK retry spends its two retries and still
+    # refuses the unusable content, so three calls are seen but nothing yields.
+    assert client.calls == 3
     assert process_tracker

@@ -339,9 +339,13 @@ def test_incomplete_v2_never_opens_route(mode, monkeypatch, process_tracker):
     result = agent.solve(PROBLEM, {"source": "e2e"})
     assert result["candidate_verified"] is False
     assert result["childReaped"] is True
-    assert result["metrics"]["work_units"] == 0
+    # A TRUNCATED route-proposal reply is a determinate terminal state: the
+    # truncated proposal never opens a route (exactly one proposal text is ever
+    # recorded), and the bounded retry re-asks the turn, so the run recovers and
+    # delivers the main-route work units.
+    assert result["metrics"]["work_units"] == (2 if mode == "length" else 0)
     assert result["metrics"]["effect_calls"] == 0
-    assert client.calls == 1
+    assert client.calls == (4 if mode == "length" else 1)
     assert len(client.texts) == 1
     assert captured
     source_body = _source_body(client)

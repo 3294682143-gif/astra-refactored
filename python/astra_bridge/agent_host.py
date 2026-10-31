@@ -1284,7 +1284,10 @@ class AgentHost(_Host):
             self.repair_calls += 1
         elif request["phase"] == "CONSENSUS":
             self.consensus_calls += 1
-        if transport != "COMPLETE":
+        if transport == "UNKNOWN":
+            # Only an unknown terminal state stays fail-closed. TRUNCATED/ERROR
+            # are determinate provider answers: the runtimes above them retry or
+            # skip the turn instead of aborting the whole session.
             if os.environ.get("ASTRA_DEBUG_GUARD") == "1":
                 import sys as _debug_sys
                 _debug_sys.stderr.write(
