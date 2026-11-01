@@ -484,6 +484,22 @@ class AgentClient:
                         request_id, session_id, request_hash, phase, deadline,
                         "OUTCOME_UNKNOWN", "UNKNOWN", None, None, "UNKNOWN", None,
                     )
+            if (
+                bounded is None
+                and isinstance(text, str)
+                and _code_points(text) is not None
+                and (len(text) > _MAX_TEXT_CHARS or len(_utf8(text)) > _MAX_TEXT_BYTES)
+            ):
+                # Overlong provider output is a determinate truncation, never an
+                # unknown outcome: clamp it to the protocol bound and downgrade
+                # the transport to TRUNCATED so the stage above retries or skips
+                # the turn instead of blocking the adapter on a mislabelled
+                # unknown.
+                bounded = _utf8(text[:_MAX_TEXT_CHARS])[:_MAX_TEXT_BYTES].decode(
+                    "utf-8", errors="ignore"
+                )
+                if transport == "COMPLETE":
+                    transport, completeness = "TRUNCATED", "TRUNCATED"
             if bounded is None:
                 with self._lock:
                     self.blocked = True
