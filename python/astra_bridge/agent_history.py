@@ -350,10 +350,22 @@ def project_artifacts(history, session_id, problem_hash):
                 # would pick different winners, and the Node-selected source
                 # would have no ACTIVE row in the projection (the FIELD_VALUE
                 # class of failure).
+                # The same gate also drops any packet whose claim, derivation or
+                # candidateProposal exceeds 4096 code points (agent-loop.ts
+                # evaluateConsensus). The Host must apply that exact filter as
+                # well: an overlong ballot the Node discarded would otherwise
+                # still vote in this projection, the two sides would crown
+                # different front-runners, and the Node-delivered source would
+                # again have no ACTIVE row.
                 if (
                     isinstance(candidate, str)
                     and js_nonempty(candidate)
                     and packet.get("deliveryStatus") == "COMPLETE"
+                    and all(
+                        not isinstance(packet.get(field), str)
+                        or len(packet[field]) <= 4096
+                        for field in ("claim", "derivation", "candidateProposal")
+                    )
                 ):
                     candidate_ids.append((candidate_id, candidate))
         # Match Node. A packet carrying a machine-readable CERT1|FINAL row is
