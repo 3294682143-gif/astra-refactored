@@ -6,7 +6,8 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
-    { "path": "../domain-contract" }
+    { "path": "../domain-contract" },
+    { "path": "../scenario-sdk" }
   ],
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

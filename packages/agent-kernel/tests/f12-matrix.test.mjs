@@ -84,6 +84,8 @@ test("T33: 新领域仅凭 DomainAdapter 接口注册即可由同一内核调度
     },
     validateContract: () => ({ valid: true, errors: [] }),
     buildWorkContext: () => ({ systemPromptSegment: "dummy sys", availableTools: [] }),
+    validateWorkPacket: () => ({ accepted: true }),
+    classifyRoute: () => ({ isSubstantive: true, score: 1 }),
     interpretObservation: () => [],
     proposeChecks: () => [],
     assessObligation() {
@@ -98,7 +100,7 @@ test("T33: 新领域仅凭 DomainAdapter 接口注册即可由同一内核调度
   const hostPorts = {
     model: { requestCompletion: async () => ({ content: "ok", finishReason: "stop", usage: {} }) },
     asset: { execute: async () => ({ callId: "c0", toolName: "none", status: "SUCCESS", output: null }) },
-    clock: { nowMonotonicMs: () => 100 },
+    clock: { nowMonotonicMs: () => 100, remainingBudgetMs: () => 10000 },
   };
   const result = await runUniversalAgentLoop({
     domainAdapter: dummyAdapter,

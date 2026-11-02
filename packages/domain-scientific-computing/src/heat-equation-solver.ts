@@ -156,6 +156,66 @@ export class HeatEquationSolver {
    * Perform Richardson extrapolation over multi-mesh refinement (e.g. nx=20, 40, 80)
    * to strictly verify theoretical O(dx^2) spatial convergence and CFL stability.
    */
+  static simulateProfile(params: {
+    readonly alpha: number;
+    readonly tFinal: number;
+    readonly nx?: number;
+    readonly initialProfile: readonly { readonly x: number; readonly value: number }[];
+    readonly boundaryLeft: number;
+    readonly boundaryRight: number;
+  }): { readonly xGrid: number[]; readonly numericalValues: number[]; readonly dt: number; readonly cfl: number } {
+    if (!(params.alpha > 0) || !(params.tFinal > 0)) {
+      throw new Error("alpha and tFinal must be positive");
+    }
+    if (params.initialProfile.length < 2) {
+      throw new Error("initialProfile requires at least two points");
+    }
+    const nx = params.nx ?? 80;
+    if (!Number.isInteger(nx) || nx < 2) {
+      throw new Error("nx must be an integer greater than one");
+    }
+    const profile = [...params.initialProfile].sort((a, b) => a.x - b.x);
+    const length = profile[profile.length - 1]!.x - profile[0]!.x;
+    const x0 = profile[0]!.x;
+    if (!(length > 0) || profile.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.value))) {
+      throw new Error("initialProfile is invalid");
+    }
+    const interpolate = (x: number): number => {
+      if (x <= profile[0]!.x) return profile[0]!.value;
+      if (x >= profile[profile.length - 1]!.x) return profile[profile.length - 1]!.value;
+      for (let index = 1; index < profile.length; index += 1) {
+        const right = profile[index]!;
+        if (x <= right.x) {
+          const left = profile[index - 1]!;
+          const ratio = (x - left.x) / (right.x - left.x);
+          return left.value + ratio * (right.value - left.value);
+        }
+      }
+      return profile[profile.length - 1]!.value;
+    };
+    const dx = length / nx;
+    const dt = (0.16 * dx * dx) / params.alpha;
+    const cfl = (params.alpha * dt) / (dx * dx);
+    const xGrid = Array.from({ length: nx + 1 }, (_, index) => x0 + index * dx);
+    const u = xGrid.map((x) => interpolate(x));
+    const uNext = new Array<number>(nx + 1);
+    let t = 0;
+    while (t < params.tFinal - 1e-12) {
+      const currentDt = Math.min(dt, params.tFinal - t);
+      const r = (params.alpha * currentDt) / (dx * dx);
+      for (let index = 1; index < nx; index += 1) {
+        uNext[index] = u[index]! + r * (u[index + 1]! - 2 * u[index]! + u[index - 1]!);
+      }
+      uNext[0] = params.boundaryLeft;
+      uNext[nx] = params.boundaryRight;
+      for (let index = 0; index <= nx; index += 1) {
+        u[index] = uNext[index]!;
+      }
+      t += currentDt;
+    }
+    return { xGrid, numericalValues: u, dt, cfl };
+  }
+
   static verifyConvergence(
     baseParams: HeatSimulationParams = {},
     meshCounts: number[] = [20, 40, 80]

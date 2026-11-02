@@ -292,9 +292,10 @@ export class ParameterEstimator {
     const [rawM, rawC, rawK] = theta;
 
     // Physical sanity: mass, damping, stiffness
-    const m = Math.max(1e-4, rawM);
-    const c = Math.max(1e-4, rawC);
-    const k = Math.max(1e-4, rawK);
+    const m = rawM;
+    const c = rawC;
+    const k = rawK;
+    const physicallyValid = m > 0 && c > 0 && k > 0;
 
     // Compute residual series & standard errors
     let rss = 0.0;
@@ -313,19 +314,20 @@ export class ParameterEstimator {
     const seK = Math.sqrt(Math.max(1e-8, sigma2 * invA[2]![2]!));
 
     const confidenceIntervals: ConfidenceIntervals = {
-      mass: [Math.max(0, m - 1.96 * seM), m + 1.96 * seM],
-      damping: [Math.max(0, c - 1.96 * seC), c + 1.96 * seC],
-      stiffness: [Math.max(0, k - 1.96 * seK), k + 1.96 * seK],
+      mass: [m - 1.96 * seM, m + 1.96 * seM],
+      damping: [c - 1.96 * seC, c + 1.96 * seC],
+      stiffness: [k - 1.96 * seK, k + 1.96 * seK],
     };
 
     // 3. Sampling Rate Aliasing Guard (< 10x Bandwidth)
-    const omegaN = Math.sqrt(k / m);
-    const systemBandwidthHz = omegaN / (2.0 * Math.PI);
+    const systemBandwidthHz = physicallyValid ? Math.sqrt(k / m) / (2.0 * Math.PI) : 0;
     const tenTimesBandwidthHz = 10.0 * systemBandwidthHz;
-    const aliasingDetected = fsHz < tenTimesBandwidthHz;
-    const aliasingVerdict = aliasingDetected
-      ? `欠采样混叠违规：采样率 fs=${fsHz.toFixed(2)}Hz < 10×系统特征带宽 (10×${systemBandwidthHz.toFixed(2)}Hz = ${tenTimesBandwidthHz.toFixed(2)}Hz)，义务不可关闭`
-      : `采样率满足抗混叠准则 (fs=${fsHz.toFixed(2)}Hz >= 10×带宽 ${tenTimesBandwidthHz.toFixed(2)}Hz)`;
+    const aliasingDetected = !physicallyValid || fsHz < tenTimesBandwidthHz;
+    const aliasingVerdict = !physicallyValid
+      ? "辨识参数未满足 m>0, c>0, k>0，禁止进行物理验收"
+      : aliasingDetected
+        ? `欠采样混叠违规：采样率 fs=${fsHz.toFixed(2)}Hz < 10×系统特征带宽 (10×${systemBandwidthHz.toFixed(2)}Hz = ${tenTimesBandwidthHz.toFixed(2)}Hz)，义务不可关闭`
+        : `采样率满足抗混叠准则 (fs=${fsHz.toFixed(2)}Hz >= 10×带宽 ${tenTimesBandwidthHz.toFixed(2)}Hz)`;
 
     // 4. Holdout Validation Forward Simulation
     const simulatedTrajectory: number[] = [];
@@ -337,7 +339,8 @@ export class ParameterEstimator {
       : 0.0;
 
     const valErrors: number[] = [];
-    for (const vIdx of dataset.valIndices) {
+    if (physicallyValid) {
+      for (const vIdx of dataset.valIndices) {
       const p = dataset.points[vIdx]!;
       simulatedTrajectory.push(simX);
       const err = p.x - simX;
@@ -357,9 +360,10 @@ export class ParameterEstimator {
 
       simX += (dt / 6.0) * (k1x + 2 * k2x + 2 * k3x + k4x);
       simV += (dt / 6.0) * (k1v + 2 * k2v + 2 * k3v + k4v);
+      }
     }
 
-    const holdoutRmse = dataset.valIndices.length > 0 ? Math.sqrt(valRss / dataset.valIndices.length) : 0.0;
+    const holdoutRmse = physicallyValid && dataset.valIndices.length > 0 ? Math.sqrt(valRss / dataset.valIndices.length) : Number.MAX_VALUE;
     const rmsePassed = holdoutRmse <= maxHoldoutRmse;
 
     // 5. Residual Whiteness Diagnosis (Autocorrelation Test on model error differences)
@@ -378,7 +382,7 @@ export class ParameterEstimator {
       }
     }
     const lag1Autocorrelation = autoCorrDen > 1e-12 ? autoCorrNum / autoCorrDen : 0.0;
-    const isWhite = lag1Autocorrelation < 0.2 && rmsePassed;
+    const isWhite = physicallyValid && lag1Autocorrelation < 0.2 && rmsePassed;
     const whitenessDiagnosis = isWhite ? "RESIDUAL_WHITE" : "STRUCTURE_UNDERDETERMINED";
     const whitenessVerdict = isWhite
       ? `残差呈现白噪声特征 (差分自相关 r1=${lag1Autocorrelation.toFixed(3)} < 0.200, RMSE=${holdoutRmse.toFixed(4)})，模型结构与拟合充分`

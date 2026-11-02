@@ -31,6 +31,23 @@ class ReasoningAgent:
     it is never silently downgraded to lite/legacy.
     """
 
+    SCENARIO_ID = "math.research"
+
+    @classmethod
+    def get_scenario_contract(cls):
+        """E07: Retrieve canonical ScenarioContract for mathematics research."""
+        from python.astra_bridge.scenario_contracts import MATH_SCENARIO_CONTRACT
+        return MATH_SCENARIO_CONTRACT
+
+    @classmethod
+    def get_role_mappings(cls, engine: str = "ts"):
+        """E07: Retrieve role source mappings for this engine."""
+        from python.astra_bridge.scenario_contracts import ROLE_SOURCE_MAPPINGS
+        return [
+            m for m in ROLE_SOURCE_MAPPINGS
+            if m.target_scenario_id == cls.SCENARIO_ID and m.source_engine == engine
+        ]
+
     def __init__(self, client, *args, **kwargs):
         engine = kwargs.pop("engine", "ts")
         if engine not in _ENGINES:

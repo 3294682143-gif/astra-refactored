@@ -11,6 +11,7 @@ import { ComparePage } from "./pages/batch/ComparePage";
 import { ProtocolPage } from "./pages/protocol/ProtocolPage";
 import { ResiliencePage } from "./pages/protocol/ResiliencePage";
 import { DomainsPage } from "./pages/domains/DomainsPage";
+import { ScenarioWorkspacePage } from "./pages/scenarios/ScenarioWorkspacePage";
 import { AssetsPage } from "./pages/assets/AssetsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 
@@ -31,6 +32,8 @@ export const router = createBrowserRouter([
       { path: "protocol", element: <ProtocolPage /> },
       { path: "protocol/resilience", element: <ResiliencePage /> },
       { path: "domains", element: <DomainsPage /> },
+      { path: "scenarios/:scenarioId", element: <ScenarioWorkspacePage /> },
+      { path: "scenarios", element: <DomainsPage /> },
       { path: "assets", element: <AssetsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <Navigate to="/home" replace /> },

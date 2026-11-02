@@ -1,0 +1,94 @@
+{
+  "matrixVersion": "1.1.0-current-source",
+  "description": "Scientific acceptance thresholds aligned with current source. Bundled CSV files are synthetic benchmarks.",
+  "domains": {
+    "math.research": {
+      "cases": [
+        {
+          "caseId": "math_polynomial_identity_01",
+          "taskKind": "SYMBOLIC_IDENTITY_CHECK",
+          "expectedArtifactRef": "math-assets.json#equations_simplify",
+          "physicalPrerequisites": ["AST input within whitelisted grammar", "No undefined singularities in simplified domain"],
+          "independentEvaluator": "mathagent.tools.audit_output",
+          "groundTruth": {"symbolicDiffZero": true, "evidenceLevel": "BOUNDED_OBSERVATION"},
+          "expectedTerminalState": "ACCEPTED_WITHIN_SCOPE"
+        },
+        {
+          "caseId": "math_input_scope_fault_02",
+          "taskKind": "INPUT_REJECTION",
+          "expectedArtifactRef": "oversized_matrix.json",
+          "physicalPrerequisites": ["Matrix larger than 8x8 or polynomial degree above 12"],
+          "independentEvaluator": "validate_inputs",
+          "groundTruth": {"errorCode": "INPUT_INVALID", "fabricatedOutput": false},
+          "expectedTerminalState": "CORRECT_REJECTION"
+        }
+      ]
+    },
+    "control.identification": {
+      "cases": [
+        {
+          "caseId": "control_oscillator_fit_02",
+          "taskKind": "PARAMETER_IDENTIFICATION",
+          "expectedArtifactRef": "oscillator_real_sample.csv",
+          "physicalPrerequisites": ["Single degree of freedom linear viscous damping", "Anti-aliasing sampling guard satisfied", "80% train / 20% holdout split"],
+          "independentEvaluator": "ParameterEstimator with holdout and residual diagnostics",
+          "groundTruth": {"expectedRmse": 0.05, "residualMaxLag1Autocorrelation": 0.2, "positivePhysicalParameters": true, "leakageDetected": false},
+          "expectedTerminalState": "ACCEPTED_WITHIN_SCOPE"
+        },
+        {
+          "caseId": "control_aliasing_fault_05",
+          "taskKind": "FAULT_DIAGNOSIS",
+          "expectedArtifactRef": "undersampled_oscillator.csv",
+          "physicalPrerequisites": ["Sampling rate below 10x system bandwidth"],
+          "independentEvaluator": "control_aliasing_guard",
+          "groundTruth": {"aliasingDetected": true, "obligationClosable": false},
+          "expectedTerminalState": "REFUTED"
+        }
+      ]
+    },
+    "scientific_computing.heat_transfer": {
+      "cases": [
+        {
+          "caseId": "scicomp_heat_convergence_03",
+          "taskKind": "NUMERICAL_GRID_CONVERGENCE",
+          "expectedArtifactRef": "heat_rod_experimental_sample.csv",
+          "physicalPrerequisites": ["1D transient heat equation with Dirichlet boundaries", "CFL stability condition r <= 0.5"],
+          "independentEvaluator": "HeatEquationSolver.verifyConvergence with experimental comparison",
+          "groundTruth": {"orderP": 2.0, "maxOrderErr": 0.2, "maxCflRatio": 0.5, "maxExperimentRmse": 1.0},
+          "expectedTerminalState": "ACCEPTED_WITHIN_SCOPE"
+        },
+        {
+          "caseId": "scicomp_cfl_fault_06",
+          "taskKind": "FAULT_DIAGNOSIS",
+          "expectedArtifactRef": "unstable_heat_config.json",
+          "physicalPrerequisites": ["Time step deliberately exceeds CFL limit"],
+          "independentEvaluator": "scicomp.cfl_guard",
+          "groundTruth": {"cflDetected": true, "obligationClosable": false},
+          "expectedTerminalState": "REFUTED"
+        }
+      ]
+    },
+    "data_analysis.statistical_inference": {
+      "cases": [
+        {
+          "caseId": "data_two_group_welch_04",
+          "taskKind": "STATISTICAL_HYPOTHESIS_TEST",
+          "expectedArtifactRef": "clinical_trial_sample.csv",
+          "physicalPrerequisites": ["Two independent groups", "Normality and variance diagnostics evaluated separately"],
+          "independentEvaluator": "StatisticalAnalyzer.analyze using Welch, normal-score and Levene diagnostics",
+          "groundTruth": {"alpha": 0.05, "normalScoreMaxAbs": 2.0, "requiresEffectSize": true, "requires95Ci": true},
+          "expectedTerminalState": "ACCEPTED_WITHIN_SCOPE"
+        },
+        {
+          "caseId": "data_assumption_fault_07",
+          "taskKind": "FAULT_DIAGNOSIS",
+          "expectedArtifactRef": "non_normal_trial.csv",
+          "physicalPrerequisites": ["Heavy one-sided outliers violate normality assumptions"],
+          "independentEvaluator": "normality and assumption diagnostics",
+          "groundTruth": {"assumptionViolationDetected": true, "unimplementedNonparametricSubstituteClaimed": false},
+          "expectedTerminalState": "REFUTED"
+        }
+      ]
+    }
+  }
+}

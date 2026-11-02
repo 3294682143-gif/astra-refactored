@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../domain-contract" },
+    { "path": "../scenario-sdk" },
+    { "path": "../domain-math" },
+    { "path": "../domain-control" },
+    { "path": "../domain-scientific-computing" },
+    { "path": "../domain-data-analysis" }
+  ],
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

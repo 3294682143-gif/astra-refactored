@@ -1,0 +1,22 @@
+{
+  "datasetId": "heat_conduction_1d_benchmark_v1",
+  "name": "一维金属棒瞬态热传导合成基准",
+  "license": "Synthetic benchmark; no external experimental provenance",
+  "provenance": "synthetic_generated",
+  "realExperimentalData": false,
+  "rodLengthMeters": 1.0,
+  "thermalDiffusivityAlpha": 0.05,
+  "spatialSensorsAtInitialTime": 21,
+  "timeFinalSeconds": 0.4,
+  "initialCondition": "T(x, 0) = 20.0 C except left Dirichlet boundary",
+  "boundaryConditions": {
+    "x_0": "Dirichlet: 100.0 C",
+    "x_L": "Dirichlet: 20.0 C"
+  },
+  "cflStabilityCondition": "r = alpha * dt / dx^2 <= 0.5",
+  "units": {
+    "time": "s",
+    "position": "m",
+    "temperature": "degC"
+  }
+}

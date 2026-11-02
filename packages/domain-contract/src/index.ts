@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./scenario-contracts.js";
 
 /**
  * Validates whether a candidate conforms to the strict Zygos candidate integrity rules.

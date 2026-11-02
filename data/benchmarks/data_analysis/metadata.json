@@ -1,0 +1,22 @@
+{
+  "datasetId": "two_group_statistical_benchmark_v1",
+  "name": "两组平行对照评分变化合成统计基准",
+  "license": "Synthetic benchmark; not human-subject or clinical data",
+  "provenance": "synthetic_generated",
+  "realExperimentalData": false,
+  "designType": "Synthetic two-group parallel comparison",
+  "sampleSize": {
+    "control": 35,
+    "treatment": 35,
+    "total": 70
+  },
+  "groupColumn": "group",
+  "valueColumn": "score_change",
+  "baselineColumn": "baseline_score",
+  "covariates": [
+    "age",
+    "sex"
+  ],
+  "researchHypothesis": "Treatment group exhibits a different mean score change from Control",
+  "recommendedAlpha": 0.05
+}

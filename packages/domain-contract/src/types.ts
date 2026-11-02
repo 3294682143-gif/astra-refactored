@@ -151,6 +151,9 @@ export interface RunResult {
     readonly tokensConsumed?: number;
   };
   readonly artifactRefs: readonly string[];
+  readonly obligationStates?: Readonly<Record<string, ObligationState>>;
+  readonly deliverySummary?: string;
+  readonly candidateVerified?: false;
 }
 
 // ============================================================================
@@ -323,6 +326,9 @@ export interface HostPorts {
   };
   readonly asset: {
     readonly execute: (toolName: string, params: Record<string, unknown>) => Promise<TrustedToolReceipt>;
+  };
+  readonly validator?: {
+    readonly execute: (check: CheckSpec, candidate: CandidateView) => Promise<AcceptanceReceipt>;
   };
   readonly clock: {
     readonly nowMonotonicMs: () => number;

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../domain-contract" },
+    { "path": "../agent-kernel" }
+  ],
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

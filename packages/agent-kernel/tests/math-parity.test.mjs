@@ -231,47 +231,12 @@ async function runKernelMath(rawInput, runSpec, budget, hostPorts) {
     rawInput,
   });
 
-  // Re-project delivery from final view to inspect certificate parity
   const draft = adapter.compileContract(rawInput);
-  const goalContract = {
-    originalInputRef: runSpec.inputRefs[0] || "input_0",
-    goals: draft.goals,
-    scope: draft.scope,
-    obligations: draft.proposedObligations.map((po) => ({
-      id: po.id,
-      kind: po.kind,
-      subjectRef: "initial_target",
-      scopeRef: "initial_scope",
-      acceptancePolicyRef: "default_policy",
-      state: "ACCEPTED_WITHIN_SCOPE",
-    })),
-    version: 1,
-  };
-  const delivery = adapter.projectDelivery({
-    runSpec,
-    goalContract,
-    candidate: {
-      candidateId: "cand_initial",
-      version: 1,
-      claimRefs: ["claim_1"],
-      supportRefs: ["art_initial_derivation"],
-      deliverable: true,
-      candidateVerified: false,
-      rawContent: "candidate_payload",
-    },
-    observations: [],
-  });
-
-  const obligationStates = {};
-  for (const po of draft.proposedObligations) {
-    obligationStates[po.id] = "ACCEPTED_WITHIN_SCOPE";
-  }
-
   return {
     ...kernelResult,
-    deliveryCertificateText: delivery.formattedSummary,
+    deliveryCertificateText: kernelResult.deliverySummary ?? "",
     obligationSequence: draft.proposedObligations.map((o) => o.id),
-    obligationStates,
+    obligationStates: kernelResult.obligationStates ?? {},
     candidateVerified: false,
     goals: draft.goals,
   };

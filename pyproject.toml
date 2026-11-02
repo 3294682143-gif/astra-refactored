@@ -14,6 +14,8 @@ web = [
     "pydantic>=2.6,<3",
     "starlette>=0.37,<2",
     "uvicorn>=0.30,<1",
+    "pypdf>=4,<7",
+    "pillow>=10,<13",
 ]
 
 [tool.setuptools]

@@ -16,7 +16,6 @@
     "noFallthroughCasesInSwitch": true,
     "allowImportingTsExtensions": true,
     "types": ["node"],
-    "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]

@@ -1,0 +1,16 @@
+{
+  "name": "@zygos/scenario-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Scientific Scenario Plugin SDK & Universal Scenario Registry for Track 160",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@zygos/agent-kernel": "workspace:*",
+    "@zygos/domain-contract": "workspace:*"
+  }
+}

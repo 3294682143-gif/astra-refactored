@@ -1,0 +1,23 @@
+{
+  "datasetId": "control_damped_oscillator_benchmark_v1",
+  "name": "单自由度受迫阻尼振子合成时序基准",
+  "license": "Synthetic benchmark; no external experimental provenance",
+  "provenance": "synthetic_generated",
+  "realExperimentalData": false,
+  "samplingFrequencyHz": 100.0,
+  "totalDurationSeconds": 0.99,
+  "totalSamples": 100,
+  "timeColumn": "time_s",
+  "excitationColumn": "excitation_u_N",
+  "responseColumn": "measured_displacement_x_m",
+  "units": {
+    "time": "s",
+    "excitation": "N",
+    "displacement": "m"
+  },
+  "physicsModel": "m * x''(t) + c * x'(t) + k * x(t) = u(t)",
+  "recommendedTrainRatio": 0.8,
+  "recommendedHoldoutRatio": 0.2,
+  "bandwidthHz": 1.0,
+  "antiAliasingPassed": true
+}

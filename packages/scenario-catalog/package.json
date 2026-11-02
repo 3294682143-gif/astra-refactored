@@ -1,0 +1,24 @@
+{
+  "name": "@zygos/scenario-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "catalog": "node dist/src/cli.js"
+  },
+  "dependencies": {
+    "@zygos/domain-contract": "workspace:*",
+    "@zygos/domain-control": "workspace:*",
+    "@zygos/domain-data-analysis": "workspace:*",
+    "@zygos/domain-math": "workspace:*",
+    "@zygos/domain-scientific-computing": "workspace:*",
+    "@zygos/scenario-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "typescript": "5.9.3"
+  }
+}
