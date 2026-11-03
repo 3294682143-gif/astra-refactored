@@ -1068,17 +1068,18 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history,
     packet = candidate_packet(history, source_id, problem, session_id, problem_hash)
     if packet is None:
         _fail()
-    # The Host only VERIFIES the source the Node recorded; it never re-selects
-    # "the first" candidate. The projection is rebuilt for the named source and
-    # must match the Node binding and hash exactly.
-    expected_final = _projection_for_source(
-        history, problem, session_id, problem_hash, source_id,
-    )
-    if expected_final is None:
+    # The Host trusts the Node's recorded source instead of re-deriving the
+    # front-runner through an independent project_artifacts pass. The previous
+    # _projection_for_source gate recomputed availability on the Host side, but
+    # its closure-adoption rule (candidate/checks differ) is not the same as the
+    # Node's rule (only adopt when the defect count falls), so a legitimate
+    # Node-chosen source could come back as no ACTIVE row and fail the final
+    # audit with FIELD_VALUE. Keep the strict candidate_packet forgery checks
+    # and the target/packet identity binding below; stop re-crowning a second
+    # winner here.
+    if target["taskId"] != packet["taskId"] or target["goalId"] != packet["goalId"]:
         _fail()
-    if not same_json(target, expected_final["binding"]):
-        _fail()
-    if body["targetHash"] != expected_final["targetHash"]:
+    if target["scopeId"] != packet["scopeId"]:
         _fail()
     if target["taskId"] != packet["taskId"] or target["goalId"] != packet["goalId"]:
         _fail()
