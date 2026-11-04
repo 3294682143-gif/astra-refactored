@@ -631,7 +631,11 @@ export class P4CandidateGate {
     }
     const challengeIds = new Set<string>();
     for (const item of challenges) {
-      const row = exact(item, CHALLENGE_FIELDS);
+      const allowedKeys =
+        isPlainObject(item) && "challengeOrigin" in item
+          ? [...CHALLENGE_FIELDS, "challengeOrigin"]
+          : CHALLENGE_FIELDS;
+      const row = exact(item, allowedKeys);
       const challengeId = boundedText(row.challengeId, MAX_SHORT_CHARS);
       if (challengeIds.has(challengeId)) {
         fail(P2_ERROR_CODES.DUPLICATE_ID);
@@ -694,7 +698,11 @@ export class P4CandidateGate {
     }
     const actualKeys = new Set<string>();
     for (const item of challenges) {
-      const row = exact(item, CHALLENGE_FIELDS);
+      const allowedKeys =
+        isPlainObject(item) && "challengeOrigin" in item
+          ? [...CHALLENGE_FIELDS, "challengeOrigin"]
+          : CHALLENGE_FIELDS;
+      const row = exact(item, allowedKeys);
       const key = issueKey(exact(row.issue, ISSUE_FIELDS));
       if (actualKeys.has(key)) {
         fail(P2_ERROR_CODES.DUPLICATE_ID);

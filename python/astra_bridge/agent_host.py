@@ -20,7 +20,9 @@ from pathlib import Path
 
 from .agent_client import AgentClient
 from .agent_context import (
+    _expected_target_for_source,
     _projection_for_source,
+    _target_hash_for_binding,
     _work_ordinals,
     candidate_packet,
     validate_context,
@@ -1913,23 +1915,28 @@ class AgentHost(_Host):
             for other_ordinal, other_id in ordered:
                 if other_ordinal < ordinal:
                     prior[other_id] = self.history[other_id]
-            # The Host only VERIFIES the projection the Node recorded for this
-            # WORK context; it never re-selects "the first" candidate. The
-            # expected projection is rebuilt for the recorded source request.
+            # The Host trusts the Node-recorded source for this WORK context;
+            # it never re-selects "the first" candidate. The forgery boundary
+            # is kept: the source must be a real eligible candidate packet, the
+            # recorded answer must equal that packet's candidate, and the target
+            # hash is recomputed from the declared binding plus the Host-owned
+            # raw receipt bytes.
             recorded = body.get("protectedCandidate")
             recorded_source = None
             if isinstance(recorded, dict) and isinstance(recorded.get("binding"), dict):
                 recorded_source = recorded["binding"].get("sourceRequestId")
             expected = None
             if isinstance(recorded_source, str):
-                expected = _projection_for_source(
+                expected = _expected_target_for_source(
                     prior, self.problem, self.session_id, self.problem_hash, recorded_source,
                 )
             legal = (
                 body.get("schemaVersion") == "agent-work-context-v7"
                 and body.get("allowFinal") is True
                 and expected is not None
-                and same_json(recorded, expected)
+                and recorded.get("answer") == expected["answer"]
+                and recorded.get("targetHash")
+                == _target_hash_for_binding(recorded["binding"], expected["rawText"])
                 and action.get("answer") == expected["answer"]
                 and action.get("complete") is True
                 and action.get("unresolved") == []
@@ -1941,7 +1948,7 @@ class AgentHost(_Host):
                     if later_ordinal > ordinal:
                         _fail()
                 continue
-            if candidate is not None and candidate != expected["binding"]["sourceRequestId"]:
+            if candidate is not None and candidate != recorded_source:
                 _fail()
             for later_ordinal, later_id in ordered:
                 if later_ordinal <= ordinal:

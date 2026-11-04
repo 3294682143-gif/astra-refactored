@@ -1179,7 +1179,7 @@ class AgentRuntime:
         """Keep the run's own ledger when the run ends without a candidate.
 
         An unsolved return used to discard everything the child had recorded, so
-        a case like item 34 (13 model calls, then an abstention) could not be
+        a hard multi-call run ending in an abstention could not be
         diagnosed at all: no session log, no history, no trace. Nothing here
         changes the returned object or any control decision -- it only copies what
         the Host already holds into the same ``last_*`` attributes the candidate

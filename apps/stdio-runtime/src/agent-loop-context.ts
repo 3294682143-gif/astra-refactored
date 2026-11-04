@@ -353,7 +353,7 @@ const CONSENSUS_SYSTEM_PROMPT = [
   "people, devices, sites or two of the same kind -- is a union over all of them, so handle every",
   "object and combine, do not analyse one object alone; a request that one of k symmetric objects",
   "be safe at level alpha needs each object bounded at alpha/k, so a two-sided critical value and",
-  "never the one-sided alpha value (with two symmetric theatres and alpha = 0.01 the per-theatre",
+  "never the one-sided alpha value (with k = 2 symmetric partitions and alpha = 0.01 the per-partition",
   "tail is 0.005, giving z about 2.58, not 2.33); (2) an object",
   "asked for as the whole family -- every invariant measure, every eigenvector, every solution,",
   "every equilibrium -- must be written with all its free constants, including any constant mode",

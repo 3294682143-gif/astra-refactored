@@ -78,9 +78,15 @@ def check_migration(strict: bool = False) -> int:
             print(f"FAIL: Ledger {ledger_path} missing in strict mode", file=sys.stderr)
             return 1
 
+    # Ensure all 26 assets have non-empty behaviors
+    empty_assets = [a["assetId"] for a in assets if len(a.get("behaviors", [])) == 0]
+    if empty_assets:
+        print(f"FAIL: Assets with empty behaviors ({len(empty_assets)}): {empty_assets}", file=sys.stderr)
+        return 1
+
     print("ALL MIGRATION CHECKS PASSED:")
-    print(f"  Canonical assets: {len(assets)}/26")
-    print(f"  Computational behaviors: {total_behaviors}/82")
+    print(f"  Canonical assets: {len(assets)}/26 (0 empty-shell assets)")
+    print(f"  Computational behaviors: {total_behaviors}/96 (82 legacy + {total_behaviors - 82} generalized)")
     print(f"  Registered tools mapped: {len(bound_tools)}/76 (0 unmapped)")
     print(f"  Behaviors with consumers: {total_behaviors}/{total_behaviors} (0 missing)")
     print(f"  Methods accounted for: {len(all_methods)}/20")

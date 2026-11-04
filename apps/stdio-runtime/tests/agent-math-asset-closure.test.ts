@@ -15,8 +15,8 @@ import { reactivePorts, reactiveWork } from "./agent-loop-test-support.js";
  * The `math_asset` path must feed answer closure exactly like the legacy tool
  * path does.
  *
- * Item 34 is the motivating case: the model called a math asset on the
- * Alexander matrix, the asset returned the correct invariant polynomial, and the
+ * Polynomial matrix invariant problems are the motivating case: the model called a math asset on the
+ * presentation matrix, the asset returned the correct invariant polynomial, and the
  * loop still delivered a degree-2 guess. The legacy `exact_check_expr` tool path
  * is already covered by `agent-answer-closure-loop.test.ts`; this file covers the
  * unified `math_asset` path, which builds its observation view from
@@ -174,7 +174,7 @@ test("a closure turn that keeps the wrong degree leaves the candidate alone", as
 
 
 test("an abstention triggers one forced asset turn before it is accepted", async () => {
-  // Item 34 abandons the task before any packet exists, so the forced asset turn
+  // A hard polynomial-invariant task may abandon before any packet exists, so the forced asset turn
   // (which normally runs after a candidate packet) was never reached even though
   // the problem text routes deterministically to a math asset. The abstention now
   // triggers that one observation turn, and the answer is delivered afterwards.

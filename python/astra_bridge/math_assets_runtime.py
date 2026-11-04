@@ -28,6 +28,54 @@ from .generated.math_assets import (
     MATH_BEHAVIOR_LOOKUP,
 )
 from mathagent.tools import RegisteredExecutor
+from mathagent.core.generalized_math_operators import (
+    permutation_word_eval,
+    polynomial_matrix_invariants,
+    berlekamp_massey_recurrence,
+    characteristic_general_solution,
+    contraction_fixed_point_iter,
+    finite_topology_axioms_check,
+    simplicial_euler_homology,
+    covering_fundamental_group_abelianization,
+    mle_fisher_score_check,
+    sampling_distribution_quantiles,
+    linear_regression_anova_identities,
+    lean4_verify_obligation,
+    bounded_counterexample_search,
+    boolean_sat_tautology_check,
+)
+
+GENERALIZED_OPERATOR_DISPATCH = {
+    "permutation_word_eval": permutation_word_eval,
+    "polynomial_matrix_invariants": polynomial_matrix_invariants,
+    "berlekamp_massey_recurrence": berlekamp_massey_recurrence,
+    "characteristic_general_solution": characteristic_general_solution,
+    "contraction_fixed_point_iter": contraction_fixed_point_iter,
+    "finite_topology_axioms_check": finite_topology_axioms_check,
+    "simplicial_euler_homology": simplicial_euler_homology,
+    "covering_fundamental_group_abelianization": covering_fundamental_group_abelianization,
+    "mle_fisher_score_check": mle_fisher_score_check,
+    "sampling_distribution_quantiles": sampling_distribution_quantiles,
+    "linear_regression_anova_identities": linear_regression_anova_identities,
+    "lean4_verify_obligation": lean4_verify_obligation,
+    "bounded_counterexample_search": bounded_counterexample_search,
+    "boolean_sat_tautology_check": boolean_sat_tautology_check,
+}
+
+GENERALIZED_TARGET_ALIASES = {
+    "pattern_avoiding_words_count": "avoiding_permutations",
+    "restricted_position_rook_count": "rook_numbers",
+    "transfer_matrix_walk_count": "transition_count",
+    "digit_deletion_divisibility_extremum": "deletion_divisible_largest",
+    "independent_set_polynomial_coeff": "independence_polynomial",
+    "impartial_game_outcome_dp": "deck_game_outcome",
+    "linear_invariant_elimination": "polynomial_invariant",
+    "threshold_recurrence_bound": "characteristic_general_solution",
+    "dictionary_lz78_encode": "lz78_encode",
+    "curvilinear_laplacian_2d": "circle_laplacian",
+    "compound_binomial_normal_quantile": "normal_overflow_seats",
+    "trig_power_fourier_reduction": "trig_reduce",
+}
 
 # Context keys that must come strictly from the control side; model injection is refused.
 CONTROL_BINDING_KEYS = frozenset([
@@ -118,6 +166,9 @@ def _resolve_target_and_behavior(
         elif raw_t in ("maximal_minors", "minors"):
             request_target = "maximal_minors"
 
+    if request_target and request_target in GENERALIZED_TARGET_ALIASES:
+        request_target = GENERALIZED_TARGET_ALIASES[request_target]
+
     # 1. Explicit request target
     if request_target:
         for b in behaviors:
@@ -128,6 +179,8 @@ def _resolve_target_and_behavior(
     raw_target = input_data.get("target")
     if not raw_target:
         raw_target = input_data.get("operation") or input_data.get("behavior")
+    if raw_target and raw_target in GENERALIZED_TARGET_ALIASES:
+        raw_target = GENERALIZED_TARGET_ALIASES[raw_target]
 
     # 2. Direct behavior target match
     for b in behaviors:
@@ -373,6 +426,68 @@ def use_math_asset(
 
     scope = behavior.get("declaredScope", "EXACT")
     eff_deadline = deadline if deadline is not None else (time.monotonic() + 30.0)
+
+    # Dispatch to generalized math operators if target is registered
+    if target in GENERALIZED_OPERATOR_DISPATCH:
+        op_func = GENERALIZED_OPERATOR_DISPATCH[target]
+        try:
+            op_kwargs = {
+                k: v
+                for k, v in input_data.items()
+                if k not in ("target", "operation", "behavior")
+            }
+            op_res = op_func(**op_kwargs)
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            res_val = op_res
+            obs = {
+                "quantity": target,
+                "value": res_val,
+                "domain": scope,
+                "exactness": behavior.get("evidenceCeiling", "EXACT_FOR_INPUT"),
+                "coverage": "EXACT_FOR_INPUT" if behavior.get("evidenceCeiling") == "EXACT_FOR_INPUT" else "BOUNDED",
+                "sourceInputHash": input_hash,
+                "taskId": str(context.get("taskId", "")),
+                "contractVersion": int(context.get("contractVersion", 1)),
+            }
+            res_val_hash = _sha256(_canonical_json_bytes(res_val))
+            chk = {
+                "checkerId": f"checker.{target}.v1",
+                "version": "1.0.0",
+                "scope": scope,
+                "inputHash": input_hash,
+                "resultHash": res_val_hash,
+                "status": "AUDITED",
+            }
+            return _make_result(
+                asset_id=asset_id,
+                asset_version=asset.get("version", "1.0.0"),
+                catalog_digest=catalog_digest,
+                context=context,
+                normalized_input=normalized_input,
+                status="COMPLETE",
+                guidance=guidance_list,
+                observations=[obs],
+                checks=[chk],
+                limitations=[],
+                duration_ms=duration_ms,
+                computation_type="NATIVE_PYTHON",
+            )
+        except Exception as exc:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            return _make_result(
+                asset_id=asset_id,
+                asset_version=asset.get("version", "1.0.0"),
+                catalog_digest=catalog_digest,
+                context=context,
+                normalized_input=normalized_input,
+                status="ERROR",
+                guidance=guidance_list,
+                observations=[],
+                checks=[],
+                limitations=[ERR_INPUT_INVALID, str(exc)],
+                duration_ms=duration_ms,
+                computation_type="NATIVE_PYTHON",
+            )
 
     exec_res = executor.execute(legacy_tool, exec_args, deadline=eff_deadline, scope=scope)
     duration_ms = int((time.monotonic() - start_time) * 1000)

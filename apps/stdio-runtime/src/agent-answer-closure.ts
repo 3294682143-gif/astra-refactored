@@ -2490,7 +2490,9 @@ function exactScalarObservation(
       ? ["exact", "value", "result", "numeric"]
       : operation === "SIMPLIFY"
         ? ["simplified", "value", "result"]
-        : ["trig_reduced", "value", "result"];
+        : operation === "CIRCLE_LAPLACIAN" || operation === "PLANAR_LAPLACIAN"
+          ? ["laplacian", "simplified", "value", "result"]
+          : ["trig_reduced", "value", "result"];
   for (const field of fields) {
     const raw = observation[field as keyof ExactObservationView];
     if (typeof raw !== "string") continue;
@@ -2501,7 +2503,14 @@ function exactScalarObservation(
 }
 
 function exactScalarValueDefect(input: AnswerClosureInput): AnswerClosureDefect | null {
-  const operations = ["DEFINITE_INTEGRAL", "LIMIT", "SIMPLIFY", "TRIG_REDUCE"] as const;
+  const operations = [
+    "DEFINITE_INTEGRAL",
+    "LIMIT",
+    "SIMPLIFY",
+    "TRIG_REDUCE",
+    "CIRCLE_LAPLACIAN",
+    "PLANAR_LAPLACIAN",
+  ] as const;
   for (const operation of operations) {
     const observed = exactScalarObservation(
       exactObservationFor(input, operation),
@@ -2844,6 +2853,71 @@ export function answerClosureDefects(
     input.requiresExhaustive === true,
   );
   if (completeness !== null) defects.push(completeness);
+
+  if (Array.isArray(input.toolObservations)) {
+    for (const obs of input.toolObservations) {
+      if (!obs || obs.result === undefined || obs.result === null) continue;
+      const res = obs.result as Record<string, unknown>;
+      if (typeof res === "object") {
+        if ("canonical_cycles" in res) {
+          const check = evaluateDeclarativeClosureContract(
+            "compare.permutation-canonical-cycle.v1",
+            input.candidate,
+            res,
+          );
+          if (!check.satisfied && check.defect) defects.push(check.defect);
+        }
+        if ("normalized_fitting_polynomial" in res) {
+          const check = evaluateDeclarativeClosureContract(
+            "compare.polynomial-up-to-unit.v2",
+            input.candidate,
+            res,
+          );
+          if (!check.satisfied && check.defect) defects.push(check.defect);
+        }
+        if ("basis_dimension" in res) {
+          const check = evaluateDeclarativeClosureContract(
+            "compare.solution-space-basis.v2",
+            input.candidate,
+            res,
+          );
+          if (!check.satisfied && check.defect) defects.push(check.defect);
+        }
+        if ("status" in res && (res.status === "REFUTED" || res.status === "PROVED")) {
+          const check = evaluateDeclarativeClosureContract(
+            "verify.lean4-obligation.v1",
+            input.candidate,
+            res,
+          );
+          if (!check.satisfied && check.defect) defects.push(check.defect);
+        }
+        if (
+          "two_sided_threshold_ceil" in res &&
+          "one_sided_threshold_ceil" in res &&
+          res.two_sided === true &&
+          typeof res.two_sided_threshold_ceil === "number" &&
+          typeof res.one_sided_threshold_ceil === "number"
+        ) {
+          const twoCeil = String(res.two_sided_threshold_ceil);
+          const oneCeil = String(res.one_sided_threshold_ceil);
+          const oneFloor = String(res.one_sided_threshold_ceil - 1);
+          if (
+            !input.candidate.includes(twoCeil) &&
+            (input.candidate.includes(oneCeil) || input.candidate.includes(oneFloor))
+          ) {
+            defects.push(
+              defect(
+                "EXACT_VALUE_MISMATCH",
+                `candidate "${input.candidate}" uses one-sided normal quantile threshold (${oneCeil}), whereas the symmetric two-sided event requires threshold ${twoCeil} (exact quantile ${String(res.quantile ?? twoCeil)})`,
+                "OBSERVATION",
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+
   return defects;
 }
 
@@ -2934,7 +3008,7 @@ export function answerClosureNote(defects: readonly AnswerClosureDefect[]): stri
     ...defects.map((row) => "- " + row.kind + ": " + row.detail + "."),
     ...hints,
     "Return exactly one complete WorkPacket with a corrected candidateProposal.",
-    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet.",
+    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet, and include `CERT1|FINAL|<candidateProposal>` matching the corrected candidateProposal.",
     "Include one `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` row for each corrected property.",
     "If the answer is multiple choice, include `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option in the problem exactly once and make candidateProposal exactly the TRUE options.",
     "If the problem asks for every solution or case, include `CERT1|COMPLETENESS|<exhaustive case split> => PASS`.",
@@ -2942,4 +3016,411 @@ export function answerClosureNote(defects: readonly AnswerClosureDefect[]): stri
     "Do not change tasks, scopes or protocol identity fields; keep claim, derivation and candidateProposal within 4096 Unicode code points each.",
   ];
   return lines.join("\n");
+}
+
+
+export interface DeclarativeClosureContractResult {
+  readonly satisfied: boolean;
+  readonly consumerId: string;
+  readonly defect?: AnswerClosureDefect;
+  readonly normalizedCandidate?: string;
+  readonly details?: string;
+}
+
+/**
+ * Normalizes permutation cycle notation to disjoint canonical cycles:
+ * - Each cycle starts with its minimal element: (2 6 1) -> (1 2 6)
+ * - 1-cycles (fixed points) are omitted unless the whole permutation is empty -> ()
+ * - Disjoint cycles are sorted in ascending order by their leading element.
+ */
+export function canonicalizePermutationCycles(text: string): string {
+  if (typeof text !== "string") return "()";
+  const segments = text.split(/[;；,，\n]+/);
+  const cleanedSegments = segments.map((seg) => {
+    const eqIdx = seg.lastIndexOf("=");
+    return eqIdx >= 0 ? seg.slice(eqIdx + 1) : seg;
+  });
+  const targetText = cleanedSegments.join(" ");
+  const cycleRegex = /[(\[]\s*(\d+(?:[\s,]+\d+)*)\s*[)\]]/g;
+  const cycles: number[][] = [];
+  let match: RegExpExecArray | null;
+  while ((match = cycleRegex.exec(targetText)) !== null) {
+    const group = (match[1] ?? "").trim();
+    const numbers =
+      !/[\s,]/.test(group) && group.length >= 2 && group.length <= 9
+        ? group.split("").map((s) => parseInt(s, 10))
+        : group
+            .split(/[\s,]+/)
+            .filter((s) => s.length > 0)
+            .map((s) => parseInt(s, 10));
+    if (numbers.length > 1) {
+      const minVal = Math.min(...numbers);
+      const minIdx = numbers.indexOf(minVal);
+      const rotated = [...numbers.slice(minIdx), ...numbers.slice(0, minIdx)];
+      cycles.push(rotated);
+    }
+  }
+  if (cycles.length === 0) {
+    return "()";
+  }
+  cycles.sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+  return cycles.map((c) => `(${c.join(" ")})`).join("");
+}
+
+/**
+ * Normalizes univariate/Laurent polynomials up to unit factor +/- t^k:
+ * Shifts degrees so minimum degree is 0 and ensures leading coefficient is positive.
+ */
+export function canonicalizePolynomialUpToUnit(polyStr: string): string {
+  if (typeof polyStr !== "string" || polyStr.trim().length === 0) {
+    return "";
+  }
+  const clean = polyStr
+    .replace(/\$/g, "")
+    .replace(/\\left|\\right/g, "")
+    .replace(/\*\*/g, "^")
+    .replace(/\s+/g, "");
+  const termRegex = /[+-]?(?:(?:\d+(?:\.\d+)?\*?)?[a-zA-Z](?:\^[+-]?\d+)?|\d+(?:\.\d+)?)/g;
+  const rawTerms = clean.match(termRegex);
+  if (!rawTerms) return clean;
+  const termMap = new Map<number, number>();
+  let varName = "t";
+
+  for (const raw of rawTerms) {
+    const m = raw.match(/^([+-]?\d*(?:\.\d+)?)?\*?([a-zA-Z])(?:\^([+-]?\d+))?$/);
+    if (m) {
+      varName = m[2] ?? "t";
+      const coeffStr = m[1];
+      const coeff =
+        coeffStr === "" || coeffStr === "+" || coeffStr === undefined
+          ? 1
+          : coeffStr === "-"
+          ? -1
+          : parseFloat(coeffStr);
+      const exp = m[3] ? parseInt(m[3], 10) : 1;
+      termMap.set(exp, (termMap.get(exp) ?? 0) + coeff);
+    } else {
+      const constVal = parseFloat(raw);
+      if (!isNaN(constVal)) {
+        termMap.set(0, (termMap.get(0) ?? 0) + constVal);
+      }
+    }
+  }
+
+  for (const [exp, coeff] of [...termMap.entries()]) {
+    if (Math.abs(coeff) < 1e-12) {
+      termMap.delete(exp);
+    }
+  }
+  if (termMap.size === 0) return "0";
+
+  const exps = [...termMap.keys()].sort((a, b) => a - b);
+  if (exps.length === 0) return "0";
+  const minExp = exps[0] ?? 0;
+  const maxExp = exps[exps.length - 1] ?? 0;
+
+  const shifted = new Map<number, number>();
+  for (const [exp, coeff] of termMap.entries()) {
+    shifted.set(exp - minExp, coeff);
+  }
+
+  const leadCoeff = shifted.get(maxExp - minExp) ?? 1;
+  const sign = leadCoeff < 0 ? -1 : 1;
+
+  const shiftedExps = [...shifted.keys()].sort((a, b) => b - a);
+  const parts: string[] = [];
+  for (const deg of shiftedExps) {
+    const c = (shifted.get(deg) ?? 0) * sign;
+    if (Math.abs(c) < 1e-12) continue;
+    let termStr = "";
+    if (deg === 0) {
+      termStr = `${c}`;
+    } else {
+      const absC = Math.abs(c);
+      const cPrefix = absC === 1 ? "" : `${absC}*`;
+      const degSuffix = deg === 1 ? varName : `${varName}^${deg}`;
+      termStr = `${c < 0 ? "-" : ""}${cPrefix}${degSuffix}`;
+    }
+    if (parts.length > 0 && !termStr.startsWith("-")) {
+      parts.push(`+ ${termStr}`);
+    } else if (parts.length > 0 && termStr.startsWith("-")) {
+      parts.push(`- ${termStr.slice(1)}`);
+    } else {
+      parts.push(termStr);
+    }
+  }
+  return parts.join(" ");
+}
+
+/**
+ * */
+export function evaluateDeclarativeClosureContract(
+  consumerId: string,
+  candidateAnswer: string,
+  observationPayload?: unknown,
+): DeclarativeClosureContractResult {
+  if (observationPayload === undefined || observationPayload === null) {
+    return { satisfied: true, consumerId };
+  }
+
+  const payload = observationPayload as Record<string, unknown>;
+
+  switch (consumerId) {
+    case "compare.algebraic-equivalence.v2": {
+      const obsStr = String(
+        payload.result ?? payload.value ?? payload.latex ?? payload.simplified ?? payload,
+      );
+      const candClean = candidateAnswer.replace(/[\s$]/g, "").toLowerCase();
+      const obsClean = obsStr.replace(/[\s$]/g, "").toLowerCase();
+      if (candClean === obsClean) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      const cNum = parseFloat(candClean);
+      const oNum = parseFloat(obsClean);
+      if (!isNaN(cNum) && !isNaN(oNum) && Math.abs(cNum - oNum) < 1e-9) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      const cTerms = candClean.split("+").map((s) => s.trim()).sort().join("+");
+      const oTerms = obsClean.split("+").map((s) => s.trim()).sort().join("+");
+      if (cTerms === oTerms && cTerms.length > 0) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      return {
+        satisfied: false,
+        consumerId,
+        defect: defect(
+          "EXACT_VALUE_MISMATCH",
+          `candidate "${candidateAnswer}" does not match observed algebraic equivalent "${obsStr}"`,
+          "OBSERVATION",
+        ),
+      };
+    }
+
+    case "compare.polynomial-up-to-unit.v2": {
+      const obsPoly = String(
+        payload.normalized_fitting_polynomial ??
+          payload.normalized_gcd ??
+          payload.result ??
+          payload.polynomial ??
+          payload,
+      );
+      const candCanon = canonicalizePolynomialUpToUnit(candidateAnswer);
+      const obsCanon = canonicalizePolynomialUpToUnit(obsPoly);
+      if (candCanon.length > 0 && (candCanon === obsCanon || candidateAnswer.includes(obsCanon))) {
+        return { satisfied: true, consumerId, normalizedCandidate: candCanon };
+      }
+      return {
+        satisfied: false,
+        consumerId,
+        defect: defect(
+          "EXACT_VALUE_MISMATCH",
+          `candidate polynomial "${candidateAnswer}" (canonical: ${candCanon}) does not match observed invariant up to unit "${obsPoly}" (canonical: ${obsCanon})`,
+          "OBSERVATION",
+        ),
+      };
+    }
+
+    case "compare.solution-space-basis.v2": {
+      const expDim = Number(
+        payload.basis_dimension ??
+          payload.dimension ??
+          payload.dim ??
+          (Array.isArray(payload.basis) ? payload.basis.length : NaN),
+      );
+      if (!isNaN(expDim) && expDim > 0) {
+        const dimMatch = candidateAnswer.match(/\b(?:dimension|dim|rank)\s*(?:is|=|:)?\s*(\d+)/i);
+        if (dimMatch) {
+          const candDim = parseInt(dimMatch[1] ?? "0", 10);
+          if (candDim !== expDim) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect(
+                "EXACT_VALUE_MISMATCH",
+                `candidate asserts solution space dimension ${candDim}, expected ${expDim}`,
+                "OBSERVATION",
+              ),
+            };
+          }
+        }
+        if (candidateAnswer.trim() === "0" || candidateAnswer.trim() === "$0$") {
+          return {
+            satisfied: false,
+            consumerId,
+            defect: defect(
+              "EXACT_VALUE_MISMATCH",
+              `candidate asserts trivial zero solution for non-trivial space of dimension ${expDim}`,
+              "OBSERVATION",
+            ),
+          };
+        }
+        if (
+          expDim >= 2 &&
+          Array.isArray(payload.basis_terms) &&
+          payload.basis_terms.includes("1") &&
+          payload.basis_terms.length >= 2
+        ) {
+          const rhsPart = candidateAnswer.includes("=")
+            ? candidateAnswer.slice(candidateAnswer.indexOf("=") + 1)
+            : candidateAnswer;
+          const hasAdditiveTerm = /[+-]/.test(
+            rhsPart.replace(/1\s*-\s*p/g, "q").replace(/\^\s*\{?\s*-\d+/g, ""),
+          );
+          if (!hasAdditiveTerm) {
+            const genSol = String(
+              payload.general_solution ?? "C_1 + C_2*((1 - p)/p)**x",
+            );
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect(
+                "EXACT_VALUE_MISMATCH",
+                `candidate "${candidateAnswer}" spans only a 1-dimensional family and omits the constant basis solution 1; the ${expDim}-dimensional general solution has basis ${JSON.stringify(payload.basis_terms)} (general solution: ${genSol})`,
+                "OBSERVATION",
+              ),
+            };
+          }
+        }
+      }
+      return { satisfied: true, consumerId };
+    }
+
+    case "compare.permutation-canonical-cycle.v1": {
+      if (Array.isArray(payload.word_evaluations) && payload.word_evaluations.length > 0) {
+        const expectedParts: string[] = [];
+        const compactParts: string[] = [];
+        for (const item of payload.word_evaluations as Record<string, unknown>[]) {
+          const cycStr = String(item.cycle_string ?? "");
+          const compStr = String(item.compact_cycle_string ?? cycStr);
+          if (cycStr) expectedParts.push(canonicalizePermutationCycles(cycStr));
+          if (compStr) compactParts.push(compStr);
+        }
+        const candCanonAll = canonicalizePermutationCycles(candidateAnswer);
+        const allExpectedCanon = canonicalizePermutationCycles(expectedParts.join(" "));
+        if (candCanonAll === allExpectedCanon) {
+          return { satisfied: true, consumerId, normalizedCandidate: candCanonAll };
+        }
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect(
+            "GROUP_STRUCTURE_MISMATCH",
+            `candidate permutation cycles "${candidateAnswer}" (canonical: ${candCanonAll}) do not match observed disjoint cycle representations "${compactParts.join(", ")}" (canonical: ${expectedParts.join(", ")})`,
+            "OBSERVATION",
+          ),
+        };
+      }
+      const rawCycles =
+        typeof payload.cycle_string === "string"
+          ? payload.cycle_string
+          : Array.isArray(payload.canonical_cycles)
+          ? (payload.canonical_cycles as unknown[])
+              .map((c) => (Array.isArray(c) ? `(${c.join(" ")})` : String(c)))
+              .join("")
+          : String(payload.canonical_cycles ?? payload.result ?? payload.cycles ?? payload);
+      const candCanon = canonicalizePermutationCycles(candidateAnswer);
+      const obsCanon = canonicalizePermutationCycles(rawCycles);
+      if (candCanon === obsCanon) {
+        return { satisfied: true, consumerId, normalizedCandidate: candCanon };
+      }
+      if (obsCanon !== "()") {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect(
+            "GROUP_STRUCTURE_MISMATCH",
+            `candidate permutation cycles "${candidateAnswer}" (canonical: ${candCanon}) do not match observed canonical cycles "${obsCanon}"`,
+            "OBSERVATION",
+          ),
+        };
+      }
+      return { satisfied: true, consumerId };
+    }
+
+    case "compare.measure-normalization.v2": {
+      if (
+        /\b(?:P|Pr|prob|probability)\s*(?:\([^)]*\))?\s*=\s*-\d/i.test(candidateAnswer) ||
+        /\b(?:Var|variance)\s*(?:\([^)]*\))?\s*=\s*-\d/i.test(candidateAnswer)
+      ) {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect(
+            "NORMALIZATION",
+            `candidate asserts negative probability or variance: "${candidateAnswer}"`,
+            "OBSERVATION",
+          ),
+        };
+      }
+      if (payload.normalized === false) {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect(
+            "NORMALIZATION",
+            "measure normalization check failed: integral or sum does not equal 1",
+            "OBSERVATION",
+          ),
+        };
+      }
+      return { satisfied: true, consumerId };
+    }
+
+    case "compare.option-proposition-truth.v2":
+    case "verify.lean4-obligation.v1": {
+      if (payload.status === "REFUTED" || (payload.witness !== undefined && payload.witness !== null)) {
+        if (payload.refuted_option) {
+          const opt = String(payload.refuted_option).toUpperCase();
+          if (candidateChoiceLetters(candidateAnswer).includes(opt)) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect(
+                "OPTION_VERDICT_CONTRADICTION",
+                `candidate selects refuted option ${opt} (witness: ${JSON.stringify(payload.witness)})`,
+                "OBSERVATION",
+              ),
+            };
+          }
+        }
+        if (
+          /\b(?:true|holds|valid|correct|满足|成立|正确)\b/i.test(candidateAnswer) &&
+          !/\b(?:not|false|counterexample|反例|错误)\b/i.test(candidateAnswer)
+        ) {
+          return {
+            satisfied: false,
+            consumerId,
+            defect: defect(
+              "OPTION_VERDICT_CONTRADICTION",
+              `candidate asserts refuted proposition (witness: ${JSON.stringify(payload.witness)})`,
+              "OBSERVATION",
+            ),
+          };
+        }
+      }
+      if (payload.status === "PROVED" || payload.verified === true) {
+        if (payload.proved_option) {
+          const opt = String(payload.proved_option).toUpperCase();
+          if (
+            candidateChoiceLetters(candidateAnswer).length > 0 &&
+            !candidateChoiceLetters(candidateAnswer).includes(opt)
+          ) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect(
+                "OPTION_VERDICT_CONTRADICTION",
+                `candidate omits proved option ${opt}`,
+                "OBSERVATION",
+              ),
+            };
+          }
+        }
+      }
+      return { satisfied: true, consumerId };
+    }
+
+    default:
+      return { satisfied: true, consumerId };
+  }
 }

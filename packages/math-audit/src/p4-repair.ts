@@ -175,9 +175,13 @@ export class P4RepairSession {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }
     const frozenChallenge = p2Snapshot(challenge);
+    const challengeKeys =
+      "challengeOrigin" in frozenChallenge
+        ? ["challengeId", "target", "targetHash", "issue", "requestIds", "status", "availability", "challengeOrigin"]
+        : ["challengeId", "target", "targetHash", "issue", "requestIds", "status", "availability"];
     if (
       !isPlainObject(frozenChallenge) ||
-      !exactKeys(frozenChallenge, ["challengeId", "target", "targetHash", "issue", "requestIds", "status", "availability"])
+      !exactKeys(frozenChallenge, challengeKeys)
     ) {
       fail(P2_ERROR_CODES.PACKET_BINDING);
     }

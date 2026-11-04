@@ -35,7 +35,7 @@ UNIFIED_ASSETS = [
     {"assetId": "math.statistics", "name": "统计推断", "summary": "统计模型、估计、检验、充分性和适用条件。"},
     {"assetId": "math.regression", "name": "回归诊断", "summary": "OLS 系数、残差、拟合量和模型假设。"},
     {"assetId": "math.numerics", "name": "数值计算与误差", "summary": "插值、差分、外推、误差及闭式猜想的证据边界。"},
-    {"assetId": "math.encoding", "name": "编码与序列", "summary": "LZ78 的编码、解码、校验与表示；与组合枚举分开解释。"},
+    {"assetId": "math.encoding", "name": "编码与序列", "summary": "字典编码、LZ78/LZW 序列压缩、词典树与信息论无损编码表示。"},
     {"assetId": "math.graphs", "name": "有限图", "summary": "匹配、子图、Tutte 见证和有限图颜色约束。"},
     {"assetId": "math.tiling", "name": "铺砌与覆盖", "summary": "有限棋盘、形状、覆盖、颜色下界与具体铺砌证书。"},
     {"assetId": "math.games", "name": "有限博弈", "summary": "状态图、终局、策略见证、minimax 和有限牌组。"},

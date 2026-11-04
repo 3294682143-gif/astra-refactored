@@ -105,7 +105,7 @@
     {
       "assetId": "math.encoding",
       "name": "编码与序列",
-      "summary": "LZ78 的编码、解码、校验与表示；与组合枚举分开解释。"
+      "summary": "字典编码、LZ78/LZW 序列压缩、词典树与信息论无损编码表示。"
     },
     {
       "assetId": "math.graphs",
@@ -539,10 +539,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 2,
@@ -551,10 +550,9 @@
       "batch": "W0",
       "baselineScope": "partial",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 3,
@@ -563,10 +561,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 4,
@@ -575,10 +572,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "inclusion_exclusion_counting",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 5,
@@ -587,10 +583,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "inclusion_exclusion_counting",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 6,
@@ -599,10 +594,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_calculus",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 7,
@@ -611,10 +605,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_calculus",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 8,
@@ -623,10 +616,9 @@
       "batch": "W0",
       "baselineScope": "partial",
       "family": "diophantine",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 9,
@@ -635,10 +627,9 @@
       "batch": "W0",
       "baselineScope": "partial",
       "family": "diophantine",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 10,
@@ -647,10 +638,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 11,
@@ -659,10 +649,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "functional_equation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 12,
@@ -671,10 +660,9 @@
       "batch": "W0",
       "baselineScope": "partial",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 13,
@@ -683,10 +671,9 @@
       "batch": "W0",
       "baselineScope": "partial",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 14,
@@ -695,10 +682,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "digit_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 15,
@@ -707,10 +693,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "transfer_matrix",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 16,
@@ -719,10 +704,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "transfer_matrix",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 17,
@@ -731,10 +715,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 18,
@@ -743,10 +726,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "linear_algebra_game",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 19,
@@ -755,10 +737,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "linear_algebra_game",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 20,
@@ -767,10 +748,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 21,
@@ -779,10 +759,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "numerical_methods",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 22,
@@ -791,10 +770,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 23,
@@ -803,10 +781,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "numerical_methods",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 24,
@@ -815,10 +792,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "probabilistic_model",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 25,
@@ -827,10 +803,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "probabilistic_model",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 26,
@@ -839,10 +814,9 @@
       "batch": "W0",
       "baselineScope": "available",
       "family": "probabilistic_model",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w0.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 27,
@@ -851,10 +825,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 28,
@@ -863,10 +836,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 29,
@@ -875,10 +847,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 30,
@@ -887,10 +858,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 31,
@@ -899,10 +869,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "algorithm_simulation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 32,
@@ -911,10 +880,9 @@
       "batch": "W1",
       "baselineScope": "available",
       "family": "functional_equation",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 33,
@@ -923,10 +891,9 @@
       "batch": "W1",
       "baselineScope": "partial",
       "family": "graph_extremal",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 34,
@@ -935,10 +902,9 @@
       "batch": "W1",
       "baselineScope": "partial",
       "family": "graph_extremal",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 35,
@@ -947,10 +913,9 @@
       "batch": "W1",
       "baselineScope": "partial",
       "family": "graph_extremal",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 36,
@@ -959,10 +924,9 @@
       "batch": "W1",
       "baselineScope": "partial",
       "family": "graph_extremal",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 37,
@@ -971,10 +935,9 @@
       "batch": "W1",
       "baselineScope": "partial",
       "family": "graph_extremal",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w1.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 38,
@@ -983,10 +946,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "classical_geometry_compute",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 39,
@@ -995,10 +957,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "combinatorial_geometry",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 40,
@@ -1007,10 +968,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "classical_geometry_compute",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 41,
@@ -1019,10 +979,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "combinatorial_geometry",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 42,
@@ -1031,10 +990,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "combinatorial_geometry",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 43,
@@ -1043,10 +1001,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "classical_geometry_compute",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 44,
@@ -1055,10 +1012,9 @@
       "batch": "W2",
       "baselineScope": "partial",
       "family": "combinatorial_geometry",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 45,
@@ -1067,10 +1023,9 @@
       "batch": "W2",
       "baselineScope": "available",
       "family": "lattice_counting",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 46,
@@ -1079,10 +1034,9 @@
       "batch": "W2",
       "baselineScope": "available",
       "family": "lattice_counting",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 47,
@@ -1091,10 +1045,9 @@
       "batch": "W2",
       "baselineScope": "available",
       "family": "lattice_counting",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w2.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 48,
@@ -1103,10 +1056,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "digit_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 49,
@@ -1115,10 +1067,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "digit_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 50,
@@ -1127,10 +1078,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "transfer_matrix",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 51,
@@ -1139,10 +1089,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "linear_algebra_game",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 52,
@@ -1151,10 +1100,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "minimax_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 53,
@@ -1163,10 +1111,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "game_strategy_proof",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 54,
@@ -1175,10 +1122,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "minimax_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 55,
@@ -1187,10 +1133,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "game_strategy_proof",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 56,
@@ -1199,10 +1144,9 @@
       "batch": "W3",
       "baselineScope": "available",
       "family": "minimax_dp",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 57,
@@ -1211,10 +1155,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "constrained_tiling",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 58,
@@ -1223,10 +1166,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "constrained_tiling",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 59,
@@ -1235,10 +1177,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "constrained_tiling",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 60,
@@ -1247,10 +1188,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "constrained_tiling",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 61,
@@ -1259,10 +1199,9 @@
       "batch": "W3",
       "baselineScope": "partial",
       "family": "constrained_tiling",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w3.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 62,
@@ -1271,10 +1210,9 @@
       "batch": "W4",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 63,
@@ -1283,10 +1221,9 @@
       "batch": "W4",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 64,
@@ -1295,10 +1232,9 @@
       "batch": "W4",
       "baselineScope": "partial",
       "family": "diophantine",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 65,
@@ -1307,10 +1243,9 @@
       "batch": "W4",
       "baselineScope": "partial",
       "family": "number_theory_structure",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 66,
@@ -1319,10 +1254,9 @@
       "batch": "W4",
       "baselineScope": "partial",
       "family": "number_theory_structure",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 67,
@@ -1331,10 +1265,9 @@
       "batch": "W4",
       "baselineScope": "partial",
       "family": "number_theory_structure",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 68,
@@ -1343,10 +1276,9 @@
       "batch": "W4",
       "baselineScope": "partial",
       "family": "extremal_construction",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 69,
@@ -1355,10 +1287,9 @@
       "batch": "W4",
       "baselineScope": "available",
       "family": "symbolic_algebra",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w4.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 70,
@@ -1367,10 +1298,9 @@
       "batch": "W5",
       "baselineScope": "partial",
       "family": "inequality_extremum",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 71,
@@ -1379,10 +1309,9 @@
       "batch": "W5",
       "baselineScope": "partial",
       "family": "classical_geometry_compute",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 72,
@@ -1391,10 +1320,9 @@
       "batch": "W5",
       "baselineScope": "available",
       "family": "numerical_methods",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 73,
@@ -1403,10 +1331,9 @@
       "batch": "W5",
       "baselineScope": "partial",
       "family": "inequality_extremum",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 74,
@@ -1415,10 +1342,9 @@
       "batch": "W5",
       "baselineScope": "partial",
       "family": "inequality_extremum",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 75,
@@ -1427,10 +1353,9 @@
       "batch": "W5",
       "baselineScope": "partial",
       "family": "inequality_extremum",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     },
     {
       "number": 76,
@@ -1439,10 +1364,9 @@
       "batch": "W5",
       "baselineScope": "available",
       "family": "probabilistic_model",
-      "status": "migrated",
-      "testFixture": "tests/math_assets/test_math_assets_w5.py",
-      "acceptanceStatus": "passed",
-      "verifiedOfficialEntry": true
+      "status": "pending_migration",
+      "testFixture": null,
+      "acceptanceStatus": "pending"
     }
   ]
 }

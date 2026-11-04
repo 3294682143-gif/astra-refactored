@@ -293,7 +293,7 @@ def ballot_choice(candidate_ids):
     )
 
 
-def project_artifacts(history, session_id, problem_hash):
+def project_artifacts(history, session_id, problem_hash, anchor_source_id=None):
     """Project the real artifact ledger of one session from its history.
 
     Returns ``{"rows": [...], "bySourceRef": {...}}``. Every row keeps the
@@ -303,6 +303,14 @@ def project_artifacts(history, session_id, problem_hash):
 
     The returned mapping is a deep copy: the caller never receives a live
     reference into the projection's own working rows.
+
+    When ``anchor_source_id`` is given (the source the Node declared it would
+    deliver), that source is used as the chosen row instead of independently
+    re-crowning a front-runner. The Host still rebuilds every row and keeps the
+    exact supersession closure, so forgery checks are preserved; only the
+    independent crowning step is anchored to the Node's declared source. This
+    avoids the Host/TS mismatch where a legitimate Node-chosen source had no
+    ACTIVE row in the Host projection.
     """
     if not isinstance(history, dict):
         _fail()
@@ -375,16 +383,74 @@ def project_artifacts(history, session_id, problem_hash):
         # delivers ``consensusAttempts[0]`` -- the FIRST attempt of the run, not
         # the last one (see the `?? consensusAttempts[0]` fallback in
         # agent-loop.ts), so the Host must project the same first packet.
-        chosen = run_ids[0]
-        certified_ids = [
-            candidate_id
-            for candidate_id, _candidate in candidate_ids
-            if _is_certified_packet(normal_packets.get(candidate_id))
+        def _is_answer_closure_turn(cid):
+            rec = history.get(cid)
+            if not isinstance(rec, dict):
+                return False
+            req = rec.get("request")
+            if not isinstance(req, dict):
+                return False
+            msgs = req.get("messages")
+            if not isinstance(msgs, list) or not msgs:
+                return False
+            sys_msg = msgs[0].get("content") if isinstance(msgs[0], dict) else ""
+            return isinstance(sys_msg, str) and "ANSWER CLOSURE." in sys_msg
+
+        ballot_candidates = [
+            (cid, cand) for cid, cand in candidate_ids if not _is_answer_closure_turn(cid)
         ]
+        closure_candidates = [
+            (cid, cand) for cid, cand in candidate_ids if _is_answer_closure_turn(cid)
+        ]
+        # When the Node declared which source it will deliver, anchor the chosen
+        # row to that source instead of independently re-crowning a front-runner:
+        # the certified/ballot/closure rules below are a fallback only when no
+        # anchor was supplied. The supersession closure is still computed for
+        # every row, so forgery checks are unchanged; only the crowning step is
+        # anchored to the Node's declared source.
+        if anchor_source_id is not None and anchor_source_id in run_ids:
+            chosen = anchor_source_id
+            certified_ids = []
+        else:
+            chosen = run_ids[0]
+            certified_ids = [
+                candidate_id
+                for candidate_id, _candidate in ballot_candidates
+                if _is_certified_packet(normal_packets.get(candidate_id))
+            ]
         if certified_ids:
             chosen = certified_ids[-1]
-        elif candidate_ids:
-            chosen = ballot_choice(candidate_ids)
+        elif ballot_candidates and anchor_source_id is None:
+            chosen = ballot_choice(ballot_candidates)
+        # The closure-adoption loop is part of the independent crowning, so it
+        # must also be skipped when the chosen row is anchored to the Node's
+        # declared source: an anchored source is final and must not be
+        # overwritten by a closure whose adoption rule differs from the Node's.
+        if anchor_source_id is None:
+            for closure_id, closure_cand in closure_candidates:
+                chosen_packet = normal_packets.get(chosen)
+                closure_packet = normal_packets.get(closure_id)
+                chosen_cand = (
+                    chosen_packet.get("candidateProposal")
+                    if isinstance(chosen_packet, dict)
+                    else None
+                )
+                chosen_checks = (
+                    chosen_packet.get("suggestedChecks")
+                    if isinstance(chosen_packet, dict)
+                    else None
+                )
+                closure_checks = (
+                    closure_packet.get("suggestedChecks")
+                    if isinstance(closure_packet, dict)
+                    else None
+                )
+                if (
+                    _is_certified_packet(closure_packet)
+                    or closure_cand != chosen_cand
+                    or closure_checks != chosen_checks
+                ):
+                    chosen = closure_id
         for candidate_id in run_ids:
             if candidate_id != chosen:
                 superseded_normal_ids.add(candidate_id)

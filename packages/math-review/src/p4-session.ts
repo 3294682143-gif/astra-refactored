@@ -84,6 +84,7 @@ export class P4ReviewSession {
   private readonly evidence: P4ReviewEvidence[] = [];
   private availability: P4EvidenceAvailability = "ACTIVE";
   private blocked = false;
+  private formalOrExactCertificate = false;
 
   constructor(
     contract: P2Contract,
@@ -343,6 +344,14 @@ export class P4ReviewSession {
           fail(P2_ERROR_CODES.BOUND_EXCEEDED);
         }
         index.set(key, next.length);
+        const isMachine =
+          issue.rationale.includes("MACHINE_VERIFIED") ||
+          issue.rationale.includes("REFUTED") ||
+          issue.rationale.includes("witness") ||
+          issue.rationale.includes("Lean4");
+        const origin: ("MACHINE_VERIFIED" | "LLM_TEXT_ONLY") | undefined = isMachine
+          ? "MACHINE_VERIFIED"
+          : undefined;
         next.push({
           challengeId: `challenge-${next.length + 1}`,
           target: this.target.binding,
@@ -351,6 +360,7 @@ export class P4ReviewSession {
           requestIds: [record.requestId],
           status: "CHALLENGED",
           availability: "ACTIVE",
+          ...(origin !== undefined ? { challengeOrigin: origin } : {}),
         });
         continue;
       }
@@ -396,6 +406,22 @@ export class P4ReviewSession {
         this.evidence[position] = Object.freeze({ ...item, availability: "STALE" });
       }
     }
+  }
+
+  setFormalOrExactCertificate(value = true): void {
+    this.formalOrExactCertificate = value;
+  }
+
+  hasFormalOrExactCertificate(): boolean {
+    return this.formalOrExactCertificate;
+  }
+
+  isOverridePermitted(challengeOrigin?: "MACHINE_VERIFIED" | "LLM_TEXT_ONLY"): boolean {
+    const origin = challengeOrigin ?? "LLM_TEXT_ONLY";
+    if (this.formalOrExactCertificate && origin === "LLM_TEXT_ONLY") {
+      return false;
+    }
+    return true;
   }
 
   snapshot(): P4ReviewSnapshot {

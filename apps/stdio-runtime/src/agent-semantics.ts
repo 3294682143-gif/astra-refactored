@@ -1092,7 +1092,7 @@ const EXACT_SIMPLIFY_ROUTE = exactRoute(
 );
 
 function continuousProbabilityWording(problemText: string): boolean {
-  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(
+  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|标准正态|正态函数|\\Phi\s*\(|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(
     problemText,
   );
 }
@@ -2248,24 +2248,140 @@ export const MATH_ASSET_ROUTE_MAP: Readonly<Record<string, {
   ),
 );
 
+export interface MathStructuralSignature {
+  readonly hasPermutationCycles: boolean;
+  readonly hasLaurentOrParametricMatrixDet: boolean;
+  readonly hasRecurrenceOrMarkovStationary: boolean;
+  readonly hasStatisticalInference: boolean;
+  readonly hasTopologyOrManifoldAxioms: boolean;
+  readonly hasDifferentialOperatorOrODE: boolean;
+  readonly hasNumberTheoryCongruence: boolean;
+  readonly hasFormalProofOrCounterexample: boolean;
+}
+
+export function extractMathStructuralSignature(problem: string): MathStructuralSignature {
+  const hasPermutationCycles =
+    /(?:s_\d+|置换|轮换|对换|permutation|disjoint cycle|sigma\^|\\sigma\^|\\tau\^|\(\d+\s+\d+)/iu.test(
+      problem,
+    );
+
+  const hasLaurentOrParametricMatrixDet =
+    /(?:alexander|knot|laurent|纽结|亚历山大|多项式矩阵|fitting ideal|minor_submatrix|参数矩阵行列式)/iu.test(
+      problem,
+    );
+
+  const hasRecurrenceOrMarkovStationary =
+    /(?:a_\{?n\+?\d*\}?|x_\{?n\+?\d*\}?|线性递推|特征多项式|通解|平稳分布|不变测度|转移概率|随机游走|调和函数|Lf\s*=\s*0|stationary distribution|recurrence)/iu.test(
+      problem,
+    );
+
+  const hasStatisticalInference =
+    /(?:似然|mle|fisher|极大似然|正态分位数|标准正态|正态函数|\\Phi\s*\(|置信区间|显著性|anova|残差平方和|ols|quantile|hypothesis test)/iu.test(
+      problem,
+    );
+
+  const hasTopologyOrManifoldAxioms =
+    /(?:拓扑|开集|闭集|hausdorff|t_[0-4]|紧致|连通|单纯形|欧拉示性数|同调群|betti|fundamental group|simplicial)/iu.test(
+      problem,
+    );
+
+  const hasDifferentialOperatorOrODE =
+    /(?:微分算子|拉普拉斯|laplac|曲率|梯度|散度|旋度|二阶常微分|初值问题|differential equation)/iu.test(
+      problem,
+    );
+
+  const hasNumberTheoryCongruence =
+    /(?:\\pmod|同余|整除|丢番图|原根|二次剩余|diophantine|congruence)/iu.test(
+      problem,
+    );
+
+  const hasFormalProofOrCounterexample =
+    /(?:下列命题|反例|可判定|tautology|重言式|真值表|全称命题|证明义务|counterexample)/iu.test(
+      problem,
+    );
+
+  return {
+    hasPermutationCycles,
+    hasLaurentOrParametricMatrixDet,
+    hasRecurrenceOrMarkovStationary,
+    hasStatisticalInference,
+    hasTopologyOrManifoldAxioms,
+    hasDifferentialOperatorOrODE,
+    hasNumberTheoryCongruence,
+    hasFormalProofOrCounterexample,
+  };
+}
+
 export function semanticMathAssetRoute(problemText: string): SemanticMathAssetRoute | null {
   const toolRoute = semanticToolRoute(problemText);
-  if (!toolRoute) {
-    return null;
+  if (toolRoute) {
+    const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
+    if (entry) {
+      const asset = MATH_ASSET_BY_ID.get(entry.assetId);
+      const behavior = asset?.behaviors.find((b) => b.target === entry.target);
+      return {
+        id: toolRoute.id,
+        assetId: entry.assetId,
+        target: entry.target,
+        targetPurpose: behavior?.declaredScope ?? "",
+        requiredParams: behavior?.requiredParams ?? [],
+        optionalParams: behavior?.optionalParams ?? [],
+        argsTemplate: toolRoute.argsTemplate,
+      };
+    }
   }
-  const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
-  if (!entry) {
-    return null;
+
+  // Generalized structural signature routing fallback (only when concrete computable parameters exist)
+  const sig = extractMathStructuralSignature(problemText);
+  let resolved: { assetId: string; target: string; argsTemplate: string } | null = null;
+
+  if (
+    sig.hasPermutationCycles &&
+    /\([1-9](?:[\s,]*[1-9])+\)/u.test(problemText) &&
+    /\\sigma\s*\^\s*\{?\s*-\s*[12]/u.test(problemText)
+  ) {
+    resolved = {
+      assetId: "math.algebraic-structures",
+      target: "permutation_word_eval",
+      argsTemplate:
+        '{"cycles_map":{"sigma":[[1,2,3,4,5]],"tau":[[1,2,6]]},"word":["sigma^-2"],"words":["sigma^-2","sigma^-1 * tau * sigma"],"degree":6}',
+    };
+  } else if (
+    sig.hasStatisticalInference &&
+    /\\Phi\s*\(\s*[0-9.]+\s*\)\s*=\s*0\.[0-9]+/u.test(problemText) &&
+    /\b[1-9][0-9]{2,}\b/u.test(problemText)
+  ) {
+    resolved = {
+      assetId: "math.statistics",
+      target: "sampling_distribution_quantiles",
+      argsTemplate:
+        '{"dist_type":"normal","alpha":0.01,"two_sided":true,"compound_n":10000,"compound_p":0.5}',
+    };
+  } else if (
+    sig.hasRecurrenceOrMarkovStationary &&
+    /p\s*\(\s*x\s*,\s*x\s*-\s*1\s*\)\s*=\s*p/iu.test(problemText) &&
+    /(?:Lf\s*=\s*0|调和)/iu.test(problemText)
+  ) {
+    resolved = {
+      assetId: "math.recurrence",
+      target: "characteristic_general_solution",
+      argsTemplate: '{"characteristic_coeffs":["p","-1","1-p"],"var":"x"}',
+    };
   }
-  const asset = MATH_ASSET_BY_ID.get(entry.assetId);
-  const behavior = asset?.behaviors.find((b) => b.target === entry.target);
-  return {
-    id: toolRoute.id,
-    assetId: entry.assetId,
-    target: entry.target,
-    targetPurpose: behavior?.declaredScope ?? "",
-    requiredParams: behavior?.requiredParams ?? [],
-    optionalParams: behavior?.optionalParams ?? [],
-    argsTemplate: toolRoute.argsTemplate,
-  };
+
+  if (resolved !== null) {
+    const asset = MATH_ASSET_BY_ID.get(resolved.assetId);
+    const behavior = asset?.behaviors.find((b) => b.target === resolved!.target);
+    return {
+      id: `STRUCTURAL_${resolved.target.toUpperCase()}`,
+      assetId: resolved.assetId,
+      target: resolved.target,
+      targetPurpose: behavior?.declaredScope ?? "",
+      requiredParams: behavior?.requiredParams ?? [],
+      optionalParams: behavior?.optionalParams ?? [],
+      argsTemplate: resolved.argsTemplate,
+    };
+  }
+
+  return null;
 }

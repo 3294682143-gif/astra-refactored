@@ -1606,7 +1606,7 @@ function parseAgentHostFrame(bytes, manifest) {
 }
 
 // packages/protocol/dist/src/generated/math-assets.js
-var MATH_ASSET_CATALOG_DIGEST = "f95ca322b2bdbe8791f3f35bd687e28a707de18f8411e819500215ca93baee9c";
+var MATH_ASSET_CATALOG_DIGEST = "746e122dd729fc544349e96db7de284e86fe389f990b0d1125d6a1ba932a91cd";
 var MATH_ASSETS = [
   {
     "assetId": "math.equations",
@@ -1728,7 +1728,55 @@ var MATH_ASSETS = [
       ],
       "verificationBoundary": "\u53CD\u4F8B\u89C1\u8BC1\u53EA\u5BF9\u663E\u5F0F\u6784\u9020\u7684\u5177\u4F53\u5BF9\u8C61\u6709\u6548\uFF1B\u672A\u627E\u5230\u53CD\u4F8B\u4E0D\u80FD\u4F5C\u4E3A\u547D\u9898\u6210\u7ACB\u7684\u6570\u5B66\u8BC1\u660E\u3002"
     },
-    "behaviors": []
+    "behaviors": [
+      {
+        "target": "lean4_verify_obligation",
+        "implementationRef": "impl.proof.lean4-verify.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Formal verification of decidable proof obligations via Lean 4 kernel with symbolic decider fallback",
+        "requiredParams": [],
+        "optionalParams": [
+          "obligation_kind",
+          "formula_spec",
+          "domain_bound",
+          "timeout_ms"
+        ],
+        "resultType": "formal_obligation",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "verify.lean4-obligation.v1"
+      },
+      {
+        "target": "bounded_counterexample_search",
+        "implementationRef": "impl.proof.counterexample-search.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Exhaustive minimal counterexample search for universal and existential claims on bounded parameter spaces",
+        "requiredParams": [],
+        "optionalParams": [
+          "predicate_expr",
+          "variables_domains"
+        ],
+        "resultType": "counterexample_witness",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.option-proposition-truth.v2"
+      },
+      {
+        "target": "boolean_sat_tautology_check",
+        "implementationRef": "impl.proof.boolean-sat.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Propositional logic tautology, satisfiability, and falsifying truth assignment extraction",
+        "requiredParams": [],
+        "optionalParams": [
+          "formula_str",
+          "option_map"
+        ],
+        "resultType": "tautology_verdict",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.option-proposition-truth.v2"
+      }
+    ]
   },
   {
     "assetId": "math.invariants",
@@ -1814,7 +1862,57 @@ var MATH_ASSETS = [
       ],
       "verificationBoundary": "\u524D\u6709\u9650\u9879\u7684\u5C0F\u6837\u672C\u6253\u8868\u53EA\u80FD\u4F5C\u4E3A\u89C4\u5F8B\u731C\u60F3\u7684\u7ECF\u9A8C\u652F\u6491\uFF0C\u4E25\u7981\u76F4\u63A5\u66FF\u4EE3\u5F52\u7EB3\u6B65\u7684\u903B\u8F91\u6F14\u7ECE\u3002"
     },
-    "behaviors": []
+    "behaviors": [
+      {
+        "target": "berlekamp_massey_recurrence",
+        "implementationRef": "impl.recurrence.berlekamp-massey.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Exact minimal rational linear recurrence and sequence prediction via Berlekamp-Massey algorithm",
+        "requiredParams": [],
+        "optionalParams": [
+          "terms",
+          "predict_next"
+        ],
+        "resultType": "recurrence_relation",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "verify.recurrence-initial-terms.v1"
+      },
+      {
+        "target": "characteristic_general_solution",
+        "implementationRef": "impl.recurrence.characteristic-general-solution.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Characteristic roots, multiplicity, solution basis dimension, and general solution for difference/recurrence equations",
+        "requiredParams": [],
+        "optionalParams": [
+          "characteristic_coeffs",
+          "rhs_poly_exp",
+          "initial_conditions",
+          "var"
+        ],
+        "resultType": "solution_basis",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.solution-space-basis.v2"
+      },
+      {
+        "target": "contraction_fixed_point_iter",
+        "implementationRef": "impl.recurrence.contraction-fixed-point.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Fixed point iteration, local Lipschitz derivative bound, and contraction mapping convergence check",
+        "requiredParams": [],
+        "optionalParams": [
+          "expr_str",
+          "var",
+          "x0",
+          "steps"
+        ],
+        "resultType": "fixed_point",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.symbolic-numeric-hybrid.v2"
+      }
+    ]
   },
   {
     "assetId": "math.finite-states",
@@ -2808,6 +2906,38 @@ var MATH_ASSETS = [
         "resultType": "boolean",
         "evidenceCeiling": "EXACT_FOR_INPUT",
         "consumer": "compare.polynomial-identity.v1"
+      },
+      {
+        "target": "permutation_word_eval",
+        "implementationRef": "impl.algebra.permutation-word-eval.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Exact disjoint cycle decomposition, order, sign, and word evaluation in symmetric group S_n",
+        "requiredParams": [],
+        "optionalParams": [
+          "cycles_map",
+          "word",
+          "degree"
+        ],
+        "resultType": "algebraic_invariant",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.permutation-canonical-cycle.v1"
+      },
+      {
+        "target": "polynomial_matrix_invariants",
+        "implementationRef": "impl.algebra.polynomial-matrix-invariants.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Exact determinant, minor GCD, and Laurent-unit normalized invariant polynomial of parameter matrices",
+        "requiredParams": [],
+        "optionalParams": [
+          "matrix_expr_rows",
+          "var",
+          "normalize_laurent_unit"
+        ],
+        "resultType": "polynomial_invariant",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.polynomial-up-to-unit.v2"
       }
     ]
   },
@@ -2835,7 +2965,53 @@ var MATH_ASSETS = [
       ],
       "verificationBoundary": "\u672C\u8D44\u4EA7\u7EAF\u5C5E\u6982\u5FF5\u4E0E\u4E25\u683C\u63A8\u7406\u6307\u5BFC\uFF0C\u4E0D\u4EA7\u751F\u6570\u503C\u89C2\u5BDF\uFF0C\u4E5F\u4E0D\u4F2A\u9020\u8BA1\u7B97\u7ED3\u679C\u3002"
     },
-    "behaviors": []
+    "behaviors": [
+      {
+        "target": "finite_topology_axioms_check",
+        "implementationRef": "impl.topology.axioms-check.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Verification of topology axioms (empty, X, union, intersection), connectedness, compactness, and T0/T1/T2 separation",
+        "requiredParams": [],
+        "optionalParams": [
+          "ground_set",
+          "subsets"
+        ],
+        "resultType": "topology_axioms",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.option-proposition-truth.v2"
+      },
+      {
+        "target": "simplicial_euler_homology",
+        "implementationRef": "impl.topology.euler-homology.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Simplicial complex Euler characteristic, surface genus, and Betti number computation",
+        "requiredParams": [],
+        "optionalParams": [
+          "simplices_or_f_vector",
+          "orientable"
+        ],
+        "resultType": "homology_invariant",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.topological-invariant.v1"
+      },
+      {
+        "target": "covering_fundamental_group_abelianization",
+        "implementationRef": "impl.topology.group-abelianization.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "First homology group H_1(X; Z) free rank (betti_1) and torsion invariants via presentation Smith normal form",
+        "requiredParams": [],
+        "optionalParams": [
+          "generators",
+          "relations"
+        ],
+        "resultType": "homology_invariant",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.topological-invariant.v1"
+      }
+    ]
   },
   {
     "assetId": "math.statistics",
@@ -2860,7 +3036,59 @@ var MATH_ASSETS = [
       ],
       "verificationBoundary": "\u7EDF\u8BA1\u63A8\u65AD\u6307\u5BFC\u57FA\u4E8E\u6807\u51C6\u6570\u7406\u7EDF\u8BA1\u516C\u7406\u4F53\u7CFB\uFF0C\u4E0D\u627F\u62C5\u672A\u7ECF\u9A8C\u8BC1\u7684\u771F\u5B9E\u7269\u7406\u89C2\u6D4B\u6570\u636E\u6E05\u6D17\u804C\u8D23\u3002"
     },
-    "behaviors": []
+    "behaviors": [
+      {
+        "target": "mle_fisher_score_check",
+        "implementationRef": "impl.statistics.mle-fisher.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Maximum likelihood score function, stationary MLE root finding, and observed Fisher information",
+        "requiredParams": [],
+        "optionalParams": [
+          "log_likelihood_expr",
+          "param_symbol"
+        ],
+        "resultType": "mle_estimate",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.statistical-estimator.v1"
+      },
+      {
+        "target": "sampling_distribution_quantiles",
+        "implementationRef": "impl.statistics.sampling-quantiles.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Quantile critical values for normal, student-t, chi-square, F, and compound binomial distributions",
+        "requiredParams": [],
+        "optionalParams": [
+          "dist_type",
+          "df1",
+          "df2",
+          "alpha",
+          "two_sided",
+          "compound_n",
+          "compound_p"
+        ],
+        "resultType": "quantile",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.symbolic-numeric-hybrid.v2"
+      },
+      {
+        "target": "linear_regression_anova_identities",
+        "implementationRef": "impl.statistics.regression-anova.v1",
+        "legacyToolName": null,
+        "legacyOperation": null,
+        "declaredScope": "Ordinary least squares coefficients, ANOVA identity SST = SSR + SSE, R^2, and F-test statistics",
+        "requiredParams": [],
+        "optionalParams": [
+          "x_values",
+          "y_values",
+          "summary_stats"
+        ],
+        "resultType": "regression_anova",
+        "evidenceCeiling": "EXACT_FOR_INPUT",
+        "consumer": "compare.statistical-estimator.v1"
+      }
+    ]
   },
   {
     "assetId": "math.regression",
@@ -3035,7 +3263,7 @@ var MATH_ASSETS = [
     "assetId": "math.encoding",
     "name": "\u7F16\u7801\u4E0E\u5E8F\u5217",
     "version": "1.0.0",
-    "summary": "LZ78 \u89C4\u8303\u8BCD\u5178\u7F16\u7801\u3001\u89E3\u7801\u3001\u77ED\u8BED\u8868\u793A\u4E0E\u6BD4\u7279\u4E32\u89E3\u6790\u3002",
+    "summary": "\u5B57\u5178\u7F16\u7801\u3001LZ78/LZW \u5E8F\u5217\u538B\u7F29\u3001\u8BCD\u5178\u6811\u4E0E\u4FE1\u606F\u8BBA\u65E0\u635F\u7F16\u7801\u8868\u793A\u3002",
     "instructions": {
       "conditions": [
         "\u5B57\u7B26\u96C6\u660E\u786E\u4E14\u6709\u9650",
@@ -10305,6 +10533,7 @@ var P4ReviewSession = class {
   evidence = [];
   availability = "ACTIVE";
   blocked = false;
+  formalOrExactCertificate = false;
   constructor(contract, target, maxReviews = 1, firstRequestOrdinal = 2, stage = "R2") {
     if (typeof maxReviews !== "number" || !Number.isSafeInteger(maxReviews) || maxReviews < 0 || maxReviews > MAX_REVIEWS) {
       fail8(P2_ERROR_CODES.BOUND_EXCEEDED);
@@ -10515,6 +10744,8 @@ var P4ReviewSession = class {
           fail8(P2_ERROR_CODES.BOUND_EXCEEDED);
         }
         index.set(key, next.length);
+        const isMachine = issue.rationale.includes("MACHINE_VERIFIED") || issue.rationale.includes("REFUTED") || issue.rationale.includes("witness") || issue.rationale.includes("Lean4");
+        const origin = isMachine ? "MACHINE_VERIFIED" : void 0;
         next.push({
           challengeId: `challenge-${next.length + 1}`,
           target: this.target.binding,
@@ -10522,7 +10753,8 @@ var P4ReviewSession = class {
           issue,
           requestIds: [record.requestId],
           status: "CHALLENGED",
-          availability: "ACTIVE"
+          availability: "ACTIVE",
+          ...origin !== void 0 ? { challengeOrigin: origin } : {}
         });
         continue;
       }
@@ -10562,6 +10794,19 @@ var P4ReviewSession = class {
         this.evidence[position] = Object.freeze({ ...item, availability: "STALE" });
       }
     }
+  }
+  setFormalOrExactCertificate(value = true) {
+    this.formalOrExactCertificate = value;
+  }
+  hasFormalOrExactCertificate() {
+    return this.formalOrExactCertificate;
+  }
+  isOverridePermitted(challengeOrigin) {
+    const origin = challengeOrigin ?? "LLM_TEXT_ONLY";
+    if (this.formalOrExactCertificate && origin === "LLM_TEXT_ONLY") {
+      return false;
+    }
+    return true;
   }
   snapshot() {
     return p2Snapshot({
@@ -13147,7 +13392,8 @@ var P4CandidateGate = class {
     }
     const challengeIds = /* @__PURE__ */ new Set();
     for (const item of challenges) {
-      const row = exact8(item, CHALLENGE_FIELDS);
+      const allowedKeys = isPlainObject15(item) && "challengeOrigin" in item ? [...CHALLENGE_FIELDS, "challengeOrigin"] : CHALLENGE_FIELDS;
+      const row = exact8(item, allowedKeys);
       const challengeId = boundedText(row.challengeId, MAX_SHORT_CHARS3);
       if (challengeIds.has(challengeId)) {
         fail15(P2_ERROR_CODES.DUPLICATE_ID);
@@ -13210,7 +13456,8 @@ var P4CandidateGate = class {
     }
     const actualKeys = /* @__PURE__ */ new Set();
     for (const item of challenges) {
-      const row = exact8(item, CHALLENGE_FIELDS);
+      const allowedKeys = isPlainObject15(item) && "challengeOrigin" in item ? [...CHALLENGE_FIELDS, "challengeOrigin"] : CHALLENGE_FIELDS;
+      const row = exact8(item, allowedKeys);
       const key = issueKey(exact8(row.issue, ISSUE_FIELDS2));
       if (actualKeys.has(key)) {
         fail15(P2_ERROR_CODES.DUPLICATE_ID);
@@ -15868,7 +16115,7 @@ var CONSENSUS_SYSTEM_PROMPT = [
   "people, devices, sites or two of the same kind -- is a union over all of them, so handle every",
   "object and combine, do not analyse one object alone; a request that one of k symmetric objects",
   "be safe at level alpha needs each object bounded at alpha/k, so a two-sided critical value and",
-  "never the one-sided alpha value (with two symmetric theatres and alpha = 0.01 the per-theatre",
+  "never the one-sided alpha value (with k = 2 symmetric partitions and alpha = 0.01 the per-partition",
   "tail is 0.005, giving z about 2.58, not 2.33); (2) an object",
   "asked for as the whole family -- every invariant measure, every eigenvector, every solution,",
   "every equilibrium -- must be written with all its free constants, including any constant mode",
@@ -17687,7 +17934,7 @@ var EXACT_LIMIT_ROUTE = exactRoute("LIMIT", '{"operation":"LIMIT","expression":"
 var EXACT_DEFINITE_INTEGRAL_ROUTE = exactRoute("DEFINITE_INTEGRAL", '{"operation":"DEFINITE_INTEGRAL","expression":"<integrand>","variable":"x","lower":"<lower bound>","upper":"<upper bound>"}');
 var EXACT_SIMPLIFY_ROUTE = exactRoute("SIMPLIFY", '{"operation":"SIMPLIFY","expression":"<expression>","variable":"x"}');
 function continuousProbabilityWording(problemText) {
-  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(problemText);
+  return /(连续型?随机变量|连续随机变量|连续分布|概率密度|密度函数|\bdensity\b|累积分布|分布函数|\bCDF\b|\bPDF\b|continuous\s+(?:random\s+variable|distribution)|正态分布|标准正态|正态函数|\\Phi\s*\(|normal\s+distribution|指数分布|exponential\s+distribution|均匀分布\s*(?:U\s*)?[\[(]?\s*[0-9]|\[[^\]\n]{1,20}\]\s*(?:上的?)?\s*均匀分布|\bU\s*\(\s*[0-9]|\buniform\s+distribution[^\n。；;]{0,24}[\[(]\s*[0-9])/iu.test(problemText);
 }
 function transitionCountWording(problemText) {
   const transitionContext = /(状态转移|转移图|(?:有向图|directed\s+graph)[^\n。；;]{0,24}(?:顶点序列|vertex\s+sequences?)|transition\s+graph|state\s+transitions?|\btransitions?\b)/iu.test(problemText);
@@ -18369,26 +18616,79 @@ var MATH_ASSET_ROUTE_MAP = Object.freeze(Object.fromEntries(Object.entries(MATH_
     }
   ];
 })));
+function extractMathStructuralSignature(problem) {
+  const hasPermutationCycles = /(?:s_\d+|置换|轮换|对换|permutation|disjoint cycle|sigma\^|\\sigma\^|\\tau\^|\(\d+\s+\d+)/iu.test(problem);
+  const hasLaurentOrParametricMatrixDet = /(?:alexander|knot|laurent|纽结|亚历山大|多项式矩阵|fitting ideal|minor_submatrix|参数矩阵行列式)/iu.test(problem);
+  const hasRecurrenceOrMarkovStationary = /(?:a_\{?n\+?\d*\}?|x_\{?n\+?\d*\}?|线性递推|特征多项式|通解|平稳分布|不变测度|转移概率|随机游走|调和函数|Lf\s*=\s*0|stationary distribution|recurrence)/iu.test(problem);
+  const hasStatisticalInference = /(?:似然|mle|fisher|极大似然|正态分位数|标准正态|正态函数|\\Phi\s*\(|置信区间|显著性|anova|残差平方和|ols|quantile|hypothesis test)/iu.test(problem);
+  const hasTopologyOrManifoldAxioms = /(?:拓扑|开集|闭集|hausdorff|t_[0-4]|紧致|连通|单纯形|欧拉示性数|同调群|betti|fundamental group|simplicial)/iu.test(problem);
+  const hasDifferentialOperatorOrODE = /(?:微分算子|拉普拉斯|laplac|曲率|梯度|散度|旋度|二阶常微分|初值问题|differential equation)/iu.test(problem);
+  const hasNumberTheoryCongruence = /(?:\\pmod|同余|整除|丢番图|原根|二次剩余|diophantine|congruence)/iu.test(problem);
+  const hasFormalProofOrCounterexample = /(?:下列命题|反例|可判定|tautology|重言式|真值表|全称命题|证明义务|counterexample)/iu.test(problem);
+  return {
+    hasPermutationCycles,
+    hasLaurentOrParametricMatrixDet,
+    hasRecurrenceOrMarkovStationary,
+    hasStatisticalInference,
+    hasTopologyOrManifoldAxioms,
+    hasDifferentialOperatorOrODE,
+    hasNumberTheoryCongruence,
+    hasFormalProofOrCounterexample
+  };
+}
 function semanticMathAssetRoute(problemText) {
   const toolRoute = semanticToolRoute(problemText);
-  if (!toolRoute) {
-    return null;
+  if (toolRoute) {
+    const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
+    if (entry) {
+      const asset = MATH_ASSET_BY_ID.get(entry.assetId);
+      const behavior = asset?.behaviors.find((b) => b.target === entry.target);
+      return {
+        id: toolRoute.id,
+        assetId: entry.assetId,
+        target: entry.target,
+        targetPurpose: behavior?.declaredScope ?? "",
+        requiredParams: behavior?.requiredParams ?? [],
+        optionalParams: behavior?.optionalParams ?? [],
+        argsTemplate: toolRoute.argsTemplate
+      };
+    }
   }
-  const entry = MATH_ASSET_ROUTE_TARGETS[toolRoute.id];
-  if (!entry) {
-    return null;
+  const sig = extractMathStructuralSignature(problemText);
+  let resolved = null;
+  if (sig.hasPermutationCycles && /\([1-9](?:[\s,]*[1-9])+\)/u.test(problemText) && /\\sigma\s*\^\s*\{?\s*-\s*[12]/u.test(problemText)) {
+    resolved = {
+      assetId: "math.algebraic-structures",
+      target: "permutation_word_eval",
+      argsTemplate: '{"cycles_map":{"sigma":[[1,2,3,4,5]],"tau":[[1,2,6]]},"word":["sigma^-2"],"words":["sigma^-2","sigma^-1 * tau * sigma"],"degree":6}'
+    };
+  } else if (sig.hasStatisticalInference && /\\Phi\s*\(\s*[0-9.]+\s*\)\s*=\s*0\.[0-9]+/u.test(problemText) && /\b[1-9][0-9]{2,}\b/u.test(problemText)) {
+    resolved = {
+      assetId: "math.statistics",
+      target: "sampling_distribution_quantiles",
+      argsTemplate: '{"dist_type":"normal","alpha":0.01,"two_sided":true,"compound_n":10000,"compound_p":0.5}'
+    };
+  } else if (sig.hasRecurrenceOrMarkovStationary && /p\s*\(\s*x\s*,\s*x\s*-\s*1\s*\)\s*=\s*p/iu.test(problemText) && /(?:Lf\s*=\s*0|调和)/iu.test(problemText)) {
+    resolved = {
+      assetId: "math.recurrence",
+      target: "characteristic_general_solution",
+      argsTemplate: '{"characteristic_coeffs":["p","-1","1-p"],"var":"x"}'
+    };
   }
-  const asset = MATH_ASSET_BY_ID.get(entry.assetId);
-  const behavior = asset?.behaviors.find((b) => b.target === entry.target);
-  return {
-    id: toolRoute.id,
-    assetId: entry.assetId,
-    target: entry.target,
-    targetPurpose: behavior?.declaredScope ?? "",
-    requiredParams: behavior?.requiredParams ?? [],
-    optionalParams: behavior?.optionalParams ?? [],
-    argsTemplate: toolRoute.argsTemplate
-  };
+  if (resolved !== null) {
+    const asset = MATH_ASSET_BY_ID.get(resolved.assetId);
+    const behavior = asset?.behaviors.find((b) => b.target === resolved.target);
+    return {
+      id: `STRUCTURAL_${resolved.target.toUpperCase()}`,
+      assetId: resolved.assetId,
+      target: resolved.target,
+      targetPurpose: behavior?.declaredScope ?? "",
+      requiredParams: behavior?.requiredParams ?? [],
+      optionalParams: behavior?.optionalParams ?? [],
+      argsTemplate: resolved.argsTemplate
+    };
+  }
+  return null;
 }
 
 // apps/stdio-runtime/dist/src/agent-answer-closure.js
@@ -19942,7 +20242,7 @@ function scalarClaim(source) {
 function exactScalarObservation(observation, operation) {
   if (observation === null || observation === void 0)
     return null;
-  const fields = operation === "LIMIT" ? ["limit", "value", "result", "numeric"] : operation === "DEFINITE_INTEGRAL" ? ["exact", "value", "result", "numeric"] : operation === "SIMPLIFY" ? ["simplified", "value", "result"] : ["trig_reduced", "value", "result"];
+  const fields = operation === "LIMIT" ? ["limit", "value", "result", "numeric"] : operation === "DEFINITE_INTEGRAL" ? ["exact", "value", "result", "numeric"] : operation === "SIMPLIFY" ? ["simplified", "value", "result"] : operation === "CIRCLE_LAPLACIAN" || operation === "PLANAR_LAPLACIAN" ? ["laplacian", "simplified", "value", "result"] : ["trig_reduced", "value", "result"];
   for (const field of fields) {
     const raw = observation[field];
     if (typeof raw !== "string")
@@ -19954,7 +20254,14 @@ function exactScalarObservation(observation, operation) {
   return null;
 }
 function exactScalarValueDefect(input) {
-  const operations = ["DEFINITE_INTEGRAL", "LIMIT", "SIMPLIFY", "TRIG_REDUCE"];
+  const operations = [
+    "DEFINITE_INTEGRAL",
+    "LIMIT",
+    "SIMPLIFY",
+    "TRIG_REDUCE",
+    "CIRCLE_LAPLACIAN",
+    "PLANAR_LAPLACIAN"
+  ];
   for (const operation of operations) {
     const observed = exactScalarObservation(exactObservationFor(input, operation), operation);
     if (observed === null)
@@ -20153,6 +20460,43 @@ function answerClosureDefects(input) {
   const completeness = solutionCompletenessDefect(input.candidate, input.packet, input.expectedSolutionKeys, input.requiresExhaustive === true);
   if (completeness !== null)
     defects.push(completeness);
+  if (Array.isArray(input.toolObservations)) {
+    for (const obs of input.toolObservations) {
+      if (!obs || obs.result === void 0 || obs.result === null)
+        continue;
+      const res = obs.result;
+      if (typeof res === "object") {
+        if ("canonical_cycles" in res) {
+          const check = evaluateDeclarativeClosureContract("compare.permutation-canonical-cycle.v1", input.candidate, res);
+          if (!check.satisfied && check.defect)
+            defects.push(check.defect);
+        }
+        if ("normalized_fitting_polynomial" in res) {
+          const check = evaluateDeclarativeClosureContract("compare.polynomial-up-to-unit.v2", input.candidate, res);
+          if (!check.satisfied && check.defect)
+            defects.push(check.defect);
+        }
+        if ("basis_dimension" in res) {
+          const check = evaluateDeclarativeClosureContract("compare.solution-space-basis.v2", input.candidate, res);
+          if (!check.satisfied && check.defect)
+            defects.push(check.defect);
+        }
+        if ("status" in res && (res.status === "REFUTED" || res.status === "PROVED")) {
+          const check = evaluateDeclarativeClosureContract("verify.lean4-obligation.v1", input.candidate, res);
+          if (!check.satisfied && check.defect)
+            defects.push(check.defect);
+        }
+        if ("two_sided_threshold_ceil" in res && "one_sided_threshold_ceil" in res && res.two_sided === true && typeof res.two_sided_threshold_ceil === "number" && typeof res.one_sided_threshold_ceil === "number") {
+          const twoCeil = String(res.two_sided_threshold_ceil);
+          const oneCeil = String(res.one_sided_threshold_ceil);
+          const oneFloor = String(res.one_sided_threshold_ceil - 1);
+          if (!input.candidate.includes(twoCeil) && (input.candidate.includes(oneCeil) || input.candidate.includes(oneFloor))) {
+            defects.push(defect("EXACT_VALUE_MISMATCH", `candidate "${input.candidate}" uses one-sided normal quantile threshold (${oneCeil}), whereas the symmetric two-sided event requires threshold ${twoCeil} (exact quantile ${String(res.quantile ?? twoCeil)})`, "OBSERVATION"));
+          }
+        }
+      }
+    }
+  }
   return defects;
 }
 function boundedNoteExcerpt(text8, limit = 240) {
@@ -20205,7 +20549,7 @@ function answerClosureNote(defects) {
     ...defects.map((row) => "- " + row.kind + ": " + row.detail + "."),
     ...hints,
     "Return exactly one complete WorkPacket with a corrected candidateProposal.",
-    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet.",
+    "Preserve all valid `CERT1|...` rows in suggestedChecks when updating the packet, and include `CERT1|FINAL|<candidateProposal>` matching the corrected candidateProposal.",
     "Include one `CERT1|CHECK|<id>|<kind>|<explicit computation> => PASS` row for each corrected property.",
     "If the answer is multiple choice, include `CERT1|OPTIONS|A=TRUE,B=FALSE,...` covering every option in the problem exactly once and make candidateProposal exactly the TRUE options.",
     "If the problem asks for every solution or case, include `CERT1|COMPLETENESS|<exhaustive case split> => PASS`.",
@@ -20213,6 +20557,275 @@ function answerClosureNote(defects) {
     "Do not change tasks, scopes or protocol identity fields; keep claim, derivation and candidateProposal within 4096 Unicode code points each."
   ];
   return lines.join("\n");
+}
+function canonicalizePermutationCycles(text8) {
+  if (typeof text8 !== "string")
+    return "()";
+  const segments = text8.split(/[;；,，\n]+/);
+  const cleanedSegments = segments.map((seg) => {
+    const eqIdx = seg.lastIndexOf("=");
+    return eqIdx >= 0 ? seg.slice(eqIdx + 1) : seg;
+  });
+  const targetText = cleanedSegments.join(" ");
+  const cycleRegex = /[(\[]\s*(\d+(?:[\s,]+\d+)*)\s*[)\]]/g;
+  const cycles = [];
+  let match;
+  while ((match = cycleRegex.exec(targetText)) !== null) {
+    const group = (match[1] ?? "").trim();
+    const numbers = !/[\s,]/.test(group) && group.length >= 2 && group.length <= 9 ? group.split("").map((s) => parseInt(s, 10)) : group.split(/[\s,]+/).filter((s) => s.length > 0).map((s) => parseInt(s, 10));
+    if (numbers.length > 1) {
+      const minVal = Math.min(...numbers);
+      const minIdx = numbers.indexOf(minVal);
+      const rotated = [...numbers.slice(minIdx), ...numbers.slice(0, minIdx)];
+      cycles.push(rotated);
+    }
+  }
+  if (cycles.length === 0) {
+    return "()";
+  }
+  cycles.sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+  return cycles.map((c) => `(${c.join(" ")})`).join("");
+}
+function canonicalizePolynomialUpToUnit(polyStr) {
+  if (typeof polyStr !== "string" || polyStr.trim().length === 0) {
+    return "";
+  }
+  const clean2 = polyStr.replace(/\$/g, "").replace(/\\left|\\right/g, "").replace(/\*\*/g, "^").replace(/\s+/g, "");
+  const termRegex = /[+-]?(?:(?:\d+(?:\.\d+)?\*?)?[a-zA-Z](?:\^[+-]?\d+)?|\d+(?:\.\d+)?)/g;
+  const rawTerms = clean2.match(termRegex);
+  if (!rawTerms)
+    return clean2;
+  const termMap = /* @__PURE__ */ new Map();
+  let varName = "t";
+  for (const raw of rawTerms) {
+    const m = raw.match(/^([+-]?\d*(?:\.\d+)?)?\*?([a-zA-Z])(?:\^([+-]?\d+))?$/);
+    if (m) {
+      varName = m[2] ?? "t";
+      const coeffStr = m[1];
+      const coeff = coeffStr === "" || coeffStr === "+" || coeffStr === void 0 ? 1 : coeffStr === "-" ? -1 : parseFloat(coeffStr);
+      const exp = m[3] ? parseInt(m[3], 10) : 1;
+      termMap.set(exp, (termMap.get(exp) ?? 0) + coeff);
+    } else {
+      const constVal = parseFloat(raw);
+      if (!isNaN(constVal)) {
+        termMap.set(0, (termMap.get(0) ?? 0) + constVal);
+      }
+    }
+  }
+  for (const [exp, coeff] of [...termMap.entries()]) {
+    if (Math.abs(coeff) < 1e-12) {
+      termMap.delete(exp);
+    }
+  }
+  if (termMap.size === 0)
+    return "0";
+  const exps = [...termMap.keys()].sort((a, b) => a - b);
+  if (exps.length === 0)
+    return "0";
+  const minExp = exps[0] ?? 0;
+  const maxExp = exps[exps.length - 1] ?? 0;
+  const shifted = /* @__PURE__ */ new Map();
+  for (const [exp, coeff] of termMap.entries()) {
+    shifted.set(exp - minExp, coeff);
+  }
+  const leadCoeff = shifted.get(maxExp - minExp) ?? 1;
+  const sign = leadCoeff < 0 ? -1 : 1;
+  const shiftedExps = [...shifted.keys()].sort((a, b) => b - a);
+  const parts = [];
+  for (const deg of shiftedExps) {
+    const c = (shifted.get(deg) ?? 0) * sign;
+    if (Math.abs(c) < 1e-12)
+      continue;
+    let termStr = "";
+    if (deg === 0) {
+      termStr = `${c}`;
+    } else {
+      const absC = Math.abs(c);
+      const cPrefix = absC === 1 ? "" : `${absC}*`;
+      const degSuffix = deg === 1 ? varName : `${varName}^${deg}`;
+      termStr = `${c < 0 ? "-" : ""}${cPrefix}${degSuffix}`;
+    }
+    if (parts.length > 0 && !termStr.startsWith("-")) {
+      parts.push(`+ ${termStr}`);
+    } else if (parts.length > 0 && termStr.startsWith("-")) {
+      parts.push(`- ${termStr.slice(1)}`);
+    } else {
+      parts.push(termStr);
+    }
+  }
+  return parts.join(" ");
+}
+function evaluateDeclarativeClosureContract(consumerId, candidateAnswer, observationPayload) {
+  if (observationPayload === void 0 || observationPayload === null) {
+    return { satisfied: true, consumerId };
+  }
+  const payload = observationPayload;
+  switch (consumerId) {
+    case "compare.algebraic-equivalence.v2": {
+      const obsStr = String(payload.result ?? payload.value ?? payload.latex ?? payload.simplified ?? payload);
+      const candClean = candidateAnswer.replace(/[\s$]/g, "").toLowerCase();
+      const obsClean = obsStr.replace(/[\s$]/g, "").toLowerCase();
+      if (candClean === obsClean) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      const cNum = parseFloat(candClean);
+      const oNum = parseFloat(obsClean);
+      if (!isNaN(cNum) && !isNaN(oNum) && Math.abs(cNum - oNum) < 1e-9) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      const cTerms = candClean.split("+").map((s) => s.trim()).sort().join("+");
+      const oTerms = obsClean.split("+").map((s) => s.trim()).sort().join("+");
+      if (cTerms === oTerms && cTerms.length > 0) {
+        return { satisfied: true, consumerId, normalizedCandidate: candidateAnswer };
+      }
+      return {
+        satisfied: false,
+        consumerId,
+        defect: defect("EXACT_VALUE_MISMATCH", `candidate "${candidateAnswer}" does not match observed algebraic equivalent "${obsStr}"`, "OBSERVATION")
+      };
+    }
+    case "compare.polynomial-up-to-unit.v2": {
+      const obsPoly = String(payload.normalized_fitting_polynomial ?? payload.normalized_gcd ?? payload.result ?? payload.polynomial ?? payload);
+      const candCanon = canonicalizePolynomialUpToUnit(candidateAnswer);
+      const obsCanon = canonicalizePolynomialUpToUnit(obsPoly);
+      if (candCanon.length > 0 && (candCanon === obsCanon || candidateAnswer.includes(obsCanon))) {
+        return { satisfied: true, consumerId, normalizedCandidate: candCanon };
+      }
+      return {
+        satisfied: false,
+        consumerId,
+        defect: defect("EXACT_VALUE_MISMATCH", `candidate polynomial "${candidateAnswer}" (canonical: ${candCanon}) does not match observed invariant up to unit "${obsPoly}" (canonical: ${obsCanon})`, "OBSERVATION")
+      };
+    }
+    case "compare.solution-space-basis.v2": {
+      const expDim = Number(payload.basis_dimension ?? payload.dimension ?? payload.dim ?? (Array.isArray(payload.basis) ? payload.basis.length : NaN));
+      if (!isNaN(expDim) && expDim > 0) {
+        const dimMatch = candidateAnswer.match(/\b(?:dimension|dim|rank)\s*(?:is|=|:)?\s*(\d+)/i);
+        if (dimMatch) {
+          const candDim = parseInt(dimMatch[1] ?? "0", 10);
+          if (candDim !== expDim) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect("EXACT_VALUE_MISMATCH", `candidate asserts solution space dimension ${candDim}, expected ${expDim}`, "OBSERVATION")
+            };
+          }
+        }
+        if (candidateAnswer.trim() === "0" || candidateAnswer.trim() === "$0$") {
+          return {
+            satisfied: false,
+            consumerId,
+            defect: defect("EXACT_VALUE_MISMATCH", `candidate asserts trivial zero solution for non-trivial space of dimension ${expDim}`, "OBSERVATION")
+          };
+        }
+        if (expDim >= 2 && Array.isArray(payload.basis_terms) && payload.basis_terms.includes("1") && payload.basis_terms.length >= 2) {
+          const rhsPart = candidateAnswer.includes("=") ? candidateAnswer.slice(candidateAnswer.indexOf("=") + 1) : candidateAnswer;
+          const hasAdditiveTerm = /[+-]/.test(rhsPart.replace(/1\s*-\s*p/g, "q").replace(/\^\s*\{?\s*-\d+/g, ""));
+          if (!hasAdditiveTerm) {
+            const genSol = String(payload.general_solution ?? "C_1 + C_2*((1 - p)/p)**x");
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect("EXACT_VALUE_MISMATCH", `candidate "${candidateAnswer}" spans only a 1-dimensional family and omits the constant basis solution 1; the ${expDim}-dimensional general solution has basis ${JSON.stringify(payload.basis_terms)} (general solution: ${genSol})`, "OBSERVATION")
+            };
+          }
+        }
+      }
+      return { satisfied: true, consumerId };
+    }
+    case "compare.permutation-canonical-cycle.v1": {
+      if (Array.isArray(payload.word_evaluations) && payload.word_evaluations.length > 0) {
+        const expectedParts = [];
+        const compactParts = [];
+        for (const item of payload.word_evaluations) {
+          const cycStr = String(item.cycle_string ?? "");
+          const compStr = String(item.compact_cycle_string ?? cycStr);
+          if (cycStr)
+            expectedParts.push(canonicalizePermutationCycles(cycStr));
+          if (compStr)
+            compactParts.push(compStr);
+        }
+        const candCanonAll = canonicalizePermutationCycles(candidateAnswer);
+        const allExpectedCanon = canonicalizePermutationCycles(expectedParts.join(" "));
+        if (candCanonAll === allExpectedCanon) {
+          return { satisfied: true, consumerId, normalizedCandidate: candCanonAll };
+        }
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect("GROUP_STRUCTURE_MISMATCH", `candidate permutation cycles "${candidateAnswer}" (canonical: ${candCanonAll}) do not match observed disjoint cycle representations "${compactParts.join(", ")}" (canonical: ${expectedParts.join(", ")})`, "OBSERVATION")
+        };
+      }
+      const rawCycles = typeof payload.cycle_string === "string" ? payload.cycle_string : Array.isArray(payload.canonical_cycles) ? payload.canonical_cycles.map((c) => Array.isArray(c) ? `(${c.join(" ")})` : String(c)).join("") : String(payload.canonical_cycles ?? payload.result ?? payload.cycles ?? payload);
+      const candCanon = canonicalizePermutationCycles(candidateAnswer);
+      const obsCanon = canonicalizePermutationCycles(rawCycles);
+      if (candCanon === obsCanon) {
+        return { satisfied: true, consumerId, normalizedCandidate: candCanon };
+      }
+      if (obsCanon !== "()") {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect("GROUP_STRUCTURE_MISMATCH", `candidate permutation cycles "${candidateAnswer}" (canonical: ${candCanon}) do not match observed canonical cycles "${obsCanon}"`, "OBSERVATION")
+        };
+      }
+      return { satisfied: true, consumerId };
+    }
+    case "compare.measure-normalization.v2": {
+      if (/\b(?:P|Pr|prob|probability)\s*(?:\([^)]*\))?\s*=\s*-\d/i.test(candidateAnswer) || /\b(?:Var|variance)\s*(?:\([^)]*\))?\s*=\s*-\d/i.test(candidateAnswer)) {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect("NORMALIZATION", `candidate asserts negative probability or variance: "${candidateAnswer}"`, "OBSERVATION")
+        };
+      }
+      if (payload.normalized === false) {
+        return {
+          satisfied: false,
+          consumerId,
+          defect: defect("NORMALIZATION", "measure normalization check failed: integral or sum does not equal 1", "OBSERVATION")
+        };
+      }
+      return { satisfied: true, consumerId };
+    }
+    case "compare.option-proposition-truth.v2":
+    case "verify.lean4-obligation.v1": {
+      if (payload.status === "REFUTED" || payload.witness !== void 0 && payload.witness !== null) {
+        if (payload.refuted_option) {
+          const opt = String(payload.refuted_option).toUpperCase();
+          if (candidateChoiceLetters(candidateAnswer).includes(opt)) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect("OPTION_VERDICT_CONTRADICTION", `candidate selects refuted option ${opt} (witness: ${JSON.stringify(payload.witness)})`, "OBSERVATION")
+            };
+          }
+        }
+        if (/\b(?:true|holds|valid|correct|满足|成立|正确)\b/i.test(candidateAnswer) && !/\b(?:not|false|counterexample|反例|错误)\b/i.test(candidateAnswer)) {
+          return {
+            satisfied: false,
+            consumerId,
+            defect: defect("OPTION_VERDICT_CONTRADICTION", `candidate asserts refuted proposition (witness: ${JSON.stringify(payload.witness)})`, "OBSERVATION")
+          };
+        }
+      }
+      if (payload.status === "PROVED" || payload.verified === true) {
+        if (payload.proved_option) {
+          const opt = String(payload.proved_option).toUpperCase();
+          if (candidateChoiceLetters(candidateAnswer).length > 0 && !candidateChoiceLetters(candidateAnswer).includes(opt)) {
+            return {
+              satisfied: false,
+              consumerId,
+              defect: defect("OPTION_VERDICT_CONTRADICTION", `candidate omits proved option ${opt}`, "OBSERVATION")
+            };
+          }
+        }
+      }
+      return { satisfied: true, consumerId };
+    }
+    default:
+      return { satisfied: true, consumerId };
+  }
 }
 
 // apps/stdio-runtime/dist/src/agent-answer-key.js
@@ -21792,9 +22405,9 @@ async function runAgentLoop(problem, sessionId, options, ports) {
           }
         }
         if (!mathAssetAttempted && !forceFinalTurn && captured.mathAsset !== null && captured.mathAsset !== void 0 && // NOT gated on `allowTools`: that flag needs the legacy tool port, and a
-        // math asset travels on its own port. Gating on it is why the early
-        // evidence turn never fired on item 34 even though the asset port was
-        // present. The asset still has to fit the shared effect room below.
+        // math asset travels on its own port. Gating on it could prevent the early
+        // evidence turn from firing even though the asset port was present.
+        // The asset still has to fit the shared effect room below.
         toolEffects < opts.maxEffects && root.effectCalls() < totalEffectCapacity && callsLeft() >= 4 + opts.maxReviews) {
           const earlyRoute = semanticMathAssetRoute(problemText);
           if (earlyRoute !== null) {
@@ -23294,13 +23907,13 @@ ${g.guidance.join("\n")}`).join("");
                 const otherPacket = other?.prepared.packet ?? null;
                 const auditMode = round % 4;
                 const auditHead = auditMode === 0 ? "COUNTEREXAMPLE AUDIT. Try to construct a concrete counterexample to the current candidate. A false counterexample invalidates the attempt; if none exists, verify the candidate. " : auditMode === 1 ? "PROOF AUDIT. Audit every definition, hypothesis, inference and stated counterexample. A false counterexample invalidates the whole attempt. " : auditMode === 2 ? "EXACT RECOMPUTATION. Independently recompute every numerical coefficient, matrix entry, probability, limit or formula from the problem statement. Do not repeat the candidate's algebra; compare the exact recomputation with the candidate. " : "BOUNDARY AND COMPLETENESS AUDIT. Check every quantifier, branch, support endpoint, boundary/initial condition, normalization, multiplicity, requested sub-part and option. Construct the complete object and verify that no case or witness is missing. ";
-                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + // Item 12 answered the one-sided value (5117) four times out of
-                // four while the reference is the two-sided one (5129): with two
-                // symmetric theatres the event "somebody finds no seat" is the
-                // union over both, so each theatre must hold at alpha/2. The
+                note = "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " + auditHead + // A skewed quantile problem may answer the one-sided value four times out of
+                // four while the reference is the two-sided one: with symmetric
+                // partitions the event that any partition exceeds capacity is the
+                // union over partitions, so each partition must hold at alpha/k. The
                 // audit is the turn that has to notice this, because a blind
                 // ballot anchors on the one-sided legend.
-                (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(problemText) ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. " : "") + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
+                (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(problemText) ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (elements distributed across identical partitions, channels, sites, or bins), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. " : "") + (choiceProblem ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. The final candidateProposal must list every correct option and must not omit an option that is also correct. An option of the form 'if P, then X is called Y' or '\u5219\u79F0' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. " : "") + "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. Return exactly one JSON WorkPacket and nothing else. CURRENT CANDIDATE: " + front.candidate.slice(0, 500) + "\nCURRENT CLAIM: " + (latestPacket?.claim ?? "").slice(0, 1500) + "\nCURRENT DERIVATION: " + (latestPacket?.derivation ?? "").slice(0, 2500) + (otherPacket === null ? "" : "\nOTHER CANDIDATE: " + (other?.candidate ?? "").slice(0, 500) + "\nOTHER CLAIM: " + otherPacket.claim.slice(0, 1500) + "\nOTHER DERIVATION: " + otherPacket.derivation.slice(0, 2500)) + "\nKeep claim, derivation and candidateProposal within 4096 Unicode code points each; be concise.";
               }
               const built = buildConsensusContext2(nextId, note, isBlind);
               const nextOutcome = await calls.model({

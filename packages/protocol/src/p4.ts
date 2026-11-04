@@ -157,6 +157,7 @@ export interface P4Challenge {
   readonly requestIds: readonly string[];
   readonly status: P4ChallengeStatus;
   readonly availability: P4EvidenceAvailability;
+  readonly challengeOrigin?: "MACHINE_VERIFIED" | "LLM_TEXT_ONLY";
 }
 
 /** Model review evidence: at most REVIEWED, always checkResult UNKNOWN. */

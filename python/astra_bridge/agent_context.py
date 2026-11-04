@@ -569,7 +569,7 @@ def _projection_for_source(history, problem, session_id, problem_hash, source_id
             # A REPAIR request carries task/scope identity but not the full
             # scope object; the binding only needs the declared scope id.
             scope = {"scopeId": task.get("scopeId")}
-        projection = project_artifacts(history, session_id, problem_hash)
+        projection = project_artifacts(history, session_id, problem_hash, source_id)
         row = projection["bySourceRef"].get(source_id)
         if not isinstance(row, dict) or row["availability"] != "ACTIVE":
             return None
@@ -600,6 +600,53 @@ def _projection_for_source(history, problem, session_id, problem_hash, source_id
         return None
 
 
+def _expected_target_for_source(history, problem, session_id, problem_hash, source_id,
+                                source_schema=_ACTIVE_CONTEXT_SCHEMA_VERSION):
+    """Answer and raw receipt for a Node-named source, without re-crowning.
+
+    The Node selects the delivered source; the Host keeps every forgery check
+    that does not depend on re-deriving the front-runner: the source must be a
+    real eligible candidate packet, and the returned raw receipt bytes are the
+    Host-owned ones used to recompute the target hash.
+    """
+    try:
+        if not isinstance(history, dict) or not isinstance(source_id, str):
+            return None
+        packet = candidate_packet(
+            history, source_id, problem, session_id, problem_hash, source_schema,
+        )
+        if packet is None:
+            return None
+        entry = history.get(source_id)
+        if not isinstance(entry, dict):
+            return None
+        _, _request, receipt, _body = _source_body(entry)
+        raw_text = receipt["text"]
+        if not isinstance(raw_text, str):
+            return None
+        answer = packet["candidateProposal"]
+        if not isinstance(answer, str) or not js_nonempty(answer):
+            return None
+        return {"rawText": raw_text, "answer": answer}
+    except ProbeError:
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _target_hash_for_binding(binding, raw_text):
+    """Target hash over the declared binding and the Host-owned raw receipt."""
+    if not isinstance(binding, dict) or not isinstance(raw_text, str):
+        return None
+    try:
+        ordered = {name: binding[name] for name in _TARGET_FIELDS}
+    except KeyError:
+        return None
+    raw_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    payload = json.dumps([ordered, raw_hash], ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def check_inputs(inner, history, current_request_id):
     """Check declared input artifacts against the trusted Host history."""
     if not isinstance(inner, dict) or not isinstance(history, dict):
@@ -617,8 +664,7 @@ def check_inputs(inner, history, current_request_id):
     if not isinstance(dependencies, list) or len(refs) != len(artifacts) or len(refs) > _MAX_REFS:
         _fail()
     current_ordinal = _ordinal(current_request_id)
-    projection = project_artifacts(history, inner["sessionId"], inner["problemHash"])
-    by_source = projection["bySourceRef"]
+    projections = {}
     seen = set()
     for index, ref in enumerate(refs):
         _exact_keys(ref, ("artifactId", "artifactVersion"))
@@ -637,7 +683,11 @@ def check_inputs(inner, history, current_request_id):
             _fail()
         if _ordinal(source_id) >= current_ordinal:
             _fail()
-        actual_row = by_source.get(source_id)
+        if source_id not in projections:
+            projections[source_id] = project_artifacts(
+                history, inner["sessionId"], inner["problemHash"], source_id,
+            )
+        actual_row = projections[source_id]["bySourceRef"].get(source_id)
         if not isinstance(actual_row, dict):
             _fail()
         if actual_row["availability"] != "ACTIVE":
@@ -966,11 +1016,18 @@ def _check_work(body, request_id, problem, session_id, problem_hash, history, ef
                 _fail()
             _hash64(projection["targetHash"])
             _text(projection["answer"], _MAX_TEXT_CHARS)
-            expected = _projection_for_source(
+            # Trust the Node-selected source (no independent front-runner
+            # re-crowning), but keep the forgery boundary: the answer must be
+            # exactly the source packet's candidate and the target hash is
+            # recomputed from the declared binding plus the Host-owned raw
+            # receipt bytes.
+            expected = _expected_target_for_source(
                 history, problem, session_id, problem_hash,
                 binding["sourceRequestId"], version,
             )
-            if expected is None or not same_json(projection, expected):
+            if expected is None or projection["answer"] != expected["answer"]:
+                _fail()
+            if projection["targetHash"] != _target_hash_for_binding(binding, expected["rawText"]):
                 _fail()
         if body["allowFinal"] and projection is None:
             _fail()
@@ -1081,11 +1138,10 @@ def _check_r2(body, request_id, problem, session_id, problem_hash, history,
         _fail()
     if target["scopeId"] != packet["scopeId"]:
         _fail()
-    if target["taskId"] != packet["taskId"] or target["goalId"] != packet["goalId"]:
-        _fail()
-    if target["scopeId"] != packet["scopeId"]:
-        _fail()
     entry = history.get(source_id)
+    raw_text = entry["receipt"].get("text") if isinstance(entry.get("receipt"), dict) else None
+    if body["targetHash"] != _target_hash_for_binding(target, raw_text):
+        _fail()
     source_body = _parse_inner(entry["request"]["messages"][1]["content"])
     source_scope = source_body.get("scope")
     source_obligations = source_body.get("obligations")

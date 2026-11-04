@@ -8,7 +8,7 @@ false = False
 
 MATH_ASSET_SCHEMA_VERSION = "math-assets-v1"
 MATH_ASSET_CATALOG_VERSION = "1.0.0"
-MATH_ASSET_CATALOG_DIGEST = "f95ca322b2bdbe8791f3f35bd687e28a707de18f8411e819500215ca93baee9c"
+MATH_ASSET_CATALOG_DIGEST = "746e122dd729fc544349e96db7de284e86fe389f990b0d1125d6a1ba932a91cd"
 
 MATH_ASSETS = [
     {
@@ -192,6 +192,14 @@ MATH_ASSETS = [
                     "description": "Parameter argument for target function_identity"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.real-roots.v1",
+                "compare.polynomial.v1",
+                "record.bounded-observation.v1",
+                "compare.polynomial-identity.v1"
+            ]
         }
     },
     {
@@ -217,7 +225,55 @@ MATH_ASSETS = [
             ],
             "verificationBoundary": "反例见证只对显式构造的具体对象有效；未找到反例不能作为命题成立的数学证明。"
         },
-        "behaviors": [],
+        "behaviors": [
+            {
+                "target": "lean4_verify_obligation",
+                "implementationRef": "impl.proof.lean4-verify.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Formal verification of decidable proof obligations via Lean 4 kernel with symbolic decider fallback",
+                "requiredParams": [],
+                "optionalParams": [
+                    "obligation_kind",
+                    "formula_spec",
+                    "domain_bound",
+                    "timeout_ms"
+                ],
+                "resultType": "formal_obligation",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "verify.lean4-obligation.v1"
+            },
+            {
+                "target": "bounded_counterexample_search",
+                "implementationRef": "impl.proof.counterexample-search.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Exhaustive minimal counterexample search for universal and existential claims on bounded parameter spaces",
+                "requiredParams": [],
+                "optionalParams": [
+                    "predicate_expr",
+                    "variables_domains"
+                ],
+                "resultType": "counterexample_witness",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.option-proposition-truth.v2"
+            },
+            {
+                "target": "boolean_sat_tautology_check",
+                "implementationRef": "impl.proof.boolean-sat.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Propositional logic tautology, satisfiability, and falsifying truth assignment extraction",
+                "requiredParams": [],
+                "optionalParams": [
+                    "formula_str",
+                    "option_map"
+                ],
+                "resultType": "tautology_verdict",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.option-proposition-truth.v2"
+            }
+        ],
         "examples": {
             "positive": [
                 {
@@ -244,7 +300,10 @@ MATH_ASSETS = [
                 "target": {
                     "type": "string",
                     "enum": [
-                        "analyze"
+                        "analyze",
+                        "lean4_verify_obligation",
+                        "bounded_counterexample_search",
+                        "boolean_sat_tautology_check"
                     ],
                     "description": "Mathematical target of the request"
                 },
@@ -260,6 +319,12 @@ MATH_ASSETS = [
                     "description": "For analyze target: list of explicit mathematical assumptions"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.lean4-obligation.v1",
+                "compare.option-proposition-truth.v2"
+            ]
         }
     },
     {
@@ -401,6 +466,12 @@ MATH_ASSETS = [
                     "description": "Parameter description for target double_counting"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.polynomial-identity.v1",
+                "record.bounded-observation.v1"
+            ]
         }
     },
     {
@@ -426,7 +497,57 @@ MATH_ASSETS = [
             ],
             "verificationBoundary": "前有限项的小样本打表只能作为规律猜想的经验支撑，严禁直接替代归纳步的逻辑演绎。"
         },
-        "behaviors": [],
+        "behaviors": [
+            {
+                "target": "berlekamp_massey_recurrence",
+                "implementationRef": "impl.recurrence.berlekamp-massey.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Exact minimal rational linear recurrence and sequence prediction via Berlekamp-Massey algorithm",
+                "requiredParams": [],
+                "optionalParams": [
+                    "terms",
+                    "predict_next"
+                ],
+                "resultType": "recurrence_relation",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "verify.recurrence-initial-terms.v1"
+            },
+            {
+                "target": "characteristic_general_solution",
+                "implementationRef": "impl.recurrence.characteristic-general-solution.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Characteristic roots, multiplicity, solution basis dimension, and general solution for difference/recurrence equations",
+                "requiredParams": [],
+                "optionalParams": [
+                    "characteristic_coeffs",
+                    "rhs_poly_exp",
+                    "initial_conditions",
+                    "var"
+                ],
+                "resultType": "solution_basis",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.solution-space-basis.v2"
+            },
+            {
+                "target": "contraction_fixed_point_iter",
+                "implementationRef": "impl.recurrence.contraction-fixed-point.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Fixed point iteration, local Lipschitz derivative bound, and contraction mapping convergence check",
+                "requiredParams": [],
+                "optionalParams": [
+                    "expr_str",
+                    "var",
+                    "x0",
+                    "steps"
+                ],
+                "resultType": "fixed_point",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.symbolic-numeric-hybrid.v2"
+            }
+        ],
         "examples": {
             "positive": [
                 {
@@ -453,7 +574,10 @@ MATH_ASSETS = [
                 "target": {
                     "type": "string",
                     "enum": [
-                        "analyze"
+                        "analyze",
+                        "berlekamp_massey_recurrence",
+                        "characteristic_general_solution",
+                        "contraction_fixed_point_iter"
                     ],
                     "description": "Mathematical target of the request"
                 },
@@ -469,6 +593,13 @@ MATH_ASSETS = [
                     "description": "For analyze target: list of explicit mathematical assumptions"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.recurrence-initial-terms.v1",
+                "compare.solution-space-basis.v2",
+                "compare.symbolic-numeric-hybrid.v2"
+            ]
         }
     },
     {
@@ -742,6 +873,12 @@ MATH_ASSETS = [
                     "description": "Parameter end_rows for target hamiltonian_paths_grid"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.exact-count.v1",
+                "record.bounded-observation.v1"
+            ]
         }
     },
     {
@@ -919,6 +1056,12 @@ MATH_ASSETS = [
                     "description": "Parameter forbidden for target avoiding_permutations"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.exact-count.v1",
+                "record.bounded-observation.v1"
+            ]
         }
     },
     {
@@ -1018,6 +1161,11 @@ MATH_ASSETS = [
                     "description": "Parameter parameters for target expand_coefficients"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.polynomial.v1"
+            ]
         }
     },
     {
@@ -1201,6 +1349,11 @@ MATH_ASSETS = [
                     "description": "Parameter x_hi for target quadratic_discriminant_family"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.scalar-value.v1"
+            ]
         }
     },
     {
@@ -1303,6 +1456,11 @@ MATH_ASSETS = [
                     "description": "Parameter upper for target definite_integral"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.scalar-value.v1"
+            ]
         }
     },
     {
@@ -1552,6 +1710,12 @@ MATH_ASSETS = [
                     "description": "Parameter seed for target worst_configuration_search"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "record.bounded-observation.v1",
+                "compare.exact-count.v1"
+            ]
         }
     },
     {
@@ -1715,6 +1879,11 @@ MATH_ASSETS = [
                     "description": "Parameter n_terms for target subset_gap_worst_case"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "record.bounded-observation.v1"
+            ]
         }
     },
     {
@@ -1899,6 +2068,14 @@ MATH_ASSETS = [
                     "description": "Parameter variable for target maximal_minors"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.explicit-rank.v1",
+                "compare.explicit-nullity.v1",
+                "compare.linear-system-status.v1",
+                "compare.degree-conservation.v1"
+            ]
         }
     },
     {
@@ -2088,6 +2265,12 @@ MATH_ASSETS = [
                     "description": "Parameter continuity_correction for target normal_overflow_seats"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.scalar-value.v1",
+                "compare.cover-time.v1"
+            ]
         }
     },
     {
@@ -2185,6 +2368,11 @@ MATH_ASSETS = [
                     "description": "Parameter point for target limit"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.scalar-value.v1"
+            ]
         }
     },
     {
@@ -2321,6 +2509,11 @@ MATH_ASSETS = [
                     "description": "Parameter variable for target trig_reduce"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.polynomial.v1"
+            ]
         }
     },
     {
@@ -2430,6 +2623,38 @@ MATH_ASSETS = [
                 "resultType": "boolean",
                 "evidenceCeiling": "EXACT_FOR_INPUT",
                 "consumer": "compare.polynomial-identity.v1"
+            },
+            {
+                "target": "permutation_word_eval",
+                "implementationRef": "impl.algebra.permutation-word-eval.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Exact disjoint cycle decomposition, order, sign, and word evaluation in symmetric group S_n",
+                "requiredParams": [],
+                "optionalParams": [
+                    "cycles_map",
+                    "word",
+                    "degree"
+                ],
+                "resultType": "algebraic_invariant",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.permutation-canonical-cycle.v1"
+            },
+            {
+                "target": "polynomial_matrix_invariants",
+                "implementationRef": "impl.algebra.polynomial-matrix-invariants.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Exact determinant, minor GCD, and Laurent-unit normalized invariant polynomial of parameter matrices",
+                "requiredParams": [],
+                "optionalParams": [
+                    "matrix_expr_rows",
+                    "var",
+                    "normalize_laurent_unit"
+                ],
+                "resultType": "polynomial_invariant",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.polynomial-up-to-unit.v2"
             }
         ],
         "examples": {
@@ -2478,7 +2703,9 @@ MATH_ASSETS = [
                         "splitting_field_degree",
                         "factor_over_extension",
                         "algebraic_polynomial_check",
-                        "wronskian_root_identity"
+                        "wronskian_root_identity",
+                        "permutation_word_eval",
+                        "polynomial_matrix_invariants"
                     ],
                     "description": "Mathematical target of the request"
                 },
@@ -2527,6 +2754,16 @@ MATH_ASSETS = [
                     "description": "Parameter roots for target wronskian_root_identity"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.finite-group-option.v1",
+                "compare.scalar-value.v1",
+                "compare.polynomial.v1",
+                "compare.polynomial-identity.v1",
+                "compare.permutation-canonical-cycle.v1",
+                "compare.polynomial-up-to-unit.v2"
+            ]
         }
     },
     {
@@ -2553,7 +2790,53 @@ MATH_ASSETS = [
             ],
             "verificationBoundary": "本资产纯属概念与严格推理指导，不产生数值观察，也不伪造计算结果。"
         },
-        "behaviors": [],
+        "behaviors": [
+            {
+                "target": "finite_topology_axioms_check",
+                "implementationRef": "impl.topology.axioms-check.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Verification of topology axioms (empty, X, union, intersection), connectedness, compactness, and T0/T1/T2 separation",
+                "requiredParams": [],
+                "optionalParams": [
+                    "ground_set",
+                    "subsets"
+                ],
+                "resultType": "topology_axioms",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.option-proposition-truth.v2"
+            },
+            {
+                "target": "simplicial_euler_homology",
+                "implementationRef": "impl.topology.euler-homology.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Simplicial complex Euler characteristic, surface genus, and Betti number computation",
+                "requiredParams": [],
+                "optionalParams": [
+                    "simplices_or_f_vector",
+                    "orientable"
+                ],
+                "resultType": "homology_invariant",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.topological-invariant.v1"
+            },
+            {
+                "target": "covering_fundamental_group_abelianization",
+                "implementationRef": "impl.topology.group-abelianization.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "First homology group H_1(X; Z) free rank (betti_1) and torsion invariants via presentation Smith normal form",
+                "requiredParams": [],
+                "optionalParams": [
+                    "generators",
+                    "relations"
+                ],
+                "resultType": "homology_invariant",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.topological-invariant.v1"
+            }
+        ],
         "examples": {
             "positive": [
                 {
@@ -2580,7 +2863,10 @@ MATH_ASSETS = [
                 "target": {
                     "type": "string",
                     "enum": [
-                        "analyze"
+                        "analyze",
+                        "finite_topology_axioms_check",
+                        "simplicial_euler_homology",
+                        "covering_fundamental_group_abelianization"
                     ],
                     "description": "Mathematical target of the request"
                 },
@@ -2596,6 +2882,12 @@ MATH_ASSETS = [
                     "description": "For analyze target: list of explicit mathematical assumptions"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.option-proposition-truth.v2",
+                "compare.topological-invariant.v1"
+            ]
         }
     },
     {
@@ -2621,7 +2913,59 @@ MATH_ASSETS = [
             ],
             "verificationBoundary": "统计推断指导基于标准数理统计公理体系，不承担未经验证的真实物理观测数据清洗职责。"
         },
-        "behaviors": [],
+        "behaviors": [
+            {
+                "target": "mle_fisher_score_check",
+                "implementationRef": "impl.statistics.mle-fisher.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Maximum likelihood score function, stationary MLE root finding, and observed Fisher information",
+                "requiredParams": [],
+                "optionalParams": [
+                    "log_likelihood_expr",
+                    "param_symbol"
+                ],
+                "resultType": "mle_estimate",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.statistical-estimator.v1"
+            },
+            {
+                "target": "sampling_distribution_quantiles",
+                "implementationRef": "impl.statistics.sampling-quantiles.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Quantile critical values for normal, student-t, chi-square, F, and compound binomial distributions",
+                "requiredParams": [],
+                "optionalParams": [
+                    "dist_type",
+                    "df1",
+                    "df2",
+                    "alpha",
+                    "two_sided",
+                    "compound_n",
+                    "compound_p"
+                ],
+                "resultType": "quantile",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.symbolic-numeric-hybrid.v2"
+            },
+            {
+                "target": "linear_regression_anova_identities",
+                "implementationRef": "impl.statistics.regression-anova.v1",
+                "legacyToolName": null,
+                "legacyOperation": null,
+                "declaredScope": "Ordinary least squares coefficients, ANOVA identity SST = SSR + SSE, R^2, and F-test statistics",
+                "requiredParams": [],
+                "optionalParams": [
+                    "x_values",
+                    "y_values",
+                    "summary_stats"
+                ],
+                "resultType": "regression_anova",
+                "evidenceCeiling": "EXACT_FOR_INPUT",
+                "consumer": "compare.statistical-estimator.v1"
+            }
+        ],
         "examples": {
             "positive": [
                 {
@@ -2648,7 +2992,10 @@ MATH_ASSETS = [
                 "target": {
                     "type": "string",
                     "enum": [
-                        "analyze"
+                        "analyze",
+                        "mle_fisher_score_check",
+                        "sampling_distribution_quantiles",
+                        "linear_regression_anova_identities"
                     ],
                     "description": "Mathematical target of the request"
                 },
@@ -2664,6 +3011,12 @@ MATH_ASSETS = [
                     "description": "For analyze target: list of explicit mathematical assumptions"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.statistical-estimator.v1",
+                "compare.symbolic-numeric-hybrid.v2"
+            ]
         }
     },
     {
@@ -2773,6 +3126,11 @@ MATH_ASSETS = [
                     "description": "Parameter claimed for target ols_check"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.ols-regression.v1"
+            ]
         }
     },
     {
@@ -3007,13 +3365,21 @@ MATH_ASSETS = [
                     "description": "Parameter basis for target identify_constant"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.interpolation-residual.v1",
+                "compare.scalar-value.v1",
+                "record.bounded-observation.v1",
+                "record.conjecture.v1"
+            ]
         }
     },
     {
         "assetId": "math.encoding",
         "name": "编码与序列",
         "version": "1.0.0",
-        "summary": "LZ78 规范词典编码、解码、短语表示与比特串解析。",
+        "summary": "字典编码、LZ78/LZW 序列压缩、词典树与信息论无损编码表示。",
         "instructions": {
             "conditions": [
                 "字符集明确且有限",
@@ -3187,6 +3553,11 @@ MATH_ASSETS = [
                     "description": "Parameter pair for target format_phrases"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.encoding-phrases.v1"
+            ]
         }
     },
     {
@@ -3401,6 +3772,12 @@ MATH_ASSETS = [
                     "description": "Parameter fixed for target constraint_propagation_2coloring"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.graph-matching.v1",
+                "compare.exact-count.v1"
+            ]
         }
     },
     {
@@ -3615,6 +3992,12 @@ MATH_ASSETS = [
                     "description": "Parameter marked_cells for target unique_tiling_check"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.tiling-certificate.v1",
+                "compare.exact-count.v1"
+            ]
         }
     },
     {
@@ -3842,6 +4225,11 @@ MATH_ASSETS = [
                     "description": "Parameter max_threats for target pairing_strategy_verify"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "verify.game-outcome.v1"
+            ]
         }
     },
     {
@@ -3982,6 +4370,11 @@ MATH_ASSETS = [
                     "description": "Parameter vertices for target lattice_points_in_polygon"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.exact-count.v1"
+            ]
         }
     },
     {
@@ -4122,6 +4515,12 @@ MATH_ASSETS = [
                     "description": "Parameter modulus for target odd_part_table"
                 }
             }
+        },
+        "consumption": {
+            "consumers": [
+                "compare.scalar-value.v1",
+                "record.bounded-observation.v1"
+            ]
         }
     }
 ]

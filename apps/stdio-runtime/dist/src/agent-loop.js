@@ -1287,11 +1287,10 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                 }
                 // Evidence before reasoning. A problem whose text routes deterministically
                 // to a math asset gets that one observation turn FIRST, before any answer
-                // turn, instead of only after a candidate packet exists. Item 34 is why: a
-                // long Alexander-matrix item spent its whole 30-minute problem budget on
-                // answer turns and audits, so the maximal-minor computation returning the
-                // reference polynomial was never reached and the run died with BUDGET
-                // after 13 calls. The turn is one bounded model call plus one effect, it is
+                // turn, instead of only after a candidate packet exists. Complex matrix and
+                // polynomial invariant problems may otherwise exhaust model budget on ungrounded
+                // answer turns and audits, so the invariant computation returning the reference
+                // polynomial is prioritized. The turn is one bounded model call plus one effect, it is
                 // taken only when the asset port exists and effect room is left, and it
                 // never replaces the method-card turn (that contract is unchanged).
                 if (!mathAssetAttempted &&
@@ -1299,9 +1298,9 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     captured.mathAsset !== null &&
                     captured.mathAsset !== undefined &&
                     // NOT gated on `allowTools`: that flag needs the legacy tool port, and a
-                    // math asset travels on its own port. Gating on it is why the early
-                    // evidence turn never fired on item 34 even though the asset port was
-                    // present. The asset still has to fit the shared effect room below.
+                    // math asset travels on its own port. Gating on it could prevent the early
+                    // evidence turn from firing even though the asset port was present.
+                    // The asset still has to fit the shared effect room below.
                     toolEffects < opts.maxEffects &&
                     root.effectCalls() < totalEffectCapacity &&
                     callsLeft() >= 4 + opts.maxReviews) {
@@ -2669,8 +2668,8 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                     // appended to its system message, and it spends no work unit.
                     // Before asking the model again, give it the evidence it refused to
                     // gather. The forced math-asset turn normally runs AFTER a candidate
-                    // packet exists, so an item that abstains without ever delivering one
-                    // (item 34 gave up on a DERIVATION task while the candidate obligation
+                    // packet exists, so an execution that abstains without ever delivering one
+                    // (e.g. giving up on a DERIVATION task while the candidate obligation
                     // was still open) never reached it -- even though its problem text
                     // routed deterministically to a math asset that computes the invariant
                     // exactly. Here the abstention itself triggers that one forced
@@ -2702,9 +2701,9 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         });
                         continue;
                     }
-                    // The refusal is not limited to the answer-bearing task: item 34 gave up
-                    // on a DERIVATION task that still had the candidate obligation open, so
-                    // the whole run ended with no candidate at all. Any first abstention on a
+                    // The refusal is not limited to the answer-bearing task: abstention
+                    // on an intermediate task that still has the candidate obligation open
+                    // could end the whole run with no candidate at all. Any first abstention on a
                     // readable task is refused once; a second one is honoured.
                     if (unsolvedRefusals === 0 &&
                         revision.pendingTaskId() === null &&
@@ -3202,10 +3201,11 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                         // a blind ballot does not. When both audits independently reject the
                         // ballot majority in favour of the same answer, that is the only signal
                         // in the run that has actually seen a defect, and the certificate is
-                        // anchored to it instead of to the front-runner. Item 36 is the case
-                        // that motivated this: four ballots answered AC, both audits answered
-                        // ACD (the reference), and the certificate then put AC back because it
-                        // was only shown the front-runner.
+                        // anchored to it instead of to the front-runner. Multi-select topology items
+                        // are typical examples that motivated this: ballots may converge on a
+                        // subset of options, while audits independently recover the complete
+                        // option set, and the certificate should anchor to the audited consensus
+                        // rather than reverting to the unverified front-runner.
                         const auditConsensus = () => {
                             const audits = consensusAttempts.filter((attempt) => attempt.stage === "AUDIT" && attempt.candidate.length > 0);
                             if (audits.length < 2)
@@ -3389,21 +3389,21 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                 note =
                                     "ADVERSARIAL AUDIT. A candidate solution is supplied below. Audit it; do not assume it is correct. " +
                                         auditHead +
-                                        // Item 12 answered the one-sided value (5117) four times out of
-                                        // four while the reference is the two-sided one (5129): with two
-                                        // symmetric theatres the event "somebody finds no seat" is the
-                                        // union over both, so each theatre must hold at alpha/2. The
+                                        // A skewed quantile problem may answer the one-sided value four times out of
+                                        // four while the reference is the two-sided one: with symmetric
+                                        // partitions the event that any partition exceeds capacity is the
+                                        // union over partitions, so each partition must hold at alpha/k. The
                                         // audit is the turn that has to notice this, because a blind
                                         // ballot anchors on the one-sided legend.
                                         (/(概率|probability|分布|distribution|置信|confidence|显著性|significance|分位数|quantile)/iu.test(problemText)
-                                            ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (people choosing among identical theatres, devices, sites, machines), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. "
+                                            ? "QUANTIFIER CHECK before anything else: if the task bounds the probability that SOME ONE of k symmetric objects is affected (elements distributed across identical partitions, channels, sites, or bins), the event is the UNION over all k objects. Bound each object at alpha/k, take the corresponding two-sided critical value, and never reuse the one-sided alpha value; state the k, the alpha/k and the z or t you used. "
                                             : "") +
                                         (choiceProblem
                                             ? "MULTIPLE-CHOICE COVERAGE: independently decide every option A, B, C, D (and E when present) as true or false. " +
                                                 "The final candidateProposal must list every correct option and must not omit an option that is also correct. " +
                                                 // An audit that rejects a definitional option as "not a theorem"
-                                                // removes a correct option from a correct answer; item 36 lost
-                                                // option D exactly that way.
+                                                // removes a correct option from a correct answer; multi-select
+                                                // items can lose definitional options exactly that way.
                                                 "An option of the form 'if P, then X is called Y' or '则称' is a DEFINITION, not a claim to prove: accept it when it agrees with the standard definition of the named object, and never reject it for being definitional, for not being a theorem, or for stating only one sufficient condition. "
                                             : "") +
                                         "If the candidate is correct, return the same candidate with a short verification; if it is wrong, return one corrected WorkPacket. " +
@@ -3609,7 +3609,7 @@ export async function runAgentLoop(problem, sessionId, options, ports) {
                                             // Adopt a closure correction when the OBSERVATION-grounded
                                             // defect count falls. A certificate-only defect introduced
                                             // by the correction must not discard a corrected exact
-                                            // answer (the original #35 failure mode). If observation
+                                            // answer (the premature derivation-abstention failure mode). If observation
                                             // defects are unchanged, require the total defect count to
                                             // fall, so a different answer with the same unresolved
                                             // defect is still not an improvement.

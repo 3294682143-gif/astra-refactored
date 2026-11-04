@@ -17,7 +17,7 @@
 | `migrated_implementation_sources` | `76` | `76` | **PASS** | 76 项计算实现全量迁入统一运行时 |
 | `unmapped_sources` | `0` | `0` | **PASS** | 无任何遗漏或未映射历史实现 |
 | `blocked_fixed_implementations` | `0` | `0` | **PASS** | 零项固定实现被阻断或降级 |
-| `legacy_only_fixed_implementations` | `0` | `0` | **PASS** | 零项仅存留在旧路径的实现 |
+| `legacy_only_fixed_implementations` | `0` | `76` | **FAIL** | 零项仅存留在旧路径的实现 |
 | `reachable_fixed_implementations_through_official_entry` | `76` | `76` | **PASS** | 76 项计算实现经 use_math_asset 全部可达 |
 | `computation_variants_without_input_contract` | `0` | `0` | **PASS** | 82 个计算行为均具备严格输入契约 |
 | `computation_variants_without_result_contract` | `0` | `0` | **PASS** | 82 个计算行为均具备严格输出契约 |
@@ -31,7 +31,7 @@
 | `generated_view_drift` | `0` | `0` | **PASS** | TS/Python 双端静态编译视图零漂移，确定性同步 |
 | `release_manifest_valid` | `True` | `True` | **PASS** | release/BUILD_MANIFEST.json 严格自校验通过 |
 | `default_entry_uses_unified_assets` | `True` | `True` | **PASS** | ReasoningAgent 默认无参数启动即走 TS 统一资产链 |
-| `required_offline_checks_passed` | `True` | `True` | **PASS** | 所有硬门禁与离线回归测试 100% 通过 |
+| `required_offline_checks_passed` | `True` | `False` | **FAIL** | 所有硬门禁与离线回归测试 100% 通过 |
 
 ## 2. 验收结论
 
@@ -44,4 +44,4 @@
 - **默认环境切换**: `user_agent.py` 默认使用 TypeScript Engine 与 `release/stdio-runtime.bundle.mjs`，无源码依赖独立启动。
 - **基线与冻结审计**: 历史冻结文件哈希 100% 保持原样，零篡改。
 
-**最终判定**: ACCEPTANCE PASSED (100%)
+**最终判定**: ACCEPTANCE FAILED
