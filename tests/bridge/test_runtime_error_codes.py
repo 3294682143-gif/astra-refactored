@@ -38,6 +38,20 @@ def test_unexpected_exception_reports_only_its_type():
     assert agent_runtime._exception_code(ValueError(SECRET)) == "EXC_ValueError"
 
 
+def test_unexpected_code_traceback_is_opt_in(capsys, monkeypatch):
+    monkeypatch.delenv("ASTRA_DEBUG_TRACEBACK", raising=False)
+    try:
+        raise SyntaxError(SECRET)
+    except SyntaxError as exc:
+        assert agent_runtime._unexpected_code(exc) == "EXC_SyntaxError"
+        assert "Traceback" not in capsys.readouterr().err
+        monkeypatch.setenv("ASTRA_DEBUG_TRACEBACK", "1")
+        assert agent_runtime._unexpected_code(exc) == "EXC_SyntaxError"
+        err = capsys.readouterr().err
+        assert "Traceback" in err
+        assert "SyntaxError" in err
+
+
 def test_exception_code_never_carries_the_message():
     code = agent_runtime._exception_code(RuntimeError(SECRET))
     assert SECRET not in code

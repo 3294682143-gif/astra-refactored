@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import uuid
 from pathlib import Path
 
@@ -110,6 +111,22 @@ def _exception_code(exc):
     if not name.replace("_", "a").isalnum() or not name.isascii():
         return _EXC_CODE_PREFIX + "UNKNOWN"
     return _EXC_CODE_PREFIX + name
+
+
+def _unexpected_code(exc):
+    """Fixed code, plus an opt-in stderr traceback for local reproduction.
+
+    The default path stays text-free. A traceback is written to stderr only
+    when ASTRA_DEBUG_TRACEBACK=1 is set for a local debugging run, never into
+    the returned object or a protocol frame.
+    """
+    code = _exception_code(exc)
+    if os.environ.get("ASTRA_DEBUG_TRACEBACK") == "1":
+        try:
+            traceback.print_exc()
+        except Exception:  # noqa: BLE001 - diagnostics must never fail a run
+            pass
+    return code
 
 
 _STAGES = (
@@ -1009,7 +1026,7 @@ class AgentRuntime:
         except OSError:
             error_code = "CHILD_FAILED"
         except Exception as exc:  # noqa: BLE001 - fixed code only, no traceback
-            error_code = _exception_code(exc)
+            error_code = _unexpected_code(exc)
         finally:
             try:
                 host.selector.close()
