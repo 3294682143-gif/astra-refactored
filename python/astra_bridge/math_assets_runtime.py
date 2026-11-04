@@ -489,7 +489,24 @@ def use_math_asset(
                 computation_type="NATIVE_PYTHON",
             )
 
-    exec_res = executor.execute(legacy_tool, exec_args, deadline=eff_deadline, scope=scope)
+    try:
+        exec_res = executor.execute(legacy_tool, exec_args, deadline=eff_deadline, scope=scope)
+    except Exception as exc:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        return _make_result(
+            asset_id=asset_id,
+            asset_version=asset.get("version", "1.0.0"),
+            catalog_digest=catalog_digest,
+            context=context,
+            normalized_input=normalized_input,
+            status="ERROR",
+            guidance=guidance_list,
+            observations=[],
+            checks=[],
+            limitations=[ERR_INPUT_INVALID, str(exc)],
+            duration_ms=duration_ms,
+            computation_type="NATIVE_PYTHON",
+        )
     duration_ms = int((time.monotonic() - start_time) * 1000)
 
     # 11. Interpret execution results

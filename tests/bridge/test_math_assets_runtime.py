@@ -190,3 +190,27 @@ def test_needs_input_then_completion(base_context):
     )
     assert r2["status"] == "COMPLETE"
     assert r2["observations"][0]["value"] == 2
+
+
+class _ExplodingExecutor:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def execute(self, tool, args, deadline, scope):
+        raise self._exc
+
+
+@pytest.mark.parametrize("exc", [SyntaxError("invalid syntax"), RuntimeError("worker died")])
+def test_legacy_executor_exception_is_controlled_error(base_context, exc):
+    """7. legacy worker 异常（含 SyntaxError）不得逃逸为整题失败。"""
+    request = {
+        "action": "math_asset",
+        "assetId": "math.linear-algebra",
+        "input": {"target": "rank", "rows": [1, 2, 3]},
+    }
+    result = use_math_asset(request, context=base_context, executor=_ExplodingExecutor(exc))
+    assert result["status"] == "ERROR"
+    assert result["observations"] == []
+    assert result["checks"] == []
+    assert result["limitations"][0] == ERR_INPUT_INVALID
+    assert result["usage"]["computationType"] == "NATIVE_PYTHON"
