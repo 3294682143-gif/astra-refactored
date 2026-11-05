@@ -202,7 +202,8 @@ def permutation_word_eval(
     compact_str = single_eval["compact_cycle_string"]
 
     if canonical_cycles:
-        latex_str = "".join([f"({'\\ '.join(map(str, c))})" for c in canonical_cycles])
+        cycle_sep = "\\ "
+        latex_str = "".join([f"({cycle_sep.join(map(str, c))})" for c in canonical_cycles])
     else:
         latex_str = "()"
 
