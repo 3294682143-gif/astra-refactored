@@ -1817,7 +1817,7 @@ class AgentHost(_Host):
                 if packet is None:
                     _fail()
                 projection = project_artifacts(
-                    self.history, self.session_id, self.problem_hash,
+                    self.history, self.session_id, self.problem_hash, candidate,
                 )
                 row = projection["bySourceRef"].get(candidate)
                 if not isinstance(row, dict):
