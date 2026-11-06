@@ -14,14 +14,14 @@ from typing import Final
 WEB_ENGINES: Final[tuple[str, ...]] = ("ts",)
 DEFAULT_BUDGET: Final[MappingProxyType[str, object]] = MappingProxyType(
     {
-        "max_model_calls": 8,
+        "max_model_calls": 32,
         "max_work_units": 4,
         "max_effects": 1,
-        "max_reviews": 1,
-        "max_method_loads": 0,
-        "max_repairs": 0,
-        "max_consensus": 0,
-        "max_r0": 0,
+        "max_reviews": 2,
+        "max_method_loads": 1,
+        "max_repairs": 1,
+        "max_consensus": 1,
+        "max_r0": 1,
         "problem_seconds": 600,
         "policy": "BEST_EFFORT",
     }

@@ -87,12 +87,38 @@ class SolverAdapter:
         agent_kwargs = dict(budgets)
         if callable(observer):
             agent_kwargs["observer"] = observer
+        if "engine" in request:
+            agent_kwargs["engine"] = request["engine"]
+        resume_checkpoint = request.get("resume_checkpoint")
+        if agent_kwargs.get("engine") != "lite":
+            mode = (
+                request.get("mode")
+                or (resume_checkpoint.get("mode") if isinstance(resume_checkpoint, dict) else None)
+                or "local"
+            )
+            agent_kwargs["mode"] = mode
         agent = self._agent_class()(client=client, **agent_kwargs)
         metadata = request.get("metadata")
-        result = agent.solve(problem, dict(metadata) if isinstance(metadata, Mapping) else {})
+        if resume_checkpoint is not None:
+            result = agent.solve(
+                problem,
+                dict(metadata) if isinstance(metadata, Mapping) else {},
+                resume_checkpoint=resume_checkpoint,
+            )
+        else:
+            result = agent.solve(problem, dict(metadata) if isinstance(metadata, Mapping) else {})
         if not isinstance(result, Mapping):
             raise TypeError("ReasoningAgent.solve must return a mapping")
         payload = dict(result)
+        # Export checkpoint from the agent runtime if available so checkpoints persist
+        cp = None
+        if hasattr(agent, "_impl") and hasattr(agent._impl, "export_checkpoint"):
+            try:
+                cp = agent._impl.export_checkpoint(problem)
+            except Exception:
+                cp = None
+        if cp is not None and "checkpoint" not in payload:
+            payload["checkpoint"] = cp
         # A Web run can never turn a candidate into a verified answer.
         if payload.get("candidate_verified") is not False:
             payload["candidate_verified"] = False

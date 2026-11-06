@@ -17,10 +17,12 @@ GET  /                           apps/web-demo/dist 静态资源（若存在，�
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import mimetypes
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,8 @@ from starlette.responses import FileResponse, JSONResponse, Response, StreamingR
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
+
+from python.astra_bridge import host_checkpoint
 
 # 注册关键 MIME 类型，防御 Windows 注册表错误关联（如 .js 映射为 text/plain 导致浏览器严格 MIME 检查阻断 ES 模块）
 mimetypes.add_type("application/javascript", ".js")
@@ -52,6 +56,7 @@ from .math_assets_catalog import (
 from .queue import ExecutionManager, IdempotencyConflict
 from .solver_adapter import build_solver_from_env
 from .storage import PathTraversalError, Store
+from .workspace_projector import find_evidence_detail, project_workspace
 
 class JSONResponseUTF8(JSONResponse):
     """显式声明 ``charset=utf-8`` 的 JSON 响应。
@@ -157,6 +162,10 @@ def capabilities(request: Request) -> JSONResponse:
             "/api/math-assets/{assetId}",
             "/api/runs",
             "/api/runs/{run_id}",
+            "/api/runs/{run_id}/workspace",
+            "/api/runs/{run_id}/evidence/{evidenceId}",
+            "/api/runs/{run_id}/recovery",
+            "/api/runs/{run_id}/resume",
             "/api/runs/{run_id}/events",
             "/api/replays",
             "/api/assets",
@@ -346,6 +355,207 @@ def get_replay(request: Request) -> JSONResponse:
     })
 
 
+def _resolve_run_and_events(request: Request, run_id: str) -> tuple[dict[str, Any], list[dict[str, Any]], bool]:
+    store: Store = request.app.state.store
+    manager: ExecutionManager = request.app.state.execution_manager
+    is_active = manager.is_active(run_id)
+
+    if is_active:
+        active_info = manager.get_active_run(run_id) or {}
+        run_dict = {
+            "run_id": run_id,
+            "status": "running",
+            "scenario": active_info.get("problem", ""),
+            "summary": active_info,
+        }
+        events = list(manager.get_history_events(run_id))
+        return run_dict, events, True
+
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    events: list[dict[str, Any]] = []
+    checkpoint: Optional[dict[str, Any]] = None
+    if isinstance(run.get("summary"), dict) and run["summary"].get("checkpoint"):
+        checkpoint = run["summary"]["checkpoint"]
+
+    l2_path = run.get("l2_path")
+    if l2_path:
+        try:
+            payload_path = store.safe_join(l2_path)
+            if payload_path.is_file():
+                details = json.loads(payload_path.read_text(encoding="utf-8"))
+                events = list(details.get("events") or [])
+                if not checkpoint and isinstance(details.get("checkpoint"), dict):
+                    checkpoint = details["checkpoint"]
+        except Exception:
+            pass
+
+    # Check dedicated checkpoint file runs/{run_id}/checkpoint.json
+    if not checkpoint:
+        try:
+            cp_path = store.safe_join(f"runs/{run_id}/checkpoint.json")
+            if cp_path.is_file():
+                checkpoint = json.loads(cp_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    if checkpoint:
+        run["checkpoint"] = checkpoint
+
+    return run, events, False
+
+
+def get_workspace(request: Request) -> JSONResponse:
+    run_id = request.path_params["run_id"]
+    run, events, is_active = _resolve_run_and_events(request, run_id)
+    snapshot = project_workspace(run, events, is_active=is_active)
+    return JSONResponseUTF8(snapshot)
+
+
+def get_evidence(request: Request) -> JSONResponse:
+    run_id = request.path_params["run_id"]
+    evidence_id = request.path_params["evidence_id"]
+    run, events, is_active = _resolve_run_and_events(request, run_id)
+    detail = find_evidence_detail(run, events, evidence_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="evidence not found")
+    return JSONResponseUTF8(detail)
+
+
+def get_recovery(request: Request) -> JSONResponse:
+    run_id = request.path_params["run_id"]
+    run, events, is_active = _resolve_run_and_events(request, run_id)
+    snapshot = project_workspace(run, events, is_active=is_active)
+    return JSONResponseUTF8(snapshot.get("recovery", {}))
+
+
+def validate_and_prepare_resume(
+    run: dict[str, Any],
+    events: list[dict[str, Any]],
+    is_active: bool,
+    headers: Any = None,
+) -> dict[str, Any]:
+    """校验恢复准入条件并生成收紧预算的同题恢复请求 (方案 9 节 / AGENTS.md:9)."""
+    run_id = run.get("run_id") or ""
+    snapshot = project_workspace(run, events, is_active=is_active)
+    recovery_info = snapshot.get("recovery") or {}
+
+    if is_active:
+        raise HTTPException(status_code=409, detail="run is currently active; cannot resume concurrently")
+    if not recovery_info.get("eligible"):
+        raise HTTPException(
+            status_code=400,
+            detail=recovery_info.get("reason", "this run is not eligible for resumption"),
+        )
+
+    checkpoint = run.get("checkpoint")
+    if not checkpoint or not isinstance(checkpoint, dict):
+        raise HTTPException(status_code=400, detail="未检测到可信中间检查点，拒绝恢复")
+
+    problem = snapshot.get("problem") or run.get("scenario") or ""
+    problem_hash = hashlib.sha256(problem.encode("utf-8")).hexdigest()
+    try:
+        verified_cp = host_checkpoint.verify_checkpoint(
+            checkpoint,
+            problem_hash=problem_hash,
+            contract_version=host_checkpoint.body_contract_version(checkpoint),
+        )
+    except host_checkpoint.CheckpointError as exc:
+        raise HTTPException(status_code=400, detail=f"检查点校验失败 ({exc.code})，拒绝恢复") from exc
+
+    # Check unknownRequestIds: strictly blocked per AGENTS.md:9
+    if len(verified_cp.get("unknownRequestIds") or []) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="存在未确认远端请求 (OUTCOME_UNKNOWN)，依据安全准则禁止自动续推",
+        )
+
+    # 严格收紧预算，不放宽总预算或重新赠送原时限 (Standards S2, S3 / AGENTS.md:9)
+    spent_m = verified_cp.get("spent", {}).get("modelCalls", 0)
+    max_m = verified_cp.get("budget", {}).get("maxModelCalls", 0)
+    rem_m = max(0, max_m - spent_m)
+    if rem_m <= 0:
+        raise HTTPException(status_code=400, detail="原模型预算已耗尽，禁止超出原限额续推")
+
+    spent_e = verified_cp.get("spent", {}).get("effectCalls", 0)
+    max_e = verified_cp.get("budget", {}).get("maxEffects", 0)
+    rem_e = max(0, max_e - spent_e)
+
+    # 继承原执行的截止时间，判断是否已过期；同一个截止边界贯穿两次执行，过期必须拒绝；不能拿历史耗时当绝对时间并赠送 (Standards S1, S2)
+    original_seconds = float(run.get("summary", {}).get("problem_seconds") or run.get("problem_seconds") or DEFAULT_BUDGET["problem_seconds"])
+    duration_s = float(run.get("duration_s", 0.0))
+    created_at = float(run.get("created_at") or run.get("summary", {}).get("created_at") or 0.0)
+    now = time.time()
+
+    # 原绝对截止时间：不可变。同一截止边界贯穿整个生命周期 (Standards S1)
+    root_deadline_ts = float(
+        run.get("root_deadline_ts")
+        or run.get("summary", {}).get("root_deadline_ts")
+        or (created_at + original_seconds if created_at > 0 else (now + (original_seconds - duration_s)))
+    )
+
+    rem_seconds_by_deadline = root_deadline_ts - now
+    rem_seconds_by_duration = original_seconds - duration_s
+
+    # 若请求到达时已过期，必须立即拒绝
+    if rem_seconds_by_duration <= 0 or rem_seconds_by_deadline <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"原任务时间限额已耗尽或绝对截止时间已过期 (限额 {original_seconds}s，已耗时 {duration_s}s)，依据安全准则禁止恢复",
+        )
+
+    # 确定性剩余预算秒数：由不可变的原限额与已耗时决定，保证同一检查点的幂等指纹恒定 (Standards S2)
+    stable_rem_seconds = round(max(0.001, rem_seconds_by_duration), 3)
+
+    mode = verified_cp.get("mode") or "local"
+
+    cp_seq = len(verified_cp.get("sessionLog", []))
+    resume_key = f"resume-{run_id}-{cp_seq}"
+    header_dict = dict(headers or {})
+    header_key = header_dict.get("Idempotency-Key") or header_dict.get("idempotency-key") or resume_key
+
+    return {
+        "problem": problem,
+        "engine": run.get("summary", {}).get("engine", "ts"),
+        "metadata": {
+            "resumed_from": run_id,
+            "root_run_id": run.get("summary", {}).get("root_run_id", run_id),
+            "checkpoint_seq": cp_seq,
+            "root_max_model_calls": max_m,
+            "remaining_model_calls": rem_m,
+            "root_deadline_ts": root_deadline_ts,
+        },
+        "mode": mode,
+        "max_model_calls": max_m,
+        "max_effects": max_e,
+        "max_method_loads": recovery_info.get("remainingBudget", {}).get("maxMethodLoads", 2),
+        "problem_seconds": stable_rem_seconds,
+        "root_deadline_ts": root_deadline_ts,
+        "resume_checkpoint": verified_cp,
+        "idempotency_key": header_key,
+    }
+
+
+async def resume_run(request: Request) -> JSONResponse:
+    """申请受约束的同题恢复，支持请求幂等 (方案 9.2 节)."""
+    run_id = request.path_params["run_id"]
+    manager: ExecutionManager = request.app.state.execution_manager
+
+    run, events, is_active = _resolve_run_and_events(request, run_id)
+    resume_req = validate_and_prepare_resume(run, events, is_active, headers=request.headers)
+
+    try:
+        result = await manager.enqueue_run(request=resume_req)
+    except IdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    status_code = 200 if result.get("idempotent_replay") else 201
+    return JSONResponseUTF8(result, status_code=status_code)
+
+
+
 def list_math_assets(request: Request) -> JSONResponse:
     try:
         return JSONResponseUTF8(math_asset_summary())
@@ -465,6 +675,10 @@ def create_app(
         Route("/api/runs", list_runs, methods=["GET"]),
         Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),
+        Route("/api/runs/{run_id}/workspace", get_workspace, methods=["GET"]),
+        Route("/api/runs/{run_id}/evidence/{evidence_id:path}", get_evidence, methods=["GET"]),
+        Route("/api/runs/{run_id}/recovery", get_recovery, methods=["GET"]),
+        Route("/api/runs/{run_id}/resume", resume_run, methods=["POST"]),
         Route("/api/runs/{run_id}/events", sse_events, methods=["GET"]),
         Route("/api/runtime-info", get_runtime_info, methods=["GET"]),
         Route("/api/math-assets", list_math_assets, methods=["GET"]),

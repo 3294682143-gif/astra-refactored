@@ -448,10 +448,52 @@ class ExecutionManager:
         self._inflight += 1
         self._max_observed_concurrency = max(self._max_observed_concurrency, self._inflight)
         started = time.time()
-        loop = asyncio.get_running_loop()
+
+        # Standards S1: 出队与真正启动前重新校验原绝对截止时间
+        # 串行队列等待期间原截止时间持续消耗；若排队后已超期，严禁调用 solver，直接以系统级失败收口
+        root_deadline = info.get("root_deadline_ts") or info.get("metadata", {}).get("root_deadline_ts")
+        if root_deadline is not None:
+            now = time.time()
+            rem = float(root_deadline) - now
+            if rem <= 0:
+                logger.warning(
+                    "Run %s exceeded original deadline while waiting in queue (rem=%.3fs); refusing solver invocation",
+                    run_id,
+                    rem,
+                )
+                outcome = SolveOutcome(
+                    stop_reason=StopReason.ERROR,
+                    final_response=UNSOLVED_RESPONSE,
+                    reason=f"原任务截止时间在排队等待期间已过期（超期 {-rem:.3f}s），依据安全准则禁止启动求解",
+                    code="DEADLINE_EXCEEDED_IN_QUEUE",
+                    executed=False,
+                )
+                duration_s = round(time.time() - started, 3)
+                try:
+                    self._finalize(info, outcome, duration_s=duration_s)
+                except Exception as exc:
+                    logger.error("failed to finalize run %s: %s", run_id, exc)
+                finally:
+                    self._inflight -= 1
+                    self._running.discard(run_id)
+                    self._completed_total += 1
+                    self._active_runs.pop(run_id, None)
+                    self._notify_close(run_id)
+                return
+            else:
+                # 动态计算真正出队启动时的剩余秒数，保证 solver 严格受限于原绝对截止时间
+                info["problem_seconds"] = round(rem, 3)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
 
         def event_sink(event: Mapping[str, Any]) -> None:
-            loop.call_soon_threadsafe(self.append_event_sync, run_id, dict(event))
+            if loop is not None:
+                loop.call_soon_threadsafe(self.append_event_sync, run_id, dict(event))
+            else:
+                self.append_event_sync(run_id, dict(event))
 
         try:
             outcome = await self._invoke_solver(info, event_sink=event_sink)
@@ -491,6 +533,7 @@ class ExecutionManager:
                 "max_model_calls", "max_work_units", "max_effects",
                 "max_reviews", "max_method_loads", "max_repairs",
                 "max_consensus", "max_r0", "problem_seconds", "policy",
+                "mode", "resume_checkpoint", "root_deadline_ts",
             )
             if key in info
         }
@@ -594,6 +637,18 @@ class ExecutionManager:
             summary["nodeVersion"] = resolve_node_version()
             summary["modelEndpoint"] = "openai-compatible"
             summary["commitHash"] = resolve_commit_hash()
+
+        # Persist checkpoint if exported by the solver runtime
+        cp = raw.get("checkpoint")
+        if cp:
+            summary["checkpoint"] = cp
+            try:
+                atomic_write_json(
+                    self.store.safe_join(f"runs/{run_id}/checkpoint.json"),
+                    cp,
+                )
+            except Exception as exc:
+                logger.warning("failed to persist checkpoint for %s: %s", run_id, exc)
 
         # Real-time observer events are already in the per-run history. Append
         # any final events supplied by the solver, then persist the same ordered
@@ -1003,6 +1058,10 @@ class ExecutionManager:
                 "nodeVersion": summary.get("nodeVersion"),
                 "modelEndpoint": summary.get("modelEndpoint"),
                 "commitHash": summary.get("commitHash"),
+                "unresolvedObligations": list(summary.get("unresolvedObligations") or []),
+                "strictAcceptance": summary.get("strictAcceptance"),
+                "targetEnvironment": summary.get("targetEnvironment"),
+                "mode": summary.get("mode"),
             },
         }
         self.append_event_sync(run_id, event)

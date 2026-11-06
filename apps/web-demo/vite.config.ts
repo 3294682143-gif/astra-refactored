@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "katex": fileURLToPath(new URL("./src/vendor/katex/katex.mjs", import.meta.url)),
     },
   },
   server: {

@@ -9,6 +9,11 @@
  */
 
 import type { RunEventEnvelope } from "../domain/reduceRun.ts";
+import type {
+  ResearchViewModel,
+  ResearchEvidence,
+  RecoveryEligibility,
+} from "../domain/research/types.ts";
 
 /** 数据可观测级别；UNKNOWN 表示无法从接口确证级别（不得冒充 L2 / L3）。 */
 export type TraceLevel = "L1" | "L2" | "L3" | "UNKNOWN";
@@ -369,6 +374,36 @@ export async function fetchReplay(runId: string): Promise<ApiResult<ReplayPayloa
       details,
     },
   };
+}
+
+export function fetchWorkspace(runId: string): Promise<ApiResult<ResearchViewModel>> {
+  return requestJson<ResearchViewModel>(`/api/runs/${encodeURIComponent(runId)}/workspace`);
+}
+
+export function fetchEvidence(
+  runId: string,
+  evidenceId: string,
+): Promise<ApiResult<ResearchEvidence>> {
+  return requestJson<ResearchEvidence>(
+    `/api/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}`,
+  );
+}
+
+export function fetchRecovery(runId: string): Promise<ApiResult<RecoveryEligibility>> {
+  return requestJson<RecoveryEligibility>(`/api/runs/${encodeURIComponent(runId)}/recovery`);
+}
+
+export function resumeRun(
+  runId: string,
+  idempotencyKey?: string,
+): Promise<ApiResult<CreateRunResponse>> {
+  return requestJson<CreateRunResponse>(`/api/runs/${encodeURIComponent(runId)}/resume`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+    },
+  });
 }
 
 const DECLARED_LEVELS: readonly TraceLevel[] = ["L1", "L2", "L3"];

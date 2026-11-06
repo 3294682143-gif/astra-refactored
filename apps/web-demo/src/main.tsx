@@ -4,6 +4,7 @@ import { RouterProvider } from "react-router";
 
 import { router } from "./router";
 import "./index.css";
+import "./vendor/katex/katex.min.css";
 
 const container = document.getElementById("root");
 
