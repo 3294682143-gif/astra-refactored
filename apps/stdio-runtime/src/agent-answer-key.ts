@@ -132,6 +132,24 @@ function polynomialToken(poly: Poly): string {
   return `poly:${rows.map(([monomial, coefficient]) => `${monomial}=${coefficient}`).join(";")}`;
 }
 
+const MULTIPART_TRUTH_RE = /(?:\(\s*(\d+)\s*\)|(\d+)\)|statement\s+(\d+)\s*[:.])\s*(true|false|正确|错误|对|错|成立|不成立|是|否|√|×)(?![A-Za-z一-鿿])/giu;
+const MULTIPART_TRUTH_MAP: Record<string, string> = {
+  true: "true", "正确": "true", "对": "true", "成立": "true", "是": "true", "√": "true",
+  false: "false", "错误": "false", "错": "false", "不成立": "false", "否": "false", "×": "false",
+};
+
+function multipartTruthToken(value: string): string | null {
+  const found: Array<[number, string]> = [];
+  for (const match of value.matchAll(MULTIPART_TRUTH_RE)) {
+    const number = match[1] ?? match[2] ?? match[3];
+    found.push([Number(number), MULTIPART_TRUTH_MAP[match[4]!.toLowerCase()]!]);
+  }
+  if (found.length < 2) return null;
+  const numbers = found.map(([number]) => number);
+  if (numbers.some((number, index) => number !== index + 1)) return null;
+  return `parts:${found.map(([, truth]) => truth).join(",")}`;
+}
+
 /** Conservative canonical key used only for bounded consensus comparison. */
 export function canonicalAnswerKey(text: string): string {
   let value = text.trim();
@@ -172,6 +190,10 @@ export function canonicalAnswerKey(text: string): string {
   const optionKey = optionToken(compactLower);
   if (optionKey !== null) {
     return optionKey;
+  }
+  const multipartTruth = multipartTruthToken(value);
+  if (multipartTruth !== null) {
+    return multipartTruth;
   }
   // Do not turn two adjacent numeric literals ("1 2", "1 1/2") into a
   // polynomial product and then a different numeric answer.

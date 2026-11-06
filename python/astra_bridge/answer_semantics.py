@@ -429,6 +429,37 @@ def _polynomial_token(poly):
 # -- the key -----------------------------------------------------------------
 
 
+_MULTIPART_TRUTH_RE = re.compile(
+    r"(?:\(\s*(\d+)\s*\)|(\d+)\)|statement\s+(\d+)\s*[:.])\s*"
+    r"(true|false|正确|错误|对|错|成立|不成立|是|否|√|×)(?![A-Za-z一-鿿])",
+    re.IGNORECASE,
+)
+_MULTIPART_TRUTH_MAP = {
+    "true": "true", "正确": "true", "对": "true", "成立": "true", "是": "true", "√": "true",
+    "false": "false", "错误": "false", "错": "false", "不成立": "false", "否": "false", "×": "false",
+}
+
+
+def _multipart_truth_token(value):
+    """Cross-language key for a numbered list of truth verdicts.
+
+    Matches ``(1) True; (2) True``, ``1) 错误; 2) 正确`` and ``Statement 1:
+    TRUE. Statement 2: TRUE`` alike, requiring consecutive numbered verdicts so
+    a single or unnumbered claim is never folded into a multi-part key.
+    """
+    found = []
+    for match in _MULTIPART_TRUTH_RE.finditer(value):
+        number = match.group(1) or match.group(2) or match.group(3)
+        truth = _MULTIPART_TRUTH_MAP[match.group(4).lower()]
+        found.append((int(number), truth))
+    if len(found) < 2:
+        return None
+    numbers = [number for number, _ in found]
+    if numbers != list(range(1, len(found) + 1)):
+        return None
+    return "parts:" + ",".join(truth for _, truth in found)
+
+
 def canonical_answer_key(text):
     """One comparable key for one answer text; never a normalized answer."""
     if not isinstance(text, str):
@@ -454,6 +485,9 @@ def canonical_answer_key(text):
     options = _option_token(compact_lower)
     if options is not None:
         return options
+    multipart_truth = _multipart_truth_token(value)
+    if multipart_truth is not None:
+        return multipart_truth
     polynomial = None if re.search(r"\d\s+\d", value) else _polynomial_of(compact_lower)
     if polynomial is not None:
         return _polynomial_token(polynomial)

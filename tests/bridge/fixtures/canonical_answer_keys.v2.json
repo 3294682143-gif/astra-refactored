@@ -157,6 +157,23 @@
         "A、B、C 正确，D 错误",
         "a、b、c正确，d错误"
       ]
+    },
+    {
+      "group": "multipart-truth-all-true",
+      "inputs": [
+        "(1) True; (2) True",
+        "Statement 1: TRUE. Statement 2: TRUE (A=A^T).",
+        "1) 对; 2) 对",
+        "(1) 正确; (2) 正确"
+      ]
+    },
+    {
+      "group": "multipart-truth-false-true",
+      "inputs": [
+        "1) 错误（不存在这样的A,B）；2) 正确（A=Aᵀ）",
+        "1) 错误; 2) 正确",
+        "(1) False; (2) True"
+      ]
     }
   ],
   "different": [
@@ -219,6 +236,16 @@
       "group": "whitespace-mixed-number",
       "left": "1 1/2",
       "right": "11/2"
+    },
+    {
+      "group": "multipart-truth-vs-flipped",
+      "left": "(1) True; (2) True",
+      "right": "1) 错误; 2) 正确"
+    },
+    {
+      "group": "multipart-truth-single-not-folded",
+      "left": "(1) 正确。反例构造：取 2x5 嵌入块",
+      "right": "(1) True; (2) True"
     }
   ],
   "pythonKeys": [
@@ -349,6 +376,22 @@
     {
       "input": "   ",
       "key": "text:"
+    },
+    {
+      "input": "(1) True; (2) True",
+      "key": "parts:true,true"
+    },
+    {
+      "input": "Statement 1: TRUE. Statement 2: TRUE (A=A^T).",
+      "key": "parts:true,true"
+    },
+    {
+      "input": "1) 错误（不存在这样的A,B）；2) 正确（A=Aᵀ）",
+      "key": "parts:false,true"
+    },
+    {
+      "input": "1) 错误; 2) 正确",
+      "key": "parts:false,true"
     }
   ]
 }
