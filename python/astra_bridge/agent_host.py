@@ -1842,23 +1842,29 @@ class AgentHost(_Host):
         if not self._is_resuming():
             self._check_final_provenance(candidate, summary["stopReason"])
         self.solve_result = copy.deepcopy(result)
+        raw_events = None
         private_state = result.get("privateState")
         if isinstance(private_state, dict):
             session_log = private_state.get("sessionLog")
             if isinstance(session_log, dict) and isinstance(session_log.get("events"), list):
-                for ev in session_log["events"]:
-                    if not isinstance(ev, dict):
-                        continue
-                    kind = ev.get("kind")
-                    data = ev.get("data")
-                    if not isinstance(data, dict):
-                        continue
-                    clean_data = {k: v for k, v in data.items() if not k.startswith("__")}
-                    if kind in (
-                        "CONTRACT", "TASK_STARTED", "WORKUNIT",
-                        "REVIEW_CHALLENGE", "REPAIR", "CONSENSUS",
-                    ):
-                        self._emit(kind, clean_data)
+                raw_events = session_log["events"]
+        if raw_events is None and isinstance(result.get("sessionLog"), list):
+            raw_events = result["sessionLog"]
+
+        if isinstance(raw_events, list):
+            for ev in raw_events:
+                if not isinstance(ev, dict):
+                    continue
+                kind = ev.get("kind")
+                data = ev.get("data")
+                if not isinstance(data, dict):
+                    continue
+                clean_data = {k: v for k, v in data.items() if not k.startswith("__")}
+                if kind in (
+                    "CONTRACT", "CONTRACT_REVISED", "TASK_STARTED", "WORKUNIT",
+                    "REVIEW_CHALLENGE", "REPAIR", "CONSENSUS", "R0_REVIEW",
+                ):
+                    self._emit(kind, clean_data)
         self.expected = None
 
     def _check_final_provenance(self, candidate, stop_reason):
