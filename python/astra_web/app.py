@@ -54,6 +54,12 @@ from .math_assets_catalog import (
     summary_payload as math_asset_summary,
 )
 from .queue import ExecutionManager, IdempotencyConflict
+from .solver_config import config_path
+from .solver_runtime import UsageLedger, build_solver_from_path
+from .solver_config_api import (
+    get_solver_config, put_solver_config, delete_solver_config,
+    get_solver_usage, list_solver_models,
+)
 from .solver_adapter import build_solver_from_env
 from .storage import PathTraversalError, Store
 from .workspace_projector import find_evidence_detail, project_workspace
@@ -653,13 +659,19 @@ def create_app(
     mount_static: bool = True,
     solver: Any = None,
     recover_orphans: bool = True,
+    use_saved_solver: bool = False,
 ) -> Starlette:
     default_data_root = REPO_ROOT / "var" / "astra"
     default_web_dist = REPO_ROOT / "apps" / "web-demo" / "dist"
 
     store_root = Path(data_root) if data_root else _env_path("ASTRA_DATA_ROOT", str(default_data_root))
     store = Store(store_root)
-    execution_manager = ExecutionManager(store, solver=solver)
+    usage = UsageLedger()
+    solver_config_path = config_path()
+    effective_solver = solver
+    if effective_solver is None and use_saved_solver:
+        effective_solver = build_solver_from_path(solver_config_path, usage)
+    execution_manager = ExecutionManager(store, solver=effective_solver)
     if recover_orphans:
         # A previous process may have died mid-run. Those runs keep their real
         # events and are closed honestly instead of showing a phantom "running".
@@ -672,6 +684,11 @@ def create_app(
         Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/api/health", health, methods=["GET"]),
         Route("/api/capabilities", capabilities, methods=["GET"]),
+        Route("/api/config/solver", get_solver_config, methods=["GET"]),
+        Route("/api/config/solver", put_solver_config, methods=["PUT"]),
+        Route("/api/config/solver", delete_solver_config, methods=["DELETE"]),
+        Route("/api/config/usage", get_solver_usage, methods=["GET"]),
+        Route("/api/config/models", list_solver_models, methods=["POST"]),
         Route("/api/runs", list_runs, methods=["GET"]),
         Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),
@@ -705,13 +722,20 @@ def create_app(
     )
     app.state.store = store
     app.state.execution_manager = execution_manager
+    app.state.solver_config_path = solver_config_path
+    app.state.usage = usage
     app.state.data_root = store.root
     app.state.web_dist = dist_path if dist_path.is_dir() else None
 
     return app
 
 
-try:
-    app = create_app(solver=build_solver_from_env())
-except Exception:
+if os.environ.get("ASTRA_SKIP_DEFAULT_APP") == "1":
+    # Imported as a library (e.g. scripts/web_demo_server.py): do NOT create a
+    # second ExecutionManager/Store on the same data root.
     app = None
+else:
+    try:
+        app = create_app(use_saved_solver=True)
+    except Exception:
+        app = None

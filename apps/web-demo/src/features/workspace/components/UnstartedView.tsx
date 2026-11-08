@@ -21,38 +21,35 @@ export interface FeaturedCase {
 
 export const FEATURED_CASES: readonly FeaturedCase[] = [
   {
-    id: "case-poly",
-    title: "整系数多项式完全平方判定",
+    id: "case-irreducible",
+    title: "整系数多项式的不可约性与对称分式精确值",
     tag: "数论与多项式代数",
-    problem:
-      "设 P(x) 为整系数多项式，满足对所有正整数 n 均有 P(n) 为完全平方数。证明 P(x) 是某整系数多项式的平方。",
-    realRunId: "run-16a5b148239f",
-    rationale: "包含二阶展开资产调用、判别式检验、专家审查与代数恒等引理闭合",
+    problem: "设整系数多项式 $P(x) = x^5 - x - 1 \\in \\mathbb{Z}[x]$，其五个复根记为 $\\alpha_1, \\alpha_2, \\alpha_3, \\alpha_4, \\alpha_5$。\n（1）通过模素数约化法，证明 $P(x)$ 在有理数域 $\\mathbb{Q}[x]$ 上不可约；\n（2）求对称有理分式 $\\sum_{i=1}^5 \\frac{1}{\\alpha_i^2 + 1}$ 的精确值。",
+    rationale: "模素数约化不可约性判定 + 幂和/对称分式精确计算",
   },
   {
-    id: "case-gf2",
-    title: "有限域 GF(2) 矩阵秩与通解",
-    tag: "线性代数与符号计算",
-    problem:
-      "已知线性系统方程 Ax=b，求 GF(2) 秩及通解，并验证齐次空间正交基。",
-    realRunId: "run-c4c0292f1708",
-    rationale: "包含高斯消元算子、有限域秩计算资产与齐次解空间一致性验证",
+    id: "case-smith",
+    title: "整数矩阵的 Smith 标准型与 Abel 群不变因子",
+    tag: "线性代数与模论",
+    problem: "设整数环 $\\mathbb{Z}$ 上的三阶矩阵为\n$$A = \\begin{pmatrix} 2 & 4 & 4 \\\\ -6 & 6 & 12 \\\\ 10 & -4 & -16 \\end{pmatrix} \\in M_3(\\mathbb{Z}).$$\n求矩阵 $A$ 在 $\\mathbb{Z}$ 上的不变因子与 Smith 标准型 $\\operatorname{diag}(d_1, d_2, d_3)$（其中 $d_1 \\mid d_2 \\mid d_3$），并给出有限生成 Abel 商群 $\\mathbb{Z}^3 / A\\mathbb{Z}^3$ 的不变因子分解。",
+    rationale: "初等/不变因子计算 + 有限生成 Abel 群结构定理",
+    realRunId: "run-ea293cf3bac6",
   },
   {
-    id: "case-alexander",
-    title: "Alexander 纽结多项式拓扑不变性",
-    tag: "拓扑与低维流形",
-    problem:
-      "设 K 为三维球面中的规范纽结投影，计算其 Seifert 矩阵并推导 Alexander 多项式，验证对称性质。",
-    rationale: "多角色分工推理、拓扑不变性检验与代数关系约束",
+    id: "case-lens",
+    title: "透镜空间 L(p,q) 的同调与上同调",
+    tag: "代数拓扑",
+    problem: "设三维透镜空间 $L(p,q)$（其中 $\\gcd(p,q)=1, p \\ge 2$）具有标准 CW 复形分解，在维度 $k=0,1,2,3$ 上各恰有一个 $k$-维胞腔 $e^k$，其胞腔链复形 $(C_*(L(p,q)), \\partial_*)$ 的边缘算子满足 $\\partial_1 = 0, \\partial_2(e^2) = p e^1, \\partial_3 = 0$。\n（1）计算 $L(p,q)$ 的整系数同调群 $H_k(L(p,q); \\mathbb{Z})$（$0 \\le k \\le 3$）；\n（2）利用上同调万有系数定理计算整系数上同调群 $H^k(L(p,q); \\mathbb{Z})$，并求模 $p$ 系数同调群 $H_k(L(p,q); \\mathbb{Z}_p)$。",
+    rationale: "CW 链复形边缘算子 + 同调/上同调万有系数定理",
+    realRunId: "run-81c56bf13f85",
   },
   {
-    id: "case-d8",
-    title: "二面体群 D₈ 对称性与特征标表",
-    tag: "抽象代数与群表示",
-    problem:
-      "构造正方形对称群 D_8 的所有共轭类与不可约复表示，生成特征标表并检验正交恒等式。",
-    rationale: "群论结构拆解、子群共轭分类与反例防御闭合",
+    id: "case-s4",
+    title: "S4 不可约表示与外/对称平方分解",
+    tag: "抽象群表示论",
+    problem: "设 4 次对称群 $S_4$ 在 $\\mathbb{C}^4$ 上的自然置换表示分解为平凡表示 $\\mathbf{1}$ 与三维标准不可约表示 $V$ 的直和。记 $S_4$ 的全部 5 个不可约复表示分别为：平凡表示 $\\mathbf{1}$、符号表示 $\\epsilon$、二维不可约表示 $W$、三维标准表示 $V$ 以及扭曲标准表示 $V \\otimes \\epsilon$。\n（1）写出 $V$ 在 $S_4$ 五个共轭类（按轮换型 $1^4, 2^1 1^2, 2^2, 3^1 1^1, 4^1$ 排序）上的特征标值 $\\chi_V$；\n（2）利用特征标理论，将外平方 $\\Lambda^2(V)$、对称平方 $\\operatorname{Sym}^2(V)$ 以及张量积 $V \\otimes V$ 分解为不可约复表示的直和。",
+    rationale: "特征标理论 + 外平方/对称平方/张量积分解",
+    realRunId: "run-682fce1e126a",
   },
 ];
 

@@ -206,6 +206,10 @@ class ExecutionManager:
         # cannot tell "my run" from "another manager's run".
         self._owner_token = uuid.uuid4().hex
 
+    def set_solver(self, solver) -> None:
+        """Re-wire the real solver port. ``None`` = explicitly not wired."""
+        self._solver = solver
+
     # ------------------------------------------------------------- 可观测性
     @property
     def solver_configured(self) -> bool:

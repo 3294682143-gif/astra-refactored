@@ -89,20 +89,32 @@ def _build_valid_checkpoint(problem: str, *, max_models=20, spent_models=5, unkn
 def test_workspace_snapshot_on_real_run():
     repo_root = Path(__file__).resolve().parent.parent
     data_root = repo_root / "var" / "astra"
+    store = Store(data_root)
+    runs = store.list_runs()
+    target_id = None
+    for r in runs:
+        if r.get("status") == "completed":
+            target_id = r["run_id"]
+            break
+    if not target_id and runs:
+        target_id = runs[0]["run_id"]
+    if not target_id:
+        pytest.skip("No historical runs found in var/astra")
+
     app = create_app(data_root=data_root, mount_static=False, recover_orphans=False)
 
-    # 1. 验证真实存在的研究记录 run-16a5b148239f
+    # 1. 验证真实存在的研究记录
     req = _make_dummy_request(
         app,
-        path="/api/runs/run-16a5b148239f/workspace",
-        path_params={"run_id": "run-16a5b148239f"},
+        path=f"/api/runs/{target_id}/workspace",
+        path_params={"run_id": target_id},
     )
     resp = get_workspace(req)
     assert resp.status_code == 200
     data = json.loads(resp.body.decode("utf-8"))
 
     # 结构断言
-    assert data["runId"] == "run-16a5b148239f"
+    assert data["runId"] == target_id
     assert data["mode"] == "completed"
     assert data["candidateVerified"] is False  # 红线
     assert len(data["stages"]) == 4
@@ -116,8 +128,8 @@ def test_workspace_snapshot_on_real_run():
     first_ev_id = next(iter(data["evidences"].keys()))
     ev_req = _make_dummy_request(
         app,
-        path=f"/api/runs/run-16a5b148239f/evidence/{first_ev_id}",
-        path_params={"run_id": "run-16a5b148239f", "evidence_id": first_ev_id},
+        path=f"/api/runs/{target_id}/evidence/{first_ev_id}",
+        path_params={"run_id": target_id, "evidence_id": first_ev_id},
     )
     ev_resp = get_evidence(ev_req)
     assert ev_resp.status_code == 200
@@ -129,8 +141,8 @@ def test_workspace_snapshot_on_real_run():
     # 3. 验证恢复能力接口：已终态候选记录严格不可恢复 (S1 / R1)
     rec_req = _make_dummy_request(
         app,
-        path="/api/runs/run-16a5b148239f/recovery",
-        path_params={"run_id": "run-16a5b148239f"},
+        path=f"/api/runs/{target_id}/recovery",
+        path_params={"run_id": target_id},
     )
     rec_resp = get_recovery(rec_req)
     assert rec_resp.status_code == 200

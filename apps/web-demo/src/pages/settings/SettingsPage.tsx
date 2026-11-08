@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Key, RefreshCw, Server } from "lucide-react";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { ModelAccessCard } from "./ModelAccessCard";
 import {
   fetchCapabilities,
   fetchHealth,
@@ -176,6 +177,8 @@ export function SettingsPage() {
           )}
         </div>
 
+                <ModelAccessCard />
+
         <div style={{ borderRadius: "var(--radius-card)", border: "1px solid var(--color-brand-ring)", backgroundColor: "var(--color-brand-tint)", padding: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
             <Key size={18} color="var(--color-brand-deep)" />
@@ -184,7 +187,7 @@ export function SettingsPage() {
             </h3>
           </div>
           <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--color-ink)", lineHeight: 1.6 }}>
-            根据项目安全纪律：<strong>前端浏览器绝对不接触任何 API Key</strong>。
+            根据项目安全纪律：<strong>凭据只写不读——前端只提交、不回显，服务端仅保存 sha256 指纹</strong>。
             模型调用仅由后端宿主（Python Host）通过官方注入的 public client 代理，
             前端不输入、不回显、也无法查询任何凭据。
           </p>
@@ -209,7 +212,7 @@ export function SettingsPage() {
               </span>
             </div>
             <div style={{ fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.6 }}>
-              模型凭据是否已配置：{UNKNOWN} —— 前端不可见（后端宿主持有），本台不做任何「已配置 / 已就绪」断言。
+              模型凭据是否已配置：以上方「模型接入配置」的实时响应为准（configured / wired）；凭据仅存于后端宿主的配置文件，本台不回显明文。
               健康检查响应中的 <code>model_invoked</code> 仅表示本次检查未触发模型调用。
             </div>
           </div>

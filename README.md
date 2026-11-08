@@ -14,7 +14,7 @@ Zygos 把问题目标、工作任务、候选答案、评审依据和调用预�
 
 ## 三个核心创新
 
-1. **双核隔离 + 双侧镜像的可信执行**：模型只产出数学内容，8 个身份字段由 Host 权威重绑为控制数据；Host 与 TS 对同一历史做逐条镜像的投影与选票（规范化答案键、COMPLETE/4096 过滤、首包回退），伪造身份、合成答案、跨任务污染一律 fail-closed。配套 R1–R4 崩溃恢复（防 PID 复用、归档优先提交、派发即计数、`dispatchState` 未发送贯通）。
+1. **双核隔离 + 锚定投影的可信执行**：模型只产出数学内容，8 个身份字段由 Host 权威重绑为控制数据；交付侧采用**锚定投影**——以 Node 声明的交付 source 为锚（`project_artifacts(anchor_source_id)`，0b6497e→3320212），Host 仍独立重建每个产物行并逐字段比对（candidate_packet + targetHash 用 Host 持有的 raw receipt 重算），**放弃独立加冕 front-runner、保留全部防伪校验**，从根上消除双侧投影分歧。配套 R1–R4 崩溃恢复（防 PID 复用、归档优先提交、派发即计数、`dispatchState` 未发送贯通）。
 2. **单一事实源的统一数学资产与结构路由**：20 方法卡 × 22 数学族 × 76 历史工具收敛为 **26 资产 × 96 目录行为**；`math-assets.json` 唯一事实源，TS/Python 双端代码确定性生成，SHA-256 冻结门禁。路由分三层：`semanticToolRoute` 措辞规则先定位（未命中诚实不路由）→ `semanticMethodRoute` 打分保留 ≤3 候选方法 → `semanticMathAssetRoute` 以 **8 维数学结构签名**（符号域、量词结构、算子等）兜底选资产——按结构泛化而非题面关键词。
 3. **机器可判定审查 + 可逆修复闭环**：R2 挑战 → 确定性闭合（16 类缺陷固定顺序）→ **6 类声明式 CAS 契约 + Lean 4 可判定义务核验** → 多反例全覆盖 REPAIR → R4 → M5 终态裁决；机器反例优先，**形式化证书保护锁**禁止无凭证文本质疑覆写已核验答案。去相关独立 ballot（5 独立 + 2 审计 + 1 证书，lens 轮换、不暴露候选、逐分量多数、**绝不合成答案**；两审计一致可推翻票数并锚定审计结论）。
 
@@ -24,25 +24,71 @@ Zygos 把问题目标、工作任务、候选答案、评审依据和调用预�
 | --- | --- | --- |
 | 统一执行入口 | `user_agent.ReasoningAgent` 默认 `engine="ts"`；Python Host 管理注入 client、协议与子进程 | 官方目标环境的 Node/子进程验收以平台确认为准 |
 | 动态数学工作流 | 目标契约 → 任务 DAG、G2 停滞让渡、版本化产物与失效传播、G7 断点续推 | — |
-| 数学资产 | **26 资产 / 96 目录行为（82 项 E2E 门禁）**，空壳资产清零；统一动作 `action:"math_asset"`，Host 唯一入口 `use_math_asset`；旧 target 别名兼容 | v6 新增能力尚未做真实模型全量回归 |
+| 数学资产 | **26 资产 / 96 目录行为（82 项 E2E 门禁）**，空壳资产清零；统一动作 `action:"math_asset"`，Host 唯一入口 `use_math_asset`；旧 target 别名兼容 | 目录行为 ≠ 全部经过真实题集验收 |
 | 形式化审查 | Lean 4 五类可判定义务 + 离线精确符号降级（明确标记）；6 类声明式 CAS 闭合契约；M4 证书保护锁 | 离线无 Lean 内核时走降级路径；`candidate_verified` 恒为 `false` |
+| 交付链 | 锚定投影修复 Host/TS 双侧分歧（0b6497e→3320212），v14 实测 **100/100 交付候选（merged 两段合并）**、协议失败面清零 | merged 非单次全量；选择机制仍有"有对选错"提升空间 |
 | 交互展示 | React 19 + Starlette BFF 驾驶舱：7 标签审计、SSE 实时事件、确定性回放、23/23 CDP 交互验收 | — |
-| 长跑可靠性 | 100 题 v8 实测 **93/100 交付候选**；单根预算只紧不松；未知 Token 显式记录 | 语义正确率仍是主要提升目标 |
+| 长跑可靠性 | 单根预算只紧不松；未知 Token 显式记录；100 题级长跑无系统性崩溃 | 语义正确率仍是主要提升目标 |
 
 ## 架构
 
+> 独立架构图文档：[ARCHITECTURE.md](ARCHITECTURE.md)（含全链路图、层职责映射与可信交付原则）。
+
 ```mermaid
 flowchart TD
-    UI["Web 驾驶舱 / 评测入口"] --> PY["Python 受信 Host<br/>身份重绑 · 协议校验 · 预算 · 子进程"]
-    PY <-->|"JSON-RPC v1.4 stdio"| TS["TS AgentLoop 状态机"]
-    TS --> M1["M1 目标契约<br/>compileP2Contract"]
-    TS --> M2["M2 调用准入<br/>P2/P3/P4 Gates"]
-    TS --> M3["M3 工作单元<br/>WORK 推导 · 依赖账本"]
-    TS --> M4["M4 过程评审<br/>R2 挑战 · REPAIR · 证书锁"]
-    TS --> M5["M5 终态审计<br/>projectProtectedFinal"]
-    TS --> AS["统一数学资产<br/>26 资产 × 96 目录行为"]
-    AS --> EX["受信执行内核<br/>SymPy / 组合 DP / 有限枚举"]
-    TS --> FV["形式化核验<br/>Lean 4 + 声明式 CAS 契约"]
+    subgraph ENTRY["入口层"]
+        API["官方统一入口<br/>user_agent.ReasoningAgent.solve()"]
+        WEB["Web 驾驶舱<br/>React 19 + Starlette BFF · SSE 实时事件 · 回放"]
+    end
+
+    subgraph HOST["Python 受信 Host（python/astra_bridge）"]
+        direction TB
+        AH["agent_host.py<br/>预算准入 · 单根账本 · 崩溃恢复 R1–R4"]
+        AC["agent_context.py<br/>validate_context · 身份重绑 · candidate_packet 防伪"]
+        AHIS["agent_history.py<br/>锚定投影 project_artifacts(anchor_source_id)<br/>独立重建产物行 · targetHash 重算"]
+        AM["math_assets_runtime.py<br/>统一入口 use_math_asset"]
+        LV["lean4_verifier.py<br/>5 类可判定义务 · 离线符号降级（诚实标记）"]
+    end
+
+    subgraph TSM["TS 智能体状态机（apps/stdio-runtime + packages）"]
+        direction TB
+        LOOP["agent-loop.ts 主循环<br/>R0 三重审阅 → WORK 长程推导 → 独立 ballot 5+2+1<br/>→ 确定性闭合 → R2 挑战 → REPAIR 全覆盖 → R4 → M5 终态"]
+        SEM["agent-semantics.ts<br/>三层路由：措辞规则 → ≤3 候选方法<br/>→ 8 维数学结构签名兜底"]
+        CLO["agent-answer-closure.ts<br/>16 类缺陷固定顺序 + 6 类声明式 CAS 契约"]
+        P4["p4-session.ts<br/>形式化证书保护锁"]
+        M1["M1 目标契约<br/>math-contract"]
+        M2["M2 调用准入<br/>math-gateway"]
+        M3["M3 工作单元<br/>math-workunit"]
+        M4["M4 过程评审<br/>math-review"]
+        M5["M5 终态审计<br/>math-audit"]
+        LOOP --> M1 --> M2 --> M3 --> M4 --> M5
+        LOOP --- SEM
+        LOOP --- CLO
+        M4 --- P4
+    end
+
+    subgraph ASSETS["统一数学资产层（SSOT）"]
+        JSON["math-assets.json<br/>26 资产 × 96 目录行为 · 冻结哈希门禁"]
+        GEN["双端确定性生成<br/>TS / Python 视图"]
+        OPS["generalized_math_operators.py<br/>14 个通用算子 + 76 项 legacy 实现内核"]
+        JSON --> GEN --> OPS
+    end
+
+    subgraph BASE["横切底座"]
+        LOG["append-only 链式哈希事件日志<br/>确定性投影 · byte-identical 重放"]
+        BUD["单根预算只紧不松<br/>G7 checkpoint 断点续推"]
+    end
+
+    ENTRY --> HOST
+    HOST <-->|"JSON-RPC v1.4 stdio<br/>身份字段权威覆写"| TSM
+    LOOP -->|"action: math_asset"| AM
+    AM --> OPS
+    OPS -->|"精确观测（证据四级）"| LOOP
+    CLO --> LV
+    AC --- AHIS
+    TSM --> LOG
+    HOST --> BUD
+    M5 -->|"candidate（candidate_verified=false）<br/>或 WITHHELD + 未关闭义务"| ENTRY
 ```
 
 主求解链：
@@ -90,18 +136,21 @@ flowchart TD
 
 | 口径 | 数值 | 说明 |
 | --- | --- | --- |
-| 100 题交付候选（v8，fcbd311） | **93/100** | 真实模型全量单轮 |
-| 100 题语义正确（独立判分） | **73%** | 同模型 · 同题集 · 同预算 · 独立判分，非官方平台分 |
-| 失败题 | 7 | 未解、超时、异常均计入分母 |
+| **100 题交付候选（v14，3320212）** | **100/100** | 真实模型，front+tail 两段合并，**协议失败面清零**（锚定投影修复后） |
+| **100 题语义答对（独立判分）** | **87/100（87%）** | 同模型 · 同题集 · 同预算 · 非官方平台分 |
+| 其中：有对选错（选择机制可提升空间） | 8 题 | 候选池含正确答案但未交付，属选择机制而非能力缺口 |
+| 其中：真短板（能力缺口） | 5 题 | 11/18/47/64/83，需补精确资产或新策略 |
+| 理论上限（oracle，候选池含对即计） | 95/100 | 当前兑现率 87/95 ≈ 91.6% |
+| 历史对照：v8（fcbd311） | 93 交付 / 73% 语义 | 100 题全量单轮 |
 | 严格 ReferenceJudge | 25/100 | 格式敏感，仅对照，**不是数学准确率** |
 | 十题分支交付（v8 容错链） | 10/10 | R0→WORK→5/2/1→R2→REPAIR→R4 全链路 |
 | 82 资产行为 E2E | 82/82 | 离线门禁，不代表解题正确率 |
 
 - `candidate_verified` 恒为 `false`；`strictAcceptance=NOT_PERFORMED`。
-- 86/91/96/97 等定向修复/合并口径**禁止作为成绩引用**。
+- 86/91/96/97 等定向修复/合并口径**禁止作为成绩引用**；v14 的 100/100 为 merged 两段合并，**不是单次全量盲跑**，引用时必须注明。
 - 已验证的方法论结论：**加采样轮次不提分，补精确计算能力才提分**（§28 定向实验）。
 - 四臂同预算对照设计：A/B（基线/官方 API）如实记 `NOT_RUN`；C（增强关）vs D（增强开）用于归因 R0 + 修复机制贡献。
-- **v6（96 目录行为、Lean4、声明式契约）尚未完成真实模型全量回归**；已知一项 Host/TS closure 采纳规则双侧分歧正在修复（`fix/closure-source-trust`），修复前不宣称 v6 提分。其余未解决项：5-ballot 未同口径全量复跑、多路径独立性仅同模型 lens 去相关（非多模型）。
+- 其余未解决项：5-ballot 未同口径全量复跑、多路径独立性仅同模型 lens 去相关（非多模型）；真短板 5 题（11/18/47/64/83）为下一代资产迭代方向。
 
 ## 源码快速开始
 
@@ -187,6 +236,7 @@ python -m pytest -q
 
 | 阅读目的 | 文档 |
 | --- | --- |
+| 项目架构图（全链路） | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 交接与演进总账（最新实装） | [HANDOFF.md](HANDOFF.md) |
 | 贡献约定 | [AGENTS.md](AGENTS.md) |
 | 资产统一说明 | [MATH_ASSETS_UNIFIED.md](MATH_ASSETS_UNIFIED.md) |
