@@ -1,4 +1,4 @@
-# ======================================================================
+﻿# ======================================================================
 #   天轭 (Zygos) 数学智能体工作台 · 一键启动脚本 (PowerShell 版)
 #   Astra Math Agent Workbench (V15 Release)
 # ======================================================================
@@ -17,10 +17,10 @@ Write-Host ""
 # 1. 查找 Python 解释器
 $pyExe = $null
 $candidates = @(
-    Join-Path $root ".venv\Scripts\python.exe",
-    Join-Path $root "venv\Scripts\python.exe",
-    Join-Path $root ".venv/bin/python",
-    Join-Path $root "venv/bin/python"
+    (Join-Path $root ".venv\Scripts\python.exe"),
+    (Join-Path $root "venv\Scripts\python.exe"),
+    (Join-Path $root ".venv/bin/python"),
+    (Join-Path $root "venv/bin/python")
 )
 
 foreach ($c in $candidates) {

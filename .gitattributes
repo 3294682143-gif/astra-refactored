@@ -1,4 +1,4 @@
-# Enforce LF line endings across all platforms
+# Enforce LF line endings across all platforms for cross-platform files
 * text=auto eol=lf
 *.py text eol=lf
 *.json text eol=lf
@@ -7,3 +7,9 @@
 *.mjs text eol=lf
 *.md text eol=lf
 *.sh text eol=lf
+
+# Windows batch and PowerShell scripts must strictly use CRLF line endings;
+# cmd.exe mis-parses LF-only .bat files due to 2-byte seek drift.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
