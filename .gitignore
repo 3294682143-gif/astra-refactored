@@ -36,3 +36,6 @@ scripts/dispatch_d*.py
 tests/web_review/baseline/
 tests/web_review/baseline_*.zip
 datasets/
+
+# 预构建前端产物随仓（克隆即用，免 Node 构建）
+!apps/web-demo/dist/
