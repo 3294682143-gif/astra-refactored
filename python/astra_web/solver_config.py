@@ -59,7 +59,7 @@ ENDPOINTS: tuple[EndpointSpec, ...] = (
         key="intern-s2-chat",
         label="书生 · 浦语 Intern-S2（官方对话端点）",
         url="https://chat.intern-ai.org.cn/api/v1/chat/completions",
-        models=("Intern-S2-Preview-397B",),
+        models=("intern-s2", "intern-latest", "Intern-S2-Preview-397B"),
         client="intern-chat",
     ),
     EndpointSpec(

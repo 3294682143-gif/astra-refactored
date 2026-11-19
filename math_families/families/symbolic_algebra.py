@@ -114,9 +114,9 @@ def splitting_field_degree(
 ) -> Evidence:
     """[E:Q] for the splitting field E of a univariate rational polynomial.
 
-    Adjoins roots one at a time, tracking the primitive element's minimal
-    polynomial; the final degree is the answer. Certificate: the final
-    minimal polynomial.
+    Uses Galois group order directly when there is a single nonlinear
+    irreducible rational factor of degree <= 6, and falls back to iterated
+    primitive-element adjunction otherwise.
     """
     def _work():
         import sympy
@@ -126,9 +126,49 @@ def splitting_field_degree(
         pr = sympy.Poly(poly, var)
         if not pr.is_univariate:
             raise ValueError("univariate only")
+        factors = sympy.factor_list(poly, var)[1]
+        total_roots = 0
+        nontrivial: list[tuple[Any, int]] = []
+        for fac, _mult in factors:
+            fac_deg = sympy.Poly(fac, var).degree()
+            if fac_deg >= 1:
+                total_roots += fac_deg
+            if fac_deg >= 2:
+                nontrivial.append((fac, fac_deg))
+        if not nontrivial:
+            return (
+                1,
+                total_roots,
+                "all_linear_factors",
+                "all non-constant factors are linear over Q; splitting field degree is 1",
+                "factor_list over Q",
+            )
+        if len(nontrivial) == 1:
+            fac, fac_deg = nontrivial[0]
+            try:
+                fac_poly = sympy.Poly(fac, var, domain=sympy.QQ)
+            except Exception:
+                fac_poly = None
+            if (
+                fac_poly is not None
+                and fac_deg <= 6
+                and (fac_poly.domain.is_QQ or fac_poly.domain.is_ZZ)
+            ):
+                try:
+                    group, _ = fac_poly.galois_group()
+                    order = int(group.order())
+                    return (
+                        order,
+                        total_roots,
+                        f"galois_group={group}, order={order}",
+                        f"Galois group order over Q of degree-{fac_deg} irreducible factor",
+                        "sympy Poly.galois_group over Q",
+                    )
+                except Exception:
+                    pass
         roots = []
-        for fac, mult in sympy.factor_list(poly, var)[1]:
-            for i in range(sympy.Poly(fac, var).degree()):
+        for fac, fac_deg in nontrivial:
+            for i in range(fac_deg):
                 roots.append(RootOf(fac, i))
         current: list = []
         degree = 1
@@ -140,7 +180,13 @@ def splitting_field_degree(
             minpoly = sympy.Poly(pe[0], newvar)
             degree = minpoly.degree()
             final_minpoly = str(pe[0])
-        return degree, len(roots), final_minpoly
+        return (
+            degree,
+            total_roots,
+            f"primitive_element_minpoly={final_minpoly}",
+            "degree from minimal polynomial of primitive element of all roots",
+            "iterated minpoly computation",
+        )
 
     status, payload = run_with_timeout(_work, timeout_ms)
     if status != "ok":
@@ -149,13 +195,13 @@ def splitting_field_degree(
             infeasible(status, "iterated primitive-element adjunction"),
             "iterated minpoly; exponential worst case",
         )
-    degree, nroots, minpoly_str = payload
+    degree, nroots, cert_detail, self_check, complexity_bound = payload
     return Evidence(
         value=degree,
-        certificate=f"primitive_element_minpoly={minpoly_str}, roots_adjoined={nroots}",
-        self_check="degree from minimal polynomial of primitive element of all roots",
+        certificate=f"{cert_detail}, roots_adjoined={nroots}",
+        self_check=self_check,
         feasibility="ok",
-        complexity_bound="iterated minpoly computation",
+        complexity_bound=complexity_bound,
     )
 
 

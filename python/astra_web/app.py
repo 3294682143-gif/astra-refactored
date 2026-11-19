@@ -45,6 +45,14 @@ mimetypes.add_type("image/x-icon", ".ico")
 
 from pydantic import ValidationError
 
+from .ablation import ablation_summary, get_ablation_problem, list_ablation_problems
+from .ablation_runs import (
+    get_eval200_replay_payload,
+    get_eval200_run,
+    list_ablation_runs,
+    resolve_eval200_run_and_events,
+)
+from .archive import atomic_write_json
 from .config import DEFAULT_BUDGET, WEB_ENGINES, default_budget
 from .contracts.dto import CapabilitiesDto, RunRequestDto
 from .math_assets_catalog import (
@@ -53,6 +61,16 @@ from .math_assets_catalog import (
     runtime_info as math_runtime_info,
     summary_payload as math_asset_summary,
 )
+from .problem_sets import (
+    MAX_ENQUEUE_ITEMS,
+    build_run_request_for_problem,
+    delete_problem_set,
+    get_problem_set,
+    list_problem_sets,
+    parse_problem_set_jsonl,
+    save_problem_set,
+)
+from .replays import ImportValidationError, import_jsonl_bytes
 from .queue import ExecutionManager, IdempotencyConflict
 from .solver_config import config_path
 from .solver_runtime import UsageLedger, build_solver_from_path
@@ -89,7 +107,7 @@ def _env_path(var: str, default: str) -> Path:
 
 def _terminal_payload(store: Store, run_id: str) -> dict[str, Any]:
     """从真实运行记录里取出终态事实（供 SSE 关闭帧如实告知，不做任何编造）。"""
-    run = store.get_run(run_id)
+    run = store.get_run(run_id) or get_eval200_run(run_id)
     if run is None:
         return {}
     summary = run.get("summary") or {}
@@ -175,6 +193,8 @@ def capabilities(request: Request) -> JSONResponse:
             "/api/runs/{run_id}/events",
             "/api/replays",
             "/api/assets",
+            "/api/problem-sets",
+            "/api/problem-sets/import",
         ],
         "levels": {
             "L1": "summary inline in SQLite index",
@@ -240,7 +260,10 @@ def get_run(request: Request) -> JSONResponse:
     run_id = request.path_params["run_id"]
     run = store.get_run(run_id)
     if run is None:
-        raise HTTPException(status_code=404, detail="run not found")
+        eval_run = get_eval200_run(run_id)
+        if eval_run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return JSONResponseUTF8(eval_run)
     assets = store.list_assets(run_id=run_id)
     run["assets"] = assets
     run["detail_level"] = _derive_detail_level(store, run, assets)
@@ -254,7 +277,7 @@ async def sse_events(request: Request) -> Response:
     manager: ExecutionManager = request.app.state.execution_manager
 
     # 检查运行是否存在
-    if not manager.is_active(run_id) and not store.has_run(run_id):
+    if not manager.is_active(run_id) and not store.has_run(run_id) and get_eval200_run(run_id) is None:
         raise HTTPException(status_code=404, detail="run not found")
 
     # 解析起始 seq 游标
@@ -341,7 +364,12 @@ def get_replay(request: Request) -> JSONResponse:
     store: Store = request.app.state.store
     run_id = request.path_params["run_id"]
     run = store.get_run(run_id)
-    if run is None or not run.get("l2_path"):
+    if run is None:
+        eval_replay = get_eval200_replay_payload(run_id)
+        if eval_replay is not None:
+            return JSONResponseUTF8(eval_replay)
+        raise HTTPException(status_code=404, detail="replay not found")
+    if not run.get("l2_path"):
         raise HTTPException(status_code=404, detail="replay not found")
     try:
         payload_path = store.safe_join(run["l2_path"])
@@ -379,6 +407,9 @@ def _resolve_run_and_events(request: Request, run_id: str) -> tuple[dict[str, An
 
     run = store.get_run(run_id)
     if run is None:
+        eval_resolved = resolve_eval200_run_and_events(run_id)
+        if eval_resolved is not None:
+            return eval_resolved
         raise HTTPException(status_code=404, detail="run not found")
 
     events: list[dict[str, Any]] = []
@@ -594,6 +625,122 @@ def list_assets(request: Request) -> JSONResponse:
     return JSONResponseUTF8({"items": items, "count": len(items)})
 
 
+def get_problem_sets(request: Request) -> JSONResponse:
+    store: Store = request.app.state.store
+    items = list_problem_sets(store)
+    return JSONResponseUTF8({"ok": True, "items": items, "count": len(items)})
+
+
+def get_problem_set_detail(request: Request) -> JSONResponse:
+    store: Store = request.app.state.store
+    set_id = request.path_params["set_id"]
+    detail = get_problem_set(store, set_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="problem set not found")
+    return JSONResponseUTF8({"ok": True, "data": detail})
+
+
+def remove_problem_set(request: Request) -> JSONResponse:
+    store: Store = request.app.state.store
+    set_id = request.path_params["set_id"]
+    if not delete_problem_set(store, set_id):
+        raise HTTPException(status_code=404, detail="problem set not found")
+    return JSONResponseUTF8({"ok": True, "deleted": set_id})
+
+
+async def import_problem_set(request: Request) -> JSONResponse:
+    """POST /api/problem-sets/import 导入 JSONL 题目集或历史 SolveResult JSONL。"""
+    store: Store = request.app.state.store
+    manager: ExecutionManager = request.app.state.execution_manager
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="request body must be a JSON object")
+
+    jsonl_text = body.get("jsonl_text")
+    if not isinstance(jsonl_text, str):
+        raise HTTPException(status_code=422, detail="jsonl_text must be a string")
+
+    mode = str(body.get("mode") or "catalog").strip().lower()
+    if mode not in {"catalog", "enqueue", "replays"}:
+        raise HTTPException(status_code=422, detail="mode must be one of catalog | enqueue | replays")
+
+    if mode == "replays":
+        try:
+            imported = import_jsonl_bytes(
+                store,
+                jsonl_text,
+                source="batch-jsonl-import",
+                overwrite=bool(body.get("overwrite")),
+                strict=True,
+            )
+        except ImportValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponseUTF8(
+            {
+                "ok": True,
+                "mode": "replays",
+                "imported_count": len(imported),
+                "items": imported,
+            },
+            status_code=201,
+        )
+
+    try:
+        items = parse_problem_set_jsonl(jsonl_text)
+    except ImportValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if mode == "enqueue" and len(items) > MAX_ENQUEUE_ITEMS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"单次直接入队上限为 {MAX_ENQUEUE_ITEMS} 题，当前 {len(items)} 题；请先用 catalog 模式导入或分批提交。",
+        )
+
+    saved = save_problem_set(
+        store,
+        name=body.get("name") if isinstance(body.get("name"), str) else None,
+        items=items,
+        mode=mode,
+    )
+
+    enqueued_run_ids: list[str] = []
+    if mode == "enqueue":
+        raw_ml = body.get("max_method_loads")
+        raw_sec = body.get("problem_seconds")
+        max_ml = int(raw_ml) if isinstance(raw_ml, int) else None
+        prob_sec = int(raw_sec) if isinstance(raw_sec, int) else None
+        for item in items:
+            req_payload = build_run_request_for_problem(
+                item,
+                set_id=saved["set_id"],
+                max_method_loads=max_ml,
+                problem_seconds=prob_sec,
+            )
+            try:
+                res = await manager.enqueue_run(request=req_payload)
+                if isinstance(res.get("run_id"), str):
+                    enqueued_run_ids.append(res["run_id"])
+            except IdempotencyConflict:
+                continue
+        saved["enqueued_run_ids"] = enqueued_run_ids
+        atomic_write_json(store.safe_join(f"problem_sets/{saved['set_id']}.json"), saved)
+
+    return JSONResponseUTF8(
+        {
+            "ok": True,
+            "mode": mode,
+            "solver_configured": manager.solver_configured,
+            "problem_set": saved,
+            "enqueued_count": len(enqueued_run_ids),
+            "run_ids": enqueued_run_ids,
+        },
+        status_code=201,
+    )
+
+
 def download_asset(request: Request) -> Response:
     store: Store = request.app.state.store
     asset_id = request.path_params["asset_id"]
@@ -641,11 +788,16 @@ class SPAStaticFiles(StaticFiles):
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
-            return await super().get_response(path, scope)
+            resp = await super().get_response(path, scope)
         except HTTPException as exc:
             if exc.status_code == 404 and not path.startswith("assets/"):
-                return await super().get_response("index.html", scope)
-            raise
+                resp = await super().get_response("index.html", scope)
+            else:
+                raise
+        media = (resp.media_type or "").lower()
+        if path in ("", ".", "index.html") or "html" in media:
+            resp.headers["Cache-Control"] = "no-store, must-revalidate"
+        return resp
 
 
 def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -689,6 +841,14 @@ def create_app(
         Route("/api/config/solver", delete_solver_config, methods=["DELETE"]),
         Route("/api/config/usage", get_solver_usage, methods=["GET"]),
         Route("/api/config/models", list_solver_models, methods=["POST"]),
+        Route("/api/ablation/summary", ablation_summary, methods=["GET"]),
+        Route("/api/ablation/problems", list_ablation_problems, methods=["GET"]),
+        Route("/api/ablation/problems/{problem_id}", get_ablation_problem, methods=["GET"]),
+        Route("/api/ablation/runs", list_ablation_runs, methods=["GET"]),
+        Route("/api/problem-sets", get_problem_sets, methods=["GET"]),
+        Route("/api/problem-sets/import", import_problem_set, methods=["POST"]),
+        Route("/api/problem-sets/{set_id}", get_problem_set_detail, methods=["GET"]),
+        Route("/api/problem-sets/{set_id}", remove_problem_set, methods=["DELETE"]),
         Route("/api/runs", list_runs, methods=["GET"]),
         Route("/api/runs", create_run, methods=["POST"]),
         Route("/api/runs/{run_id}", get_run, methods=["GET"]),

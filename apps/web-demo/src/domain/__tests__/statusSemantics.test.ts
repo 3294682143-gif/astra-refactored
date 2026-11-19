@@ -125,4 +125,37 @@ describe("final_response 诚实性", () => {
     assert.strictEqual(s.candidateProposal, "4");
     assert.strictEqual(s.candidateVerified, false);
   });
+
+  it("eval200 REVISE_REJECTED 且 status=candidate 时保留原合规候选终态；未预注册止因退回 declared status", () => {
+    const s1 = fold([
+      {
+        seq: 1,
+        kind: "RESULT",
+        payload: { status: "candidate", stopReason: "REVISE_REJECTED", final_response: "X is metrizable." },
+      },
+    ]);
+    assert.strictEqual(s1.status, "candidate");
+    assert.strictEqual(s1.stopReason, "REVISE_REJECTED");
+    assert.strictEqual(s1.candidateVerified, false);
+
+    const s2 = fold([
+      {
+        seq: 1,
+        kind: "RESULT",
+        payload: { status: "candidate", stopReason: "NO_REVIEW", final_response: "42" },
+      },
+    ]);
+    assert.strictEqual(s2.status, "candidate");
+    assert.strictEqual(s2.stopReason, "NO_REVIEW");
+
+    const s3 = fold([
+      {
+        seq: 1,
+        kind: "RESULT",
+        payload: { status: "unsolved", stopReason: "CONTROL_REJECTED", final_response: "Unsolved." },
+      },
+    ]);
+    assert.strictEqual(s3.status, "unsolved");
+    assert.strictEqual(s3.stopReason, "CONTROL_REJECTED");
+  });
 });

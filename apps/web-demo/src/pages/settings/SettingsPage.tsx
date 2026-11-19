@@ -1,227 +1,344 @@
-import { useEffect, useState } from "react";
-import { Key, RefreshCw, Server } from "lucide-react";
-import { PanelEmptyState } from "@/components/PanelEmptyState";
-import { DataSourceBadge } from "@/components/DataSourceBadge";
-import { ModelAccessCard } from "./ModelAccessCard";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Activity,
+  Lock,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Sliders,
+} from "lucide-react";
 import {
   fetchCapabilities,
   fetchHealth,
-  type ApiResult,
   type CapabilitiesResponse,
   type HealthResponse,
 } from "@/api/client.ts";
+import { DataSourceBadge } from "@/components/DataSourceBadge.tsx";
+import { PanelEmptyState } from "@/components/PanelEmptyState.tsx";
+import { ModelAccessCard } from "./ModelAccessCard.tsx";
 
 const UNKNOWN = "未知";
 
-interface Row {
-  readonly label: string;
-  readonly value: string;
+function formatBool(v: boolean | null | undefined): string {
+  if (typeof v !== "boolean") return UNKNOWN;
+  return v ? "是 (true)" : "否 (false)";
 }
 
 export function SettingsPage() {
-  const [health, setHealth] = useState<ApiResult<HealthResponse> | null>(null);
-  const [caps, setCaps] = useState<ApiResult<CapabilitiesResponse> | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [probeError, setProbeError] = useState<string | null>(null);
+
+  const loadProbes = useCallback(async () => {
+    setLoading(true);
+    setProbeError(null);
+    const [hRes, cRes] = await Promise.all([fetchHealth(), fetchCapabilities()]);
+    setHealth(hRes.ok ? hRes.data : null);
+    setCapabilities(cRes.ok ? cRes.data : null);
+
+    const errs: string[] = [];
+    if (!hRes.ok) errs.push(`/api/health: ${hRes.error.message}`);
+    if (!cRes.ok) errs.push(`/api/capabilities: ${cRes.error.message}`);
+    if (errs.length > 0) {
+      setProbeError(
+        hRes.ok || cRes.ok
+          ? `部分探针响应异常（${errs.join("；")}）`
+          : `后端探针全部失败（${errs.join("；")}）`,
+      );
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    let alive = true;
-    setHealth(null);
-    setCaps(null);
-    fetchHealth().then((res) => {
-      if (alive) setHealth(res);
-    });
-    fetchCapabilities().then((res) => {
-      if (alive) setCaps(res);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [reloadKey]);
+    void loadProbes();
+  }, [loadProbes]);
 
-  const healthData = health && health.ok ? health.data : null;
-  const capsData = caps && caps.ok ? caps.data : null;
-
-  const rows: Row[] = [
+  const probeRows = [
     {
-      label: "BFF /api/health 可达性",
-      value: health === null ? "探测中..." : health.ok ? `可达（status=${healthData?.status ?? UNKNOWN}）` : `不可达（${health.error.message}）`,
-    },
-    {
-      label: "BFF 服务标识 / 版本",
-      value: healthData ? `${healthData.service} / ${healthData.version}` : UNKNOWN,
-    },
-    {
-      label: "健康检查是否调用模型",
-      value: healthData ? String(healthData.model_invoked) : UNKNOWN,
-    },
-    {
-      label: "数据根目录 (data_root)",
-      value: healthData?.data_root ?? UNKNOWN,
-    },
-    {
-      label: "Schema 版本",
-      value: capsData?.schema_version !== undefined ? String(capsData.schema_version) : UNKNOWN,
-    },
-    {
-      label: "执行队列 / SSE 流式",
+      key: "服务名称与版本",
       value:
-        capsData && (capsData.execution_queue !== undefined || capsData.sse_streaming !== undefined)
-          ? `execution_queue=${String(capsData.execution_queue ?? UNKNOWN)}, sse_streaming=${String(capsData.sse_streaming ?? UNKNOWN)}`
+        health?.service || capabilities?.service
+          ? `${health?.service ?? capabilities?.service} (${health?.version ?? capabilities?.version ?? UNKNOWN})`
           : UNKNOWN,
     },
     {
-      label: "并发求解队列上限",
-      value:
-        typeof capsData?.execution?.max_concurrent_runs === "number"
-          ? String(capsData.execution.max_concurrent_runs)
-          : typeof capsData?.max_concurrent_runs === "number"
-            ? String(capsData.max_concurrent_runs)
-            : `${UNKNOWN}（接口未返回该字段）`,
+      key: "BFF 健康状态 (/api/health)",
+      value: health?.status ?? UNKNOWN,
     },
     {
-      label: "当前运行中 / 排队",
-      value:
-        capsData?.execution &&
-        (typeof capsData.execution.running === "number" || typeof capsData.execution.queued === "number")
-          ? `running=${String(capsData.execution.running ?? UNKNOWN)}, queued=${String(capsData.execution.queued ?? UNKNOWN)}`
-          : `${UNKNOWN}（接口未返回该字段）`,
+      key: "协议 / Schema 版本",
+      value: String(capabilities?.protocol_version ?? capabilities?.schema_version ?? UNKNOWN),
     },
     {
-      label: "支持主动取消运行",
-      value:
-        typeof capsData?.cancellation_supported === "boolean"
-          ? String(capsData.cancellation_supported)
-          : typeof capsData?.supports_cancellation === "boolean"
-            ? String(capsData.supports_cancellation)
-            : `${UNKNOWN}（接口未返回该字段）`,
+      key: "探针阶段是否触发模型调用",
+      value: formatBool(health?.model_invoked ?? capabilities?.model_invoked),
     },
     {
-      label: "Node.js 运行时版本",
-      value: `${UNKNOWN}（浏览器端无法读取宿主 Node 版本）`,
+      key: "只读保护模式 (read_only)",
+      value: formatBool(capabilities?.read_only),
     },
     {
-      label: "Web Demo 前端版本",
-      value: `${UNKNOWN}（前端未注入构建版本号）`,
+      key: "执行队列支持 (execution_queue)",
+      value: formatBool(capabilities?.execution_queue),
+    },
+    {
+      key: "SSE 实时流 (sse_streaming)",
+      value: formatBool(capabilities?.sse_streaming),
+    },
+    {
+      key: "最大并发任务数",
+      value: String(
+        capabilities?.execution?.max_concurrent_runs ??
+          capabilities?.max_concurrent_runs ??
+          UNKNOWN,
+      ),
+    },
+    {
+      key: "受控任务取消能力",
+      value: formatBool(
+        capabilities?.supports_cancellation ?? capabilities?.cancellation_supported,
+      ),
+    },
+    {
+      key: "数学资产目录版本",
+      value: capabilities?.catalog_version ?? UNKNOWN,
+    },
+    {
+      key: "运行档案数据根目录 (data_root)",
+      value: health?.data_root ?? UNKNOWN,
     },
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div>
-        <h2 style={{ margin: "0 0 6px", fontSize: "20px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
-          系统状态与运行环境设置
-        </h2>
-        <p style={{ margin: 0, fontSize: "13px", color: "var(--color-ink-soft)" }}>
-          本页状态全部来自 <code>/api/health</code> 与 <code>/api/capabilities</code> 实时响应；接口未返回的字段显示「未知」。
-        </p>
+    <div className="zygos-page-container" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Keynote Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: "16px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "11px",
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--color-brand-mid)",
+              marginBottom: "6px",
+            }}
+          >
+            <Sliders size={13} />
+            <span>SYSTEM SETTINGS · 运行环境与模型凭据配置</span>
+          </div>
+          <h1
+            className="zygos-keynote-title"
+            style={{
+              margin: 0,
+              fontSize: "28px",
+              fontWeight: 800,
+              letterSpacing: "-0.025em",
+            }}
+          >
+            系统设置与模型接入
+          </h1>
+          <p style={{ margin: "6px 0 0", fontSize: "13.5px", color: "var(--color-ink-soft)" }}>
+            管理宿主机推演引擎端点、密钥只写隔离策略，并实时核验 BFF 后端健康度与能力声明。
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void loadProbes()}
+          disabled={loading}
+          className="zygos-btn-ghost"
+          style={{ padding: "8px 14px", fontSize: "13px" }}
+        >
+          <RefreshCw size={14} className={loading ? "spin" : undefined} />
+          <span>重新探测后端能力</span>
+        </button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div style={{ borderRadius: "var(--radius-card)", border: "1px solid var(--color-line)", backgroundColor: "#ffffff", padding: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Server size={18} color="var(--color-brand)" />
-              <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--color-ink)" }}>
-                本地服务运行状态
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
+      {/* Model Access Card */}
+      <ModelAccessCard />
+
+      {/* BFF Health & Capabilities Table */}
+      <section
+        className="zygos-glass"
+        style={{
+          borderRadius: "18px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--color-line)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span
               style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "10px",
+                backgroundColor: "var(--color-brand-tint)",
+                border: "1px solid var(--color-brand-ring)",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "6px",
-                borderRadius: "6px",
-                border: "1px solid var(--color-line-strong)",
-                backgroundColor: "#ffffff",
-                color: "var(--color-ink-soft)",
-                padding: "6px 12px",
-                fontSize: "12px",
-                cursor: "pointer",
+                justifyContent: "center",
+                color: "var(--color-brand-mid)",
               }}
             >
-              <RefreshCw size={13} />
-              <span>重新探测</span>
-            </button>
+              <Server size={16} />
+            </span>
+            <div>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+                BFF 后端探针与能力矩阵
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--color-ink-mute)" }}>
+                实时查询 /api/health 与 /api/capabilities；未返回字段严格显示“{UNKNOWN}”
+              </div>
+            </div>
           </div>
 
-          {health !== null && !health.ok && caps !== null && !caps.ok ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 11px",
+              borderRadius: "999px",
+              backgroundColor:
+                health?.status === "ok"
+                  ? "var(--color-state-success-bg)"
+                  : "var(--color-state-stale-bg)",
+              border: `1px solid ${
+                health?.status === "ok"
+                  ? "var(--color-state-success-border)"
+                  : "var(--color-line)"
+              }`,
+              color:
+                health?.status === "ok"
+                  ? "var(--color-state-success)"
+                  : "var(--color-ink-soft)",
+              fontSize: "12px",
+              fontWeight: 600,
+            }}
+          >
+            <Activity size={13} />
+            <span>{loading ? "探测中..." : health ? `状态: ${health.status}` : "状态未确认"}</span>
+          </span>
+        </div>
+
+        {probeError && (
+          <div style={{ padding: "16px 20px" }}>
             <PanelEmptyState
               variant="missing"
-              title="BFF 探测失败（真实错误态）"
-              description={`/api/health：${health.error.message}；/api/capabilities：${caps.error.message}`}
-              hint="未以演示数据顶替，也不显示为「已就绪」。"
+              title="后端探针存在异常"
+              description={probeError}
+              hint="请确认 python/astra_web BFF 服务已启动，且 Vite 代理或静态托管路径通畅。"
             />
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "13px" }}>
-              {rows.map((row) => (
-                <div
-                  key={row.label}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    padding: "8px 12px",
-                    backgroundColor: "var(--color-surface-muted)",
-                    borderRadius: "6px",
-                  }}
-                >
-                  <span style={{ color: "var(--color-ink-mute)" }}>{row.label}</span>
-                  <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>
+          </div>
+        )}
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <tbody>
+              {probeRows.map((row) => (
+                <tr key={row.key} style={{ borderBottom: "1px solid var(--color-line)" }}>
+                  <td
+                    style={{
+                      padding: "12px 20px",
+                      width: "340px",
+                      color: "var(--color-ink-soft)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {row.key}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 20px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "12.5px",
+                      color:
+                        row.value === UNKNOWN
+                          ? "var(--color-ink-mute)"
+                          : "var(--color-brand-deep)",
+                    }}
+                  >
                     {row.value}
-                  </span>
-                </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
+      </section>
 
-                <ModelAccessCard />
-
-        <div style={{ borderRadius: "var(--radius-card)", border: "1px solid var(--color-brand-ring)", backgroundColor: "var(--color-brand-tint)", padding: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-            <Key size={18} color="var(--color-brand-deep)" />
-            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--color-brand-deep)" }}>
-              凭据隔离与安全设计
-            </h3>
+      {/* Credential Isolation & Data Observability Notice */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: "16px",
+        }}
+      >
+        <section
+          className="zygos-glass"
+          style={{
+            borderRadius: "16px",
+            padding: "18px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+            <Lock size={16} color="var(--color-brand-mid)" />
+            <span>凭据隔离与安全红线说明</span>
           </div>
-          <p style={{ margin: "0 0 12px", fontSize: "13px", color: "var(--color-ink)", lineHeight: 1.6 }}>
-            根据项目安全纪律：<strong>凭据只写不读——前端只提交、不回显，服务端仅保存 sha256 指纹</strong>。
-            模型调用仅由后端宿主（Python Host）通过官方注入的 public client 代理，
-            前端不输入、不回显、也无法查询任何凭据。
+          <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.65, color: "var(--color-ink-soft)" }}>
+            模型 API 凭据在提交后即刻由前端清空输入框状态，仅通过受控 <code style={{ fontFamily: "var(--font-mono)" }}>PUT /api/config/solver</code> 写入宿主机内存配置；
+            任何读取接口（包括历史档案、回放流、工作台事件与前端持久化存储）均绝不回显或落盘明文密钥，仅展示后端派生的脱敏指纹（fingerprint）。
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                backgroundColor: "#ffffff",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                color: health?.ok ? "#15803d" : health === null ? "var(--color-ink-soft)" : "#b45309",
-                fontWeight: 500,
-                border: `1px solid ${health?.ok ? "#bbf7d0" : "#fde68a"}`,
-              }}
-            >
-              <span>
-                ● BFF 健康检查：
-                {health === null ? "探测中..." : health.ok ? `status=${healthData?.status ?? UNKNOWN}` : `不可达（${health.error.message}）`}
-              </span>
-            </div>
-            <div style={{ fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.6 }}>
-              模型凭据是否已配置：以上方「模型接入配置」的实时响应为准（configured / wired）；凭据仅存于后端宿主的配置文件，本台不回显明文。
-              健康检查响应中的 <code>model_invoked</code> 仅表示本次检查未触发模型调用。
-            </div>
-          </div>
-        </div>
+        </section>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--color-ink-mute)" }}>
-          <DataSourceBadge level={health === null ? "UNKNOWN" : health.ok ? "L1" : "UNKNOWN"} size="sm" />
-          <span>健康与能力信息属于轻量只读摘要（L1）；探测失败时级别记为未知。</span>
-        </div>
+        <section
+          className="zygos-glass"
+          style={{
+            borderRadius: "16px",
+            padding: "18px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+            <ShieldCheck size={16} color="var(--color-brand-mid)" />
+            <span>运行档案可观测级别分级</span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <DataSourceBadge level="L1" withCaption />
+            <DataSourceBadge level="L2" withCaption />
+            <DataSourceBadge level="L3" withCaption />
+            <DataSourceBadge level="UNKNOWN" withCaption />
+          </div>
+        </section>
       </div>
     </div>
   );

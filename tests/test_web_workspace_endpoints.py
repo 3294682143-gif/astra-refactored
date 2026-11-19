@@ -953,3 +953,74 @@ def test_homepage_demo_mechanisms_configuration(tmp_path):
     assert summary["max_effects"] == 2
 
 
+def test_project_workspace_projects_r0_reading_and_521_consensus():
+    from python.astra_web.workspace_projector import project_workspace
+
+    run = {
+        "id": "run-r0-521-test",
+        "problem": "Test syzygy problem",
+        "status": "candidate",
+        "summary": {"final_response": "\\boxed{42}", "stopReason": "REVIEWS_COMPLETE"},
+    }
+    events = [
+        {"seq": 1, "at": 1000, "kind": "SESSION_INIT", "payload": {"budgets": {"maxR0": 1, "maxConsensus": 8}}},
+        {"seq": 2, "at": 1100, "kind": "model_dispatched", "payload": {"requestId": "model-1", "phase": "R0"}},
+        {"seq": 3, "at": 2300, "kind": "model_returned", "payload": {"requestId": "model-1", "phase": "R0"}},
+        {"seq": 4, "at": 2310, "kind": "model_dispatched", "payload": {"requestId": "model-2", "phase": "R0"}},
+        {"seq": 5, "at": 3260, "kind": "model_returned", "payload": {"requestId": "model-2", "phase": "R0"}},
+        {"seq": 6, "at": 3270, "kind": "model_dispatched", "payload": {"requestId": "model-3", "phase": "R0"}},
+        {"seq": 7, "at": 4370, "kind": "model_returned", "payload": {"requestId": "model-3", "phase": "R0"}},
+        {"seq": 8, "at": 4400, "kind": "R0_REVIEW", "payload": {"role": "MEANING", "requestId": "model-1", "verdict": "NO_ISSUE", "dimension": "PROBLEM_ALIGNMENT", "issueCount": 0}},
+        {"seq": 9, "at": 4401, "kind": "REVIEW_CHALLENGE", "payload": {"round": "R0", "role": "MEANING", "verdict": "NO_ISSUE"}},
+        {"seq": 10, "at": 4402, "kind": "R0_REVIEW", "payload": {"role": "METHOD", "requestId": "model-2", "verdict": "ISSUES", "dimension": "SCOPE", "issueCount": 1}},
+        {"seq": 11, "at": 4403, "kind": "REVIEW_CHALLENGE", "payload": {"round": "R0", "role": "METHOD", "verdict": "ISSUES"}},
+        {"seq": 12, "at": 4404, "kind": "R0_REVIEW", "payload": {"role": "TASK_TOOL", "requestId": "model-3", "verdict": "NO_ISSUE", "dimension": "TASK_COVERAGE", "issueCount": 0}},
+        {"seq": 13, "at": 4405, "kind": "REVIEW_CHALLENGE", "payload": {"round": "R0", "role": "TASK_TOOL", "verdict": "NO_ISSUE"}},
+        {"seq": 14, "at": 4406, "kind": "R0_REVIEW", "payload": {"role": "AGGREGATE", "conclusion": "ISSUES", "issueDimensions": ["SCOPE"]}},
+        {"seq": 15, "at": 4407, "kind": "REVIEW_CHALLENGE", "payload": {"round": "R0", "role": "AGGREGATE", "verdict": "ISSUES"}},
+        {"seq": 16, "at": 4408, "kind": "R0_REVIEW", "payload": {"role": "STAGE", "action": "REVISE", "reason": "SCOPE_REFINED"}},
+        {"seq": 17, "at": 4420, "kind": "CONTRACT_REVISED", "payload": {"contractVersion": 2, "obligations": 4, "tasks": 4}},
+        {"seq": 18, "at": 5000, "kind": "CONSENSUS", "payload": {"stage": "INDEPENDENT", "round": 1, "requestId": "m-4", "previousCandidate": "42", "nextCandidate": "\\boxed{42}", "agreement": True}},
+        {"seq": 19, "at": 5100, "kind": "CONSENSUS", "payload": {"stage": "INDEPENDENT", "round": 2, "requestId": "m-5", "previousCandidate": "42", "nextCandidate": "42", "agreement": True}},
+        {"seq": 20, "at": 5200, "kind": "CONSENSUS", "payload": {"stage": "INDEPENDENT", "round": 3, "requestId": "m-6", "previousCandidate": "42", "nextCandidate": "$42$", "agreement": True}},
+        {"seq": 21, "at": 5300, "kind": "CONSENSUS", "payload": {"stage": "INDEPENDENT", "round": 4, "requestId": "m-7", "previousCandidate": "42", "nextCandidate": "41", "agreement": False}},
+        {"seq": 22, "at": 5400, "kind": "CONSENSUS", "payload": {"stage": "INDEPENDENT", "round": 5, "requestId": "m-8", "previousCandidate": "42", "nextCandidate": "42", "agreement": True}},
+        {"seq": 23, "at": 5500, "kind": "CONSENSUS", "payload": {"stage": "AUDIT", "round": 1, "auditMode": "COUNTEREXAMPLE", "previousCandidate": "42", "nextCandidate": "42", "agreement": True}},
+        {"seq": 24, "at": 5600, "kind": "CONSENSUS", "payload": {"stage": "AUDIT", "round": 2, "auditMode": "PROOF_AUDIT", "previousCandidate": "42", "nextCandidate": "42", "agreement": True}},
+        {"seq": 25, "at": 5700, "kind": "CONSENSUS", "payload": {"stage": "CERTIFICATE", "previousCandidate": "42", "nextCandidate": "42", "agreement": True, "certificateChecks": 3, "certificateCertified": True}},
+        {"seq": 26, "at": 5800, "kind": "CONSENSUS", "payload": {"stage": "ANSWER_CLOSURE", "observationViews": 2, "observationUsed": True, "closureRequested": False, "candidateChanged": False, "defects": [], "remainingDefects": []}},
+        {"seq": 27, "at": 5900, "kind": "RESULT", "payload": {"status": "candidate", "stopReason": "REVIEWS_COMPLETE", "final_response": "\\boxed{42}"}},
+    ]
+
+    ws = project_workspace(run, events)
+    assert ws["candidateVerified"] is False
+
+    # R0 nodes must stay in stage_1_planning and duplicate REVIEW_CHALLENGE(round=R0) must not spill to stage_3_review
+    stage_1_ids = [n["id"] for n in ws["nodes"] if n["stage"] == "stage_1_planning"]
+    assert any(nid.startswith("node-r0-meaning-") for nid in stage_1_ids)
+    assert any(nid.startswith("node-r0-aggregate-") for nid in stage_1_ids)
+    assert len([nid for nid in stage_1_ids if nid.startswith("node-r0-meaning-")]) == 1
+    assert not any(n["stage"] == "stage_3_review" and n["id"].startswith("node-review-") for n in ws["nodes"])
+
+    r0 = ws["r0Reading"]
+    assert r0["status"] == "completed"
+    assert r0["aggregateConclusion"] == "ISSUES"
+    assert r0["revisionTriggered"] is True
+    assert r0["contractVersion"] == 2
+    assert r0["agents"][0]["latencyMs"] == 1200
+    assert r0["agents"][1]["verdict"] == "ISSUES"
+
+    mas = ws["multiAgentSolving"]
+    assert mas["maxConsensusBudget"] == 8
+    assert len(mas["ballots"]) == 6
+    assert mas["voteGroups"][0]["displayPlain"] == "42"
+    assert mas["voteGroups"][0]["count"] == 5
+    assert mas["voteGroups"][0]["isFrontRunner"] is True
+    assert len(mas["audits"]) == 2
+    assert mas["certificate"]["observed"] is True
+    assert mas["certificate"]["certificateChecks"] == 3
+    assert mas["closure"]["observed"] is True
+    assert mas["closure"]["observationViews"] == 2
+
+
+

@@ -45,6 +45,126 @@ export type NodeExecutionStatus =
   | "failed"      // 执行失败/异常
   | "unrecorded"; // 历史记录缺失细节
 
+/** R0 三方独立读题角色 */
+export type R0RoleKind = "MEANING" | "METHOD" | "TASK_TOOL";
+
+export interface R0RoleAgentView {
+  readonly role: R0RoleKind;
+  readonly title: string;
+  readonly dimension: string;
+  readonly focus: string;
+  readonly status: NodeExecutionStatus;
+  /** 仅取真实 R0_REVIEW / REVIEW_CHALLENGE[round=R0] 结论；仅存在调度遥测时保持 null */
+  readonly verdict: "NO_ISSUE" | "ISSUES" | "UNKNOWN" | null;
+  readonly issueCount: number;
+  readonly requestId?: string;
+  readonly latencyMs?: number | null;
+  readonly nodeId?: string;
+  readonly evidenceId?: string;
+}
+
+export interface ThreeAgentReadingView {
+  readonly enabled: boolean | null;
+  readonly status: "idle" | "running" | "completed" | "skipped";
+  readonly agents: readonly R0RoleAgentView[];
+  readonly aggregateConclusion: "NO_ISSUE" | "ISSUES" | "UNKNOWN" | null;
+  readonly issueDimensions: readonly string[];
+  readonly stageAction?: string | null;
+  readonly stageReason?: string | null;
+  readonly revisionTriggered: boolean;
+  readonly recheckObserved: boolean;
+  readonly contractVersion: number;
+  readonly obligationsCount: number | null;
+  readonly tasksCount: number | null;
+  readonly totalR0Calls: number;
+}
+
+export interface MultiAgentBallotView {
+  readonly id: string;
+  readonly kind: "SEED" | "INDEPENDENT";
+  readonly index: number;
+  readonly roleLabel: string;
+  readonly lensTitle: string;
+  readonly lensDescription: string;
+  readonly requestId?: string;
+  readonly status: NodeExecutionStatus;
+  readonly latencyMs?: number | null;
+  readonly candidateRaw?: string;
+  readonly candidatePlain?: string;
+  readonly agreesWithPrevious?: boolean | null;
+  readonly canonicalKey?: string;
+  readonly nodeId?: string;
+  readonly evidenceId?: string;
+}
+
+export interface ConsensusVoteGroupView {
+  readonly key: string;
+  readonly displayCandidate: string;
+  readonly displayPlain: string;
+  readonly count: number;
+  readonly ballotLabels: readonly string[];
+  readonly isFrontRunner: boolean;
+}
+
+export interface MultiAgentAuditView {
+  readonly id: string;
+  readonly index: number;
+  readonly modeLabel: string;
+  readonly requestId?: string;
+  readonly latencyMs?: number | null;
+  readonly previousCandidate?: string;
+  readonly nextCandidate?: string;
+  readonly previousPlain?: string;
+  readonly nextPlain?: string;
+  readonly agreement: boolean | null;
+  readonly nodeId?: string;
+  readonly evidenceId?: string;
+}
+
+export interface MultiAgentCertificateView {
+  readonly observed: boolean;
+  readonly requestId?: string;
+  readonly latencyMs?: number | null;
+  readonly previousCandidate?: string;
+  readonly nextCandidate?: string;
+  readonly previousPlain?: string;
+  readonly nextPlain?: string;
+  readonly agreement: boolean | null;
+  readonly certificateChecks: number | null;
+  readonly certificateCertified: boolean | null;
+  readonly auditOverrideDetected: boolean;
+  readonly nodeId?: string;
+  readonly evidenceId?: string;
+}
+
+export interface MultiAgentClosureView {
+  readonly observed: boolean;
+  readonly closureRequested: boolean;
+  readonly observationViews: number;
+  readonly observationUsed: boolean;
+  readonly candidateChanged: boolean;
+  readonly defects: readonly string[];
+  readonly remainingDefects: readonly string[];
+  readonly previousCandidate?: string;
+  readonly nextCandidate?: string;
+  readonly nodeId?: string;
+  readonly evidenceId?: string;
+}
+
+export interface MultiAgentSolvingView {
+  readonly maxConsensusBudget: number | null;
+  readonly totalWorkModelCalls: number;
+  readonly totalConsensusModelCalls: number;
+  readonly inFlightRequests: readonly { readonly requestId: string; readonly phase: string }[];
+  readonly ballots: readonly MultiAgentBallotView[];
+  readonly voteGroups: readonly ConsensusVoteGroupView[];
+  readonly frontRunnerCandidate?: string;
+  readonly audits: readonly MultiAgentAuditView[];
+  readonly certificate: MultiAgentCertificateView;
+  readonly closure: MultiAgentClosureView;
+  readonly methodRoutes: readonly string[];
+}
+
 /** 节点连线语义类别 (方案 4.3 节) */
 export type EdgeKind =
   | "sequence"    // 顺序推进
@@ -149,5 +269,7 @@ export interface ResearchViewModel {
   readonly recovery: RecoveryEligibility;
   readonly finalAnswer?: string;
   readonly unresolvedObligations?: readonly string[];
+  readonly r0Reading?: ThreeAgentReadingView;
+  readonly multiAgentSolving?: MultiAgentSolvingView;
   readonly rawEvents: readonly RunEventEnvelope[];
 }

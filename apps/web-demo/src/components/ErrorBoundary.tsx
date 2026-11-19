@@ -46,14 +46,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <div
         role="alert"
+        className="zygos-glass"
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           borderRadius: "var(--radius-card)",
-          border: "1px solid #fecaca",
-          backgroundColor: "#fef2f2",
+          border: "1px solid var(--color-state-error-border)",
+          backgroundColor: "var(--color-state-error-bg)",
           padding: "36px 20px",
           textAlign: "center",
         }}
@@ -62,19 +63,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           style={{
             marginBottom: "12px",
             display: "flex",
-            width: "44px",
-            height: "44px",
+            width: "46px",
+            height: "46px",
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: "50%",
-            backgroundColor: "#fee2e2",
-            color: "#b91c1c",
+            borderRadius: "12px",
+            backgroundColor: "var(--color-state-error-bg)",
+            border: "1px solid var(--color-state-error-border)",
+            color: "var(--color-state-error)",
           }}
         >
           <ShieldAlert size={22} />
         </div>
 
-        <h3 style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: 600, color: "var(--color-ink)" }}>
+        <h3 style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: 700, color: "var(--color-ink)" }}>
           {scope ? `${scope} 局部渲染异常` : "模块渲染失败"}
         </h3>
 
@@ -87,35 +89,19 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             margin: "0 0 16px",
             maxWidth: "100%",
             overflowX: "auto",
-            borderRadius: "6px",
-            backgroundColor: "#ffffff",
-            padding: "8px 12px",
+            borderRadius: "8px",
+            backgroundColor: "var(--color-code-bg)",
+            padding: "10px 14px",
             fontFamily: "var(--font-mono)",
             fontSize: "12px",
-            color: "#b91c1c",
-            border: "1px solid #fecaca",
+            color: "var(--color-state-error)",
+            border: "1px solid var(--color-state-error-border)",
           }}
         >
           {error.message}
         </pre>
 
-        <button
-          type="button"
-          onClick={this.reset}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            borderRadius: "8px",
-            backgroundColor: "var(--color-brand)",
-            color: "#ffffff",
-            border: "none",
-            padding: "8px 16px",
-            fontSize: "13px",
-            fontWeight: 500,
-            cursor: "pointer",
-          }}
-        >
+        <button type="button" onClick={this.reset} className="zygos-btn-primary" style={{ padding: "8px 16px", fontSize: "13px" }}>
           <RefreshCw size={14} />
           重试模块
         </button>

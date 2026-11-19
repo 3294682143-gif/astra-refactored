@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router";
+import { ChevronDown, GitBranch } from "lucide-react";
 import {
   createRun,
   fetchReplay,
@@ -20,12 +21,24 @@ import type {
 } from "../../domain/research/types";
 
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
-import { UnstartedView, type StartResearchOptions } from "./components/UnstartedView";
+import {
+  UnstartedView,
+  findArchivedRunForProblem,
+  type StartResearchOptions,
+} from "./components/UnstartedView";
 import { MacroFlowCanvas } from "./components/MacroFlowCanvas";
+import { MultiAgentSynergyStage } from "./components/MultiAgentSynergyStage";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { ResultDeliveryCard } from "./result/ResultDeliveryCard";
+import { AnswerPresentationPage } from "./result/AnswerPresentationPage";
 import { ReplayControlBar } from "./components/ReplayControlBar";
 import { RecoveryBanner } from "./components/RecoveryBanner";
+import {
+  deriveThreeInnovationsMetrics,
+  type InnovationId,
+} from "./components/innovations/innovationSpecs";
+import { InnovationOverviewPipeline } from "./components/innovations/InnovationOverviewPipeline";
+import { ThreeInnovationsAccordion } from "./components/innovations/ThreeInnovationsAccordion";
 
 export function WorkspacePage() {
   const { runId } = useParams<{ runId?: string }>();
@@ -33,6 +46,29 @@ export function WorkspacePage() {
   const navigate = useNavigate();
 
   const isReplayRoute = location.pathname.endsWith("/replay");
+  const isAnswerRoute = location.pathname.endsWith("/answer");
+  const autoplayRequested = useMemo(
+    () => new URLSearchParams(location.search).get("autoplay") === "1",
+    [location.search],
+  );
+  const unfoldRequested = useMemo(
+    () =>
+      !isReplayRoute &&
+      !isAnswerRoute &&
+      (new URLSearchParams(location.search).get("unfold") === "1" ||
+        Boolean((location.state as { unfold?: unknown } | null)?.unfold)),
+    [isReplayRoute, isAnswerRoute, location.search, location.state],
+  );
+  const requestedProblem = useMemo(
+    () => new URLSearchParams(location.search).get("problem") ?? "",
+    [location.search],
+  );
+  const requestedReplaySpeed = useMemo(() => {
+    const raw = Number(new URLSearchParams(location.search).get("speed"));
+    return raw === 1 || raw === 2 || raw === 4 || raw === 6 || raw === 8
+      ? raw
+      : 6;
+  }, [location.search]);
 
   // 本地归约与视图状态
   const [, setRunState] = useState(() =>
@@ -41,6 +77,14 @@ export function WorkspacePage() {
   const [problemText, setProblemText] = useState("");
   const [viewModel, setViewModel] = useState<ResearchViewModel>(() =>
     projectRunToResearchView(createInitialRunViewState(runId || ""), ""),
+  );
+
+  const [completedView, setCompletedView] = useState<"answer" | "process">(() =>
+    isAnswerRoute ? "answer" : "process",
+  );
+  const userPickedViewRef = useRef(false);
+  const [expandedInnovations, setExpandedInnovations] = useState<Set<InnovationId>>(
+    () => new Set(),
   );
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -53,10 +97,27 @@ export function WorkspacePage() {
   const [replayCursor, setReplayCursor] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
+  const [unfoldIntervalMs, setUnfoldIntervalMs] = useState<number | null>(null);
 
   const sseRef = useRef<EventSource | null>(null);
   const playTimerRef = useRef<number | null>(null);
+  const autoAnswerTimerRef = useRef<number | null>(null);
   const authoritativeWorkspaceRef = useRef<ResearchViewModel | null>(null);
+  const replayCursorRef = useRef(0);
+
+  const handleChangeCompletedView = useCallback(
+    (nextView: "answer" | "process") => {
+      userPickedViewRef.current = true;
+      setCompletedView(nextView);
+      if (nextView === "answer") {
+        setSelectedNodeId(null);
+      }
+      if (isAnswerRoute && nextView === "process" && runId) {
+        navigate(`/runs/${encodeURIComponent(runId)}`);
+      }
+    },
+    [isAnswerRoute, navigate, runId],
+  );
 
   // 1. 当 URL 改变或切换 runId 时重置与重新加载
   useEffect(() => {
@@ -69,16 +130,24 @@ export function WorkspacePage() {
       clearInterval(playTimerRef.current);
       playTimerRef.current = null;
     }
+    if (autoAnswerTimerRef.current) {
+      clearTimeout(autoAnswerTimerRef.current);
+      autoAnswerTimerRef.current = null;
+    }
     setIsPlaying(false);
+    setUnfoldIntervalMs(null);
     setSelectedNodeId(null);
     setErrorNotice(null);
+    setExpandedInnovations(new Set());
+    userPickedViewRef.current = false;
+    setCompletedView(isAnswerRoute ? "answer" : "process");
 
     if (!runId) {
-      // /solve 新建模式
+      // /solve 新建模式（支持从 /batch 导入题集带入 ?problem= 预填）
       const init = createInitialRunViewState("");
       setRunState(init);
-      setProblemText("");
-      const initialVm = projectRunToResearchView(init, "");
+      setProblemText(requestedProblem);
+      const initialVm = projectRunToResearchView(init, requestedProblem);
       authoritativeWorkspaceRef.current = initialVm;
       setViewModel(initialVm);
       return;
@@ -92,10 +161,18 @@ export function WorkspacePage() {
       const wsRes = await fetchWorkspace(runId!);
       if (!isCancelled && wsRes.ok && wsRes.data) {
         authoritativeWorkspaceRef.current = wsRes.data;
-        setViewModel(wsRes.data);
         setProblemText(wsRes.data.problem);
-        if (wsRes.data.nodes.length > 0) {
+        if (!unfoldRequested) {
+          setViewModel(wsRes.data);
+        }
+        // 自动演进回放 / 快速展开时默认收起右侧抽屉以保留完整拓扑画布视角；手动点击任意节点仍可随时展开证据
+        if (
+          wsRes.data.nodes.length > 0 &&
+          ((isReplayRoute && !autoplayRequested) || (!unfoldRequested && wsRes.data.mode !== "completed"))
+        ) {
           setSelectedNodeId(wsRes.data.nodes[0].id);
+        } else {
+          setSelectedNodeId(null);
         }
       }
 
@@ -103,27 +180,48 @@ export function WorkspacePage() {
       const replayRes = await fetchReplay(runId!);
       if (!isCancelled && replayRes.ok && replayRes.data.events) {
         const evs = replayRes.data.events;
+        const resolvedProblem =
+          (replayRes.data.details?.problem as string) ||
+          authoritativeWorkspaceRef.current?.problem ||
+          problemText;
         setAllReplayEvents(evs);
-        setReplayCursor(evs.length);
+
+        const shouldStepFromStart =
+          ((isReplayRoute && autoplayRequested) || unfoldRequested) && evs.length > 0;
+        const initialCount = shouldStepFromStart ? 1 : evs.length;
+        replayCursorRef.current = initialCount;
+        setReplayCursor(initialCount);
 
         let cur = createInitialRunViewState(runId!);
-        for (const ev of evs) {
-          cur = reduceRun(cur, ev);
+        for (let i = 0; i < initialCount; i++) {
+          cur = reduceRun(cur, evs[i]);
         }
         setRunState(cur);
 
-        // 如果在回放路由下，采用带服务端基准的回放投影；否则保持权威快照
-        if (isReplayRoute) {
-          const projected = projectRunToResearchView(
-            cur,
-            (replayRes.data.details?.problem as string) || problemText,
-            {
-              serverBaseline: authoritativeWorkspaceRef.current || undefined,
-              isReplay: true,
-            }
-          );
+        if (isReplayRoute || (unfoldRequested && evs.length > 1)) {
+          const projected = projectRunToResearchView(cur, resolvedProblem, {
+            serverBaseline: authoritativeWorkspaceRef.current || undefined,
+            isReplay: true,
+          });
           setViewModel(projected);
+          if (isReplayRoute && autoplayRequested && evs.length > 1) {
+            setReplaySpeed(requestedReplaySpeed);
+            setIsPlaying(true);
+          } else if (unfoldRequested && evs.length > 1) {
+            const targetMs = Math.max(
+              95,
+              Math.min(240, Math.round(9600 / Math.max(1, evs.length - 1))),
+            );
+            setUnfoldIntervalMs(targetMs);
+            setIsPlaying(true);
+          }
+        } else if (unfoldRequested && authoritativeWorkspaceRef.current) {
+          setViewModel(authoritativeWorkspaceRef.current);
+          setCompletedView("answer");
         }
+      } else if (!isCancelled && unfoldRequested && authoritativeWorkspaceRef.current) {
+        setViewModel(authoritativeWorkspaceRef.current);
+        setCompletedView("answer");
       }
 
       // 若状态仍为 running，接通实时 SSE
@@ -137,12 +235,16 @@ export function WorkspacePage() {
 
     return () => {
       isCancelled = true;
+      if (autoAnswerTimerRef.current) {
+        clearTimeout(autoAnswerTimerRef.current);
+        autoAnswerTimerRef.current = null;
+      }
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;
       }
     };
-  }, [runId, isReplayRoute]);
+  }, [runId, isReplayRoute, isAnswerRoute, autoplayRequested, unfoldRequested, requestedReplaySpeed, requestedProblem]);
 
   // 2. 实时 SSE 连接管理 (监听具名事件、保证去重与终态收口)
   const connectSSE = useCallback((rid: string) => {
@@ -155,6 +257,7 @@ export function WorkspacePage() {
 
     const KNOWN_EVENT_KINDS = [
       "SESSION_INIT",
+      "R0_REVIEW",
       "CONTRACT",
       "CONTRACT_REVISED",
       "TASK_STARTED",
@@ -212,11 +315,15 @@ export function WorkspacePage() {
       es.close();
       sseRef.current = null;
 
-      // 终态重刷服务端权威工作台快照
+      // 终态重刷服务端权威工作台快照，停留在三大创新点主舞台下方直接滑出最终结果卡
       void fetchWorkspace(rid).then((res) => {
         if (res.ok && res.data) {
           authoritativeWorkspaceRef.current = res.data;
           setViewModel(res.data);
+          if (res.data.mode === "completed" && !userPickedViewRef.current) {
+            setCompletedView(isAnswerRoute ? "answer" : "process");
+            setSelectedNodeId(null);
+          }
         }
       });
     });
@@ -236,17 +343,29 @@ export function WorkspacePage() {
           if (res.data.mode === "completed") {
             es.close();
             sseRef.current = null;
+            if (!userPickedViewRef.current) {
+              setCompletedView(isAnswerRoute ? "answer" : "process");
+              setSelectedNodeId(null);
+            }
           }
         }
       });
     };
-  }, [problemText]);
+  }, [problemText, isAnswerRoute]);
 
   // 3. 提交新研究 (Spec R3)
   const handleStartResearch = async (
     problem: string,
     options: StartResearchOptions,
   ) => {
+    const matchedArchivedRunId = findArchivedRunForProblem(problem);
+    if (matchedArchivedRunId) {
+      navigate(`/runs/${encodeURIComponent(matchedArchivedRunId)}`, {
+        state: { unfold: true },
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorNotice(null);
 
@@ -260,6 +379,7 @@ export function WorkspacePage() {
       max_repairs: options.max_repairs,
       max_consensus: options.max_consensus,
       max_r0: options.max_r0,
+      problem_seconds: options.problem_seconds,
       engine: "ts",
     });
 
@@ -293,7 +413,11 @@ export function WorkspacePage() {
     (targetSeq: number) => {
       if (allReplayEvents.length === 0) return;
       const clamped = Math.max(1, Math.min(targetSeq, allReplayEvents.length));
+      replayCursorRef.current = clamped;
       setReplayCursor(clamped);
+
+      const resolvedProblem =
+        problemText || authoritativeWorkspaceRef.current?.problem || "";
 
       // 从第一帧重新归约到当前帧
       let cur = createInitialRunViewState(runId || "");
@@ -301,7 +425,7 @@ export function WorkspacePage() {
         cur = reduceRun(cur, allReplayEvents[i]);
       }
       setRunState(cur);
-      const projected = projectRunToResearchView(cur, problemText, {
+      const projected = projectRunToResearchView(cur, resolvedProblem, {
         serverBaseline: authoritativeWorkspaceRef.current || undefined,
         isReplay: true,
       });
@@ -311,7 +435,9 @@ export function WorkspacePage() {
   );
 
   const handlePlayReplay = () => {
-    if (replayCursor >= allReplayEvents.length) {
+    userPickedViewRef.current = false;
+    setCompletedView("process");
+    if (replayCursorRef.current >= allReplayEvents.length) {
       handleSeekReplay(1);
     }
     setIsPlaying(true);
@@ -323,17 +449,39 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (isPlaying) {
-      const intervalMs = Math.max(150, Math.floor(1000 / replaySpeed));
+      const intervalMs =
+        !isReplayRoute && unfoldIntervalMs !== null
+          ? unfoldIntervalMs
+          : Math.max(80, Math.floor(800 / replaySpeed));
       playTimerRef.current = window.setInterval(() => {
-        setReplayCursor((prev) => {
-          if (prev >= allReplayEvents.length) {
-            setIsPlaying(false);
-            return prev;
+        const curSeq = replayCursorRef.current;
+        const finishToAnswer = () => {
+          setIsPlaying(false);
+          if (!isReplayRoute && !userPickedViewRef.current) {
+            if (unfoldIntervalMs !== null) {
+              autoAnswerTimerRef.current = window.setTimeout(() => {
+                if (authoritativeWorkspaceRef.current) {
+                  setViewModel(authoritativeWorkspaceRef.current);
+                }
+                setUnfoldIntervalMs(null);
+                setCompletedView("process");
+                setSelectedNodeId(null);
+              }, 450);
+            } else {
+              setCompletedView("process");
+              setSelectedNodeId(null);
+            }
           }
-          const next = prev + 1;
-          handleSeekReplay(next);
-          return next;
-        });
+        };
+        if (curSeq >= allReplayEvents.length) {
+          finishToAnswer();
+          return;
+        }
+        const next = curSeq + 1;
+        handleSeekReplay(next);
+        if (next >= allReplayEvents.length) {
+          finishToAnswer();
+        }
       }, intervalMs);
     } else if (playTimerRef.current) {
       clearInterval(playTimerRef.current);
@@ -346,11 +494,52 @@ export function WorkspacePage() {
         playTimerRef.current = null;
       }
     };
-  }, [isPlaying, replaySpeed, allReplayEvents.length, handleSeekReplay]);
+  }, [
+    isPlaying,
+    isReplayRoute,
+    replaySpeed,
+    unfoldIntervalMs,
+    allReplayEvents.length,
+    handleSeekReplay,
+  ]);
 
-  // 当前选中的节点与证据
+  const showDedicatedAnswerPage =
+    viewModel.mode === "completed" && (isAnswerRoute || completedView === "answer");
+
+  const threeMetrics = useMemo(
+    () =>
+      deriveThreeInnovationsMetrics(
+        viewModel,
+        replayCursor > 0 ? replayCursor : allReplayEvents.length,
+      ),
+    [viewModel, replayCursor, allReplayEvents.length],
+  );
+
+  const handleToggleInnovationExpand = useCallback((id: InnovationId) => {
+    setExpandedInnovations((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        window.setTimeout(() => {
+          document
+            .getElementById(`innovation-accordion-${id}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 80);
+      }
+      return next;
+    });
+  }, []);
+
+  // 当前选中的节点与证据（含抽屉上下步进索引）
+  const activeNodeIndex = selectedNodeId
+    ? viewModel.nodes.findIndex((n) => n.id === selectedNodeId)
+    : -1;
   const activeNode: ResearchNode | null =
-    viewModel.nodes.find((n) => n.id === selectedNodeId) || null;
+    !showDedicatedAnswerPage && activeNodeIndex >= 0
+      ? viewModel.nodes[activeNodeIndex]
+      : null;
   const activeEvidence: ResearchEvidence | null =
     activeNode?.evidenceId ? viewModel.evidences[activeNode.evidenceId] || null : null;
 
@@ -360,6 +549,9 @@ export function WorkspacePage() {
       <WorkspaceHeader
         viewModel={viewModel}
         isReplay={isReplayRoute}
+        isFastUnfold={unfoldIntervalMs !== null}
+        completedView={completedView}
+        onChangeCompletedView={handleChangeCompletedView}
         onToggleReplay={() => {
           if (isReplayRoute) {
             navigate(`/runs/${runId}`);
@@ -373,12 +565,17 @@ export function WorkspacePage() {
       {/* 异常错误浮条 */}
       {errorNotice && (
         <div
+          className="zygos-glass"
           style={{
-            backgroundColor: "#fef2f2",
-            borderBottom: "1px solid #fecaca",
+            backgroundColor: "var(--color-state-error-bg)",
+            borderBottom: "1px solid var(--color-state-error-border)",
+            borderTop: "none",
+            borderLeft: "none",
+            borderRight: "none",
+            borderRadius: 0,
             padding: "10px 24px",
             fontSize: "13px",
-            color: "#991b1b",
+            color: "var(--color-state-error)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -388,7 +585,15 @@ export function WorkspacePage() {
           <button
             type="button"
             onClick={() => setErrorNotice(null)}
-            style={{ border: "none", background: "none", color: "#991b1b", cursor: "pointer", fontWeight: 700 }}
+            style={{
+              border: "none",
+              background: "none",
+              color: "var(--color-state-error)",
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: "16px",
+              lineHeight: 1,
+            }}
           >
             ×
           </button>
@@ -412,8 +617,15 @@ export function WorkspacePage() {
           {viewModel.mode === "unstarted" ? (
             /* 状态 1：未开始 (居中输入 + 案例) */
             <UnstartedView onSubmit={handleStartResearch} isLoading={isSubmitting} />
+          ) : showDedicatedAnswerPage ? (
+            /* 独立最终答案呈现页（全部流程完成后进入，无四阶段细节干扰，纯文本/直接数字呈现） */
+            <AnswerPresentationPage
+              viewModel={viewModel}
+              isReplay={isReplayRoute}
+              onShowProcess={() => handleChangeCompletedView("process")}
+            />
           ) : (
-            /* 状态 2 & 3：运行中或已完成 */
+            /* 状态 2 & 3：三大核心创新点动态总览 + 直接结果呈现 + 可折叠三创新细则 */
             <>
               {/* 恢复提示横幅（仅在实时非回放态且具备有效检查点时展示） */}
               {!isReplayRoute && viewModel.recovery.eligible && (
@@ -424,18 +636,124 @@ export function WorkspacePage() {
                 />
               )}
 
-              {/* 宏观机制流程图 */}
-              <MacroFlowCanvas
+              {/* 总览重心：题目输入 -> 只展示三大总创新点动态流水线 -> 得出结果 */}
+              <InnovationOverviewPipeline
                 viewModel={viewModel}
-                selectedNodeId={selectedNodeId}
-                onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-                compact={viewModel.mode === "completed"}
+                metrics={threeMetrics}
+                expandedIds={expandedInnovations}
+                onToggleExpand={handleToggleInnovationExpand}
               />
 
-              {/* 已完成状态：展示宽幅数学结果交付与覆盖表 */}
-              {viewModel.mode === "completed" && (
-                <ResultDeliveryCard viewModel={viewModel} />
+              {/* 结果输出：推演收敛后直接在三大创新点下方呈现高对比度候选结果卡 */}
+              {viewModel.mode === "completed" ? (
+                <ResultDeliveryCard
+                  viewModel={viewModel}
+                  onOpenAnswerPage={() => handleChangeCompletedView("answer")}
+                />
+              ) : (
+                <div
+                  className="zygos-glass"
+                  style={{
+                    borderRadius: "16px",
+                    padding: "14px 18px",
+                    border: "1px dashed var(--color-brand-ring)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
+                    <span
+                      className="zygos-live-dot"
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--color-brand)",
+                      }}
+                    />
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-brand-deep)" }}>
+                      三大创新机制正在协同推演与校验，收敛完成后将在此直接呈现最终候选结论……
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11.5px", color: "var(--color-ink-mute)" }}>
+                    已观测事件 {threeMetrics.eventCount} 帧 · 严格保持 candidateVerified = false
+                  </span>
+                </div>
               )}
+
+              {/* 默认折叠：三大核心创新点底层机制拆解（每点横向 3 块源码可视化动图） */}
+              <ThreeInnovationsAccordion
+                metrics={threeMetrics}
+                expandedIds={expandedInnovations}
+                onToggleExpand={handleToggleInnovationExpand}
+                onExpandAll={() =>
+                  setExpandedInnovations(new Set(["inn1", "inn2", "inn3"]))
+                }
+                onCollapseAll={() => setExpandedInnovations(new Set())}
+                isLive={viewModel.mode === "running" || isPlaying}
+              />
+
+              {/* 底层细节按需折叠：原四阶段节点流程图与全量因果事件审计 */}
+              <details
+                className="zygos-glass zygos-disclosure"
+                style={{
+                  borderRadius: "18px",
+                  border: "1px solid var(--color-line)",
+                  overflow: "hidden",
+                }}
+              >
+                <summary
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    cursor: "pointer",
+                    listStyle: "none",
+                    userSelect: "none",
+                  }}
+                >
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "9px" }}>
+                    <GitBranch size={15} color="var(--color-brand-mid)" />
+                    <span style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--color-ink)" }}>
+                      底层运行机理拓扑与节点证据明细（按需审计展开）
+                    </span>
+                    <span style={{ fontSize: "11.5px", color: "var(--color-ink-mute)" }}>
+                      · 含完整 M1 DAG / R0 / 5+2+1 / 四阶段因果流 ({viewModel.nodes.length} 节点)
+                    </span>
+                  </div>
+                  <ChevronDown size={16} className="zygos-chevron" color="var(--color-ink-mute)" />
+                </summary>
+
+                <div
+                  style={{
+                    padding: "0 16px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "18px",
+                  }}
+                >
+                  <MultiAgentSynergyStage
+                    viewModel={viewModel}
+                    r0Reading={viewModel.r0Reading}
+                    multiAgentSolving={viewModel.multiAgentSolving}
+                    activeStage={viewModel.currentStage}
+                    isRunning={viewModel.mode === "running"}
+                    problemText={viewModel.problem}
+                    onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+                  />
+
+                  <MacroFlowCanvas
+                    viewModel={viewModel}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+                    compact={viewModel.mode === "completed"}
+                  />
+                </div>
+              </details>
             </>
           )}
         </div>
@@ -446,6 +764,18 @@ export function WorkspacePage() {
             node={activeNode}
             evidence={activeEvidence}
             onClose={() => setSelectedNodeId(null)}
+            nodeIndex={activeNodeIndex}
+            totalNodes={viewModel.nodes.length}
+            onPrevNode={
+              activeNodeIndex > 0
+                ? () => setSelectedNodeId(viewModel.nodes[activeNodeIndex - 1].id)
+                : undefined
+            }
+            onNextNode={
+              activeNodeIndex >= 0 && activeNodeIndex < viewModel.nodes.length - 1
+                ? () => setSelectedNodeId(viewModel.nodes[activeNodeIndex + 1].id)
+                : undefined
+            }
           />
         )}
       </div>
@@ -464,6 +794,7 @@ export function WorkspacePage() {
           onSeek={handleSeekReplay}
           onSpeedChange={(s) => setReplaySpeed(s)}
           onReset={() => handleSeekReplay(1)}
+          events={allReplayEvents}
         />
       )}
     </div>

@@ -267,7 +267,7 @@ def resolve_node_version(node_bin: str = "node") -> str:
     if env_v:
         return env_v.strip()
     try:
-        proc = subprocess.run([node_bin, "-v"], capture_output=True, text=True, timeout=2)
+        proc = subprocess.run([node_bin, "-v"], capture_output=True, text=True, timeout=2, creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0))
         if proc.returncode == 0:
             v = proc.stdout.strip()
             if v.startswith("v"):
@@ -284,7 +284,7 @@ def resolve_commit_hash() -> str:
     if env_c and len(env_c.strip()) == 40:
         return env_c.strip().lower()
     try:
-        proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=2)
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=2, creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0))
         if proc.returncode == 0:
             commit = proc.stdout.strip().lower()
             if len(commit) == 40 and all(c in "0123456789abcdef" for c in commit):

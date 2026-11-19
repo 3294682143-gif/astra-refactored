@@ -37,6 +37,15 @@ def test_every_asset_detail_is_available_and_guidance_only_is_valid():
     assert detail_payload("math.not-real") is None
 
 
+def test_asset_detail_includes_targets_and_behavior_count():
+    for asset in MATH_ASSETS:
+        detail = detail_payload(asset["assetId"])
+        assert detail is not None
+        assert isinstance(detail["targets"], list)
+        assert detail["behaviorCount"] == len(detail["behaviors"])
+        assert detail["targets"] == [b["target"] for b in detail["behaviors"] if b.get("target")]
+
+
 def test_http_catalog_and_runtime_info(tmp_path):
     app = create_app(data_root=tmp_path / "data", mount_static=False)
     with TestClient(app) as client:

@@ -1,59 +1,1001 @@
 /* ============================================================
- * Zygos 天轭设计系统 (方向 B: 现代赛事智能体驾驶舱)
- * 书生先锋蓝 #1152B6 + 天轭深蓝 #0F265C
+ * Zygos 天轭 Keynote 设计系统 (Apple Keynote × InternLM Aurora)
+ * 支持深空黑曜舞台 (dark, 默认) 与 学术昼光玻璃 (light) 双主题
  * ============================================================ */
 
-:root {
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 品牌主色：书生极光蓝 + 霓虹天青 */
+  --color-brand: #3b82f6;
+  --color-brand-mid: #60a5fa;
+  --color-brand-deep: #eff6ff;
+  --color-brand-tint: rgba(59, 130, 246, 0.16);
+  --color-brand-ring: rgba(96, 165, 250, 0.42);
+  --color-brand-ink: #dbeafe;
+  --color-aurora-cyan: #38bdf8;
+  --color-aurora-indigo: #818cf8;
+
+  /* 舞台与玻璃表面 */
+  --color-canvas: #050812;
+  --color-surface: rgba(15, 23, 42, 0.72);
+  --color-surface-solid: #0d1424;
+  --color-surface-elevated: rgba(22, 33, 58, 0.78);
+  --color-surface-muted: rgba(15, 23, 42, 0.56);
+  --color-surface-sunken: rgba(7, 11, 22, 0.72);
+  --color-surface-popover: rgba(13, 20, 36, 0.92);
+
+  /* 边线与高光 */
+  --color-line: rgba(148, 163, 184, 0.16);
+  --color-line-strong: rgba(148, 163, 184, 0.28);
+  --color-specular: rgba(255, 255, 255, 0.12);
+
+  /* 文字层级 */
+  --color-ink: #f1f5f9;
+  --color-ink-soft: #b8c4d9;
+  --color-ink-mute: #7c8ba6;
+
+  /* 状态语义（严守可信对比） */
+  --color-state-candidate: #fbbf24;
+  --color-state-candidate-bg: rgba(245, 158, 11, 0.14);
+  --color-state-candidate-border: rgba(251, 191, 36, 0.34);
+
+  --color-state-unsolved: #cbd5e1;
+  --color-state-unsolved-bg: rgba(100, 116, 139, 0.2);
+
+  --color-state-error: #fca5a5;
+  --color-state-error-bg: rgba(239, 68, 68, 0.15);
+  --color-state-error-border: rgba(248, 113, 113, 0.35);
+
+  --color-state-stale: #94a3b8;
+  --color-state-stale-bg: rgba(148, 163, 184, 0.12);
+
+  --color-state-success: #34d399;
+  --color-state-success-bg: rgba(16, 185, 129, 0.15);
+  --color-state-success-border: rgba(52, 211, 153, 0.35);
+
+  --color-code-bg: rgba(4, 7, 16, 0.82);
+  --color-code-inline-bg: rgba(59, 130, 246, 0.18);
+  --color-code-inline-ink: #93c5fd;
+
+  /* 阴影与物理缓动 */
+  --shadow-ambient: 0 24px 60px -16px rgba(0, 0, 0, 0.65), 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 12px 32px -12px rgba(0, 0, 0, 0.52), inset 0 1px 0 var(--color-specular);
+  --shadow-glow-brand: 0 0 0 1px rgba(96, 165, 250, 0.35), 0 12px 32px -8px rgba(37, 99, 235, 0.45);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "SFMono-Regular", Consolas, monospace;
+  --radius-card: 16px;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
   --color-brand: #1152b6;
-  --color-brand-mid: #3c74cc;
+  --color-brand-mid: #2563eb;
   --color-brand-deep: #0f265c;
-  --color-brand-tint: #e9f0fa;
-  --color-brand-ring: #c9daf1;
+  --color-brand-tint: rgba(17, 82, 182, 0.08);
+  --color-brand-ring: rgba(17, 82, 182, 0.25);
   --color-brand-ink: #0b1b42;
+  --color-aurora-cyan: #0284c7;
+  --color-aurora-indigo: #4f46e5;
 
-  --color-surface: #ffffff;
-  --color-surface-muted: #f6f8fb;
-  --color-surface-sunken: #eef2f8;
+  --color-canvas: #eef3fb;
+  --color-surface: rgba(255, 255, 255, 0.84);
+  --color-surface-solid: #ffffff;
+  --color-surface-elevated: rgba(255, 255, 255, 0.94);
+  --color-surface-muted: rgba(246, 249, 253, 0.88);
+  --color-surface-sunken: rgba(235, 241, 250, 0.88);
+  --color-surface-popover: rgba(255, 255, 255, 0.96);
 
-  --color-line: #e2e8f2;
-  --color-line-strong: #cbd6e6;
+  --color-line: rgba(15, 38, 92, 0.09);
+  --color-line-strong: rgba(15, 38, 92, 0.18);
+  --color-specular: rgba(255, 255, 255, 0.9);
 
   --color-ink: #0f1b2d;
   --color-ink-soft: #47566e;
-  --color-ink-mute: #7b8aa1;
+  --color-ink-mute: #74849c;
 
   --color-state-candidate: #b45309;
   --color-state-candidate-bg: #fef3c7;
+  --color-state-candidate-border: #fde68a;
+
   --color-state-unsolved: #475569;
   --color-state-unsolved-bg: #e2e8f0;
+
   --color-state-error: #b91c1c;
   --color-state-error-bg: #fee2e2;
-  --color-state-stale: #6b7280;
-  --color-state-stale-bg: #f3f4f6;
+  --color-state-error-border: #fecaca;
 
-  --font-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  --radius-card: 0.875rem;
+  --color-state-stale: #64748b;
+  --color-state-stale-bg: #f1f5f9;
+
+  --color-state-success: #047857;
+  --color-state-success-bg: #ecfdf5;
+  --color-state-success-border: #a7f3d0;
+
+  --color-code-bg: #f4f7fc;
+  --color-code-inline-bg: rgba(17, 82, 182, 0.08);
+  --color-code-inline-ink: #0f265c;
+
+  --shadow-ambient: 0 20px 50px -15px rgba(15, 38, 92, 0.14), 0 4px 12px -4px rgba(15, 38, 92, 0.06);
+  --shadow-card: 0 8px 24px -10px rgba(15, 38, 92, 0.08), 0 1px 3px rgba(15, 38, 92, 0.04), inset 0 1px 0 var(--color-specular);
+  --shadow-glow-brand: 0 0 0 1px rgba(17, 82, 182, 0.25), 0 12px 28px -8px rgba(17, 82, 182, 0.26);
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-*, *:before, *:after {
+*,
+*::before,
+*::after {
   box-sizing: inherit;
 }
 
 body {
-  background-color: var(--color-surface-muted);
+  background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.35s var(--ease-smooth), color 0.35s var(--ease-smooth);
 }
 
+/* 优雅极细滚动条 */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.48);
+}
+
+/* ============================================================
+ * Keynote 关键帧动效库
+ * ============================================================ */
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.65);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.18);
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes zygos-pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+@keyframes zygos-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes zygos-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes zygos-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes zygos-aurora-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -2%, 0) scale(1.06);
+  }
+}
+
+@keyframes zygos-flow-dash {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+@keyframes zygos-shimmer {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ============================================================
+ * Keynote 舞台与通用玻璃/Bento 组件类
+ * ============================================================ */
+
 .astra-brand-rule {
-  background-image: linear-gradient(90deg, var(--color-brand) 0%, var(--color-brand-deep) 100%);
+  background-image: linear-gradient(90deg, var(--color-brand) 0%, var(--color-aurora-cyan) 50%, var(--color-aurora-indigo) 100%);
+}
+
+.zygos-stage-shell {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  overflow-x: clip;
+}
+
+.zygos-aurora-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .zygos-aurora-backdrop::before {
+  content: "";
+  position: absolute;
+  top: -22%;
+  left: 12%;
+  width: 72vw;
+  height: 55vh;
+  background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.24) 0%, rgba(56, 189, 248, 0.11) 38%, transparent 72%);
+  filter: blur(48px);
+  animation: zygos-aurora-drift 16s ease-in-out infinite;
+}
+
+[data-theme="dark"] .zygos-aurora-backdrop::after {
+  content: "";
+  position: absolute;
+  bottom: -18%;
+  right: -8%;
+  width: 56vw;
+  height: 48vh;
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.16) 0%, rgba(17, 82, 182, 0.12) 45%, transparent 72%);
+  filter: blur(56px);
+  animation: zygos-aurora-drift 20s ease-in-out infinite reverse;
+}
+
+[data-theme="light"] .zygos-aurora-backdrop::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 15%;
+  width: 70vw;
+  height: 55vh;
+  background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.14) 0%, rgba(14, 165, 233, 0.08) 45%, transparent 72%);
+  filter: blur(48px);
+}
+
+[data-theme="light"] .zygos-aurora-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/书生官网_首页浅蓝流光背景_原图.png");
+  background-size: cover;
+  background-position: center top;
+  opacity: 0.28;
+}
+
+.zygos-math-grid-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("/assets/书生浦语官网_Math数学网格_原图.svg");
+  background-size: 960px auto;
+  background-position: center top;
+  background-repeat: repeat;
+  opacity: 0.05;
+  mask-image: radial-gradient(ellipse at 55% 25%, black 15%, transparent 78%);
+}
+
+[data-theme="light"] .zygos-math-grid-overlay {
+  opacity: 0.06;
+  filter: invert(1);
+}
+
+/* 磨砂玻璃与 Bento 卡片 */
+.zygos-glass {
+  background: var(--color-surface);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-card);
+}
+
+.zygos-bento {
+  background: var(--color-surface);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.28s var(--ease-spring), border-color 0.25s var(--ease-smooth), box-shadow 0.28s var(--ease-spring), background-color 0.25s var(--ease-smooth);
+}
+
+.zygos-bento:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-brand-ring);
+  box-shadow: var(--shadow-ambient);
+}
+
+.zygos-animate-in {
+  animation: zygos-fade-up 0.5s var(--ease-spring) both;
+}
+
+.zygos-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keynote 标题渐变 */
+.zygos-keynote-title {
+  background: linear-gradient(135deg, #ffffff 0%, #dbeafe 45%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme="light"] .zygos-keynote-title {
+  background: linear-gradient(135deg, #0b1b42 0%, #1152b6 55%, #0284c7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Spotlight 聚焦光环容器 */
+.zygos-spotlight-box {
+  position: relative;
+  background: var(--color-surface);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 20px;
+  box-shadow: var(--shadow-ambient);
+  transition: border-color 0.3s var(--ease-smooth), box-shadow 0.35s var(--ease-spring), transform 0.35s var(--ease-spring);
+}
+
+.zygos-spotlight-box:focus-within {
+  border-color: var(--color-brand-mid);
+  box-shadow: var(--shadow-glow-brand), var(--shadow-ambient);
+}
+
+/* Keynote 主按钮（带金属高光扫光） */
+.zygos-btn-primary {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb 0%, #1152b6 55%, #0284c7 100%);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px -6px rgba(37, 99, 235, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.22s var(--ease-spring), box-shadow 0.25s var(--ease-smooth), filter 0.2s ease;
+}
+
+.zygos-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 12px 26px -6px rgba(59, 130, 246, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  filter: brightness(1.07);
+}
+
+.zygos-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.zygos-btn-primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: translateX(-140%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.zygos-btn-primary:hover:not(:disabled)::after {
+  animation: zygos-shimmer 0.85s var(--ease-smooth);
+}
+
+.zygos-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.zygos-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 9px;
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-soft);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s var(--ease-spring);
+}
+
+.zygos-btn-ghost:hover:not(:disabled) {
+  background: var(--color-brand-tint);
+  border-color: var(--color-brand-ring);
+  color: var(--color-brand-deep);
+  transform: translateY(-1px);
+}
+
+.zygos-btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 独立二级页面容器（修复无外边距问题） */
+.zygos-page-container {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 34px 56px 34px;
+  position: relative;
+  z-index: 1;
+  animation: zygos-fade-up 0.42s var(--ease-spring) both;
+}
+
+@media (max-width: 900px) {
+  .zygos-page-container {
+    padding: 20px 18px 40px 18px;
+  }
+}
+
+/* 侧栏链接悬停 */
+.zygos-nav-link {
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s var(--ease-spring);
+}
+
+.zygos-nav-link:hover {
+  background-color: var(--color-brand-tint) !important;
+  color: var(--color-brand-deep) !important;
+}
+
+/* 表格与表单元素深浅色兼容 */
+input,
+select,
+textarea {
+  color: var(--color-ink);
+  font-family: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-mute);
+}
+
+/* 苹果风范围滑块 */
+input[type="range"].zygos-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-line-strong);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"].zygos-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s var(--ease-spring);
+}
+
+input[type="range"].zygos-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+}
+
+/* KaTeX 渲染公式跟随主题文本色 */
+.katex {
+  color: inherit;
+  font-size: 1.04em;
+}
+
+.katex-display {
+  margin: 0.4em 0 !important;
+}
+
+/* SVG 流动光点/虚线动画 */
+.zygos-svg-flow {
+  stroke-dasharray: 6 6;
+  animation: zygos-flow-dash 1.2s linear infinite;
+}
+
+.zygos-svg-flow-repair {
+  stroke-dasharray: 7 5;
+  animation: zygos-flow-dash 0.9s linear infinite;
+}
+
+.zygos-node-card {
+  transition: transform 0.24s var(--ease-spring), border-color 0.2s ease, box-shadow 0.24s var(--ease-spring), background-color 0.2s ease;
+}
+
+.zygos-node-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-brand-ring) !important;
+  box-shadow: var(--shadow-card);
+}
+
+.zygos-drawer-panel {
+  animation: zygos-drawer-in 0.28s var(--ease-spring) both;
+}
+
+.zygos-modal-card {
+  animation: zygos-modal-in 0.28s var(--ease-spring) both;
+}
+
+/* ==========================================================================
+   Modern Web + Apple Design Fluid Motion System (Innovations Stage & Controls)
+   ========================================================================== */
+:root {
+  --ease-spring-fluid: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.zygos-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.zygos-spring-card {
+  transition:
+    transform 0.32s var(--ease-spring-fluid),
+    border-color 0.22s ease,
+    box-shadow 0.32s var(--ease-spring-fluid),
+    background-color 0.22s ease,
+    opacity 0.28s ease;
+  will-change: transform;
+}
+
+.zygos-spring-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+.zygos-spring-card:active {
+  transform: translateY(0) scale(0.985);
+}
+
+@starting-style {
+  .zygos-reveal-item {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+.zygos-reveal-item {
+  transition:
+    opacity 0.36s var(--ease-spring-fluid),
+    transform 0.36s var(--ease-spring-fluid);
+}
+
+/* Segmented control (Apple WWDC-style tab rail) */
+.zygos-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--color-panel-soft) 86%, var(--color-brand-tint));
+  border: 1px solid var(--color-line);
+}
+
+.zygos-segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease-spring-fluid),
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.zygos-segmented-btn:hover {
+  color: var(--color-ink);
+}
+
+.zygos-segmented-btn:active {
+  transform: scale(0.97);
+}
+
+.zygos-segmented-btn[data-active="true"] {
+  color: var(--color-brand-deep);
+  background: var(--color-surface, #ffffff);
+  border-color: var(--color-line);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+/* Native HTML <details> disclosure with smooth modern motion */
+details.zygos-disclosure {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: var(--color-panel-soft);
+  overflow: hidden;
+  transition: border-color 0.22s ease, background-color 0.22s ease;
+}
+
+details.zygos-disclosure[open] {
+  border-color: var(--color-brand-ring);
+}
+
+details.zygos-disclosure > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+details.zygos-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.zygos-disclosure .zygos-chevron {
+  transition: transform 0.26s var(--ease-spring-fluid);
+}
+
+details.zygos-disclosure[open] .zygos-chevron {
+  transform: rotate(180deg);
+}
+
+/* Semantic color-mix stage accents */
+.zygos-accent-r0 {
+  background: color-mix(in oklab, var(--color-brand-tint) 65%, transparent);
+  border-color: color-mix(in oklab, var(--color-brand-ring) 55%, var(--color-line));
+}
+
+.zygos-accent-consensus {
+  background: color-mix(in oklab, #10b981 10%, transparent);
+  border-color: color-mix(in oklab, #10b981 28%, var(--color-line));
+}
+
+.zygos-accent-audit {
+  background: color-mix(in oklab, #f59e0b 10%, transparent);
+  border-color: color-mix(in oklab, #f59e0b 28%, var(--color-line));
+}
+
+.zygos-accent-cert {
+  background: color-mix(in oklab, #6366f1 10%, transparent);
+  border-color: color-mix(in oklab, #6366f1 28%, var(--color-line));
+}
+
+/* Smooth vote tally bar fill */
+.zygos-vote-bar-fill {
+  transition: width 0.55s var(--ease-spring-fluid), background-color 0.25s ease;
+}
+
+/* Live pulse dot (GPU opacity + scale only) */
+@keyframes zygos-live-ring {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.28);
+  }
+}
+
+.zygos-live-dot {
+  animation: zygos-live-ring 1.5s var(--ease-spring-fluid) infinite;
+}
+
+/* Blueprint dot-matrix backdrop for parallel agent DAG stages */
+.zygos-blueprint-canvas {
+  background-color: color-mix(in oklab, var(--color-surface-sunken, #f8fafc) 82%, transparent);
+  background-image: radial-gradient(color-mix(in oklab, var(--color-ink-mute) 26%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.zygos-dag-spline {
+  transition: stroke-opacity 0.22s ease, stroke-width 0.22s ease, stroke 0.22s ease;
+}
+
+/* Three Innovations stage & 3x3 micro-diagram motion primitives */
+@keyframes zygos-beam-sweep {
+  0% {
+    transform: translateX(-110%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.75;
+  }
+  80% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(220%);
+    opacity: 0;
+  }
+}
+
+@keyframes zygos-radar-x {
+  0% {
+    transform: translateX(-20%);
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(480%);
+    opacity: 0.15;
+  }
+}
+
+@keyframes zygos-orbit-spin {
+  to {
+    stroke-dashoffset: -120;
+  }
+}
+
+@keyframes zygos-lane-packet {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes zygos-tally-pulse {
+  0%, 100% {
+    filter: brightness(1);
+    transform: scaleX(1);
+  }
+  50% {
+    filter: brightness(1.18);
+    transform: scaleX(1.02);
+  }
+}
+
+@keyframes zygos-seal-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
+  }
+}
+
+.zygos-scan-beam {
+  animation: zygos-radar-x 2.8s ease-in-out infinite;
+}
+
+.zygos-loop-dash {
+  animation: zygos-orbit-spin 4s linear infinite;
+}
+
+.zygos-tally-animate {
+  transform-origin: left center;
+  animation: zygos-tally-pulse 2.4s ease-in-out infinite;
+}
+
+.zygos-seal-animate {
+  animation: zygos-seal-glow 2.2s ease-in-out infinite;
+}
+
+/* Connected 3-column innovation pipeline on desktop, single column on compact viewports */
+.zygos-pipeline-3col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.zygos-pipeline-connector {
+  display: none;
+}
+
+@media (min-width: 1120px) {
+  .zygos-pipeline-3col {
+    grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr) 32px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .zygos-pipeline-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Selective typographic balance for short headings only */
+.zygos-heading-balance {
+  text-wrap: balance;
+}
+
+/* Modern native <details> accordion with intrinsic size animation & reduced-motion guard */
+.zygos-accordion details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.zygos-accordion details > summary::-webkit-details-marker {
+  display: none;
+}
+.zygos-accordion details > summary .zygos-acc-marker {
+  rotate: -90deg;
+  flex-shrink: 0;
+}
+.zygos-accordion details[open] > summary .zygos-acc-marker {
+  rotate: 0deg;
+}
+.zygos-accordion details::details-content {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  contain: layout;
+}
+.zygos-accordion details:not([open])::details-content {
+  block-size: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zygos-accordion details > summary .zygos-acc-marker {
+    transition: rotate 0.2s ease;
+  }
+  .zygos-accordion details::details-content {
+    transition: block-size, content-visibility, display;
+    transition-duration: 0.28s;
+    transition-timing-function: ease-in-out;
+    transition-behavior: allow-discrete;
+  }
+}
+
+/* Container-aware horizontal 3-card grid for expanded innovation sub-diagrams */
+.zygos-subdiag-container {
+  container-type: inline-size;
+}
+.zygos-subdiag-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 1040px) {
+  .zygos-subdiag-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@supports (container-type: inline-size) {
+  @media (min-width: 1040px) {
+    .zygos-subdiag-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @container (min-width: 820px) {
+    .zygos-subdiag-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+}
+
+/* Forced colors (Windows High Contrast) structural border preservation */
+@media (forced-colors: active) {
+  .zygos-spring-card,
+  .zygos-accordion details,
+  .zygos-blueprint-canvas {
+    border: 1px solid CanvasText !important;
+  }
+  .zygos-seal-animate {
+    outline: 2px solid Highlight !important;
+  }
+}
+
+/* Accessibility: honor user reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .zygos-spring-card,
+  .zygos-reveal-item,
+  .zygos-segmented-btn,
+  .zygos-vote-bar-fill,
+  details.zygos-disclosure .zygos-chevron,
+  .zygos-accordion details > summary .zygos-acc-marker,
+  .zygos-accordion details::details-content,
+  .zygos-svg-flow,
+  .zygos-svg-flow-repair,
+  .zygos-live-dot,
+  .zygos-scan-beam,
+  .zygos-loop-dash,
+  .zygos-tally-animate,
+  .zygos-seal-animate {
+    animation: none !important;
+    transition: none !important;
+  }
 }

@@ -233,7 +233,7 @@ export function SolvePage() {
         max_repairs: fullCapability ? 3 : 0,
         max_consensus: fullCapability ? 8 : 0,
         max_r0: fullCapability ? 1 : 0,
-        problem_seconds: fullCapability ? 3600 : 600,
+        problem_seconds: fullCapability ? 1200 : 600,
       },
       idempotencyKey,
     );

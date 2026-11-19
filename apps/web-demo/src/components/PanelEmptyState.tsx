@@ -27,14 +27,15 @@ export function PanelEmptyState({
   return (
     <div
       role="status"
+      className="zygos-glass"
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "var(--radius-card)",
-        border: `1px dashed ${isMissing ? "var(--color-state-candidate)" : "var(--color-line-strong)"}`,
-        backgroundColor: isMissing ? "var(--color-state-candidate-bg)" : "rgba(255,255,255,0.7)",
+        border: `1px dashed ${isMissing ? "var(--color-state-candidate-border)" : "var(--color-line-strong)"}`,
+        backgroundColor: isMissing ? "var(--color-state-candidate-bg)" : "var(--color-surface)",
         padding: "48px 24px",
         textAlign: "center",
       }}
@@ -43,30 +44,31 @@ export function PanelEmptyState({
         style={{
           marginBottom: "16px",
           display: "flex",
-          width: "48px",
-          height: "48px",
+          width: "52px",
+          height: "52px",
           alignItems: "center",
           justifyContent: "center",
-          borderRadius: "50%",
-          backgroundColor: isMissing ? "#fef3c7" : "var(--color-brand-tint)",
-          color: isMissing ? "#b45309" : "var(--color-brand)",
+          borderRadius: "14px",
+          backgroundColor: isMissing ? "var(--color-state-candidate-bg)" : "var(--color-brand-tint)",
+          border: `1px solid ${isMissing ? "var(--color-state-candidate-border)" : "var(--color-brand-ring)"}`,
+          color: isMissing ? "var(--color-state-candidate)" : "var(--color-brand-mid)",
         }}
       >
         <Icon size={24} />
       </div>
 
-      <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 600, color: "var(--color-ink)" }}>
+      <h3 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 700, color: "var(--color-ink)" }}>
         {title}
       </h3>
 
       {description?.trim() ? (
-        <p style={{ margin: "0 0 8px", maxWidth: "420px", fontSize: "13px", lineHeight: 1.5, color: "var(--color-ink-soft)" }}>
+        <p style={{ margin: "0 0 8px", maxWidth: "480px", fontSize: "13px", lineHeight: 1.6, color: "var(--color-ink-soft)" }}>
           {description}
         </p>
       ) : null}
 
       {hint?.trim() ? (
-        <p style={{ margin: 0, maxWidth: "420px", fontSize: "11px", color: "var(--color-ink-mute)" }}>
+        <p style={{ margin: 0, maxWidth: "480px", fontSize: "12px", color: "var(--color-ink-mute)" }}>
           {hint}
         </p>
       ) : null}

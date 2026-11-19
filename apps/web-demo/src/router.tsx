@@ -15,6 +15,7 @@ export const router = createBrowserRouter([
       { path: "solve", element: <WorkspacePage /> },
       { path: "runs", element: <RunsPage /> },
       { path: "runs/:runId", element: <WorkspacePage /> },
+      { path: "runs/:runId/answer", element: <WorkspacePage /> },
       { path: "runs/:runId/replay", element: <WorkspacePage /> },
       { path: "batch", element: <BatchPage /> },
       { path: "assets", element: <AssetsPage /> },

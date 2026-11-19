@@ -1,362 +1,681 @@
+import { useMemo } from "react";
+import { Link } from "react-router";
 import {
-  Award,
+  Activity,
   AlertTriangle,
+  ArrowUpRight,
+  Award,
+  Boxes,
   CheckCircle2,
+  Clock,
+  Cpu,
   FileText,
+  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import type { ResearchViewModel } from "../../../domain/research/types";
+import { extractFinalAnswerPresentation } from "../../../domain/research/plainAnswer";
 import { MathMarkdown } from "../../../components/MathMarkdown";
 
-interface ResultDeliveryCardProps {
+export interface ResultDeliveryCardProps {
   viewModel: ResearchViewModel;
+  onOpenAnswerPage?: () => void;
 }
 
-export function ResultDeliveryCard({ viewModel }: ResultDeliveryCardProps) {
-  const isCandidate = viewModel.status === "candidate";
-  const stopReason = viewModel.stopReason || "REVIEWS_COMPLETE";
+interface ObligationRow {
+  readonly id: string;
+  readonly statement: string;
+  readonly resolved: boolean;
+  readonly note?: string;
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+function asString(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
+function extractStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item === "string" && item.trim()) {
+      out.push(item.trim());
+    } else {
+      const rec = asRecord(item);
+      const label =
+        asString(rec?.["id"]) ??
+        asString(rec?.["obligation_id"]) ??
+        asString(rec?.["title"]) ??
+        asString(rec?.["statement"]) ??
+        asString(rec?.["description"]);
+      if (label) out.push(label);
+    }
+  }
+  return out;
+}
+
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0 ms";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(2)} s`;
+  return `${(ms / 60_000).toFixed(1)} min`;
+}
+
+function normalizeObligations(
+  contractRaw: Record<string, unknown> | null,
+  deliveryRaw: Record<string, unknown> | null,
+): {
+  formalItems: ObligationRow[];
+  unresolvedList: string[];
+} {
+  const contractPayload = asRecord(contractRaw?.["payload"]) ?? contractRaw;
+  const contractObj = asRecord(contractPayload?.["contract"]) ?? contractPayload;
+  const deliveryPayload = asRecord(deliveryRaw?.["payload"]) ?? deliveryRaw;
+  const deliverySummary = asRecord(deliveryPayload?.["summary"]) ?? deliveryPayload;
+
+  const rawUnresolved =
+    deliverySummary?.["unresolved_obligations"] ??
+    deliverySummary?.["unresolvedObligations"] ??
+    deliverySummary?.["unresolved_list"] ??
+    deliverySummary?.["unresolvedList"] ??
+    deliverySummary?.["unresolved"] ??
+    deliverySummary?.["open_obligations"];
+  const unresolvedList = extractStringArray(rawUnresolved);
+  const unresolvedSet = new Set(unresolvedList.map((s) => s.toLowerCase()));
+
+  const rawObligations =
+    contractObj?.["obligationList"] ??
+    contractObj?.["obligation_list"] ??
+    contractObj?.["obligations"] ??
+    contractObj?.["formal_obligations"] ??
+    deliverySummary?.["obligationList"] ??
+    deliverySummary?.["obligation_list"] ??
+    deliverySummary?.["obligations"];
+
+  if (!Array.isArray(rawObligations) || rawObligations.length === 0) {
+    return { formalItems: [], unresolvedList };
+  }
+
+  const formalItems: ObligationRow[] = [];
+  rawObligations.forEach((entry, idx) => {
+    if (typeof entry === "string" && entry.trim()) {
+      const id = `OBL-${idx + 1}`;
+      const text = entry.trim();
+      const isOpen =
+        unresolvedSet.has(id.toLowerCase()) || unresolvedSet.has(text.toLowerCase());
+      formalItems.push({ id, statement: text, resolved: !isOpen });
+      return;
+    }
+
+    const rec = asRecord(entry);
+    if (!rec) return;
+    const id =
+      asString(rec["id"]) ??
+      asString(rec["obligation_id"]) ??
+      asString(rec["code"]) ??
+      `OBL-${idx + 1}`;
+    const statement =
+      asString(rec["statement"]) ??
+      asString(rec["description"]) ??
+      asString(rec["title"]) ??
+      asString(rec["goal"]) ??
+      id;
+    const note = asString(rec["note"]) ?? asString(rec["status"]) ?? undefined;
+    const explicitResolved =
+      typeof rec["resolved"] === "boolean" ? rec["resolved"] : undefined;
+    const matchedOpen =
+      unresolvedSet.has(id.toLowerCase()) ||
+      unresolvedSet.has(statement.toLowerCase()) ||
+      unresolvedList.some(
+        (u) =>
+          u.toLowerCase().includes(id.toLowerCase()) ||
+          id.toLowerCase().includes(u.toLowerCase()),
+      );
+
+    formalItems.push({
+      id,
+      statement,
+      resolved: explicitResolved !== undefined ? explicitResolved : !matchedOpen,
+      note,
+    });
+  });
+
+  return { formalItems, unresolvedList };
+}
+
+export function ResultDeliveryCard({ viewModel, onOpenAnswerPage }: ResultDeliveryCardProps) {
+  const contractNode = useMemo(
+    () => viewModel.nodes.find((n) => n.id === "node-contract") ?? null,
+    [viewModel.nodes],
+  );
+  const deliveryNode = useMemo(
+    () => viewModel.nodes.find((n) => n.id === "node-delivery-final") ?? null,
+    [viewModel.nodes],
+  );
+
+  const deliveryEvidence = deliveryNode?.evidenceId
+    ? viewModel.evidences[deliveryNode.evidenceId] ?? null
+    : null;
+
+  const contractRaw = asRecord(contractNode?.technical?.raw);
+  const deliveryRaw = asRecord(deliveryNode?.technical?.raw);
+
+  const { formalItems, unresolvedList } = useMemo(
+    () => normalizeObligations(contractRaw, deliveryRaw),
+    [contractRaw, deliveryRaw],
+  );
+
+  const plainPresentation = useMemo(
+    () => extractFinalAnswerPresentation(viewModel),
+    [viewModel],
+  );
+
+  const deliveryMarkdown = useMemo(() => {
+    if (viewModel.finalAnswer && viewModel.finalAnswer.trim()) {
+      return viewModel.finalAnswer.trim();
+    }
+    if (deliveryEvidence?.markdownContent?.trim()) {
+      return deliveryEvidence.markdownContent;
+    }
+    const payload = asRecord(deliveryRaw?.["payload"]) ?? deliveryRaw;
+    const summary = asRecord(payload?.["summary"]) ?? payload;
+    const rawResp =
+      asString(payload?.["final_response"]) ??
+      asString(payload?.["finalResponse"]) ??
+      asString(summary?.["final_response"]) ??
+      asString(summary?.["finalResponse"]) ??
+      asString(payload?.["markdown"]) ??
+      deliveryNode?.outputSummary ??
+      deliveryNode?.summary;
+    return (
+      rawResp ??
+      "本次运行已进入终态，但事件流中未携带完整数学交付文本。请点击阶段 4 节点检查技术详情。"
+    );
+  }, [viewModel.finalAnswer, deliveryEvidence, deliveryRaw, deliveryNode]);
+
+  const stopReasonText = useMemo(() => {
+    const payload = asRecord(deliveryRaw?.["payload"]) ?? deliveryRaw;
+    const summary = asRecord(payload?.["summary"]) ?? payload;
+    return (
+      asString(payload?.["stopReason"]) ??
+      asString(summary?.["stopReason"]) ??
+      asString(payload?.["stop_reason"]) ??
+      null
+    );
+  }, [deliveryRaw]);
+
+  const { budget } = viewModel;
+  const kpiCards = [
+    {
+      label: "模型逻辑调用",
+      value: `${budget.usedModelCalls}`,
+      sub: `上限 ${budget.maxModelCalls || "∞"}`,
+      icon: Cpu,
+      accent: "#3b82f6",
+    },
+    {
+      label: "数学资产加载",
+      value: `${budget.usedMethodLoads}`,
+      sub: `配额 ${budget.maxMethodLoads}`,
+      icon: Boxes,
+      accent: "#38bdf8",
+    },
+    {
+      label: "研究工作单元",
+      value: `${budget.usedWorkUnits}`,
+      sub: `上限 ${budget.maxWorkUnits || "∞"}`,
+      icon: Activity,
+      accent: "#10b981",
+    },
+    {
+      label: "端到端观测耗时",
+      value: formatDuration(budget.elapsedMs),
+      sub: `${viewModel.nodes.length} 个机制节点`,
+      icon: Clock,
+      accent: "#818cf8",
+    },
+  ];
+
+  const resolvedCount = formalItems.filter((item) => item.resolved).length;
+  const unresolvedCount = formalItems.length - resolvedCount;
 
   return (
-    <div
+    <section
+      aria-label="研究结论交付与可信审计报告"
+      className="zygos-glass zygos-animate-in"
       style={{
-        backgroundColor: "var(--color-surface)",
-        borderRadius: "12px",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: "20px",
         border: "1px solid var(--color-line-strong)",
-        boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
-        padding: "28px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "24px",
+        boxShadow: "var(--shadow-ambient)",
       }}
     >
-      {/* 终态横幅 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          borderBottom: "1px solid var(--color-line)",
-          paddingBottom: "18px",
-          gap: "16px",
-        }}
-      >
-        <div style={{ display: "flex", gap: "14px" }}>
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "42px",
-              height: "42px",
-              borderRadius: "10px",
-              backgroundColor: isCandidate ? "var(--color-brand-tint)" : "#fef2f2",
-              color: isCandidate ? "var(--color-brand)" : "#dc2626",
-            }}
-          >
-            {isCandidate ? <Award size={24} /> : <AlertTriangle size={24} />}
-          </span>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: "18px",
-                  fontWeight: 800,
-                  color: isCandidate ? "var(--color-brand-deep)" : "#991b1b",
-                }}
-              >
-                {isCandidate ? "候选结论交付 (待形式化验证)" : "研究阶段收口"}
-              </h2>
-              <span
-                style={{
-                  fontSize: "12px",
-                  padding: "2px 8px",
-                  borderRadius: "9999px",
-                  backgroundColor: isCandidate ? "#dbeafe" : "#fee2e2",
-                  color: isCandidate ? "#1d4ed8" : "#991b1b",
-                  fontWeight: 600,
-                }}
-              >
-                代码: {stopReason}
-              </span>
-            </div>
-            <div style={{ fontSize: "13px", color: "var(--color-ink-soft)", marginTop: "4px" }}>
-              {isCandidate
-                ? "经 R0角色审阅、有界资产调用、候选生成与专家一致性复核通过，向用户如实交付推导结论。"
-                : "本次求解由于预算上限或约束未产出确认候选，交付当前已探索的范围与未解边界。"}
-            </div>
-          </div>
-        </div>
+      {/* Keynote Top Brand Rule */}
+      <div className="astra-brand-rule" style={{ height: "4px", width: "100%" }} />
 
-        {/* 预算与消耗指标 */}
+      <div style={{ padding: "26px 28px", display: "flex", flexDirection: "column", gap: "22px" }}>
+        {/* Header Bar */}
         <div
           style={{
             display: "flex",
-            gap: "18px",
-            fontSize: "12px",
-            textAlign: "right",
-            color: "var(--color-ink-soft)",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "16px",
+            flexWrap: "wrap",
           }}
         >
-          <div>
-            <div style={{ color: "var(--color-ink-mute)", fontSize: "11px" }}>模型逻辑调用</div>
-            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--color-ink)" }}>
-              {viewModel.budget.usedModelCalls} / {viewModel.budget.maxModelCalls}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius: "13px",
+                backgroundColor: "var(--color-state-candidate-bg)",
+                border: "1px solid var(--color-state-candidate-border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--color-state-candidate)",
+                flexShrink: 0,
+              }}
+            >
+              <Award size={22} />
             </div>
-          </div>
-          <div>
-            <div style={{ color: "var(--color-ink-mute)", fontSize: "11px" }}>数学资产加载</div>
-            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--color-ink)" }}>
-              {viewModel.budget.usedMethodLoads} / {viewModel.budget.maxMethodLoads}
-            </div>
-          </div>
-          <div>
-            <div style={{ color: "var(--color-ink-mute)", fontSize: "11px" }}>工作单元</div>
-            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--color-ink)" }}>
-              {viewModel.budget.usedWorkUnits} 个
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 严格红线免责/边界标注卡片 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          padding: "12px 18px",
-          borderRadius: "8px",
-          backgroundColor: isCandidate ? "#f0f9ff" : "#fef2f2",
-          border: isCandidate ? "1px solid #bae6fd" : "1px solid #fecaca",
-          fontSize: "13px",
-          color: isCandidate ? "#0369a1" : "#991b1b",
-          lineHeight: 1.5,
-        }}
-      >
-        {isCandidate ? (
-          <ShieldCheck size={20} style={{ flexShrink: 0 }} />
-        ) : (
-          <AlertTriangle size={20} style={{ flexShrink: 0 }} />
-        )}
-        <div>
-          <strong>可信边界说明（红线声明）：</strong>
-          {isCandidate ? (
-            <>
-              系统交付的上述结论为形式化前置候选推演，<code>candidate_verified 恒为 false</code>
-              。在接入 Isabelle / Lean 等外部形式化完备定理证明器核验之前，保持“未形式化验证候选”定位，绝不夸大结论等级。
-            </>
-          ) : (
-            <>
-              本次求解未达成收敛候选结论（状态：{viewModel.status}，终止原因：{stopReason}），<code>candidate_verified 恒为 false</code>
-              。无形式化候选结论交付，已完整保留审计记录与未闭合责任边界。
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 宽幅数学证明 / 候选结论正文 */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
-          <FileText size={16} color="var(--color-brand)" />
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
-            {isCandidate ? "交付结论正文" : "阶段推导与未解记录正文"}
-          </h3>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: "var(--color-surface-muted)",
-            border: "1px solid var(--color-line-strong)",
-            borderRadius: "10px",
-            padding: "20px 24px",
-          }}
-        >
-          {viewModel.finalAnswer ? (
-            <MathMarkdown content={viewModel.finalAnswer} />
-          ) : (
-            <div style={{ color: "var(--color-ink-mute)", fontStyle: "italic" }}>
-              未生成文本结论（终态未记录或收口异常）
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 义务覆盖与审查结论 */}
-      <div>
-        <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
-          规划目标与义务覆盖
-        </h3>
-
-        {(() => {
-          // 动态提取合同与交付节点中的义务与审查事实
-          const contractNode = viewModel.nodes.find((n) => n.id.includes("node-contract"));
-          const contractRaw = (contractNode?.technical?.raw as Record<string, unknown>) || {};
-          const deliveryNode = viewModel.nodes.find((n) => n.id === "node-delivery-final");
-          const deliveryRaw = (deliveryNode?.technical?.raw as Record<string, unknown>) || {};
-
-          const unresolvedList: string[] = Array.isArray(deliveryRaw.unresolvedObligations)
-            ? (deliveryRaw.unresolvedObligations as string[])
-            : Array.isArray(viewModel.unresolvedObligations)
-            ? (viewModel.unresolvedObligations as string[])
-            : [];
-
-          const toolNodes = viewModel.nodes.filter(
-            (n) => n.stage === "stage_2_execution" && n.id.includes("tool")
-          );
-          const reviewNodes = viewModel.nodes.filter((n) => n.stage === "stage_3_review");
-
-          // 动态提取合同中规划的义务项（仅从可信合同读取真实离散清单，禁止臆造虚假身份，Spec R1）
-          const rawList = contractRaw.obligationList || contractRaw.obligationsList;
-          const formalItems: { id: string; title: string; task?: string; asset?: string }[] = [];
-          if (Array.isArray(rawList) && rawList.length > 0) {
-            rawList.forEach((item, idx) => {
-              if (typeof item === "string") {
-                formalItems.push({ id: `OBL-0${idx + 1}`, title: item });
-              } else if (item && typeof item === "object") {
-                const obj = item as Record<string, unknown>;
-                formalItems.push({
-                  id: String(obj.id || `OBL-0${idx + 1}`),
-                  title: String(obj.title || obj.name || obj.description || `形式化证明义务 #${idx + 1}`),
-                  task: obj.task ? String(obj.task) : undefined,
-                  asset: obj.asset ? String(obj.asset) : undefined,
-                });
-              }
-            });
-          }
-
-          const isItemUnresolved = (item: { id: string; title: string }) => {
-            const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-            const itemIdNorm = norm(item.id);
-            return unresolvedList.some((u) => {
-              const uNorm = norm(u);
-              return (
-                uNorm === itemIdNorm ||
-                u === item.title ||
-                itemIdNorm.includes(uNorm) ||
-                uNorm.includes(itemIdNorm)
-              );
-            });
-          };
-
-          if (formalItems.length > 0) {
-            return (
-              <table
+            <div>
+              <div
                 style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: "13px",
-                  textAlign: "left",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--color-brand-mid)",
                 }}
               >
+                CONCLUSION REVEAL · 阶段 4 交付报告
+              </div>
+              <h2
+                className="zygos-keynote-title"
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: "22px",
+                  fontWeight: 800,
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                候选数学推导结果与约束审查摘要
+              </h2>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            {stopReasonText && (
+              <span
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: "999px",
+                  backgroundColor: "var(--color-surface-sunken)",
+                  border: "1px solid var(--color-line)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11.5px",
+                  color: "var(--color-ink-soft)",
+                }}
+              >
+                终止码: {stopReasonText}
+              </span>
+            )}
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "5px 13px",
+                borderRadius: "999px",
+                backgroundColor: "var(--color-state-candidate-bg)",
+                border: "1px solid var(--color-state-candidate-border)",
+                color: "var(--color-state-candidate)",
+                fontSize: "12px",
+                fontWeight: 700,
+              }}
+            >
+              <ShieldAlert size={14} />
+              <span>candidate_verified 恒为 false</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Plain Text Direct Answer Highlight + Dedicated Page Action */}
+        {plainPresentation.hasAnswer && (
+          <div
+            style={{
+              padding: "18px 22px",
+              borderRadius: "16px",
+              background: "linear-gradient(135deg, var(--color-brand-tint) 0%, var(--color-surface-sunken) 100%)",
+              border: "1px solid var(--color-brand-ring)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ minWidth: 0, flex: "1 1 380px" }}>
+              <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--color-brand-mid)", marginBottom: "6px" }}>
+                直接纯文本 / 数值答案摘要（无符号化）
+              </div>
+              <div
+                className="zygos-tabular"
+                style={{
+                  fontSize: "17px",
+                  fontWeight: 700,
+                  lineHeight: 1.65,
+                  color: "var(--color-brand-deep)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {plainPresentation.fullPlainText}
+              </div>
+            </div>
+
+            {onOpenAnswerPage ? (
+              <button
+                type="button"
+                onClick={onOpenAnswerPage}
+                className="zygos-btn-primary"
+                style={{ padding: "9px 16px", fontSize: "13px", flexShrink: 0 }}
+              >
+                <span>打开单独答案呈现页</span>
+                <ArrowUpRight size={15} />
+              </button>
+            ) : (
+              viewModel.runId && (
+                <Link
+                  to={`/runs/${encodeURIComponent(viewModel.runId)}/answer`}
+                  className="zygos-btn-primary"
+                  style={{ padding: "9px 16px", fontSize: "13px", textDecoration: "none", flexShrink: 0 }}
+                >
+                  <span>打开单独答案呈现页</span>
+                  <ArrowUpRight size={15} />
+                </Link>
+              )
+            )}
+          </div>
+        )}
+
+        {/* Strict Honesty Red-line Notice */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "12px",
+            padding: "14px 16px",
+            borderRadius: "13px",
+            backgroundColor: "var(--color-state-candidate-bg)",
+            border: "1px solid var(--color-state-candidate-border)",
+            color: "var(--color-state-candidate)",
+            fontSize: "13px",
+            lineHeight: 1.6,
+          }}
+        >
+          <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
+          <div>
+            <strong>可信边界声明（candidateVerified = {String(viewModel.candidateVerified)}）：</strong>
+            本控制台展示的是引擎经结构化审查与受控反例校验后收敛得到的
+            <strong>候选研究交付物</strong>，未接入 Lean / Coq 等外部形式化证明内核；
+            任何“已收敛 / 自报完成”均不等于形式化定理成立，最终数学正确性仍须人工学者复核。
+          </div>
+        </div>
+
+        {/* Bento KPI Telemetry Row */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: "12px",
+          }}
+        >
+          {kpiCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div
+                key={card.label}
+                className="zygos-bento"
+                style={{
+                  padding: "14px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  backgroundColor: "var(--color-surface-sunken)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-ink-mute)" }}>
+                    {card.label}
+                  </span>
+                  <Icon size={15} color={card.accent} />
+                </div>
+                <div
+                  className="zygos-tabular"
+                  style={{
+                    fontSize: "22px",
+                    fontWeight: 800,
+                    color: "var(--color-brand-deep)",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {card.value}
+                </div>
+                <div className="zygos-tabular" style={{ fontSize: "11.5px", color: "var(--color-ink-soft)" }}>
+                  {card.sub}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mathematical Proof & Final Conclusion */}
+        <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "10px",
+              gap: "12px",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+                fontWeight: 700,
+                color: "var(--color-brand-deep)",
+              }}
+            >
+              <FileText size={16} color="var(--color-brand-mid)" />
+              <span>完整推导与结论正文（KaTeX 数学排版）</span>
+            </span>
+          </div>
+
+          <div
+            style={{
+              padding: "20px 24px",
+              borderRadius: "14px",
+              backgroundColor: "var(--color-surface-sunken)",
+              border: "1px solid var(--color-line-strong)",
+              boxShadow: "inset 0 1px 0 var(--color-specular)",
+            }}
+          >
+            <MathMarkdown content={deliveryMarkdown} />
+          </div>
+        </div>
+
+        {/* Obligations Coverage Table OR Honest Fallback Card */}
+        <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "10px",
+              flexWrap: "wrap",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+                fontWeight: 700,
+                color: "var(--color-brand-deep)",
+              }}
+            >
+              <ShieldCheck size={16} color="var(--color-brand-mid)" />
+              <span>研究契约义务项收敛覆盖核对表</span>
+            </span>
+
+            {formalItems.length > 0 && (
+              <span className="zygos-tabular" style={{ fontSize: "12px", color: "var(--color-ink-soft)" }}>
+                共 {formalItems.length} 项 · 已响应收口 {resolvedCount} 项 · 未决/敞口{" "}
+                <strong style={{ color: unresolvedCount > 0 ? "var(--color-state-error)" : "var(--color-state-success)" }}>
+                  {unresolvedCount}
+                </strong>{" "}
+                项
+              </span>
+            )}
+          </div>
+
+          {formalItems.length > 0 ? (
+            <div
+              style={{
+                borderRadius: "14px",
+                border: "1px solid var(--color-line)",
+                overflow: "hidden",
+                backgroundColor: "var(--color-surface-sunken)",
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
-                  <tr style={{ borderBottom: "2px solid var(--color-line)", backgroundColor: "#f8fafc" }}>
-                    <th style={{ padding: "10px 14px", color: "var(--color-ink-soft)", fontWeight: 600 }}>规划义务项</th>
-                    <th style={{ padding: "10px 14px", color: "var(--color-ink-soft)", fontWeight: 600 }}>关联任务</th>
-                    <th style={{ padding: "10px 14px", color: "var(--color-ink-soft)", fontWeight: 600 }}>调用资产</th>
-                    <th style={{ padding: "10px 14px", color: "var(--color-ink-soft)", fontWeight: 600 }}>覆盖与复核状态</th>
+                  <tr
+                    style={{
+                      backgroundColor: "var(--color-surface-muted)",
+                      borderBottom: "1px solid var(--color-line)",
+                      textAlign: "left",
+                      color: "var(--color-ink-mute)",
+                      fontSize: "11.5px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    <th style={{ padding: "11px 14px", width: "130px" }}>义务编号</th>
+                    <th style={{ padding: "11px 14px" }}>契约目标 / 子命题</th>
+                    <th style={{ padding: "11px 14px", width: "180px" }}>状态归属</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {formalItems.map((item) => {
-                    const isUnresolved = isItemUnresolved(item);
-                    return (
-                      <tr key={item.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
-                        <td style={{ padding: "12px 14px", fontWeight: 500 }}>
-                          <span style={{ color: "var(--color-brand)", marginRight: "6px" }}>{item.id}</span>
-                          {item.title}
-                        </td>
-                        <td style={{ padding: "12px 14px" }}>
-                          <code>{item.task || "task-01"}</code>
-                        </td>
-                        <td style={{ padding: "12px 14px" }}>
-                          <code>{item.asset || (toolNodes[0]?.relations?.assetName as string) || "无外部资产"}</code>
-                        </td>
-                        <td style={{ padding: "12px 14px", fontWeight: 600 }}>
-                          {isUnresolved ? (
-                            <span style={{ color: "#dc2626", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <AlertTriangle size={14} /> 未闭合 (Unresolved)
-                            </span>
-                          ) : isCandidate ? (
-                            <span style={{ color: "var(--color-brand)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <CheckCircle2 size={14} /> 流程闭合 (待形式化核验)
-                            </span>
-                          ) : (
-                            <span style={{ color: "#d97706", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <AlertTriangle size={14} /> 探索中断未闭合
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {formalItems.map((row) => (
+                    <tr
+                      key={row.id}
+                      style={{
+                        borderBottom: "1px solid var(--color-line)",
+                      }}
+                    >
+                      <td
+                        style={{
+                          padding: "12px 14px",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "12px",
+                          color: "var(--color-brand-mid)",
+                          verticalAlign: "top",
+                        }}
+                      >
+                        {row.id}
+                      </td>
+                      <td style={{ padding: "12px 14px", color: "var(--color-ink)", lineHeight: 1.55 }}>
+                        <MathMarkdown content={row.statement} compact />
+                      </td>
+                      <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                        {row.resolved ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "3px 10px",
+                              borderRadius: "999px",
+                              backgroundColor: "var(--color-state-candidate-bg)",
+                              border: "1px solid var(--color-state-candidate-border)",
+                              color: "var(--color-state-candidate)",
+                              fontSize: "11.5px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            <CheckCircle2 size={12} />
+                            <span>候选收口 · 待核验</span>
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "3px 10px",
+                              borderRadius: "999px",
+                              backgroundColor: "var(--color-state-error-bg)",
+                              border: "1px solid var(--color-state-error-border)",
+                              color: "var(--color-state-error)",
+                              fontSize: "11.5px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            <AlertTriangle size={12} />
+                            <span>未解决 / 敞口</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-            );
-          }
-
-          // 未记录离散清单时的如实审计卡
-          return (
+            </div>
+          ) : (
             <div
               style={{
-                padding: "16px 20px",
-                backgroundColor: "#f8fafc",
-                border: "1px solid var(--color-line)",
-                borderRadius: "8px",
+                padding: "16px 18px",
+                borderRadius: "14px",
+                border: "1px dashed var(--color-line-strong)",
+                backgroundColor: "var(--color-surface-sunken)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
                 fontSize: "13px",
                 color: "var(--color-ink-soft)",
                 lineHeight: 1.6,
               }}
             >
-              <div style={{ fontWeight: 600, color: "var(--color-brand-deep)", marginBottom: "6px" }}>
-                📋 运行过程事实与审计记录
+              <div style={{ fontWeight: 700, color: "var(--color-ink)" }}>
+                诚实审计说明：当前记录未附带离散契约义务清单（obligationList）
               </div>
               <div>
-                {typeof contractRaw.obligations === "number" && contractRaw.obligations > 0
-                  ? `合同规划了 ${contractRaw.obligations} 项证明义务（离散明细未记录，采用有界符号推导模式）。`
-                  : "本次推导未记录离散的形式化义务拆解清单（采用有界符号推导模式）。"}
-              </div>
-              <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div>
-                  • <strong>执行工作单元</strong>：共完成 {viewModel.budget.usedWorkUnits} 个推导单元
-                </div>
-                <div>
-                  • <strong>数学资产调用</strong>：
-                  {toolNodes.length > 0 ? (
-                    toolNodes.map((t) => t.label).join("、")
-                  ) : (
-                    <span style={{ color: "var(--color-ink-mute)" }}>未记录外部符号计算资产调用</span>
-                  )}
-                </div>
-                <div>
-                  • <strong>审查与准入机制</strong>：
-                  {reviewNodes.length > 0 ? (
-                    reviewNodes
-                      .map((r) => `${r.label}（${r.status === "completed" ? "准入生效" : "拒绝/回流"}）`)
-                      .join("；")
-                  ) : (
-                    <span style={{ color: "var(--color-ink-mute)" }}>未记录独立审查质询（由主干收口）</span>
-                  )}
-                </div>
-                {unresolvedList.length > 0 ? (
-                  <div style={{ color: "#b91c1c", fontWeight: 600 }}>
-                    • <strong>未解决形式化义务</strong>：{unresolvedList.join("、")}
-                  </div>
-                ) : (
-                  <div>
-                    • <strong>义务收口状态</strong>：
-                    {isCandidate ? (
-                      <span style={{ color: "var(--color-brand)", fontWeight: 600 }}>主干流程已交付（待形式化核验）</span>
-                    ) : (
-                      <span style={{ color: "#d97706", fontWeight: 600 }}>探索中断，未形成收敛候选</span>
-                    )}
-                  </div>
-                )}
+                为遵守可信数据契约，控制台不会自动拆分或伪造虚拟义务表。
+                {unresolvedList.length > 0
+                  ? ` 终端摘要显式标记了 ${unresolvedList.length} 项未决条目：${unresolvedList.join("、")}。`
+                  : " 如需逐项追溯阶段 1 的研究契约与阶段 3 的反例审校过程，请直接点击上方拓扑图节点打开证据检查器。"}
               </div>
             </div>
-          );
-        })()}
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

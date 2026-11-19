@@ -1,10 +1,6 @@
 import { CircleHelp, Database, History, ScanSearch } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-/**
- * 数据可观测级别徽章。
- * UNKNOWN 用于「接口未确证级别」的情形：绝不冒充 L2 / L3（记录缺失时不得标 L3）。
- */
 export type DataSourceLevel = "L1" | "L2" | "L3" | "UNKNOWN";
 
 interface SourceConfig {
@@ -41,9 +37,9 @@ const REGISTRY: Record<DataSourceLevel, SourceConfig> = {
     name: "完整观察",
     caption: "完整观察层：保留原始依赖、推导与毫秒级时间戳",
     icon: ScanSearch,
-    bg: "#e0e7ff",
-    text: "#3730a3",
-    border: "#c7d2fe",
+    bg: "rgba(99, 102, 241, 0.16)",
+    text: "var(--color-aurora-indigo)",
+    border: "rgba(129, 140, 248, 0.35)",
   },
   UNKNOWN: {
     level: "UNKNOWN",
@@ -52,7 +48,7 @@ const REGISTRY: Record<DataSourceLevel, SourceConfig> = {
     icon: CircleHelp,
     bg: "var(--color-state-stale-bg)",
     text: "var(--color-state-stale)",
-    border: "#d1d5db",
+    border: "var(--color-line)",
   },
 };
 
@@ -76,18 +72,18 @@ export function DataSourceBadge({
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "6px",
-          borderRadius: "6px",
-          fontWeight: 500,
+          gap: "5px",
+          borderRadius: "9999px",
+          fontWeight: 600,
           backgroundColor: cfg.bg,
           color: cfg.text,
           border: `1px solid ${cfg.border}`,
-          padding: size === "sm" ? "2px 6px" : "4px 8px",
+          padding: size === "sm" ? "2px 8px" : "4px 10px",
           fontSize: size === "sm" ? "11px" : "12px",
           lineHeight: 1.4,
         }}
       >
-        <Icon size={size === "sm" ? 12 : 14} />
+        <Icon size={size === "sm" ? 11 : 13} />
         <span>{cfg.level === "UNKNOWN" ? "未知级别" : `${cfg.level} · ${cfg.name}`}</span>
       </span>
       {withCaption ? (

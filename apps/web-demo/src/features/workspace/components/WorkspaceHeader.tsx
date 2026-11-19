@@ -1,4 +1,5 @@
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import {
   Sparkles,
@@ -8,23 +9,51 @@ import {
   Clock,
   FileText,
   ChevronRight,
+  X,
+  Award,
+  GitBranch,
 } from "lucide-react";
 import { MACRO_STAGES, type ResearchViewModel } from "../../../domain/research/types";
+import { toPlainAnswerText } from "../../../domain/research/plainAnswer";
+import { MathMarkdown } from "../../../components/MathMarkdown";
 
 interface WorkspaceHeaderProps {
   viewModel: ResearchViewModel;
   isReplay: boolean;
+  isFastUnfold?: boolean;
   onToggleReplay?: () => void;
   onResume?: () => void;
+  completedView?: "answer" | "process";
+  onChangeCompletedView?: (view: "answer" | "process") => void;
 }
 
 export function WorkspaceHeader({
   viewModel,
   isReplay,
+  isFastUnfold = false,
   onToggleReplay,
   onResume,
+  completedView,
+  onChangeCompletedView,
 }: WorkspaceHeaderProps) {
   const [showFullProblem, setShowFullProblem] = useState(false);
+
+  useEffect(() => {
+    if (!showFullProblem) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowFullProblem(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [showFullProblem]);
+
+  useEffect(() => {
+    setShowFullProblem(false);
+  }, [viewModel.runId]);
 
   const getStatusBadge = () => {
     if (isReplay) {
@@ -33,33 +62,42 @@ export function WorkspaceHeader({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "5px",
-            padding: "3px 10px",
+            gap: "6px",
+            padding: "4px 11px",
             borderRadius: "9999px",
-            backgroundColor: "#ede9fe",
-            color: "#6d28d9",
+            backgroundColor: "rgba(139, 92, 246, 0.16)",
+            border: "1px solid rgba(167, 139, 250, 0.35)",
+            color: "var(--color-aurora-indigo)",
             fontSize: "12px",
             fontWeight: 600,
+            whiteSpace: "nowrap",
           }}
         >
           <RotateCcw size={13} />
-          真实回放
+          <span>真实回放</span>
         </span>
       );
     }
     if (viewModel.mode === "running") {
       return (
         <span
+          title={
+            isFastUnfold
+              ? "源自 var/astra/runs 真实实采事件轨迹按快速节奏展开 · candidateVerified 恒为 false"
+              : undefined
+          }
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "5px",
-            padding: "3px 10px",
+            gap: "7px",
+            padding: "4px 12px",
             borderRadius: "9999px",
-            backgroundColor: "#dbeafe",
-            color: "#1d4ed8",
+            backgroundColor: "var(--color-brand-tint)",
+            border: "1px solid var(--color-brand-ring)",
+            color: "var(--color-brand-deep)",
             fontSize: "12px",
             fontWeight: 600,
+            whiteSpace: "nowrap",
           }}
         >
           <span
@@ -67,11 +105,11 @@ export function WorkspaceHeader({
               width: "7px",
               height: "7px",
               borderRadius: "50%",
-              backgroundColor: "#2563eb",
+              backgroundColor: "#3b82f6",
               animation: "pulse 1.5s infinite",
             }}
           />
-          实时推演中
+          <span>{isFastUnfold ? "推演进行中" : "实时推演中"}</span>
         </span>
       );
     }
@@ -81,17 +119,19 @@ export function WorkspaceHeader({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "5px",
-            padding: "3px 10px",
+            gap: "6px",
+            padding: "4px 11px",
             borderRadius: "9999px",
-            backgroundColor: "#e0f2fe",
-            color: "#0369a1",
+            backgroundColor: "var(--color-state-candidate-bg)",
+            border: "1px solid var(--color-state-candidate-border)",
+            color: "var(--color-state-candidate)",
             fontSize: "12px",
             fontWeight: 600,
+            whiteSpace: "nowrap",
           }}
         >
           <CheckCircle2 size={13} />
-          候选已收敛（待形式化验证）
+          <span>候选已收敛（待形式化验证）</span>
         </span>
       );
     }
@@ -100,166 +140,245 @@ export function WorkspaceHeader({
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "5px",
-          padding: "3px 10px",
+          gap: "6px",
+          padding: "4px 11px",
           borderRadius: "9999px",
-          backgroundColor: "#f1f5f9",
-          color: "#475569",
+          backgroundColor: "var(--color-surface-sunken)",
+          border: "1px solid var(--color-line)",
+          color: "var(--color-ink-soft)",
           fontSize: "12px",
           fontWeight: 600,
+          whiteSpace: "nowrap",
         }}
       >
         <Clock size={13} />
-        {viewModel.status || "未开始"}
+        <span>{viewModel.status || "未开始"}</span>
       </span>
     );
   };
 
+  const activeStageIndex = MACRO_STAGES.findIndex((s) => s.id === viewModel.currentStage);
+
   return (
-    <div
+    <header
+      className="zygos-glass"
       style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 25,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        height: "56px",
-        padding: "0 24px",
-        backgroundColor: "var(--color-surface)",
-        borderBottom: "1px solid var(--color-line)",
+        minHeight: "60px",
+        padding: "8px 24px",
+        borderTop: "none",
+        borderLeft: "none",
+        borderRight: "none",
+        borderRadius: 0,
         gap: "16px",
+        flexWrap: "wrap",
       }}
     >
-      {/* 左侧：题目概览与原题查看 */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+      {/* 左侧：状态徽章、题目摘要与查看原题 */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: "1 1 260px" }}>
         {getStatusBadge()}
 
         <div
           style={{
-            fontSize: "14px",
+            fontSize: "13.5px",
             fontWeight: 600,
             color: "var(--color-ink)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            maxWidth: "380px",
+            maxWidth: "360px",
           }}
           title={viewModel.problem}
         >
-          {viewModel.problem || "新建研究题目"}
+          {(viewModel.problem && toPlainAnswerText(viewModel.problem, { singleLine: true })) ||
+            "新建研究题目"}
         </div>
 
         {viewModel.problem && (
           <button
             type="button"
             onClick={() => setShowFullProblem(true)}
+            className="zygos-btn-ghost"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              padding: "3px 8px",
-              borderRadius: "4px",
-              border: "1px solid var(--color-line)",
-              backgroundColor: "transparent",
-              color: "var(--color-ink-soft)",
+              padding: "4px 10px",
               fontSize: "12px",
-              cursor: "pointer",
+              borderRadius: "7px",
+              flexShrink: 0,
             }}
           >
             <FileText size={13} />
-            查看原题
+            <span>查看原题</span>
           </button>
         )}
       </div>
 
-      {/* 中间：四大宏观阶段进展指示 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-        }}
-      >
-        {MACRO_STAGES.map((st, idx) => {
-          const isActive = viewModel.currentStage === st.id;
-          const isPast =
-            MACRO_STAGES.findIndex((s) => s.id === viewModel.currentStage) > idx;
+      {/* 中间：四大宏观阶段胶囊步进器 */}
+      {viewModel.mode !== "unstarted" && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "4px",
+            borderRadius: "12px",
+            backgroundColor: "var(--color-surface-sunken)",
+            border: "1px solid var(--color-line)",
+          }}
+        >
+          {MACRO_STAGES.map((st, idx) => {
+            const isActive = viewModel.currentStage === st.id;
+            const isPast = activeStageIndex > idx;
 
-          return (
-            <Fragment key={st.id}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "4px 10px",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: isActive ? 600 : 500,
-                  backgroundColor: isActive
-                    ? "var(--color-brand-tint)"
-                    : isPast
-                    ? "#f8fafc"
-                    : "transparent",
-                  color: isActive
-                    ? "var(--color-brand)"
-                    : isPast
-                    ? "var(--color-ink)"
-                    : "var(--color-ink-mute)",
-                  border: isActive
-                    ? "1px solid var(--color-brand-ring)"
-                    : "1px solid transparent",
-                }}
-              >
-                <span
+            return (
+              <Fragment key={st.id}>
+                <div
                   style={{
-                    width: "16px",
-                    height: "16px",
-                    borderRadius: "50%",
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "10px",
+                    gap: "6px",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: isActive ? 700 : 500,
                     backgroundColor: isActive
-                      ? "var(--color-brand)"
+                      ? "var(--color-brand-tint)"
                       : isPast
-                      ? "#94a3b8"
-                      : "#cbd5e1",
-                    color: "#ffffff",
+                      ? "var(--color-state-success-bg)"
+                      : "transparent",
+                    color: isActive
+                      ? "var(--color-brand-deep)"
+                      : isPast
+                      ? "var(--color-state-success)"
+                      : "var(--color-ink-mute)",
+                    border: isActive
+                      ? "1px solid var(--color-brand-ring)"
+                      : "1px solid transparent",
+                    transition: "all 0.25s var(--ease-spring)",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {st.order}
-                </span>
-                <span>{st.name}</span>
-              </div>
-              {idx < MACRO_STAGES.length - 1 && (
-                <ChevronRight size={14} color="var(--color-line-strong)" />
-              )}
-            </Fragment>
-          );
-        })}
-      </div>
+                  <span
+                    className="zygos-tabular"
+                    style={{
+                      width: "17px",
+                      height: "17px",
+                      borderRadius: "50%",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      backgroundColor: isActive
+                        ? "var(--color-brand)"
+                        : isPast
+                        ? "#10b981"
+                        : "var(--color-line-strong)",
+                      color: "#ffffff",
+                    }}
+                  >
+                    {isPast ? "✓" : st.order}
+                  </span>
+                  <span>{st.name}</span>
+                </div>
+                {idx < MACRO_STAGES.length - 1 && (
+                  <ChevronRight size={13} color="var(--color-ink-mute)" style={{ opacity: 0.5 }} />
+                )}
+              </Fragment>
+            );
+          })}
+        </div>
+      )}
 
-      {/* 右侧：操作区 */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      {/* 右侧：操作按钮 */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, flexWrap: "wrap" }}>
+        {viewModel.mode === "completed" && onChangeCompletedView && (
+          <div
+            role="tablist"
+            aria-label="完成态视图切换"
+            style={{
+              display: "inline-flex",
+              padding: "3px",
+              borderRadius: "10px",
+              backgroundColor: "var(--color-surface-sunken)",
+              border: "1px solid var(--color-line-strong)",
+              gap: "2px",
+            }}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={completedView === "answer"}
+              onClick={() => onChangeCompletedView("answer")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "5px 11px",
+                borderRadius: "7px",
+                border: "none",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                backgroundColor:
+                  completedView === "answer"
+                    ? "var(--color-brand)"
+                    : "transparent",
+                color:
+                  completedView === "answer" ? "#ffffff" : "var(--color-ink-soft)",
+              }}
+            >
+              <Award size={13} />
+              <span>最终答案页</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={completedView === "process"}
+              onClick={() => onChangeCompletedView("process")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "5px 11px",
+                borderRadius: "7px",
+                border: "none",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                backgroundColor:
+                  completedView === "process"
+                    ? "var(--color-brand-tint)"
+                    : "transparent",
+                color:
+                  completedView === "process"
+                    ? "var(--color-brand-deep)"
+                    : "var(--color-ink-soft)",
+              }}
+            >
+              <GitBranch size={13} />
+              <span>四阶段过程</span>
+            </button>
+          </div>
+        )}
+
         {viewModel.recovery.eligible && onResume && (
           <button
             type="button"
             onClick={onResume}
+            className="zygos-btn-primary"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              backgroundColor: "var(--color-brand)",
-              color: "#ffffff",
+              padding: "6px 13px",
               fontSize: "12px",
-              fontWeight: 600,
-              border: "none",
-              cursor: "pointer",
+              borderRadius: "8px",
             }}
           >
-            <RotateCcw size={14} />
-            恢复同题研究
+            <RotateCcw size={13} />
+            <span>恢复同题研究</span>
           </button>
         )}
 
@@ -267,119 +386,116 @@ export function WorkspaceHeader({
           <button
             type="button"
             onClick={onToggleReplay}
+            className="zygos-btn-ghost"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
               padding: "6px 12px",
-              borderRadius: "6px",
-              border: "1px solid var(--color-line-strong)",
-              backgroundColor: isReplay ? "var(--color-brand-tint)" : "var(--color-surface)",
-              color: isReplay ? "var(--color-brand)" : "var(--color-ink)",
               fontSize: "12px",
-              fontWeight: 500,
-              cursor: "pointer",
+              borderRadius: "8px",
+              backgroundColor: isReplay ? "var(--color-brand-tint)" : undefined,
+              borderColor: isReplay ? "var(--color-brand-ring)" : undefined,
+              color: isReplay ? "var(--color-brand-deep)" : undefined,
             }}
           >
-            <Play size={14} />
-            {isReplay ? "退出回放" : "全过程回放"}
+            <Play size={13} />
+            <span>{isReplay ? "退出回放" : "全过程回放"}</span>
           </button>
         )}
 
         <Link
           to="/solve"
+          className="zygos-btn-ghost"
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "5px",
             padding: "6px 12px",
-            borderRadius: "6px",
-            backgroundColor: "var(--color-surface-sunken)",
-            color: "var(--color-ink)",
             fontSize: "12px",
-            fontWeight: 500,
+            borderRadius: "8px",
             textDecoration: "none",
           }}
         >
-          <Sparkles size={14} />
-          新建
+          <Sparkles size={13} />
+          <span>新建</span>
         </Link>
       </div>
 
-      {/* 查看原题弹窗 */}
-      {showFullProblem && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 999,
-            backgroundColor: "rgba(15, 27, 45, 0.45)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setShowFullProblem(false)}
-        >
+      {/* 查看原题模态框 —— 通过 Portal 挂载到 body，避免被 sticky/backdrop-filter 顶栏裁剪卡住 */}
+      {showFullProblem &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="研究题目完整定义"
             style={{
-              backgroundColor: "var(--color-surface)",
-              borderRadius: "12px",
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              backgroundColor: "rgba(4, 8, 20, 0.72)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               padding: "24px",
-              maxWidth: "600px",
-              width: "100%",
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+              overflowY: "auto",
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setShowFullProblem(false)}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
-                研究题目完整定义
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowFullProblem(false)}
-                style={{ border: "none", background: "none", fontSize: "18px", cursor: "pointer", color: "var(--color-ink-mute)" }}
-              >
-                ×
-              </button>
-            </div>
             <div
+              className="zygos-glass zygos-modal-card"
               style={{
-                fontSize: "15px",
-                lineHeight: 1.8,
-                color: "var(--color-ink)",
-                backgroundColor: "var(--color-surface-muted)",
-                padding: "16px",
-                borderRadius: "8px",
-                border: "1px solid var(--color-line)",
-                fontFamily: "var(--font-sans)",
+                borderRadius: "18px",
+                padding: "26px",
+                maxWidth: "720px",
+                width: "100%",
+                maxHeight: "86vh",
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "var(--color-surface-popover)",
+                boxShadow: "var(--shadow-ambient)",
+                margin: "auto",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              {viewModel.problem}
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
-              <button
-                type="button"
-                onClick={() => setShowFullProblem(false)}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", gap: "12px" }}>
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+                  研究题目完整定义
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowFullProblem(false)}
+                  className="zygos-btn-ghost"
+                  style={{ padding: "6px 10px", borderRadius: "8px", fontSize: "12px" }}
+                  aria-label="关闭原题弹窗"
+                >
+                  <X size={15} />
+                  <span>关闭 (Esc)</span>
+                </button>
+              </div>
+              <div
                 style={{
-                  padding: "8px 18px",
-                  borderRadius: "6px",
-                  backgroundColor: "var(--color-brand)",
-                  color: "#ffffff",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  border: "none",
-                  cursor: "pointer",
+                  backgroundColor: "var(--color-surface-sunken)",
+                  padding: "18px 20px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--color-line)",
+                  overflowY: "auto",
+                  flex: 1,
                 }}
               >
-                关闭
-              </button>
+                <MathMarkdown content={viewModel.problem} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowFullProblem(false)}
+                  className="zygos-btn-primary"
+                  style={{ padding: "8px 22px", fontSize: "13px" }}
+                >
+                  关闭
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </div>,
+          document.body,
+        )}
+    </header>
   );
 }

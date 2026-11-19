@@ -583,9 +583,16 @@ function applyKnownEvent(state: RunViewState, ev: RunEventEnvelope): RunViewStat
       // 两者都缺失时保持 null + unknown，不默认填充 REVIEWS_COMPLETE（旧版默认值属于伪造终态）。
       const stopReason = (declaredStop ??
         canonicalStopReasonForStatus(declaredStatus)) as StopReason | null;
-      const status = declaredStop
-        ? classifyRunStatus(declaredStop)
-        : classifyDeclaredStatus(declaredStatus);
+      const rawStopStatus = declaredStop ? classifyRunStatus(declaredStop) : null;
+      const declaredStatusKind = declaredStatus ? classifyDeclaredStatus(declaredStatus) : null;
+      const status =
+        rawStopStatus && rawStopStatus !== "unknown"
+          ? declaredStop === "REVISE_REJECTED" && declaredStatusKind === "candidate"
+            ? "candidate"
+            : rawStopStatus
+          : declaredStatusKind && declaredStatusKind !== "unknown"
+            ? declaredStatusKind
+            : rawStopStatus ?? classifyDeclaredStatus(declaredStatus);
       const finalResponse =
         str("final_response") ?? str("finalResponse") ?? str("answer") ?? str("candidateProposal");
       const finalResponseMissing = !(finalResponse && finalResponse.trim());

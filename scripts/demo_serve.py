@@ -50,7 +50,7 @@ if foreground:
 
 creationflags = 0
 if os.name == "nt":
-    creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW  # 无黑窗口
 
 p = subprocess.Popen(
     cmd,

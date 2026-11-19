@@ -47,6 +47,36 @@ const LOCAL_OVERRIDES: Record<
     categoryTitle: "引擎自报（未经形式化验证）",
     description: "引擎自报 SOLVED；本控制台不执行形式化验证，产物仍按待审候选呈现。",
   },
+  NO_REVIEW: {
+    title: "未启用审修流程，直接交付",
+    categoryTitle: "消融交付（无审查）",
+    description: "未执行 R2/R4 审查与修复闭环，直接交付当前候选答案（常见于 no_review_repair 消融组）。",
+  },
+  REVIEW_STOP: {
+    title: "审查满足准则后停止交付",
+    categoryTitle: "正常交付",
+    description: "审查阶段判定候选结果满足终止条件，受控收口并交付候选答案。",
+  },
+  CONTROL_REJECTED: {
+    title: "控制策略门控拒绝交付",
+    categoryTitle: "受控拒绝（未交付）",
+    description: "控制门控检测到违反运行边界或策略约束，拒绝交付并收口为未解。",
+  },
+  PACKET_REJECTED: {
+    title: "候选包格式或闭合校验被拒",
+    categoryTitle: "包校验拒绝",
+    description: "候选输出包未通过结构或答案闭合门控，退回处理或收口为未解。",
+  },
+  CONTEXT_REJECTED: {
+    title: "上下文或状态校验被拒",
+    categoryTitle: "上下文门控拒绝",
+    description: "执行上下文未通过准入检查，受控停止并返回未解状态。",
+  },
+  STOPPED: {
+    title: "引擎执行受控中止",
+    categoryTitle: "受控中止",
+    description: "执行器依据运行条件触发受控停止，未形成最终交付。",
+  },
 };
 
 export function describeStopReason(code: string | null | undefined): StopReasonView {

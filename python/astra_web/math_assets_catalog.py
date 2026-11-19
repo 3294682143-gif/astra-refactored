@@ -104,6 +104,8 @@ def detail_payload(asset_id: str) -> dict[str, Any] | None:
         "version": asset.get("version", "1.0.0"),
         "summary": asset.get("summary", ""),
         "guidanceOnly": len(behaviors) == 0,
+        "behaviorCount": len(behaviors),
+        "targets": [behavior["target"] for behavior in behaviors if behavior.get("target")],
         "instructions": {
             "conditions": list(instructions.get("conditions", [])),
             "procedure": list(instructions.get("procedure", [])),

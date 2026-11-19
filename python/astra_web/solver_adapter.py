@@ -160,6 +160,8 @@ def build_solver_from_env() -> Optional[SolverAdapter]:
             api_key=api_key,
             endpoint=endpoint,
             model=model,
+            connect_seconds=15,
+            read_seconds=180,
         )
         seconds = (budgets or {}).get("problem_seconds", DEFAULT_BUDGET["problem_seconds"])
         return PublicChatPort(connector, request_seconds=seconds)

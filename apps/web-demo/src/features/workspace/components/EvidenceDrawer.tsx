@@ -4,6 +4,8 @@ import {
   FileCheck2,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Cpu,
   Clock,
   ShieldCheck,
@@ -16,32 +18,49 @@ interface EvidenceDrawerProps {
   node: ResearchNode | null;
   evidence: ResearchEvidence | null;
   onClose: () => void;
+  onPrevNode?: () => void;
+  onNextNode?: () => void;
+  nodeIndex?: number;
+  totalNodes?: number;
 }
 
-export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps) {
+export function EvidenceDrawer({
+  node,
+  evidence,
+  onClose,
+  onPrevNode,
+  onNextNode,
+  nodeIndex,
+  totalNodes,
+}: EvidenceDrawerProps) {
   const [showTechnical, setShowTechnical] = useState(false);
 
   if (!node) return null;
 
+  const hasNavigation = typeof nodeIndex === "number" && typeof totalNodes === "number" && totalNodes > 1;
+
   return (
     <aside
       aria-label="节点详情与真实证据"
+      className="zygos-glass zygos-drawer-panel"
       style={{
-        width: "420px",
+        width: "430px",
+        maxWidth: "100%",
         flexShrink: 0,
-        backgroundColor: "var(--color-surface)",
-        borderLeft: "1px solid var(--color-line-strong)",
+        borderTop: "none",
+        borderBottom: "none",
+        borderRight: "none",
+        borderRadius: 0,
         display: "flex",
         flexDirection: "column",
-        height: "calc(100vh - 56px)",
+        height: "calc(100vh - 60px)",
         position: "sticky",
-        top: "56px",
-        boxShadow: "-4px 0 16px rgba(0,0,0,0.03)",
+        top: "60px",
         overflowY: "auto",
         zIndex: 20,
       }}
     >
-      {/* 抽屉顶栏 */}
+      {/* 抽屉顶栏 + 步进控制 */}
       <div
         style={{
           display: "flex",
@@ -49,12 +68,13 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
           alignItems: "center",
           padding: "16px 20px",
           borderBottom: "1px solid var(--color-line)",
-          backgroundColor: "#fcfdfe",
+          backgroundColor: "var(--color-surface-sunken)",
+          gap: "10px",
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-brand)", textTransform: "uppercase" }}>
-            机制节点真实证据
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--color-brand-mid)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            机制节点真实证据检查器
           </div>
           <div
             style={{
@@ -64,45 +84,66 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
+              marginTop: "2px",
             }}
           >
             {node.label}
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            border: "none",
-            backgroundColor: "transparent",
-            cursor: "pointer",
-            color: "var(--color-ink-mute)",
-            padding: "4px",
-            borderRadius: "4px",
-            display: "inline-flex",
-          }}
-          title="关闭面板"
-        >
-          <X size={18} />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+          {hasNavigation && (
+            <>
+              <button
+                type="button"
+                onClick={onPrevNode}
+                disabled={nodeIndex === 0}
+                className="zygos-btn-ghost"
+                style={{ padding: "5px", borderRadius: "7px" }}
+                title="上一节点"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="zygos-tabular" style={{ fontSize: "11px", color: "var(--color-ink-mute)", padding: "0 4px", fontFamily: "var(--font-mono)" }}>
+                {nodeIndex! + 1}/{totalNodes}
+              </span>
+              <button
+                type="button"
+                onClick={onNextNode}
+                disabled={nodeIndex === totalNodes! - 1}
+                className="zygos-btn-ghost"
+                style={{ padding: "5px", borderRadius: "7px" }}
+                title="下一节点"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="zygos-btn-ghost"
+            style={{ padding: "5px", borderRadius: "7px", marginLeft: "4px" }}
+            title="关闭面板"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* 统一 7 项模板内容区 */}
-      <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
-        {/* 1. 一句话：这一步要解决什么 */}
+      <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "18px" }}>
+        {/* 1. 解决目标 */}
         <div>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "4px" }}>
-            1. 解决目标
-          </div>
+          <SectionLabel>1. 解决目标</SectionLabel>
           <div
             style={{
-              fontSize: "14px",
-              lineHeight: 1.6,
+              fontSize: "13.5px",
+              lineHeight: 1.65,
               color: "var(--color-ink)",
-              backgroundColor: "var(--color-surface-muted)",
-              padding: "10px 14px",
-              borderRadius: "6px",
+              backgroundColor: "var(--color-surface-sunken)",
+              padding: "11px 14px",
+              borderRadius: "10px",
               border: "1px solid var(--color-line)",
             }}
           >
@@ -110,23 +151,38 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
           </div>
         </div>
 
-        {/* 2. 状态与结果摘要 */}
+        {/* 2. 状态与耗时 */}
         <div>
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "6px" }}>
-            2. 状态与耗时
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <SectionLabel>2. 状态与耗时</SectionLabel>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <span
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "5px",
-                padding: "3px 10px",
+                gap: "6px",
+                padding: "4px 11px",
                 borderRadius: "9999px",
                 fontSize: "12px",
                 fontWeight: 600,
-                backgroundColor: node.status === "completed" ? "#dcfce7" : "#f1f5f9",
-                color: node.status === "completed" ? "#15803d" : "#475569",
+                backgroundColor:
+                  node.status === "completed"
+                    ? "var(--color-state-success-bg)"
+                    : node.status === "failed"
+                    ? "var(--color-state-error-bg)"
+                    : "var(--color-surface-sunken)",
+                color:
+                  node.status === "completed"
+                    ? "var(--color-state-success)"
+                    : node.status === "failed"
+                    ? "var(--color-state-error)"
+                    : "var(--color-ink-soft)",
+                border: `1px solid ${
+                  node.status === "completed"
+                    ? "var(--color-state-success-border)"
+                    : node.status === "failed"
+                    ? "var(--color-state-error-border)"
+                    : "var(--color-line)"
+                }`,
               }}
             >
               <ShieldCheck size={13} />
@@ -136,10 +192,13 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
                 ? "未触发"
                 : node.status === "unrecorded"
                 ? "记录缺失"
+                : node.status === "failed"
+                ? "未通过/异常"
                 : node.status}
             </span>
+
             {node.durationMs != null && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "var(--color-ink-mute)" }}>
+              <span className="zygos-tabular" style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--color-ink-mute)", fontFamily: "var(--font-mono)" }}>
                 <Clock size={13} />
                 耗时 {node.durationMs}ms
               </span>
@@ -150,22 +209,20 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
         {/* 3. 本次输入 */}
         {node.inputSummary && (
           <div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "4px" }}>
-              3. 本次输入（题目/参数/前置候选）
-            </div>
+            <SectionLabel>3. 本次输入（题目/参数/前置候选）</SectionLabel>
             <pre
               style={{
                 margin: 0,
-                padding: "10px 12px",
-                borderRadius: "6px",
-                backgroundColor: "var(--color-surface-sunken)",
+                padding: "11px 13px",
+                borderRadius: "10px",
+                backgroundColor: "var(--color-code-bg)",
                 border: "1px solid var(--color-line)",
                 fontSize: "12px",
-                lineHeight: 1.5,
+                lineHeight: 1.55,
                 fontFamily: "var(--font-mono)",
                 whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-                color: "#1e293b",
+                wordBreak: "break-word",
+                color: "var(--color-ink-soft)",
               }}
             >
               {node.inputSummary}
@@ -176,18 +233,18 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
         {/* 4. 本次产出 */}
         {node.outputSummary && (
           <div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "4px" }}>
-              4. 本次产出（意见/公式/候选/修订）
-            </div>
+            <SectionLabel>4. 本次产出（意见/公式/候选/修订）</SectionLabel>
             <div
               style={{
-                padding: "10px 12px",
-                borderRadius: "6px",
-                backgroundColor: "#f8fafc",
+                padding: "11px 13px",
+                borderRadius: "10px",
+                backgroundColor: "var(--color-surface-sunken)",
                 border: "1px solid var(--color-line-strong)",
                 fontSize: "13px",
-                lineHeight: 1.6,
+                lineHeight: 1.65,
                 color: "var(--color-ink)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
             >
               {node.outputSummary}
@@ -198,17 +255,15 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
         {/* 5. 依据与边界 */}
         {node.rationale && (
           <div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "4px" }}>
-              5. 依据与边界说明
-            </div>
+            <SectionLabel>5. 依据与边界说明</SectionLabel>
             <div
               style={{
-                padding: "10px 12px",
-                borderRadius: "6px",
-                borderLeft: "3px solid var(--color-brand)",
+                padding: "11px 13px",
+                borderRadius: "10px",
+                borderLeft: "3px solid var(--color-brand-mid)",
                 backgroundColor: "var(--color-brand-tint)",
-                fontSize: "12px",
-                lineHeight: 1.5,
+                fontSize: "12.5px",
+                lineHeight: 1.6,
                 color: "var(--color-brand-deep)",
               }}
             >
@@ -217,57 +272,80 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
           </div>
         )}
 
-        {/* 6. 关联关系 */}
-        {node.relations && (
+        {/* 6. 关联对象 */}
+        {node.relations && (node.relations.assetName || node.relations.taskId) && (
           <div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-soft)", marginBottom: "6px" }}>
-              6. 关联对象与版本
-            </div>
+            <SectionLabel>6. 关联对象与版本</SectionLabel>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", fontSize: "12px" }}>
               {node.relations.assetName && (
-                <span style={{ padding: "3px 8px", backgroundColor: "#f1f5f9", borderRadius: "4px" }}>
-                  资产: <code>{node.relations.assetName}</code>
+                <span
+                  style={{
+                    padding: "4px 10px",
+                    backgroundColor: "var(--color-surface-sunken)",
+                    border: "1px solid var(--color-line)",
+                    borderRadius: "8px",
+                    color: "var(--color-ink-soft)",
+                  }}
+                >
+                  资产: <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-brand-mid)" }}>{node.relations.assetName}</code>
                 </span>
               )}
               {node.relations.taskId && (
-                <span style={{ padding: "3px 8px", backgroundColor: "#f1f5f9", borderRadius: "4px" }}>
-                  任务: <code>{node.relations.taskId}</code>
+                <span
+                  style={{
+                    padding: "4px 10px",
+                    backgroundColor: "var(--color-surface-sunken)",
+                    border: "1px solid var(--color-line)",
+                    borderRadius: "8px",
+                    color: "var(--color-ink-soft)",
+                  }}
+                >
+                  任务: <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-brand-mid)" }}>{node.relations.taskId}</code>
                 </span>
               )}
             </div>
           </div>
         )}
 
-        {/* 真实证据正文渲染 (如有) */}
+        {/* 真实证据正文渲染 */}
         {evidence && (
           <div style={{ borderTop: "1px solid var(--color-line)", paddingTop: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 700, color: "var(--color-brand-deep)", marginBottom: "10px" }}>
-              <FileCheck2 size={16} color="var(--color-brand)" />
-              {evidence.title}
+            <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13.5px", fontWeight: 700, color: "var(--color-brand-deep)", marginBottom: "10px" }}>
+              <FileCheck2 size={16} color="var(--color-brand-mid)" />
+              <span>{evidence.title}</span>
             </div>
 
-            <MathMarkdown content={evidence.markdownContent} />
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                backgroundColor: "var(--color-surface-sunken)",
+                border: "1px solid var(--color-line)",
+              }}
+            >
+              <MathMarkdown content={evidence.markdownContent} compact />
+            </div>
 
-            {/* 明确的红线提示 */}
+            {/* 明确红线提示 */}
             <div
               style={{
                 marginTop: "12px",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                backgroundColor: "#fffbeb",
-                border: "1px solid #fef3c7",
-                fontSize: "11px",
-                color: "#92400e",
-                lineHeight: 1.4,
+                padding: "9px 12px",
+                borderRadius: "9px",
+                backgroundColor: "var(--color-state-candidate-bg)",
+                border: "1px solid var(--color-state-candidate-border)",
+                fontSize: "11.5px",
+                color: "var(--color-state-candidate)",
+                lineHeight: 1.5,
               }}
             >
-              <AlertTriangle size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
+              <AlertTriangle size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "5px" }} />
               <strong>验证状态：未形式化证明</strong>。本证据仅供审查链与人工核验，模型/协议通过不直接等于数学逻辑成立。
             </div>
           </div>
         )}
 
-        {/* 7. 受控技术详情 (默认折叠) */}
+        {/* 7. 受控技术详情 */}
         {node.technical && (
           <div style={{ borderTop: "1px solid var(--color-line)", paddingTop: "12px" }}>
             <button
@@ -289,7 +367,7 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
             >
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                 <Cpu size={14} />
-                7. 受控技术详情 (事件编号 #{node.technical.seq ?? "N/A"})
+                <span>7. 受控技术详情 (事件编号 #{node.technical.seq ?? "N/A"})</span>
               </span>
               {showTechnical ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
@@ -298,15 +376,16 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
               <pre
                 style={{
                   margin: "8px 0 0 0",
-                  padding: "10px 12px",
-                  borderRadius: "6px",
-                  backgroundColor: "#0f1b2d",
-                  color: "#e2e8f0",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  backgroundColor: "var(--color-code-bg)",
+                  border: "1px solid var(--color-line)",
+                  color: "var(--color-ink-soft)",
                   fontSize: "11px",
-                  lineHeight: 1.4,
+                  lineHeight: 1.45,
                   fontFamily: "var(--font-mono)",
                   overflowX: "auto",
-                  maxHeight: "220px",
+                  maxHeight: "240px",
                 }}
               >
                 {JSON.stringify(node.technical.raw, null, 2)}
@@ -316,5 +395,13 @@ export function EvidenceDrawer({ node, evidence, onClose }: EvidenceDrawerProps)
         )}
       </div>
     </aside>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--color-ink-mute)", marginBottom: "6px", letterSpacing: "0.02em" }}>
+      {children}
+    </div>
   );
 }

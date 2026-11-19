@@ -9,6 +9,7 @@
  */
 
 import type { RunViewState, RunEventEnvelope } from "../reduceRun";
+import { toPlainAnswerText } from "./plainAnswer";
 import type {
   ResearchViewModel,
   WorkspaceMode,
@@ -19,6 +20,15 @@ import type {
   ResearchBudgetStats,
   RecoveryEligibility,
   NodeExecutionStatus,
+  R0RoleKind,
+  R0RoleAgentView,
+  ThreeAgentReadingView,
+  MultiAgentBallotView,
+  ConsensusVoteGroupView,
+  MultiAgentAuditView,
+  MultiAgentCertificateView,
+  MultiAgentClosureView,
+  MultiAgentSolvingView,
 } from "./types";
 
 function extractPayload(event: RunEventEnvelope): Record<string, unknown> {
@@ -69,6 +79,119 @@ export function projectRunToResearchView(
   let lastTimestamp = 0;
   let firstTimestamp = 0;
 
+  // Per-request live & historical model telemetry
+  const dispatchedAtMap = new Map<string, number>();
+  const requestPhaseMap = new Map<string, string>();
+  const requestLatencyMs = new Map<string, number>();
+  const inFlightRequestsMap = new Map<string, string>();
+  const r0OrderedRequestIds: string[] = [];
+
+  // R0 三角色读题状态累积
+  const R0_ROLE_META: Record<R0RoleKind, { title: string; dimension: string; focus: string }> = {
+    MEANING: {
+      title: "题意对齐审查",
+      dimension: "PROBLEM_ALIGNMENT",
+      focus: "核对命题条件、边界约束、量化对象与目标一致",
+    },
+    METHOD: {
+      title: "方法与域审查",
+      dimension: "SCOPE",
+      focus: "核对解题路线、领域域边界、反例风险与适用定理",
+    },
+    TASK_TOOL: {
+      title: "任务与工具审查",
+      dimension: "TASK_COVERAGE",
+      focus: "核对子任务拆分完整性与计算资产/脚本调度需求",
+    },
+  };
+  let r0BudgetEnabled: boolean | null = null;
+  const seenR0Roles = new Set<string>();
+  let seenR0Aggregate = false;
+  const r0RoleMap = new Map<R0RoleKind, R0RoleAgentView>([
+    ["MEANING", { role: "MEANING", ...R0_ROLE_META.MEANING, status: "untriggered", verdict: null, issueCount: 0 }],
+    ["METHOD", { role: "METHOD", ...R0_ROLE_META.METHOD, status: "untriggered", verdict: null, issueCount: 0 }],
+    ["TASK_TOOL", { role: "TASK_TOOL", ...R0_ROLE_META.TASK_TOOL, status: "untriggered", verdict: null, issueCount: 0 }],
+  ]);
+  let r0AggregateConclusion: "NO_ISSUE" | "ISSUES" | "UNKNOWN" | null = null;
+  let r0IssueDimensions: string[] = [];
+  let r0StageAction: string | null = null;
+  let r0StageReason: string | null = null;
+  let r0RevisionTriggered = false;
+  let r0RecheckObserved = false;
+  let r0ContractVersion = 1;
+  let r0ObligationsCount: number | null = null;
+  let r0TasksCount: number | null = null;
+
+  // 多-Agent 协同求解状态累积 (5+2+1 共识 + 资产闭环)
+  const INDEPENDENT_LENS_FALLBACKS: readonly { title: string; desc: string }[] = [
+    { title: "直推符号与条件核验视角", desc: "沿原始数学陈述独立展开完整推导并逐项校验前提" },
+    { title: "对偶变换与等价重表征视角", desc: "尝试变换变量、几何/代数等价转译后重新独立求解" },
+    { title: "极端边界与反例构造视角", desc: "优先检验边界值、退化情形与潜在反例以锁定唯一解" },
+    { title: "不变量与模约化交叉视角", desc: "借助守恒量、对称性或商结构进行跨尺度独立计算" },
+    { title: "逆向代回与完备性证明视角", desc: "从候选答案反向代回原约束并核查解集完备无遗漏" },
+  ];
+  let maxConsensusBudget: number | null = null;
+  let totalWorkModelCalls = 0;
+  let totalConsensusModelCalls = 0;
+  let seedCandidateRaw: string | undefined = undefined;
+  let seedNodeId: string | undefined = undefined;
+  let seedEvidenceId: string | undefined = undefined;
+  const independentBallots: MultiAgentBallotView[] = [];
+  const audits: MultiAgentAuditView[] = [];
+  let certificateState: MultiAgentCertificateView = {
+    observed: false,
+    agreement: null,
+    certificateChecks: null,
+    certificateCertified: null,
+    auditOverrideDetected: false,
+  };
+  let closureState: MultiAgentClosureView = {
+    observed: false,
+    closureRequested: false,
+    observationViews: 0,
+    observationUsed: false,
+    candidateChanged: false,
+    defects: [],
+    remainingDefects: [],
+  };
+  const methodRoutesSet = new Set<string>();
+  const closureDefectsSet = new Set<string>();
+
+  function normalizeVerdict(raw: unknown): "NO_ISSUE" | "ISSUES" | "UNKNOWN" | null {
+    const s = String(raw || "").toUpperCase();
+    if (s === "NO_ISSUE" || s === "PASS" || s === "PASSED" || s === "OK") return "NO_ISSUE";
+    if (s === "ISSUES" || s === "ISSUE" || s === "FAIL" || s === "REJECT" || s === "CHALLENGE") return "ISSUES";
+    if (s === "UNKNOWN") return "UNKNOWN";
+    return null;
+  }
+
+  function upsertR0Role(
+    role: R0RoleKind,
+    verdict: "NO_ISSUE" | "ISSUES" | "UNKNOWN" | null,
+    issueCount: number,
+    dimensionRaw: unknown,
+    requestId: string | undefined,
+    nodeId: string | undefined,
+    evidenceId: string | undefined
+  ) {
+    const prev = r0RoleMap.get(role)!;
+    const req = requestId || prev.requestId;
+    const lat = req && requestLatencyMs.has(req) ? requestLatencyMs.get(req)! : prev.latencyMs ?? null;
+    const status: R0RoleAgentView["status"] =
+      verdict === "ISSUES" ? "failed" : verdict !== null ? "completed" : prev.status;
+    r0RoleMap.set(role, {
+      ...prev,
+      dimension: typeof dimensionRaw === "string" && dimensionRaw ? dimensionRaw : prev.dimension,
+      status,
+      verdict: verdict ?? prev.verdict,
+      issueCount: Number.isFinite(issueCount) ? issueCount : prev.issueCount,
+      requestId: req,
+      latencyMs: lat,
+      nodeId: nodeId || prev.nodeId,
+      evidenceId: evidenceId || prev.evidenceId,
+    });
+  }
+
   // 遍历事件流投影机制节点与证据
   for (const ev of state.events) {
     const kind = ev.kind || ev.type || "";
@@ -85,21 +208,179 @@ export function projectRunToResearchView(
       if (typeof payload.problem === "string" && !resolvedProblem) {
         resolvedProblem = payload.problem;
       }
+      const budgets = payload.budgets;
+      if (budgets && typeof budgets === "object") {
+        const b = budgets as Record<string, unknown>;
+        if (typeof b.maxR0 === "number") r0BudgetEnabled = b.maxR0 > 0;
+        if (typeof b.maxConsensus === "number") maxConsensusBudget = b.maxConsensus;
+      }
+    }
+
+    if (kind === "MODEL_REQUEST" || kind === "model_dispatched") {
+      modelCallCount++;
+      const reqId = String(payload.requestId || payload.id || `req-${seq}`);
+      const phase = String(payload.phase || "WORK").toUpperCase();
+      requestPhaseMap.set(reqId, phase);
+      if (at) dispatchedAtMap.set(reqId, at);
+      inFlightRequestsMap.set(reqId, phase);
+
+      if (phase === "R0") {
+        r0OrderedRequestIds.push(reqId);
+        const roleOrder: R0RoleKind[] = ["MEANING", "METHOD", "TASK_TOOL"];
+        const slot = (r0OrderedRequestIds.length - 1) % 3;
+        const targetRole = roleOrder[slot];
+        const prev = r0RoleMap.get(targetRole)!;
+        if (prev.verdict === null) {
+          r0RoleMap.set(targetRole, {
+            ...prev,
+            status: "running",
+            requestId: reqId,
+          });
+        }
+      } else if (phase === "WORK") {
+        totalWorkModelCalls++;
+      } else if (phase === "CONSENSUS") {
+        totalConsensusModelCalls++;
+      }
+    }
+
+    if (kind === "model_returned") {
+      const reqId = String(payload.requestId || payload.id || "");
+      const phase = String(payload.phase || requestPhaseMap.get(reqId) || "").toUpperCase();
+      if (reqId) {
+        inFlightRequestsMap.delete(reqId);
+        const startAt = dispatchedAtMap.get(reqId);
+        if (at && startAt && at >= startAt) {
+          requestLatencyMs.set(reqId, at - startAt);
+        }
+        if (phase === "R0") {
+          for (const role of ["MEANING", "METHOD", "TASK_TOOL"] as const) {
+            const cur = r0RoleMap.get(role)!;
+            if (cur.requestId === reqId) {
+              r0RoleMap.set(role, {
+                ...cur,
+                status: cur.verdict === "ISSUES" ? "failed" : "completed",
+                latencyMs: requestLatencyMs.get(reqId) ?? cur.latencyMs ?? null,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (kind === "R0_REVIEW") {
+      currentStage = "stage_1_planning";
+      r0BudgetEnabled = true;
+      const roleRaw = String(payload.role || "").toUpperCase();
+      if (payload.recheck === true) {
+        r0RecheckObserved = true;
+      }
+
+      if (roleRaw === "MEANING" || roleRaw === "METHOD" || roleRaw === "TASK_TOOL") {
+        const role = roleRaw as R0RoleKind;
+        seenR0Roles.add(`${role}:${payload.recheck ? "recheck" : "init"}`);
+        const verdict = normalizeVerdict(payload.verdict) ?? "UNKNOWN";
+        const issueCount = Number(payload.issueCount ?? 0);
+        const reqId = typeof payload.requestId === "string" ? payload.requestId : undefined;
+        const meta = R0_ROLE_META[role];
+        const nodeId = `node-r0-${role.toLowerCase()}-${seq}`;
+        const evidenceId = `ev-r0-${role.toLowerCase()}-${seq}`;
+        const latencyMs = reqId && requestLatencyMs.has(reqId) ? requestLatencyMs.get(reqId)! : null;
+
+        upsertR0Role(role, verdict, issueCount, payload.dimension, reqId, nodeId, evidenceId);
+
+        nodes.push({
+          id: nodeId,
+          stage: "stage_1_planning",
+          label: `R0 读题 · ${meta.title}`,
+          summary: `${meta.focus}（结论：${verdict}${issueCount > 0 ? ` · ${issueCount} 项关注点` : ""}）`,
+          status: verdict === "ISSUES" ? "failed" : "completed",
+          durationMs: latencyMs,
+          inputSummary: resolvedProblem || "原始数学命题",
+          outputSummary: `维度 ${payload.dimension || meta.dimension} · 结论 ${verdict}`,
+          rationale: "R0 三方并行独立审题协议，彼此隔离不交叉污染",
+          relations: reqId ? { taskId: reqId } : undefined,
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: `R0 独立读题审查：${meta.title}`,
+          kind: "review_challenge",
+          timestamp: at,
+          markdownContent: `### ${meta.title} (${role})\n\n* **审查维度**：${payload.dimension || meta.dimension}\n* **审查结论**：${verdict}\n* **关注/问题数**：${issueCount}\n* **关联请求**：${reqId || "未记录"}${latencyMs !== null ? `\n* **真实响应耗时**：${(latencyMs / 1000).toFixed(2)} s` : ""}\n\n> ${meta.focus}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (roleRaw === "AGGREGATE") {
+        seenR0Aggregate = true;
+        const conclusion = normalizeVerdict(payload.conclusion ?? payload.verdict) ?? "UNKNOWN";
+        r0AggregateConclusion = conclusion;
+        if (Array.isArray(payload.issueDimensions)) {
+          r0IssueDimensions = payload.issueDimensions.map((d) => String(d));
+        }
+        if (conclusion === "ISSUES") {
+          r0RevisionTriggered = true;
+        }
+        const nodeId = `node-r0-aggregate-${seq}`;
+        const evidenceId = `ev-r0-aggregate-${seq}`;
+        nodes.push({
+          id: nodeId,
+          stage: "stage_1_planning",
+          label: "R0 三方读题聚合门控",
+          summary: `确定性聚合三角色评审结论：${conclusion}${r0IssueDimensions.length ? `（涉及维度：${r0IssueDimensions.join(" / ")}）` : ""}`,
+          status: conclusion === "ISSUES" ? "failed" : "completed",
+          inputSummary: "MEANING / METHOD / TASK_TOOL 三方独立评审结果",
+          outputSummary: `聚合结论：${conclusion}`,
+          rationale: "确定性汇总门控：任一方发现关键歧义或漏项即触发规划合同修订与重审",
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: "R0 读题确定性聚合结论",
+          kind: "review_challenge",
+          timestamp: at,
+          markdownContent: `### R0 读题聚合结论\n\n* **最终结论**：${conclusion}\n* **问题维度**：${r0IssueDimensions.length ? r0IssueDimensions.join(", ") : "无"}\n* **是否复检**：${payload.recheck ? "是 (Recheck)" : "首轮聚合"}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (roleRaw === "STAGE") {
+        r0StageAction = typeof payload.action === "string" ? payload.action : null;
+        r0StageReason = typeof payload.reason === "string" ? payload.reason : null;
+        if (r0StageAction === "REVISE" || r0StageAction === "REVISED") {
+          r0RevisionTriggered = true;
+        }
+      }
     }
 
     if (kind === "CONTRACT" || kind === "CONTRACT_REVISED") {
       currentStage = "stage_1_planning";
       const obligations = payload.obligations ?? "若干";
       const tasks = payload.tasks ?? "若干";
+      const contractVersion = Number(payload.contractVersion ?? (kind === "CONTRACT_REVISED" ? r0ContractVersion + 1 : 1));
+      r0ContractVersion = contractVersion;
+      if (typeof payload.obligations === "number") r0ObligationsCount = payload.obligations;
+      if (typeof payload.tasks === "number") r0TasksCount = payload.tasks;
+      if (kind === "CONTRACT_REVISED") {
+        r0RevisionTriggered = true;
+      }
+
       const node: ResearchNode = {
         id: `node-contract-${seq}`,
         stage: "stage_1_planning",
-        label: "题意解析与合同义务",
-        summary: `解析题目目标，确立 ${obligations} 项证明义务与 ${tasks} 个执行阶段`,
+        label: kind === "CONTRACT_REVISED" ? `规划合同修订 (v${contractVersion})` : "题意解析与合同义务",
+        summary: `确立 v${contractVersion} 执行合同：${obligations} 项证明义务与 ${tasks} 个子任务`,
         status: "completed",
         inputSummary: resolvedProblem || "当前数学命题",
-        outputSummary: `确立目标义务表，分派初始研究任务`,
-        rationale: "依据形式化约束与题目结构化解析协议",
+        outputSummary: `合同版本 v${contractVersion}，分派 ${tasks} 项研究任务`,
+        rationale: kind === "CONTRACT_REVISED" ? "依据 R0 读题聚合反馈执行合同增量修订" : "依据形式化约束与题目结构化解析协议",
+        relations: { artifactVersion: `v${contractVersion}` },
         evidenceId: `ev-contract-${seq}`,
         technical: { seq, eventKind: kind, raw: payload },
       };
@@ -108,18 +389,14 @@ export function projectRunToResearchView(
       evidences[`ev-contract-${seq}`] = {
         id: `ev-contract-${seq}`,
         runId: state.runId,
-        title: "题意解析与规划义务合同",
+        title: kind === "CONTRACT_REVISED" ? `规划合同修订记录 (v${contractVersion})` : "题意解析与规划义务合同",
         kind: "contract",
         timestamp: at,
-        markdownContent: `### 题目命题\n\n${resolvedProblem || "未记录题目文本"}\n\n### 规划合同义务\n\n* **义务总数**：${obligations}\n* **子任务数**：${tasks}\n* **状态**：已准入并初始化工作视图`,
+        markdownContent: `### 题目命题\n\n${resolvedProblem || "未记录题目文本"}\n\n### 规划合同义务 (v${contractVersion})\n\n* **义务总数**：${obligations}\n* **子任务数**：${tasks}\n* **状态**：${kind === "CONTRACT_REVISED" ? "已完成 R0 后修订重编" : "已准入并初始化工作视图"}`,
         verified: false,
         sourceEventSeq: seq,
         rawPayload: payload,
       };
-    }
-
-    if (kind === "MODEL_REQUEST" || kind === "model_dispatched") {
-      modelCallCount++;
     }
 
     if (kind === "METHOD_LOAD") {
@@ -306,6 +583,92 @@ export function projectRunToResearchView(
     }
 
     if (kind === "REVIEW_CHALLENGE" || kind === "REPAIR") {
+      if (kind === "REPAIR" && String(payload.kind || "") === "METHOD_ROUTE" && Array.isArray(payload.candidates)) {
+        for (const c of payload.candidates) {
+          if (typeof c === "string" && c.trim()) {
+            methodRoutesSet.add(c.trim());
+          }
+        }
+      }
+
+      const roundTag = String(payload.round || "").toUpperCase();
+      if (kind === "REVIEW_CHALLENGE" && roundTag === "R0") {
+        currentStage = "stage_1_planning";
+        r0BudgetEnabled = true;
+        const roleRaw = String(payload.role || "").toUpperCase();
+        const recheckSuffix = payload.recheck ? "recheck" : "init";
+        if (roleRaw === "MEANING" || roleRaw === "METHOD" || roleRaw === "TASK_TOOL") {
+          const role = roleRaw as R0RoleKind;
+          const verdict = normalizeVerdict(payload.verdict) ?? "UNKNOWN";
+          const issueCount = Number(payload.issueCount ?? 0);
+          if (!seenR0Roles.has(`${role}:${recheckSuffix}`)) {
+            seenR0Roles.add(`${role}:${recheckSuffix}`);
+            const meta = R0_ROLE_META[role];
+            const nodeId = `node-r0-${role.toLowerCase()}-${seq}`;
+            const evidenceId = `ev-r0-${role.toLowerCase()}-${seq}`;
+            upsertR0Role(role, verdict, issueCount, payload.dimension, undefined, nodeId, evidenceId);
+            nodes.push({
+              id: nodeId,
+              stage: "stage_1_planning",
+              label: `R0 读题 · ${meta.title}`,
+              summary: String(payload.rationale || `${meta.focus}（结论：${verdict}）`),
+              status: verdict === "ISSUES" ? "failed" : "completed",
+              inputSummary: resolvedProblem || "原始数学命题",
+              outputSummary: `结论 ${verdict}`,
+              rationale: "R0 三方独立审题协议",
+              evidenceId,
+              technical: { seq, eventKind: kind, raw: payload },
+            });
+            evidences[evidenceId] = {
+              id: evidenceId,
+              runId: state.runId,
+              title: `R0 独立读题审查：${meta.title}`,
+              kind: "review_challenge",
+              timestamp: at,
+              markdownContent: `### ${meta.title} (${role})\n\n* **结论**：${verdict}\n* **说明**：${payload.rationale || meta.focus}`,
+              verified: false,
+              sourceEventSeq: seq,
+              rawPayload: payload,
+            };
+          }
+        } else if (roleRaw === "AGGREGATE") {
+          if (!seenR0Aggregate) {
+            seenR0Aggregate = true;
+            const conclusion = normalizeVerdict(payload.verdict ?? payload.conclusion) ?? "UNKNOWN";
+            r0AggregateConclusion = conclusion;
+            if (Array.isArray(payload.issueDimensions)) {
+              r0IssueDimensions = payload.issueDimensions.map((d) => String(d));
+            }
+            const nodeId = `node-r0-aggregate-${seq}`;
+            const evidenceId = `ev-r0-aggregate-${seq}`;
+            nodes.push({
+              id: nodeId,
+              stage: "stage_1_planning",
+              label: "R0 三方读题聚合门控",
+              summary: String(payload.rationale || `聚合结论：${conclusion}`),
+              status: conclusion === "ISSUES" ? "failed" : "completed",
+              inputSummary: "MEANING / METHOD / TASK_TOOL 三方评审结果",
+              outputSummary: `聚合结论：${conclusion}`,
+              rationale: "R0 确定性聚合门控",
+              evidenceId,
+              technical: { seq, eventKind: kind, raw: payload },
+            });
+            evidences[evidenceId] = {
+              id: evidenceId,
+              runId: state.runId,
+              title: "R0 读题确定性聚合结论",
+              kind: "review_challenge",
+              timestamp: at,
+              markdownContent: `### R0 读题聚合结论\n\n* **最终结论**：${conclusion}\n* **说明**：${payload.rationale || ""}`,
+              verified: false,
+              sourceEventSeq: seq,
+              rawPayload: payload,
+            };
+          }
+        }
+        continue;
+      }
+
       currentStage = "stage_3_review";
       const rationale = String(payload.rationale || payload.reason || "专家与审查机制复核");
       const isChallenge = kind === "REVIEW_CHALLENGE";
@@ -385,11 +748,252 @@ export function projectRunToResearchView(
       };
     }
 
+    if (kind === "CONSENSUS") {
+      const stageRaw = String(payload.stage || "").toUpperCase();
+      const reqId = typeof payload.requestId === "string" ? payload.requestId : undefined;
+      const latencyMs = reqId && requestLatencyMs.has(reqId) ? requestLatencyMs.get(reqId)! : null;
+      const prevCand = typeof payload.previousCandidate === "string" ? payload.previousCandidate : undefined;
+      const nextCand = typeof payload.nextCandidate === "string" ? payload.nextCandidate : undefined;
+      const agreement = typeof payload.agreement === "boolean" ? payload.agreement : null;
+
+      if (!seedCandidateRaw && prevCand) {
+        seedCandidateRaw = prevCand;
+      }
+
+      if (stageRaw === "INDEPENDENT") {
+        currentStage = "stage_2_execution";
+        const idx = Number(payload.round ?? independentBallots.length + 1);
+        const fallback = INDEPENDENT_LENS_FALLBACKS[(Math.max(1, idx) - 1) % INDEPENDENT_LENS_FALLBACKS.length];
+        const lensTitle = String(payload.lensTitle || payload.lens || payload.perspective || fallback.title);
+        const lensDescription = String(payload.lensDescription || fallback.desc);
+        const nodeId = `node-consensus-independent-${seq}`;
+        const evidenceId = `ev-consensus-independent-${seq}`;
+        const candPlain = nextCand ? toPlainAnswerText(nextCand) : undefined;
+        const canonicalKey = nextCand ? (toPlainAnswerText(nextCand) || nextCand).replace(/\s+/g, " ").trim().toLowerCase() : undefined;
+
+        independentBallots.push({
+          id: `ballot-ind-${idx}-${seq}`,
+          kind: "INDEPENDENT",
+          index: idx,
+          roleLabel: `独立盲解 #${idx}`,
+          lensTitle,
+          lensDescription,
+          requestId: reqId,
+          status: "completed",
+          latencyMs,
+          candidateRaw: nextCand,
+          candidatePlain: candPlain,
+          agreesWithPrevious: agreement,
+          canonicalKey,
+          nodeId,
+          evidenceId,
+        });
+
+        nodes.push({
+          id: nodeId,
+          stage: "stage_2_execution",
+          label: `多 Agent 盲解 #${idx} · ${lensTitle}`,
+          summary: `屏蔽历史候选独立重算，输出候选答案${candPlain ? `：${candPlain.slice(0, 60)}` : ""}`,
+          status: "completed",
+          durationMs: latencyMs,
+          inputSummary: `旋转求解视角：${lensTitle}`,
+          outputSummary: candPlain ? `独立候选：${candPlain.slice(0, 80)}` : "完成独立推导",
+          rationale: "Blind Independent Solve：隔离上下文与前置答案，防止共识从众",
+          relations: reqId ? { taskId: reqId } : undefined,
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: `独立盲解 #${idx} (${lensTitle})`,
+          kind: "model_opinion",
+          timestamp: at,
+          markdownContent: `### 独立盲解轮次 #${idx}\n\n* **探索视角**：${lensTitle}\n* **与上一轮候选一致**：${agreement === true ? "一致" : agreement === false ? "分歧" : "未比对"}\n* **输出摘要**：${candPlain || "（无文本候选）"}${latencyMs !== null ? `\n* **模型耗时**：${(latencyMs / 1000).toFixed(2)} s` : ""}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (stageRaw === "AUDIT") {
+        currentStage = "stage_3_review";
+        const idx = audits.length + 1;
+        const modeRaw = String(payload.auditMode || payload.mode || (idx % 2 === 1 ? "COUNTEREXAMPLE" : "PROOF_AUDIT"));
+        const modeLabel =
+          modeRaw.toUpperCase().includes("COUNTER")
+            ? "反例攻防与边界证伪"
+            : "证明链严密性与步骤审计";
+        const nodeId = `node-consensus-audit-${seq}`;
+        const evidenceId = `ev-consensus-audit-${seq}`;
+        const prevPlain = prevCand ? toPlainAnswerText(prevCand) : undefined;
+        const nextPlain = nextCand ? toPlainAnswerText(nextCand) : undefined;
+
+        audits.push({
+          id: `audit-${idx}-${seq}`,
+          index: idx,
+          modeLabel,
+          requestId: reqId,
+          latencyMs,
+          previousCandidate: prevCand,
+          nextCandidate: nextCand,
+          previousPlain: prevPlain,
+          nextPlain: nextPlain,
+          agreement,
+          nodeId,
+          evidenceId,
+        });
+
+        nodes.push({
+          id: nodeId,
+          stage: "stage_3_review",
+          label: `锚定对抗审计 #${idx} · ${modeLabel}`,
+          summary:
+            agreement === false
+              ? `对抗审计检出分歧或修正了主票候选（${nextPlain?.slice(0, 50) || "已修订"}）`
+              : `对抗审计维持多数派主票结论（一致确认）`,
+          status: agreement === false ? "failed" : "completed",
+          durationMs: latencyMs,
+          inputSummary: prevPlain ? `待审主票：${prevPlain.slice(0, 60)}` : "多数派汇总候选",
+          outputSummary: agreement === false ? "提出修订或风险标注" : "确认无推翻性反例或逻辑断层",
+          rationale: "Anchored Adversarial Audit：基于投票聚类的主票候选实施高压证伪",
+          relations: reqId ? { taskId: reqId } : undefined,
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: `对抗审计 #${idx}：${modeLabel}`,
+          kind: "review_challenge",
+          timestamp: at,
+          markdownContent: `### 对抗审计 #${idx} (${modeLabel})\n\n* **审计结论**：${agreement === false ? "检出分歧/修正候选" : "确认主票成立"}\n* **审计前候选**：${prevPlain || "无"}\n* **审计后候选**：${nextPlain || "无"}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (stageRaw === "CERTIFICATE") {
+        currentStage = "stage_2_execution";
+        const nodeId = `node-consensus-certificate-${seq}`;
+        const evidenceId = `ev-consensus-certificate-${seq}`;
+        const checks = typeof payload.certificateChecks === "number" ? payload.certificateChecks : null;
+        const certified = typeof payload.certificateCertified === "boolean" ? payload.certificateCertified : null;
+        const overrideDetected = Boolean(payload.auditOverrideDetected);
+        const prevPlain = prevCand ? toPlainAnswerText(prevCand) : undefined;
+        const nextPlain = nextCand ? toPlainAnswerText(nextCand) : undefined;
+
+        certificateState = {
+          observed: true,
+          requestId: reqId,
+          latencyMs,
+          previousCandidate: prevCand,
+          nextCandidate: nextCand,
+          previousPlain: prevPlain,
+          nextPlain: nextPlain,
+          agreement,
+          certificateChecks: checks,
+          certificateCertified: certified,
+          auditOverrideDetected: overrideDetected,
+          nodeId,
+          evidenceId,
+        };
+
+        nodes.push({
+          id: nodeId,
+          stage: "stage_2_execution",
+          label: "CERT1 一致性自检证书",
+          summary: `执行确定性检验 ${checks ?? 0} 项 · 候选${agreement === false ? "发生修订" : "保持一致"}（certified=${String(certified ?? false)}）`,
+          status: "completed",
+          durationMs: latencyMs,
+          inputSummary: prevPlain || "当前共识候选",
+          outputSummary: nextPlain || "自检输出候选",
+          rationale: "CERT1 机制对最终候选做条件回代与独立性自洽核查",
+          relations: reqId ? { taskId: reqId } : undefined,
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: "CERT1 结构化自检证书",
+          kind: "checkpoint",
+          timestamp: at,
+          markdownContent: `### CERT1 自检证书\n\n* **核验条目数**：${checks ?? 0}\n* **证书认证标志**：${certified ? "已通过自检项" : "待人工/形式化复核"}\n* **前后一致**：${agreement === true ? "一致" : agreement === false ? "有变更" : "未对比"}\n* **覆盖检测**：${overrideDetected ? "检测到审计覆盖" : "无"}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (stageRaw === "ANSWER_CLOSURE") {
+        currentStage = "stage_2_execution";
+        const nodeId = `node-consensus-closure-${seq}`;
+        const evidenceId = `ev-consensus-closure-${seq}`;
+        const defects = Array.isArray(payload.defects) ? payload.defects.map((d) => String(d)) : [];
+        const remainingDefects = Array.isArray(payload.remainingDefects) ? payload.remainingDefects.map((d) => String(d)) : [];
+        for (const d of defects) closureDefectsSet.add(d);
+        const obsViews = Number(payload.observationViews ?? 0);
+        const obsUsed = Boolean(payload.observationUsed);
+        const closureReq = Boolean(payload.closureRequested);
+        const candChanged = Boolean(payload.candidateChanged);
+
+        closureState = {
+          observed: true,
+          closureRequested: closureReq,
+          observationViews: obsViews,
+          observationUsed: obsUsed,
+          candidateChanged: candChanged,
+          defects: Array.from(closureDefectsSet),
+          remainingDefects,
+          previousCandidate: prevCand,
+          nextCandidate: nextCand,
+          nodeId,
+          evidenceId,
+        };
+
+        nodes.push({
+          id: nodeId,
+          stage: "stage_2_execution",
+          label: "答案闭合与资产对齐校验",
+          summary:
+            remainingDefects.length > 0
+              ? `存在 ${remainingDefects.length} 项未闭合缺陷（观测视角 ${obsViews} 个）`
+              : `全量证明义务与观测视图（${obsViews} 项）闭合通过`,
+          status: remainingDefects.length > 0 ? "failed" : "completed",
+          inputSummary: `程序计算观测视图 ${obsViews} 项`,
+          outputSummary: remainingDefects.length > 0 ? `残余缺陷：${remainingDefects.join("; ")}` : "答案闭合完整无缺陷",
+          rationale: "Answer Closure 对齐工具真值观测与最终候选表述，杜绝晚到观测漏引",
+          evidenceId,
+          technical: { seq, eventKind: kind, raw: payload },
+        });
+        evidences[evidenceId] = {
+          id: evidenceId,
+          runId: state.runId,
+          title: "答案闭合与工具回执一致性校验",
+          kind: "checkpoint",
+          timestamp: at,
+          markdownContent: `### 答案闭合报告\n\n* **观测视角数**：${obsViews}\n* **是否直接引用观测**：${obsUsed ? "是" : "否"}\n* **触发二次收口请求**：${closureReq ? "是" : "否"}\n* **检出缺陷**：${defects.length ? defects.join(", ") : "无"}\n* **残余缺陷**：${remainingDefects.length ? remainingDefects.join(", ") : "无"}`,
+          verified: false,
+          sourceEventSeq: seq,
+          rawPayload: payload,
+        };
+      } else if (stageRaw === "LATE_OBSERVATION_DEFECT" || stageRaw === "UNSOLVED_REFUSAL") {
+        closureDefectsSet.add(String(payload.reason || payload.defect || stageRaw));
+        closureState = {
+          ...closureState,
+          observed: true,
+          defects: Array.from(closureDefectsSet),
+        };
+      }
+    }
+
     if (kind === "FINAL" || kind === "RESULT") {
       currentStage = "stage_4_delivery";
       const ans = payload.final_response || payload.answer;
       if (typeof ans === "string" && ans) {
         finalAnswerText = ans;
+      }
+      if (maxConsensusBudget === null && payload.metrics && typeof payload.metrics === "object") {
+        const m = payload.metrics as Record<string, unknown>;
+        if (typeof m.consensus_independent_ballots === "number" && m.consensus_independent_ballots > 0 && maxConsensusBudget === null) {
+          maxConsensusBudget = Number(m.consensus_independent_ballots) + 3;
+        }
       }
     }
   }
@@ -580,6 +1184,143 @@ export function projectRunToResearchView(
     recovery = { ...options.serverBaseline.recovery };
   }
 
+  // 若未从 CONSENSUS 捕获 Seed，从首个含 candidateProposal 的 WORKUNIT 回填真实关联
+  const firstWorkWithCandidate = nodes.find(
+    (n) =>
+      n.id.startsWith("node-work-") &&
+      typeof ((n.technical?.raw as Record<string, unknown> | undefined)?.candidateProposal) === "string" &&
+      String((n.technical?.raw as Record<string, unknown>).candidateProposal).trim() !== ""
+  );
+  if (firstWorkWithCandidate) {
+    seedNodeId = firstWorkWithCandidate.id;
+    seedEvidenceId = firstWorkWithCandidate.evidenceId;
+    if (!seedCandidateRaw) {
+      seedCandidateRaw = String((firstWorkWithCandidate.technical?.raw as Record<string, unknown>).candidateProposal);
+    }
+  }
+
+  const allBallots: MultiAgentBallotView[] = [];
+  if (seedCandidateRaw) {
+    const seedPlain = toPlainAnswerText(seedCandidateRaw);
+    const seedKey = (seedPlain || seedCandidateRaw).replace(/\s+/g, " ").trim().toLowerCase();
+    allBallots.push({
+      id: "ballot-seed-0",
+      kind: "SEED",
+      index: 0,
+      roleLabel: "初始种子候选 (Seed)",
+      lensTitle: "主推理链首轮生成",
+      lensDescription: "基于规划合同与数学工具观测生成的初始候选解答",
+      status: "completed",
+      candidateRaw: seedCandidateRaw,
+      candidatePlain: seedPlain,
+      agreesWithPrevious: null,
+      canonicalKey: seedKey,
+      nodeId: seedNodeId,
+      evidenceId: seedEvidenceId,
+    });
+  }
+  allBallots.push(...independentBallots);
+
+  const voteBucketMap = new Map<
+    string,
+    {
+      displayCandidate: string;
+      displayPlain: string;
+      count: number;
+      ballotLabels: string[];
+      firstOrder: number;
+    }
+  >();
+  allBallots.forEach((b, idx) => {
+    if (!b.candidateRaw || !b.canonicalKey) return;
+    const existing = voteBucketMap.get(b.canonicalKey);
+    const label = b.kind === "SEED" ? "Seed" : `Agent #${b.index}`;
+    if (existing) {
+      existing.count += 1;
+      existing.ballotLabels.push(label);
+    } else {
+      voteBucketMap.set(b.canonicalKey, {
+        displayCandidate: b.candidateRaw,
+        displayPlain: b.candidatePlain || b.candidateRaw,
+        count: 1,
+        ballotLabels: [label],
+        firstOrder: idx,
+      });
+    }
+  });
+
+  const sortedBuckets = Array.from(voteBucketMap.entries()).sort((a, b) => {
+    if (b[1].count !== a[1].count) return b[1].count - a[1].count;
+    return a[1].firstOrder - b[1].firstOrder;
+  });
+  const topKey = sortedBuckets[0]?.[0];
+  const voteGroups: ConsensusVoteGroupView[] = sortedBuckets.map(([key, bucket]) => ({
+    key,
+    displayCandidate: bucket.displayCandidate,
+    displayPlain: bucket.displayPlain,
+    count: bucket.count,
+    ballotLabels: bucket.ballotLabels,
+    isFrontRunner: key === topKey,
+  }));
+  const frontRunnerCandidate = sortedBuckets[0]?.[1].displayPlain;
+
+  const r0Agents = (["MEANING", "METHOD", "TASK_TOOL"] as const).map((r) => r0RoleMap.get(r)!);
+  const anyR0Running = r0Agents.some((a) => a.status === "running");
+  const anyR0Done = r0Agents.some((a) => a.status === "completed" || a.status === "failed") || seenR0Aggregate;
+  const r0Status: ThreeAgentReadingView["status"] =
+    r0BudgetEnabled === false && !anyR0Running && !anyR0Done
+      ? "skipped"
+      : anyR0Running
+      ? "running"
+      : anyR0Done
+      ? "completed"
+      : "idle";
+
+  const computedR0Reading: ThreeAgentReadingView = {
+    enabled: r0BudgetEnabled ?? (anyR0Done || anyR0Running ? true : null),
+    status: r0Status,
+    agents: r0Agents,
+    aggregateConclusion: r0AggregateConclusion,
+    issueDimensions: r0IssueDimensions,
+    stageAction: r0StageAction,
+    stageReason: r0StageReason,
+    revisionTriggered: r0RevisionTriggered,
+    recheckObserved: r0RecheckObserved,
+    contractVersion: r0ContractVersion,
+    obligationsCount: r0ObligationsCount,
+    tasksCount: r0TasksCount,
+    totalR0Calls: r0OrderedRequestIds.length,
+  };
+
+  const inFlightRequests = Array.from(inFlightRequestsMap.entries()).map(([requestId, phase]) => ({
+    requestId,
+    phase,
+  }));
+
+  const computedMultiAgentSolving: MultiAgentSolvingView = {
+    maxConsensusBudget,
+    totalWorkModelCalls,
+    totalConsensusModelCalls,
+    inFlightRequests,
+    ballots: allBallots,
+    voteGroups,
+    frontRunnerCandidate,
+    audits,
+    certificate: certificateState,
+    closure: closureState,
+    methodRoutes: Array.from(methodRoutesSet),
+  };
+
+  const r0Reading =
+    state.events.length === 0 && options?.serverBaseline?.r0Reading
+      ? options.serverBaseline.r0Reading
+      : computedR0Reading;
+
+  const multiAgentSolving =
+    state.events.length === 0 && options?.serverBaseline?.multiAgentSolving
+      ? options.serverBaseline.multiAgentSolving
+      : computedMultiAgentSolving;
+
   return {
     runId: state.runId,
     problem: resolvedProblem,
@@ -595,6 +1336,8 @@ export function projectRunToResearchView(
     recovery,
     finalAnswer: finalAnswerText,
     unresolvedObligations: unresolvedObs,
+    r0Reading,
+    multiAgentSolving,
     rawEvents: state.events,
   };
 }

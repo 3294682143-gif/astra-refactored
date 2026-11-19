@@ -372,6 +372,270 @@ export function fetchRuns(limit = 50, offset = 0): Promise<ApiResult<RunsRespons
   return requestJson<RunsResponse>(`/api/runs?limit=${limit}&offset=${offset}`);
 }
 
+export interface AblationConfigRow {
+  readonly name: string;
+  readonly group: string;
+  readonly delivery: string;
+  readonly correct_n: number;
+  readonly correct_pct: number;
+  readonly A: number;
+  readonly B: number;
+  readonly subq_pct: number;
+  readonly failure_rate: string;
+  readonly cost: string;
+  readonly undelivered: number;
+  readonly rescued_n: number;
+  readonly rescued_pct: number;
+}
+
+export interface AblationSummary {
+  readonly title: string;
+  readonly grading: string;
+  readonly configs: readonly AblationConfigRow[];
+  readonly pool?: {
+    readonly oracle_n: number;
+    readonly oracle_pct: number;
+    readonly full_correct_n: number;
+    readonly fulfillment_pct: number;
+    readonly right_but_wrong_choice: number;
+    readonly right_but_undelivered: number;
+    readonly true_short: number;
+    readonly external_penetration?: Record<string, number>;
+  };
+  readonly rescue_note?: string;
+  readonly caveats?: readonly string[];
+  readonly provenance?: Record<string, string>;
+}
+
+export interface AblationSummaryResponse {
+  readonly ok: boolean;
+  readonly data?: AblationSummary;
+  readonly error?: string;
+}
+
+export function fetchAblationSummary(): Promise<ApiResult<AblationSummaryResponse>> {
+  return requestJson<AblationSummaryResponse>("/api/ablation/summary");
+}
+
+export interface AblationProblemListItem {
+  readonly id: string;
+  readonly answer_type: string;
+  readonly source_dataset: string;
+  readonly pool_category: string;
+  readonly verdicts: Record<string, boolean>;
+}
+
+export interface AblationProblemListResponse {
+  readonly ok: boolean;
+  readonly items: readonly AblationProblemListItem[];
+  readonly count: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly error?: string;
+}
+
+export interface AblationExternalVerdict {
+  readonly status: string;
+  readonly final_response: string;
+  readonly delivered_correct: boolean;
+  readonly subq: number;
+  readonly conv_right: boolean | null;
+  readonly failure: string | null;
+  readonly note: string;
+}
+
+export interface AblationInternalVerdict {
+  readonly status: string;
+  readonly final_answer: string;
+  readonly delivered_correct: boolean;
+  readonly subq: number;
+  readonly failure: string | null;
+  readonly note: string;
+}
+
+export interface AblationProblemDetail {
+  readonly id: string;
+  readonly answer_type: string;
+  readonly source_dataset: string;
+  readonly problem: string;
+  readonly reference_answer: string;
+  readonly external: Record<string, AblationExternalVerdict>;
+  readonly internal: Record<string, AblationInternalVerdict>;
+  readonly pool_category: string;
+  readonly pool_correct_cfgs: readonly string[];
+}
+
+export interface AblationProblemDetailResponse {
+  readonly ok: boolean;
+  readonly data?: AblationProblemDetail;
+  readonly error?: string;
+}
+
+export function fetchAblationProblems(
+  offset = 0,
+  limit = 25,
+  group?: string,
+  poolCategory?: string,
+): Promise<ApiResult<AblationProblemListResponse>> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (group) params.set("group", group);
+  if (poolCategory) params.set("pool_category", poolCategory);
+  return requestJson<AblationProblemListResponse>(`/api/ablation/problems?${params.toString()}`);
+}
+
+export function fetchAblationProblem(problemId: string): Promise<ApiResult<AblationProblemDetailResponse>> {
+  return requestJson<AblationProblemDetailResponse>(`/api/ablation/problems/${encodeURIComponent(problemId)}`);
+}
+
+export interface AblationRunItem extends RunSummaryItem {
+  readonly config_id: string;
+  readonly problem_id: string;
+  readonly stratum: "A" | "B";
+  readonly source_dataset?: string | null;
+  readonly answer_type?: string | null;
+  readonly delivered_correct?: boolean | null;
+  readonly subq?: number | null;
+  readonly judge_failure?: string | null;
+  readonly judge_note?: string | null;
+  readonly final_answer?: string | null;
+  readonly trace_frames_count?: number | null;
+  readonly logical_model_calls?: number | null;
+  readonly tool_names?: readonly string[];
+  readonly method_ids?: readonly string[];
+}
+
+export interface AblationRunsStats {
+  readonly total: number;
+  readonly candidate: number;
+  readonly unsolved: number;
+  readonly error_stop: number;
+  readonly l2_count: number;
+  readonly l1_count: number;
+  readonly delivered_correct_count: number;
+  readonly config_counts: Record<string, number>;
+}
+
+export interface AblationRunsResponse {
+  readonly ok: boolean;
+  readonly available: boolean;
+  readonly items: AblationRunItem[];
+  readonly count: number;
+  readonly total_all: number;
+  readonly limit: number;
+  readonly offset: number;
+  readonly stats_all: AblationRunsStats;
+  readonly stats_filtered: AblationRunsStats;
+  readonly reason?: string;
+}
+
+export interface AblationRunsQuery {
+  limit?: number;
+  offset?: number;
+  config?: string;
+  group?: string;
+  status?: string;
+  verdict?: string;
+  stop_reason?: string;
+  q?: string;
+  sort?: string;
+  results_only?: boolean;
+  cap?: number;
+}
+
+export function fetchAblationRuns(query: AblationRunsQuery = {}): Promise<ApiResult<AblationRunsResponse>> {
+  const params = new URLSearchParams({
+    limit: String(query.limit ?? 50),
+    offset: String(query.offset ?? 0),
+  });
+  if (query.config) params.set("config", query.config);
+  if (query.group) params.set("group", query.group);
+  if (query.status) params.set("status", query.status);
+  if (query.verdict) params.set("verdict", query.verdict);
+  if (query.stop_reason) params.set("stop_reason", query.stop_reason);
+  if (query.q && query.q.trim()) params.set("q", query.q.trim());
+  if (query.sort) params.set("sort", query.sort);
+  if (query.results_only) params.set("results_only", "1");
+  if (typeof query.cap === "number" && query.cap > 0) params.set("cap", String(query.cap));
+  return requestJson<AblationRunsResponse>(`/api/ablation/runs?${params.toString()}`);
+}
+
+export interface ProblemSetItem {
+  readonly index: number;
+  readonly id: string;
+  readonly problem: string;
+  readonly stratum?: string | null;
+  readonly language?: string | null;
+  readonly answer_type?: string | null;
+  readonly source_dataset?: string | null;
+  readonly reference_answer?: string | null;
+}
+
+export interface ProblemSetSummary {
+  readonly set_id: string;
+  readonly name: string;
+  readonly created_at: number;
+  readonly mode: string;
+  readonly count: number;
+  readonly enqueued_run_ids: readonly string[];
+  readonly sample_preview?: string;
+}
+
+export interface ProblemSetDetail extends ProblemSetSummary {
+  readonly items: readonly ProblemSetItem[];
+}
+
+export interface ProblemSetListResponse {
+  readonly ok: boolean;
+  readonly items: readonly ProblemSetSummary[];
+  readonly count: number;
+}
+
+export interface ProblemSetDetailResponse {
+  readonly ok: boolean;
+  readonly data: ProblemSetDetail;
+}
+
+export type ProblemSetImportMode = "catalog" | "enqueue" | "replays";
+
+export interface ProblemSetImportResponse {
+  readonly ok: boolean;
+  readonly mode: ProblemSetImportMode;
+  readonly solver_configured?: boolean;
+  readonly problem_set?: ProblemSetDetail;
+  readonly enqueued_count?: number;
+  readonly run_ids?: readonly string[];
+  readonly imported_count?: number;
+}
+
+export function fetchProblemSets(): Promise<ApiResult<ProblemSetListResponse>> {
+  return requestJson<ProblemSetListResponse>("/api/problem-sets");
+}
+
+export function fetchProblemSet(setId: string): Promise<ApiResult<ProblemSetDetailResponse>> {
+  return requestJson<ProblemSetDetailResponse>(`/api/problem-sets/${encodeURIComponent(setId)}`);
+}
+
+export function deleteProblemSet(setId: string): Promise<ApiResult<{ ok: boolean; deleted: string }>> {
+  return requestJson<{ ok: boolean; deleted: string }>(`/api/problem-sets/${encodeURIComponent(setId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function importProblemSet(body: {
+  name?: string;
+  jsonl_text: string;
+  mode: ProblemSetImportMode;
+  max_method_loads?: number;
+  problem_seconds?: number;
+  overwrite?: boolean;
+}): Promise<ApiResult<ProblemSetImportResponse>> {
+  return requestJson<ProblemSetImportResponse>("/api/problem-sets/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function fetchRun(runId: string): Promise<ApiResult<RunSummaryItem>> {
   return requestJson<RunSummaryItem>(`/api/runs/${encodeURIComponent(runId)}`);
 }

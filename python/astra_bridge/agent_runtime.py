@@ -964,6 +964,8 @@ class AgentRuntime:
                     stderr=subprocess.PIPE,
                     env=_child_env(),
                     bufsize=0,
+                    # Windows: 防止解题时弹出 Node 控制台黑窗口
+                    creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0),
                 )
             except OSError:
                 error_code = "SPAWN_FAILED"

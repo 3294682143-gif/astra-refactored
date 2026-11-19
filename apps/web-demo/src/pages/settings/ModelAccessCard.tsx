@@ -1,369 +1,642 @@
-import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, KeyRound, RefreshCw, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  CheckCircle2,
+  Cpu,
+  ExternalLink,
+  KeyRound,
+  RefreshCw,
+  Server,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import {
   clearSolverConfig,
   fetchSolverConfig,
   fetchSolverModels,
   fetchSolverUsage,
   saveSolverConfig,
-  type ApiResult,
   type SolverConfigView,
+  type SolverModelsView,
   type SolverUsageView,
 } from "@/api/client.ts";
 
 const UNKNOWN = "未知";
 
-const cardStyle = {
-  borderRadius: "var(--radius-card)",
-  border: "1px solid var(--color-line)",
-  backgroundColor: "#ffffff",
-  padding: "20px",
-} as const;
-
-const fieldStyle = {
-  width: "100%",
-  boxSizing: "border-box",
-  borderRadius: "6px",
-  border: "1px solid var(--color-line-strong)",
-  backgroundColor: "#ffffff",
-  color: "var(--color-ink)",
-  padding: "8px 10px",
-  fontSize: "13px",
-  fontFamily: "var(--font-mono)",
-} as const;
-
-const labelStyle = {
-  display: "block",
-  marginBottom: "6px",
-  fontSize: "12px",
-  fontWeight: 600,
-  color: "var(--color-ink-mute)",
-} as const;
-
-const buttonStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "6px",
-  borderRadius: "6px",
-  border: "1px solid var(--color-line-strong)",
-  backgroundColor: "#ffffff",
-  color: "var(--color-ink-soft)",
-  padding: "6px 12px",
-  fontSize: "12px",
-  cursor: "pointer",
-} as const;
-
-/** Never render a token count that was not observed. */
-const tokens = (value: number | null | undefined): string =>
-  typeof value === "number" ? value.toLocaleString("en-US") : UNKNOWN;
+function tokens(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return UNKNOWN;
+  return v.toLocaleString("zh-CN");
+}
 
 export function ModelAccessCard() {
-  const [config, setConfig] = useState<ApiResult<SolverConfigView> | null>(null);
-  const [usage, setUsage] = useState<ApiResult<SolverUsageView> | null>(null);
+  const [config, setConfig] = useState<SolverConfigView | null>(null);
+  const [usage, setUsage] = useState<SolverUsageView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
   const [endpoint, setEndpoint] = useState("");
   const [model, setModel] = useState("");
   const [credential, setCredential] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [liveModels, setLiveModels] = useState<readonly string[] | null>(null);
-  const [modelsNote, setModelsNote] = useState<string | null>(null);
-  const [loadingModels, setLoadingModels] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const reload = useCallback(async () => {
-    const [nextConfig, nextUsage] = await Promise.all([fetchSolverConfig(), fetchSolverUsage()]);
-    setConfig(nextConfig);
-    setUsage(nextUsage);
+  const [modelsResult, setModelsResult] = useState<SolverModelsView | null>(null);
+  const [fetchingModels, setFetchingModels] = useState(false);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setErrorNotice(null);
+    const [cfgRes, usageRes] = await Promise.all([
+      fetchSolverConfig(),
+      fetchSolverUsage(),
+    ]);
+
+    if (!cfgRes.ok) {
+      setErrorNotice(`读取模型配置失败：${cfgRes.error.message}`);
+      setConfig(null);
+    } else {
+      setConfig(cfgRes.data);
+      setEndpoint((prev) => prev || cfgRes.data.endpoint || cfgRes.data.endpoints?.[0]?.url || "");
+      setModel((prev) => prev || cfgRes.data.model || cfgRes.data.endpoints?.[0]?.models?.[0] || "");
+    }
+
+    if (usageRes.ok) {
+      setUsage(usageRes.data);
+    } else {
+      setUsage(null);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void loadAll();
+  }, [loadAll]);
 
-  const view = config && config.ok ? config.data : null;
-  const options = view?.endpoints ?? [];
-  const activeEndpoint = options.find((option) => option.url === (endpoint || view?.endpoint));
-  // The endpoint's own list wins; the repository's known list is only a fallback,
-  // and the note below always says which of the two is on screen.
-  const models = liveModels ?? activeEndpoint?.models ?? [];
+  const activeEndpointOption = useMemo(() => {
+    const opts = config?.endpoints ?? [];
+    return opts.find((opt) => opt.url === endpoint) ?? null;
+  }, [config?.endpoints, endpoint]);
 
-  const loadModels = async () => {
-    setLoadingModels(true);
-    setModelsNote(null);
-    const result = await fetchSolverModels({
-      endpoint,
-      credential: credential.trim().length > 0 ? credential : undefined,
-    });
-    setLoadingModels(false);
-    if (!result.ok) {
-      setModelsNote(`获取模型列表失败：${result.error.message}`);
+  const modelChoices = useMemo(() => {
+    const set = new Set<string>();
+    if (modelsResult && modelsResult.endpoint === endpoint) {
+      modelsResult.models.forEach((m) => set.add(m));
+    }
+    if (activeEndpointOption) {
+      activeEndpointOption.models.forEach((m) => set.add(m));
+    }
+    if (model.trim()) {
+      set.add(model.trim());
+    }
+    return Array.from(set);
+  }, [modelsResult, endpoint, activeEndpointOption, model]);
+
+  const handleSelectEndpointCard = (opt: { url: string; models: readonly string[] }) => {
+    setEndpoint(opt.url);
+    if (opt.models.length > 0 && !opt.models.includes(model)) {
+      setModel(opt.models[0]);
+    }
+    setModelsResult(null);
+  };
+
+  const handleFetchModels = async () => {
+    if (!endpoint.trim()) {
+      setErrorNotice("请先填写或选择一个模型服务端点 URL。");
       return;
     }
-    setLiveModels(result.data.models);
-    setModelsNote(
-      result.data.source === "endpoint"
-        ? `模型列表来自端点实时返回（${result.data.models.length} 个）`
-        : (result.data.detail ?? "未能从端点获取模型列表，以下为仓库已知列表"),
-    );
+    setFetchingModels(true);
+    setErrorNotice(null);
+    const res = await fetchSolverModels({
+      endpoint: endpoint.trim(),
+      credential: credential.trim() || undefined,
+    });
+    setFetchingModels(false);
+    if (!res.ok) {
+      setErrorNotice(`获取在线模型列表失败：${res.error.message}`);
+      return;
+    }
+    setModelsResult(res.data);
+    if (res.data.models.length > 0 && !res.data.models.includes(model)) {
+      setModel(res.data.models[0]);
+    }
   };
 
-  // The endpoint select must always agree with a real option. When nothing is
-  // stored yet it defaults to the first sanctioned endpoint; leaving the state
-  // empty silently disabled the save button, because the model list is derived
-  // from the selected endpoint (an empty selection matches no option at all).
-  const storedEndpoint = view?.endpoint ?? null;
-  const firstEndpointUrl = options[0]?.url ?? "";
-  useEffect(() => {
-    if (!endpoint && (storedEndpoint !== null || firstEndpointUrl !== "")) {
-      setEndpoint(storedEndpoint ?? firstEndpointUrl);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!endpoint.trim() || !model.trim() || !credential.trim()) {
+      setErrorNotice("请完整填写服务端点、目标模型名称以及 API Credential（仅提交写入，提交后立即清空输入）。");
+      return;
     }
-  }, [endpoint, storedEndpoint, firstEndpointUrl]);
+    setSaving(true);
+    setErrorNotice(null);
+    setSuccessNotice(null);
 
-  useEffect(() => {
-    if (models.length > 0 && !models.includes(model)) {
-      setModel(models[0] ?? "");
+    const res = await saveSolverConfig({
+      endpoint: endpoint.trim(),
+      model: model.trim(),
+      credential: credential.trim(),
+    });
+    setSaving(false);
+
+    if (!res.ok) {
+      setErrorNotice(`保存模型接入配置失败：${res.error.message}`);
+      return;
     }
-  }, [model, models]);
 
-  const submit = async () => {
-    setBusy(true);
-    setNotice(null);
-    const result = await saveSolverConfig({ endpoint, model, credential });
-    setBusy(false);
-    if (result.ok) {
-      // The submitted credential is dropped from component state immediately; it is
-      // never echoed back and never read from the server.
-      setCredential("");
-      setNotice("已提交并接线（凭据不回显，只保留指纹）");
-    } else {
-      setNotice(`${result.error.message}`);
-    }
-    await reload();
-  };
-
-  const clear = async () => {
-    setBusy(true);
-    setNotice(null);
-    const result = await clearSolverConfig();
-    setBusy(false);
+    // 关键安全边界：提交成功后立即清空客户端输入态中的明文凭据
     setCredential("");
-    setNotice(result.ok ? "已清除配置并断线" : result.error.message);
-    await reload();
+    setConfig(res.data);
+    setSuccessNotice("模型接入凭据已提交至宿主机受控环境，本地输入框明文已清空。");
+    const uRes = await fetchSolverUsage();
+    if (uRes.ok) setUsage(uRes.data);
   };
 
-  const usageData = usage && usage.ok ? usage.data : null;
-  const balance = usageData?.balance ?? null;
+  const handleClear = async () => {
+    setSaving(true);
+    setErrorNotice(null);
+    setSuccessNotice(null);
+    const res = await clearSolverConfig();
+    setSaving(false);
+    if (!res.ok) {
+      setErrorNotice(`清除配置失败：${res.error.message}`);
+      return;
+    }
+    setCredential("");
+    setConfig(res.data);
+    setSuccessNotice("已清除当前宿主机模型运行时配置。");
+  };
+
+  const endpointOptions = config?.endpoints ?? [];
 
   return (
-    <div style={cardStyle}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <KeyRound size={18} color="var(--color-brand)" />
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--color-ink)" }}>
-            模型接入配置
-          </h3>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              padding: "4px 10px",
-              borderRadius: "6px",
-              border: `1px solid ${view?.wired ? "#bbf7d0" : "var(--color-line-strong)"}`,
-              backgroundColor: view?.wired ? "#f0fdf4" : "var(--color-surface-muted)",
-              color: view?.wired ? "#15803d" : "var(--color-ink-soft)",
-            }}
-          >
-            {config === null ? "探测中..." : view?.wired ? "已配置并接线" : "未配置"}
-          </span>
-          <button type="button" onClick={() => void reload()} style={buttonStyle}>
-            <RefreshCw size={13} />
-            <span>刷新</span>
-          </button>
-        </div>
-      </div>
+    <section
+      className="zygos-glass"
+      style={{
+        borderRadius: "20px",
+        overflow: "hidden",
+        border: "1px solid var(--color-line-strong)",
+      }}
+    >
+      <div className="astra-brand-rule" style={{ height: "3px", width: "100%" }} />
 
-      {config !== null && !config.ok ? (
-        <div style={{ fontSize: "13px", color: "#b45309", lineHeight: 1.6 }}>
-          读取配置失败（真实错误态）：{config.error.message}
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+      <div style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Header Bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "14px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "12px",
+                backgroundColor: "var(--color-brand-tint)",
+                border: "1px solid var(--color-brand-ring)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--color-brand-mid)",
+              }}
+            >
+              <KeyRound size={19} />
+            </div>
             <div>
-              <label style={labelStyle} htmlFor="solver-endpoint">
-                接入端点（两个书生官方端点）
-              </label>
-              <select
-                id="solver-endpoint"
-                style={fieldStyle}
-                value={endpoint || view?.endpoint || ""}
-                onChange={(event) => {
-                  setEndpoint(event.target.value);
-                  // A live list belongs to the endpoint that produced it.
-                  setLiveModels(null);
-                  setModelsNote(null);
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+                研究求解模型接入与实时 Token 遥测
+              </div>
+              <div style={{ fontSize: "12.5px", color: "var(--color-ink-soft)" }}>
+                支持官方书生 / OpenAI 兼容协议端点与动态模型探测
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "5px 12px",
+                borderRadius: "999px",
+                backgroundColor: config?.configured
+                  ? "var(--color-state-success-bg)"
+                  : "var(--color-state-candidate-bg)",
+                border: `1px solid ${
+                  config?.configured
+                    ? "var(--color-state-success-border)"
+                    : "var(--color-state-candidate-border)"
+                }`,
+                color: config?.configured
+                  ? "var(--color-state-success)"
+                  : "var(--color-state-candidate)",
+                fontSize: "12px",
+                fontWeight: 600,
+              }}
+            >
+              {config?.configured ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />}
+              <span>
+                {loading
+                  ? "读取配置中..."
+                  : config?.configured
+                  ? config.wired
+                    ? "模型已接通宿主机"
+                    : "已写入配置（待运行验证）"
+                  : "尚未配置求解模型"}
+              </span>
+            </span>
+
+            {config?.credential_fingerprint && (
+              <code
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "999px",
+                  backgroundColor: "var(--color-surface-sunken)",
+                  border: "1px solid var(--color-line)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11.5px",
+                  color: "var(--color-ink-soft)",
                 }}
               >
-                {options.length === 0 ? <option value="">{UNKNOWN}（接口未返回端点目录）</option> : null}
-                {options.map((option) => (
-                  <option key={option.key} value={option.url}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle} htmlFor="solver-model">
-                模型（由端点实时返回，随端点联动）
-              </label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <select
-                  id="solver-model"
-                  style={fieldStyle}
-                  value={model}
-                  onChange={(event) => setModel(event.target.value)}
-                >
-                  {models.length === 0 ? <option value="">{UNKNOWN}</option> : null}
-                  {models.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => void loadModels()}
-                  disabled={loadingModels || !endpoint}
-                  style={{ ...buttonStyle, whiteSpace: "nowrap" }}
-                >
-                  <RefreshCw size={13} />
-                  <span>{loadingModels ? "获取中..." : "获取模型列表"}</span>
-                </button>
-              </div>
-              {modelsNote ? (
-                <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.6 }}>
-                  {modelsNote}
-                </div>
-              ) : (
-                <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--color-ink-mute)", lineHeight: 1.6 }}>
-                  先填 API Key 再点「获取模型列表」，列表由后端用你的 Key 向端点实时取回。
-                </div>
-              )}
-            </div>
-          </div>
+                指纹: {config.credential_fingerprint}
+              </code>
+            )}
 
-          <div>
-            <label style={labelStyle} htmlFor="solver-credential">
-              API Key（只写不读：提交后不回显，服务端只保留 sha256 指纹）
-            </label>
-            <input
-              id="solver-credential"
-              type="password"
-              autoComplete="off"
-              style={fieldStyle}
-              placeholder="粘贴你的 API Key"
-              value={credential}
-              onChange={(event) => setCredential(event.target.value)}
-            />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => void submit()}
-              disabled={busy || credential.trim().length === 0 || !endpoint || !model}
-              style={{ ...buttonStyle, borderColor: "var(--color-brand-ring)", color: "var(--color-brand-deep)" }}
+              onClick={() => void loadAll()}
+              className="zygos-btn-ghost"
+              style={{ padding: "6px 10px", fontSize: "12px" }}
+              title="刷新配置与用量"
             >
-              <Save size={13} />
-              <span>{busy ? "提交中..." : "保存并接线"}</span>
+              <RefreshCw size={13} />
+              <span>刷新</span>
             </button>
-            <button type="button" onClick={() => void clear()} disabled={busy} style={buttonStyle}>
-              <Trash2 size={13} />
-              <span>清除配置</span>
-            </button>
-            {notice ? (
-              <span style={{ fontSize: "12px", color: "var(--color-ink-soft)" }}>{notice}</span>
-            ) : null}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "13px" }}>
-            <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span style={{ color: "var(--color-ink-mute)" }}>当前端点</span>
-              <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{view?.endpoint ?? UNKNOWN}</span>
-            </div>
-            <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span style={{ color: "var(--color-ink-mute)" }}>当前模型</span>
-              <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{view?.model ?? UNKNOWN}</span>
-            </div>
-            <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span style={{ color: "var(--color-ink-mute)" }}>凭据指纹</span>
-              <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{view?.credential_fingerprint ?? UNKNOWN}</span>
-            </div>
-            <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span style={{ color: "var(--color-ink-mute)" }}>求解器已接线</span>
-              <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{view === null ? UNKNOWN : String(view.wired)}</span>
-            </div>
-          </div>
-
-          <div style={{ borderTop: "1px solid var(--color-line)", paddingTop: "14px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-ink)", marginBottom: "10px" }}>
-              调用量与余额
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "13px" }}>
-              <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                <span style={{ color: "var(--color-ink-mute)" }}>调用次数 / 失败</span>
-                <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>
-                  {usageData ? `${usageData.usage.calls} / ${usageData.usage.failures}` : UNKNOWN}
-                </span>
-              </div>
-              <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                <span style={{ color: "var(--color-ink-mute)" }}>总 token（观测值）</span>
-                <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{tokens(usageData?.usage.total_tokens)}</span>
-              </div>
-              <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                <span style={{ color: "var(--color-ink-mute)" }}>输入 / 输出 token</span>
-                <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>
-                  {`${tokens(usageData?.usage.prompt_tokens)} / ${tokens(usageData?.usage.completion_tokens)}`}
-                </span>
-              </div>
-              <div style={{ padding: "8px 12px", backgroundColor: "var(--color-surface-muted)", borderRadius: "6px", display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                <span style={{ color: "var(--color-ink-mute)" }}>未报告 usage 的响应</span>
-                <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", textAlign: "right" }}>{tokens(usageData?.usage.unknown_usage_responses)}</span>
-              </div>
-            </div>
-
-            <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--color-ink-soft)", lineHeight: 1.7 }}>
-              余额：{balance === null ? UNKNOWN : balance.available ? "见平台账本" : `本台读不到（${balance.reason}）`}
-              {balance ? (
-                <>
-                  {" "}
-                  <a href={balance.ledger_url} target="_blank" rel="noreferrer" style={{ color: "var(--color-brand-deep)" }}>
-                    打开积分账本 <ExternalLink size={11} style={{ verticalAlign: "-1px" }} />
-                  </a>
-                </>
-              ) : null}
-              {view?.key_management_url ? (
-                <>
-                  {" · "}
-                  <a href={view.key_management_url} target="_blank" rel="noreferrer" style={{ color: "var(--color-brand-deep)" }}>
-                    密钥管理 <ExternalLink size={11} style={{ verticalAlign: "-1px" }} />
-                  </a>
-                </>
-              ) : null}
-            </div>
-            <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--color-ink-mute)", lineHeight: 1.7 }}>
-              调用量来自模型响应的真实 <code>usage</code> 字段；供应商未报告时显示「{UNKNOWN}」，不按 0 计。
-              余额页为登录态页面、未发现官方余额接口，故本台不做任何余额数字推断。
-            </div>
-          </div>
-
-          <div style={{ fontSize: "11px", color: "var(--color-ink-soft)", lineHeight: 1.7 }}>
-            职责边界：凭据由后端宿主持有（写入宿主端配置文件，随 BFF 进程生效），本页只提交、不读回、不显示明文；
-            端点与模型限定为上面两个书生官方端点。模型回答恒为「候选 · 未经形式化验证」。
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Notices */}
+        {errorNotice && (
+          <div
+            style={{
+              padding: "11px 14px",
+              borderRadius: "11px",
+              backgroundColor: "var(--color-state-error-bg)",
+              border: "1px solid var(--color-state-error-border)",
+              color: "var(--color-state-error)",
+              fontSize: "12.5px",
+            }}
+          >
+            {errorNotice}
+          </div>
+        )}
+        {successNotice && (
+          <div
+            style={{
+              padding: "11px 14px",
+              borderRadius: "11px",
+              backgroundColor: "var(--color-state-success-bg)",
+              border: "1px solid var(--color-state-success-border)",
+              color: "var(--color-state-success)",
+              fontSize: "12.5px",
+            }}
+          >
+            {successNotice}
+          </div>
+        )}
+
+        {/* Preset Endpoint Selector Cards (from BFF) */}
+        {endpointOptions.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-ink-mute)" }}>
+              推荐预设端点快速切换（macOS 分组配置卡片）
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "10px",
+              }}
+            >
+              {endpointOptions.map((opt) => {
+                const selected = endpoint === opt.url;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => handleSelectEndpointCard(opt)}
+                    className="zygos-node-card"
+                    style={{
+                      textAlign: "left",
+                      padding: "12px 14px",
+                      borderRadius: "12px",
+                      border: selected
+                        ? "1px solid var(--color-brand-mid)"
+                        : "1px solid var(--color-line)",
+                      backgroundColor: selected
+                        ? "var(--color-brand-tint)"
+                        : "var(--color-surface-sunken)",
+                      boxShadow: selected ? "var(--shadow-glow-brand)" : "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+                        {opt.label}
+                      </span>
+                      <Server size={13} color={selected ? "var(--color-brand-mid)" : "var(--color-ink-mute)"} />
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "11px",
+                        color: "var(--color-ink-soft)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {opt.url}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Config Form */}
+        <form onSubmit={(e) => void handleSave(e)} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "var(--color-ink-soft)" }}>
+              <span>模型 API Base Endpoint</span>
+              <input
+                type="url"
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="https://api.example.com/v1"
+                required
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid var(--color-line-strong)",
+                  backgroundColor: "var(--color-surface-sunken)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12.5px",
+                  outline: "none",
+                }}
+              />
+            </label>
+
+            <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "var(--color-ink-soft)" }}>
+              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>目标模型 ID</span>
+                <button
+                  type="button"
+                  onClick={() => void handleFetchModels()}
+                  disabled={fetchingModels}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "var(--color-brand-mid)",
+                    fontSize: "11.5px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: 0,
+                  }}
+                >
+                  <Sparkles size={12} />
+                  <span>{fetchingModels ? "探测中..." : "拉取在线模型"}</span>
+                </button>
+              </span>
+
+              {modelChoices.length > 0 ? (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid var(--color-line-strong)",
+                      backgroundColor: "var(--color-surface-sunken)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "12.5px",
+                      outline: "none",
+                    }}
+                  >
+                    {modelChoices.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="internlm3-latest"
+                  required
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--color-line-strong)",
+                    backgroundColor: "var(--color-surface-sunken)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12.5px",
+                    outline: "none",
+                  }}
+                />
+              )}
+              {modelsResult && (
+                <span style={{ fontSize: "11px", color: "var(--color-ink-mute)", fontWeight: 400 }}>
+                  模型列表来源：{modelsResult.source === "endpoint" ? "端点实时响应" : "本地回退清单"}
+                  {modelsResult.detail ? ` (${modelsResult.detail})` : ""}
+                </span>
+              )}
+            </label>
+
+            <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "var(--color-ink-soft)" }}>
+              <span>API Credential（只写不回显）</span>
+              <input
+                type="password"
+                value={credential}
+                onChange={(e) => setCredential(e.target.value)}
+                placeholder={config?.configured ? "已配置凭据（如需更新请重新输入）" : "sk-..."}
+                autoComplete="off"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid var(--color-line-strong)",
+                  backgroundColor: "var(--color-surface-sunken)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12.5px",
+                  outline: "none",
+                }}
+              />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              {config?.key_management_url && (
+                <a
+                  href={config.key_management_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    fontSize: "12px",
+                    color: "var(--color-brand-mid)",
+                    textDecoration: "none",
+                  }}
+                >
+                  <ExternalLink size={12} />
+                  <span>密钥控制台</span>
+                </a>
+              )}
+              {(usage?.balance.ledger_url || config?.balance_ledger_url) && (
+                <a
+                  href={usage?.balance.ledger_url ?? config?.balance_ledger_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    fontSize: "12px",
+                    color: "var(--color-brand-mid)",
+                    textDecoration: "none",
+                  }}
+                >
+                  <ExternalLink size={12} />
+                  <span>算力账单明细</span>
+                </a>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {config?.configured && (
+                <button
+                  type="button"
+                  onClick={() => void handleClear()}
+                  disabled={saving}
+                  className="zygos-btn-ghost"
+                  style={{
+                    padding: "8px 14px",
+                    fontSize: "12.5px",
+                    color: "var(--color-state-error)",
+                    borderColor: "var(--color-state-error-border)",
+                  }}
+                >
+                  <Trash2 size={13} />
+                  <span>清除已存配置</span>
+                </button>
+              )}
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="zygos-btn-primary"
+                style={{ padding: "9px 18px", fontSize: "13px" }}
+              >
+                <Cpu size={14} />
+                <span>{saving ? "提交写入中..." : "保存并接通求解引擎"}</span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Token Telemetry Bento Tiles */}
+        <div
+          style={{
+            borderTop: "1px solid var(--color-line)",
+            paddingTop: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "7px", fontSize: "13.5px", fontWeight: 700, color: "var(--color-brand-deep)" }}>
+              <Activity size={15} color="var(--color-brand-mid)" />
+              <span>真实观测用量遥测（供应商未上报项显示“{UNKNOWN}”）</span>
+            </span>
+            {usage?.balance && !usage.balance.available && (
+              <span style={{ fontSize: "11.5px", color: "var(--color-ink-mute)" }}>
+                账户余额查询不可用：{usage.balance.reason}
+              </span>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gap: "10px",
+            }}
+          >
+            {[
+              {
+                label: "调用次数 / 失败",
+                val: usage ? `${usage.usage.calls} / ${usage.usage.failures}` : UNKNOWN,
+              },
+              {
+                label: "Prompt Tokens",
+                val: tokens(usage?.usage.prompt_tokens),
+              },
+              {
+                label: "Completion Tokens",
+                val: tokens(usage?.usage.completion_tokens),
+              },
+              {
+                label: "Total Tokens",
+                val: tokens(usage?.usage.total_tokens),
+              },
+              {
+                label: "Cached Tokens",
+                val: tokens(usage?.usage.cached_tokens),
+              },
+              {
+                label: "未上报用量响应数",
+                val: usage ? String(usage.usage.unknown_usage_responses) : UNKNOWN,
+              },
+            ].map((tile) => (
+              <div
+                key={tile.label}
+                className="zygos-bento"
+                style={{
+                  padding: "12px 14px",
+                  backgroundColor: "var(--color-surface-sunken)",
+                }}
+              >
+                <div style={{ fontSize: "11.5px", color: "var(--color-ink-mute)", marginBottom: "4px" }}>
+                  {tile.label}
+                </div>
+                <div
+                  className="zygos-tabular"
+                  style={{
+                    fontSize: "19px",
+                    fontWeight: 800,
+                    color: tile.val === UNKNOWN ? "var(--color-ink-mute)" : "var(--color-brand-deep)",
+                  }}
+                >
+                  {tile.val}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
