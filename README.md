@@ -9,7 +9,7 @@
 > **模型接口**：对齐赛题 `Intern-S1` 公共 `client.chat` 契约，兼容书生 S2 正式版（`intern-s2`，支持书生·浦语与书生·端砚端点）。  
 > **红线声明**：协议与 Web 层均硬锁 **`candidate_verified=false`**、**`strictAcceptance=NOT_PERFORMED`**——系统交付的是经受控算子与审查门禁筛选的**机器候选解**，不等于形式化证明。
 
-[痛点与破题](#一痛点剖析与破题思路) · [系统架构](#二双核异构可信系统架构) · [三大创新](#三三大核心创新机制) · [Web 驾驶舱](#四web-实时观测驾驶舱) · [快速开始](#六快速开始与运行方式) · [目录与文档](#七仓库目录导览与文档索引)
+[痛点与破题](#一痛点剖析与破题思路) · [系统架构](#二双核异构可信系统架构) · [三大创新](#三三大核心创新机制) · [Web 驾驶舱](#四web-实时观测驾驶舱) · [快速开始](#五快速开始与运行方式) · [目录与文档](#六仓库目录导览与文档索引)
 
 ---
 
@@ -202,9 +202,9 @@ flowchart TD
 
 ---
 
-## 六、快速开始与运行方式
+## 五、快速开始与运行方式
 
-### 6.1 环境要求
+### 5.1 环境要求
 
 | 依赖 | 要求 | 说明 |
 | :--- | :--- | :--- |
@@ -213,7 +213,7 @@ flowchart TD
 | **pnpm / TypeScript** | pnpm `11.7.0`、TS `6.0.3` | 修改/构建 TS 引擎与前端时必需 |
 | **Lean 4**（可选） | `lean` 可执行文件 | 缺失时自动走精确符号降级，不影响主流程 |
 
-### 6.2 获取源码与安装依赖
+### 5.2 获取源码与安装依赖
 
 ```bash
 # 拉取当前完整 Web 演示 + v15 后端核心分支（如需纯 v15 评测基线，可改为 --branch fix/closure-source-trust）
@@ -237,7 +237,7 @@ node node_modules/typescript/bin/tsc -b
 pnpm --dir apps/web-demo build
 ```
 
-### 6.3 启动 Web 驾驶舱
+### 5.3 启动 Web 驾驶舱
 
 **方式 A：一键启动脚本**
 - Windows：双击 一键启动.py / 一键启动.py / 一键启动.py（无黑窗启动模式 A 免 Key 演示），或运行 一键启动.py / [一键启动.py](一键启动.py) 在「模式 A 免 Key 演示」与「模式 B 真实大模型求解」间切换；
@@ -251,7 +251,7 @@ python -m uvicorn python.astra_web.app:app --host 127.0.0.1 --port 8018
 
 打开 `http://127.0.0.1:8018/solve` 即可进入工作台；在 `/settings` 页面配置书生端点与 API Key 后即可发起真实 `engine="ts"` 求解，或访问 `/batch` 浏览实测样本明细与导入自定义 JSONL 题目集。
 
-### 6.4 官方编程接口（Python）
+### 5.4 官方编程接口（Python）
 
 ```python
 import os
@@ -285,7 +285,7 @@ result = agent.solve(problem, metadata={})
 > - Web 后端默认预算定义在 [python/astra_web/config.py](python/astra_web/config.py)（`max_model_calls=32, max_work_units=4, max_consensus=1, max_r0=1, problem_seconds=600`），前端请求可按需显式传入满能力参数；
 > - `ASTRA_DEBUG_TRACEBACK=1` 与 `ASTRA_DEBUG_GUARD=1` 可按需开启脱敏异常栈与 Host 守卫诊断日志。
 
-### 6.5 离线验证与测试门禁
+### 5.5 离线验证与测试门禁
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -309,7 +309,7 @@ python -m pytest -q tests/e2e/test_ts_math_assets_82_e2e.py tests/e2e/test_v6_ta
 
 ---
 
-## 七、仓库目录导览与文档索引
+## 六、仓库目录导览与文档索引
 
 ### 核心目录导览
 
