@@ -291,8 +291,8 @@ pnpm --dir apps/web-demo build
 ### 6.3 启动 Web 驾驶舱
 
 **方式 A：一键启动脚本**
-- Windows：双击 [启动.py](启动.py) / [启动.pyw](启动.pyw) / [启动.vbs](启动.vbs)（无黑窗启动模式 A 免 Key 演示），或运行 [start.bat](start.bat) / [start.ps1](start.ps1) 在「模式 A 免 Key 演示」与「模式 B 真实大模型求解」间切换；
-- Linux / macOS：执行 `bash start.sh`。
+- Windows：双击 一键启动.py / 一键启动.py / 一键启动.py（无黑窗启动模式 A 免 Key 演示），或运行 一键启动.py / [一键启动.py](一键启动.py) 在「模式 A 免 Key 演示」与「模式 B 真实大模型求解」间切换；
+- Linux / macOS：执行 `一键启动.py`。
 
 **方式 B：直接启动正式 BFF 服务（含静态前端托管）**
 
