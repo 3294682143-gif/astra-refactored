@@ -1,255 +1,399 @@
-# Zygos
-
-**ZY · 天轭**（原 Astra，旧名保留于技术入口与兼容标识）
+# 天轭（Zygos）——基于书生大模型的双核可信数学智能体系统
 
 **目标契约驱动 · 证据受控 · 有界调度 · 可逆修复的可核查数学推理运行时**
 
-Zygos 把问题目标、工作任务、候选答案、评审依据和调用预算放进同一条执行链：Python 受信 Host 负责协议可信与执行隔离，TypeScript 状态机负责动态智能体循环，统一数学资产负责精确计算，形式化审查负责"什么可以交付"。
+> **赛题**：第十五届“挑战杯”中国青年科技创新“揭榜挂帅”擂台赛 · **XH-202627《基于 Intern-S1 的数学智能体设计与推理创新》**（上海人工智能实验室）  
+> **代码基线**：核心 TS 引擎基线为最终提交版 **v15 · `7d4dfb5`**（分支 `fix/closure-source-trust`）；当前 **`feat/web-demo-v15`** 分支在保持 `7d4dfb5` TS 引擎零改动的前提下，集成最新 React 19 Web 驾驶舱、批量评测工作台与一键启动能力。  
+> **模型接口**：对齐赛题 `Intern-S1` 公共 `client.chat` 契约，兼容书生 S2 正式版（`intern-s2`，支持书生·浦语与书生·端砚端点）。  
+> **红线声明**：协议与 Web 层均硬锁 **`candidate_verified=false`**、**`strictAcceptance=NOT_PERFORMED`**——系统交付的是经受控算子与审查门禁筛选的**机器候选解**，不等于形式化证明。
 
-赛题：**XH-202627《基于 Intern-S1 的数学智能体设计与推理创新》**（挑战杯"揭榜挂帅" · 上海人工智能实验室）。
-
-[架构](#架构) · [快速开始](#源码快速开始) · [数学资产](#统一数学资产) · [形式化审查](#形式化内部审查) · [实测与口径](#实测与诚实口径) · [开发验证](#开发与验证) · [文档索引](#文档索引)
+[痛点与破题](#一痛点剖析与破题思路) · [系统架构](#二双核异构可信系统架构) · [三大创新](#三三大核心创新机制) · [Web 驾驶舱](#四web-实时观测驾驶舱) · [实测与边界](#五实测表现消融验证与能力边界) · [快速开始](#六快速开始与运行方式) · [目录与文档](#七仓库目录导览与文档索引)
 
 ---
 
-## 三个核心创新
+## 一、痛点剖析与破题思路
 
-1. **双核隔离 + 锚定投影的可信执行**：模型只产出数学内容，8 个身份字段由 Host 权威重绑为控制数据；交付侧采用**锚定投影**——以 Node 声明的交付 source 为锚（`project_artifacts(anchor_source_id)`，0b6497e→3320212），Host 仍独立重建每个产物行并逐字段比对（candidate_packet + targetHash 用 Host 持有的 raw receipt 重算），**放弃独立加冕 front-runner、保留全部防伪校验**，从根上消除双侧投影分歧。配套 R1–R4 崩溃恢复（防 PID 复用、归档优先提交、派发即计数、`dispatchState` 未发送贯通）。
-2. **单一事实源的统一数学资产与结构路由**：20 方法卡 × 22 数学族 × 76 历史工具收敛为 **26 资产 × 96 目录行为**；`math-assets.json` 唯一事实源，TS/Python 双端代码确定性生成，SHA-256 冻结门禁。路由分三层：`semanticToolRoute` 措辞规则先定位（未命中诚实不路由）→ `semanticMethodRoute` 打分保留 ≤3 候选方法 → `semanticMathAssetRoute` 以 **8 维数学结构签名**（符号域、量词结构、算子等）兜底选资产——按结构泛化而非题面关键词。
-3. **机器可判定审查 + 可逆修复闭环**：R2 挑战 → 确定性闭合（16 类缺陷固定顺序）→ **6 类声明式 CAS 契约 + Lean 4 可判定义务核验** → 多反例全覆盖 REPAIR → R4 → M5 终态裁决；机器反例优先，**形式化证书保护锁**禁止无凭证文本质疑覆写已核验答案。去相关独立 ballot（5 独立 + 2 审计 + 1 证书，lens 轮换、不暴露候选、逐分量多数、**绝不合成答案**；两审计一致可推翻票数并锚定审计结论）。
+通用大模型与常规提示词智能体在求解高阶数学题（覆盖抽象代数、拓扑、微分方程、数理统计、离散数学等 18 个子领域）时，核心困境是**“过程看似流畅、一查就出错”**。根本原因在于**基础模型单次生成不可全信，且不能让模型既当“运动员（做推导）”又当“裁判员（管预算、身份与放行）”**。
 
-## 当前能力与边界
+| 核心痛点 | 传统单核智能体典型失效 | 天轭（Zygos）破题机制 |
+| :--- | :--- | :--- |
+| **规划与求解脱节** | 单轮直写易漏定义域、量词约束与多问子项；仅靠表面关键词匹配工具，无法识别底层数学结构。 | **创新一 · 先立合同再动工**：M1 目标契约与义务 DAG → R0 三方独立会审 → **8 维数学结构签名三层路由**。 |
+| **长程失控与修订牵连** | 前序引理算错后，后续步骤沿用旧错或全盘推翻导致 Token 爆炸，缺乏产物版本与局部失效隔离。 | **创新三 · 链式哈希状态底座**：64KB 最小依赖闭包投影 + 产物版本化 + **`STALE` 下游闭包局部精确失效** + G7 断点续推。 |
+| **结果不可靠与校验错位** | 常规多数投票遇同义异形写法即散票，遇高频陷阱则“错解占多数”；缺乏精确算子反制，甚至拿抽样冒充证明。 | **创新二/三 · 5+2+1 共识 + 统一资产 + 双锁门禁**：跨语言规范键计票 + **2 路独立锚定审计推翻错票** + 26×96 精确算子 + **证书保护锁与单调修复门禁**。 |
 
-| 方向 | 当前实现 | 边界 / 未完成 |
-| --- | --- | --- |
-| 统一执行入口 | `user_agent.ReasoningAgent` 默认 `engine="ts"`；Python Host 管理注入 client、协议与子进程 | 官方目标环境的 Node/子进程验收以平台确认为准 |
-| 动态数学工作流 | 目标契约 → 任务 DAG、G2 停滞让渡、版本化产物与失效传播、G7 断点续推 | — |
-| 数学资产 | **26 资产 / 96 目录行为（82 项 E2E 门禁）**，空壳资产清零；统一动作 `action:"math_asset"`，Host 唯一入口 `use_math_asset`；旧 target 别名兼容 | 目录行为 ≠ 全部经过真实题集验收 |
-| 形式化审查 | Lean 4 五类可判定义务 + 离线精确符号降级（明确标记）；6 类声明式 CAS 闭合契约；M4 证书保护锁 | 离线无 Lean 内核时走降级路径；`candidate_verified` 恒为 `false` |
-| 交付链 | 锚定投影修复 Host/TS 双侧分歧（0b6497e→3320212），v14 实测 **100/100 交付候选（merged 两段合并）**、协议失败面清零 | merged 非单次全量；选择机制仍有"有对选错"提升空间 |
-| 交互展示 | React 19 + Starlette BFF 驾驶舱：7 标签审计、SSE 实时事件、确定性回放、23/23 CDP 交互验收 | — |
-| 长跑可靠性 | 单根预算只紧不松；未知 Token 显式记录；100 题级长跑无系统性崩溃 | 语义正确率仍是主要提升目标 |
+---
 
-## 架构
+## 二、双核异构可信系统架构
 
-> 独立架构图文档：[ARCHITECTURE.md](ARCHITECTURE.md)（含全链路图、层职责映射与可信交付原则）。
+### 2.1 “运动员—裁判员”跨进程物理隔离
+
+Zygos 将推理编排与安全控制物理拆分为两个独立进程，通过 **JSON-RPC v1.4 over stdio** 协作：
+- **上层求解核（TypeScript 状态机，“运动员”）**：位于 [apps/stdio-runtime](apps/stdio-runtime) 与 [packages](packages)，纯状态机运行，无网络 I/O、无密钥权限、无时钟篡改权，专注 M1–M5 推理编排、结构路由与闭合检查。
+- **下层控制核（Python 受信 Host，“裁判员”）**：位于 [python/astra_bridge](python/astra_bridge)，经 [user_agent.py](user_agent.py) 暴露唯一入口 `ReasoningAgent(client=...).solve(problem, metadata)`，独占 `client.chat` 通道，掌管预算账本、Schema 校验、受控算子执行与终态裁决。
+
+> 独立架构图详见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ```mermaid
 flowchart TD
     subgraph ENTRY["入口层"]
-        API["官方统一入口<br/>user_agent.ReasoningAgent.solve()"]
-        WEB["Web 驾驶舱<br/>React 19 + Starlette BFF · SSE 实时事件 · 回放"]
+        API["官方唯一入口<br/>user_agent.ReasoningAgent.solve"]
+        WEB["Web 实时观测驾驶舱<br/>React 19 + Starlette BFF · SSE · 回放"]
     end
 
-    subgraph HOST["Python 受信 Host（python/astra_bridge）"]
+    subgraph HOST["下层控制核：Python 受信 Host · python/astra_bridge"]
         direction TB
-        AH["agent_host.py<br/>预算准入 · 单根账本 · 崩溃恢复 R1–R4"]
-        AC["agent_context.py<br/>validate_context · 身份重绑 · candidate_packet 防伪"]
-        AHIS["agent_history.py<br/>锚定投影 project_artifacts(anchor_source_id)<br/>独立重建产物行 · targetHash 重算"]
-        AM["math_assets_runtime.py<br/>统一入口 use_math_asset"]
-        LV["lean4_verifier.py<br/>5 类可判定义务 · 离线符号降级（诚实标记）"]
+        AH["agent_host.py<br/>单根预算账本 · 调用准入 · 崩溃恢复 R1–R4"]
+        AC["agent_context.py<br/>8 字段身份强制重绑 · candidate_packet 防伪"]
+        AHIS["agent_history.py<br/>交付侧锚定投影 project_artifacts<br/>本地回执重建产物链 · targetHash 重算"]
+        AM["math_assets_runtime.py<br/>统一受控工具入口 use_math_asset"]
+        LV["lean4_verifier.py<br/>5 类可判定义务 · 离线符号降级"]
     end
 
-    subgraph TSM["TS 智能体状态机（apps/stdio-runtime + packages）"]
+    subgraph TSM["上层求解核：TS 状态机 · apps/stdio-runtime + packages"]
         direction TB
-        LOOP["agent-loop.ts 主循环<br/>R0 三重审阅 → WORK 长程推导 → 独立 ballot 5+2+1<br/>→ 确定性闭合 → R2 挑战 → REPAIR 全覆盖 → R4 → M5 终态"]
-        SEM["agent-semantics.ts<br/>三层路由：措辞规则 → ≤3 候选方法<br/>→ 8 维数学结构签名兜底"]
-        CLO["agent-answer-closure.ts<br/>16 类缺陷固定顺序 + 6 类声明式 CAS 契约"]
-        P4["p4-session.ts<br/>形式化证书保护锁"]
-        M1["M1 目标契约<br/>math-contract"]
-        M2["M2 调用准入<br/>math-gateway"]
-        M3["M3 工作单元<br/>math-workunit"]
-        M4["M4 过程评审<br/>math-review"]
-        M5["M5 终态审计<br/>math-audit"]
+        LOOP["agent-loop.ts 主循环<br/>R0 会审 → WORK 推导 → 5+2+1 盲解共识<br/>→ 确定性闭合 → R2 质询 → REPAIR → R4 → M5"]
+        SEM["agent-semantics.ts<br/>三层路由：措辞规则 → 候选方法 → 8 维结构签名"]
+        CLO["agent-answer-closure.ts<br/>18 类闭合缺陷固定序 + 6 类 CAS 契约"]
+        P4["p4-session.ts / p4-repair.ts<br/>形式化证书保护锁 + 单调修复门禁"]
+        M1["M1 math-contract"]
+        M2["M2 math-gateway"]
+        M3["M3 math-workunit"]
+        M4["M4 math-review"]
+        M5["M5 math-audit"]
         LOOP --> M1 --> M2 --> M3 --> M4 --> M5
         LOOP --- SEM
         LOOP --- CLO
         M4 --- P4
     end
 
-    subgraph ASSETS["统一数学资产层（SSOT）"]
-        JSON["math-assets.json<br/>26 资产 × 96 目录行为 · 冻结哈希门禁"]
-        GEN["双端确定性生成<br/>TS / Python 视图"]
-        OPS["generalized_math_operators.py<br/>14 个通用算子 + 76 项 legacy 实现内核"]
+    subgraph ASSETS["统一数学资产层 · SSOT"]
+        JSON["math-assets.json<br/>26 资产 × 96 目录行为 · SHA-256 冻结"]
+        GEN["build_math_assets.py<br/>TS / Python 双端视图确定性生成"]
+        OPS["generalized_math_operators.py<br/>14 个高阶通用算子 + 受控数学内核"]
         JSON --> GEN --> OPS
     end
 
-    subgraph BASE["横切底座"]
-        LOG["append-only 链式哈希事件日志<br/>确定性投影 · byte-identical 重放"]
-        BUD["单根预算只紧不松<br/>G7 checkpoint 断点续推"]
+    subgraph BASE["横切状态底座 · packages/runtime-core"]
+        LOG["Append-only 链式哈希日志<br/>64KB 最小依赖投影 · Byte-identical 重放"]
+        BUD["单根预算只紧不松<br/>STALE 局部失效 · G7 断点续推"]
     end
 
     ENTRY --> HOST
-    HOST <-->|"JSON-RPC v1.4 stdio<br/>身份字段权威覆写"| TSM
+    HOST <-->|"JSON-RPC v1.4 over stdio<br/>8 个身份字段由 Host 权威覆写"| TSM
     LOOP -->|"action: math_asset"| AM
     AM --> OPS
-    OPS -->|"精确观测（证据四级）"| LOOP
+    OPS -->|"精确观测回执 · 四级证据标签"| LOOP
     CLO --> LV
     AC --- AHIS
     TSM --> LOG
     HOST --> BUD
-    M5 -->|"candidate（candidate_verified=false）<br/>或 WITHHELD + 未关闭义务"| ENTRY
+    M5 -->|"candidate (candidate_verified=false)<br/>或 WITHHELD + 未关闭义务"| ENTRY
 ```
 
-主求解链：
+主求解执行链：
 
+```text
+原始题 → M1 目标契约(义务/DAG) → R0 三角色会审 → WORK 长程推导(64KB 依赖投影)
+  → 5+2+1 独立盲解共识 → 确定性闭合 + 6 类声明式 CAS 契约 → R2 缺陷质询
+  → REPAIR 有界修复(双锁门禁) → R4 复核 → M5 projectProtectedFinal
+  → candidate (candidate_verified=false) 或 WITHHELD + 未关闭义务清单
 ```
-原始题 → 目标契约(义务/DAG) → R0 三重审阅 → WORK 长程推导(64KB 依赖投影)
-  → 独立 ballot(5+2+1) → 确定性闭合 + 声明式契约 → R2 挑战 → REPAIR(全覆盖) → R4
-  → M5 projectProtectedFinal → candidate（candidate_verified=false）
-```
 
-任何分支失败：保留既有候选（模式 A）或输出诚实失败与未关闭义务（模式 B）。
+### 2.2 M1–M5 模块化分工与跨进程防伪机制
 
-| 层 / 模块 | 代码位置 | 职责 |
-| --- | --- | --- |
-| 官方入口 | [user_agent.py](user_agent.py) | `ReasoningAgent.solve()` 唯一入口 |
-| Python Host | [python/astra_bridge](python/astra_bridge) | 协议校验、身份重绑、投影镜像、预算、工具执行、崩溃恢复 |
-| TS 组合根 | [apps/stdio-runtime/src/agent-loop.ts](apps/stdio-runtime/src/agent-loop.ts) | 任务调度、consensus、闭合、终态选择 |
-| 结构路由与语义 | [apps/stdio-runtime/src/agent-semantics.ts](apps/stdio-runtime/src/agent-semantics.ts) | 8 维数学结构签名、工具/方法/资产路由 |
-| 闭合与声明式契约 | [apps/stdio-runtime/src/agent-answer-closure.ts](apps/stdio-runtime/src/agent-answer-closure.ts) | 4 类确定性闭合 + 6 类 CAS 不变量契约 |
-| M1–M5 包 | [packages/math-contract](packages/math-contract)、[math-gateway](packages/math-gateway)、[math-workunit](packages/math-workunit)、[math-review](packages/math-review)、[math-audit](packages/math-audit) | 目标契约 / 准入 / 工作单元 / 评审 / 审计 |
-| Runtime Core | [packages/runtime-core](packages/runtime-core) | 根预算、事件、上下文投影、生命周期 |
-| Lean 4 核验 | [python/astra_bridge/lean4_verifier.py](python/astra_bridge/lean4_verifier.py) | 5 类可判定义务、离线符号降级、诚实证据分级 |
-| 通用算子 | [mathagent/core/generalized_math_operators.py](mathagent/core/generalized_math_operators.py) | 14 个新增通用算子实现 |
-| 数学资产 | [mathagent/resources/math-assets.json](mathagent/resources/math-assets.json) | 唯一事实源（26 × 96） |
-| Web | [apps/web-demo](apps/web-demo)、[python/astra_web](python/astra_web) | 驾驶舱与只读 BFF、SSE、回放 |
+| 模块 | 源码包 | 核心职责与关键机制 |
+| :---: | :--- | :--- |
+| **M1** | [packages/math-contract](packages/math-contract) | **目标契约编译**：抽取求解目标、定义域、量词与多问子项，构建义务依赖 DAG，支持受控重修 `reviseGoals`（`contractVersion: 1\|2`）。 |
+| **M2** | [packages/math-gateway](packages/math-gateway) | **调用准入控制**：校验上下文 Schema 版本、根预算余额、4096 Unicode 码点上限与请求签名。 |
+| **M3** | [packages/math-workunit](packages/math-workunit) | **工作单元执行**：管理 `p2a-work-v1` 推导产物包、版本号、依赖引用与 `STALE` 传播。 |
+| **M4** | [packages/math-review](packages/math-review) | **过程评审管理**：编排 R0/R2/R4 审阅流程，由 [p4-session.ts](packages/math-review/src/p4-session.ts) 维护**形式化证书保护锁**。 |
+| **M5** | [packages/math-audit](packages/math-audit) | **终态审计裁决**：由 [p4-repair.ts](packages/math-audit/src/p4-repair.ts) 执行**单调修复门禁**与 `projectProtectedFinal`，核验多选/多问义务全覆盖。 |
 
-## 统一数学资产
+**两项关键跨进程防伪设计**：
+1. **8 字段权威身份重绑**（[agent_context.py](python/astra_bridge/agent_context.py)）：跨 JSON-RPC 传输的 `sessionId`、`problemHash`、`contractVersion`、`taskId`、`goalId`、`scopeId`、`routeId`、`sourceRequestId` 均忽略模型自称值，由 Python Host 按本地派发台账强制覆写，阻断身份伪造与跨任务串扰。
+2. **交付侧锚定投影**（[agent_history.py](python/astra_bridge/agent_history.py)，`project_artifacts(anchor_source_id)`，Commit `0b6497e` → `3320212`）：Host 以 TS 状态机终态明确声明的 `anchor_source_id` 为唯一交付锚点，放弃独立加冕 front-runner，但**仍基于 Host 本地保存的原始回执逐行重建产物并重算 `candidate_packet` 与 `targetHash`**。既保持 100% 防伪校验，又将百题长跑中的双侧协议分歧率降至 **0%**。
 
-- **单一事实源** `math-assets.json` → `scripts/build_math_assets.py` 确定性生成 TS/Python 双端视图；冻结哈希门禁保护 22 数学族、20 方法卡与 v1.2 schema。
-- **统一动作** `{"action":"math_asset","assetId":...,"target":...,"input":{...}}`，Host 统一 `use_math_asset`，效应收据跨轮次复用。
-- **证据四级分流**：`EXACT_FOR_INPUT`（仅对给定输入精确）/ `EXHAUSTIVE`（有界全集穷举）/ `SAMPLE`（抽样观察）/ `HEURISTIC`（提示性）——**抽样与启发式永不升级为全称证明**。
-- **14 个新增通用算子（v6）**：置换字求值与规范轮换、Laurent 多项式矩阵不变量（一阶 Fitting 理想子式 GCD）、Berlekamp–Massey 递推、特征方程通解、压缩映射不动点、有限拓扑公理检验、单纯 Euler/同调、覆盖空间基本群交换化、MLE/Fisher 得分核验、抽样分布分位数、线性回归 ANOVA 恒等式、Lean4 义务核验、有界反例搜索、布尔 SAT/重言式判定。
-- **验收**：82 项历史行为 E2E 100% 通过（含旧 target 别名兼容）；48/48 方法卡模板真实执行成功；24 项机器验收指标。
-- **复用与迁移**：资产目录 + 运行时 bundle 可打包导出，其他 agent 经同一 `use_math_asset` 通道接入复用、**不改其主链**；新学科 = 新增资产 JSON + 消费契约，无需改动运行时主链。
+### 2.3 五条硬不变量与单根有界预算
 
-## 形式化内部审查
+所有模型调用、工具效应、方法卡加载与审修共享**单一根预算账本**（不可通过派生子任务刷新配额，预算只紧不松），由跨端测试锁死五条硬不变量：
+1. **统一记录**：模型上下文始终是 Append-only 链式哈希日志的确定性投影；
+2. **异常拒绝（Fail-Closed）**：字段越界、哈希失配或未登记工具调用在准入阶段即拦截；
+3. **预算受限**：请求一经派发立即扣减配额（R3），重启恢复绝不增发配额；
+4. **未知终态责任**：超时或断连记为 `OUTCOME_UNKNOWN`，绝不自动重放未知副作用请求；超长输出（`>4096` 码点）优雅截断而非崩溃；
+5. **边界清晰**：防 PID 复用（R1）、归档先落盘后提交（R2）、`dispatchState` 严格区分系统故障与模型未解（R4），且 `candidate_verified` 恒为 `false`。
 
-1. **确定性闭合**：选项覆盖、次数守恒（精确 maximal-minor 观测）、密度归一、解集完备；候选保护后到达的精确观测可增量重开闭合。
-2. **6 类声明式 CAS 契约**：代数等价、Laurent 单位因子规范、解空间基维度、置换规范轮换、测度归一、选项真值证书（`evaluateDeclarativeClosureContract`）。
-3. **Lean 4 可判定义务**：`finite_decidable`、`integer_linear_omega`、`algebraic_ring_identity`、`linear_inequality`、`counterexample_eval`；离线环境降级为精确符号判定并标记 `SYMBOLIC_DECIDER_FALLBACK`，**无界采样绝不标记 PROVED**。
-4. **证书保护锁**：`setFormalOrExactCertificate` / `isOverridePermitted`——已机器核验的答案不被无凭证的 LLM 文本质疑覆写。
-5. **可逆修复**：反例全覆盖 REPAIR + 父候选保留 + R4 复核；修不好就不许劣化。
+---
 
-## 实测与诚实口径
+## 三、三大核心创新机制
 
-| 口径 | 数值 | 说明 |
-| --- | --- | --- |
-| **100 题交付候选（v14，3320212）** | **100/100** | 真实模型，front+tail 两段合并，**协议失败面清零**（锚定投影修复后） |
-| **100 题语义答对（独立判分）** | **87/100（87%）** | 同模型 · 同题集 · 同预算 · 非官方平台分 |
-| 其中：有对选错（选择机制可提升空间） | 8 题 | 候选池含正确答案但未交付，属选择机制而非能力缺口 |
-| 其中：真短板（能力缺口） | 5 题 | 11/18/47/64/83，需补精确资产或新策略 |
-| 理论上限（oracle，候选池含对即计） | 95/100 | 当前兑现率 87/95 ≈ 91.6% |
-| 历史对照：v8（fcbd311） | 93 交付 / 73% 语义 | 100 题全量单轮 |
-| 严格 ReferenceJudge | 25/100 | 格式敏感，仅对照，**不是数学准确率** |
-| 十题分支交付（v8 容错链） | 10/10 | R0→WORK→5/2/1→R2→REPAIR→R4 全链路 |
-| 82 资产行为 E2E | 82/82 | 离线门禁，不代表解题正确率 |
+### 3.1 创新一：契约驱动的任务拆解、三层路由与有界排程
 
-- `candidate_verified` 恒为 `false`；`strictAcceptance=NOT_PERFORMED`。
-- 86/91/96/97 等定向修复/合并口径**禁止作为成绩引用**；v14 的 100/100 为 merged 两段合并，**不是单次全量盲跑**，引用时必须注明。
-- 已验证的方法论结论：**加采样轮次不提分，补精确计算能力才提分**（§28 定向实验）。
-- 四臂同预算对照设计：A/B（基线/官方 API）如实记 `NOT_RUN`；C（增强关）vs D（增强开）用于归因 R0 + 修复机制贡献。
-- 其余未解决项：5-ballot 未同口径全量复跑、多路径独立性仅同模型 lens 去相关（非多模型）；真短板 5 题（11/18/47/64/83）为下一代资产迭代方向。
+- **M1 目标契约与义务 DAG**：先解析题面四要素（目标、定义域、量词、子问），将子目标编译为必须闭合的 `obligationId` 清单及任务 DAG；M5 终审若发现叶子义务未闭合即拒绝草率交付。
+- **R0 三方独立会审**：由 `MEANING`（题意与边界）、`METHOD`（定理与定义域适用性）、`TASK_TOOL`（任务粒度与算子入参）三个独立角色分别给出判定与题面原文依据：任一角色缺失/不合规则为 `UNKNOWN`；任一角色报出缺陷则记为 `ISSUES` 并触发至多 1 次 `reviseGoals`（升版至 `v2`）；三方均确认无误（`NO_ISSUE`）方放行进入 `WORK`。
+- **8 维数学结构签名三层路由**（[agent-semantics.ts](apps/stdio-runtime/src/agent-semantics.ts)）：
+  1. **第一层（显式措辞规则 `semanticToolRoute`）**：针对明确算子指征直接锁定目标资产与参数模板，未命中诚实返回 `null`；
+  2. **第二层（受限候选方法卡 `semanticMethodRoute`）**：融合工具增益打分，严格截断保留 **≤ 3 个候选方法**，避免注意力稀释；
+  3. **第三层（8 维数学结构签名兜底 `extractMathStructuralSignature`）**：按底层结构本质泛化挂载资产：
 
-## 源码快速开始
+  | 维度 | 结构签名字段 | 识别的底层数学结构 | 典型挂载资产 / 算子 |
+  | :---: | :--- | :--- | :--- |
+  | 1 | `hasPermutationCycles` | 对称群 $S_n$、不相交轮换、共轭字 | `math.algebraic-structures:permutation_word_eval` |
+  | 2 | `hasLaurentOrParametricMatrixDet` | Laurent 多项式矩阵、纽结 Alexander 多项式、Fitting 理想 | `math.linear-algebra:maximal_minors` / `laurent_fitting_gcd` |
+  | 3 | `hasRecurrenceOrMarkovStationary` | 线性递推、特征方程、马氏链平稳分布 / 调和函数 | `characteristic_general_solution` / 线性系统求解 |
+  | 4 | `hasStatisticalInference` | MLE、Fisher 信息、分位数、置信区间、OLS/ANOVA | `sampling_distribution_quantiles` / `mle_fisher_score` |
+  | 5 | `hasTopologyOrManifoldAxioms` | 分离公理 $T_{0\text{–}4}$、紧致连通、单纯复形同调 / 基本群 | `finite_topology_axioms` / `simplicial_homology` |
+  | 6 | `hasDifferentialOperatorOrODE` | 圆周/平面拉普拉斯算子、联络形式、常微分方程 | `circle_laplacian` / `planar_laplacian` |
+  | 7 | `hasNumberTheoryCongruence` | 模同余方程、二次丢番图方程、原根、二次剩余 | `quadratic_diophantine` / `symbolic_diophantine` |
+  | 8 | `hasFormalProofOrCounterexample` | 多命题真值判定、有界反例搜索、布尔重言式 / SAT | `lean4_obligation` / `bounded_counterexample_search` |
 
-### 环境要求
+- **DAG 动态排程与 G2 停滞让渡**：主循环 [agent-loop.ts](apps/stdio-runtime/src/agent-loop.ts) 每轮从就绪队列（前置均 `ACTIVE`）按根预算余额派发任务；单一路线连续停滞时触发 G2 停滞让渡切换备用路线。
 
-| 依赖 | 要求 |
-| --- | --- |
-| Python | `>=3.10`（SymPy、NumPy、SciPy、Requests，见 [requirements.txt](requirements.txt)） |
-| Node.js | 开发锁定 `24.7.0`（运行 TS 引擎必需；使用预编译 bundle 时无需 npm/pnpm/tsc） |
-| pnpm / TypeScript | 仅修改构建 TS 时需要：pnpm `11.7.0`、TS `6.0.3` |
-| Lean 4（可选） | 存在 `lean` 时启用内核证明；缺失自动走诚实降级 |
-| 公共 client | 真实求解由平台或调用方注入；离线检查用模拟 client |
+### 3.2 创新二：5+2+1 多智能体盲解共识与单一事实源统一数学资产
 
-### 获取并校验
+#### 1) 5+2+1 去相关盲解与锚定纠偏
+
+拒绝同提示词重复采样，采用物理隔离的 **5 独立盲解 + 2 锚定审计 + 1 证书自检**：
+- **5 路正交视角盲解（Lens Rotation）**：正向推导、逆向回代、换路重构、隐含假设查漏、边界特例退化检验，彼此不暴露同伴候选答案。
+- **跨语言多问与真值规范化答案键**（Commit `7d4dfb5`，[agent-answer-key.ts](apps/stdio-runtime/src/agent-answer-key.ts) & [answer_semantics.py](python/astra_bridge/answer_semantics.py)）：统一剥离 `1)` / `(1)` / `①` 及中英文标点差异，将 `True/False`、`对/错`、`正确/错误`、`是/否`、`成立/不成立`、`√/×`、无序选项串、集合与等价代数式归一为唯一规范键后计票。
+- **2 路独立锚定审计 + 绝不合成答案铁律**：若两路审计经逐行核验一致指向非多数票候选，可推翻错误多数票；切换胜出答案时，**严禁把 A 通道的推导过程与 B 通道的数字拼凑**，必须从候选池中**整条锚定**原胜出推导产物包（`WorkPacket`），并附加 `CERT1` 完备性自检。
+
+#### 2) 单一事实源统一数学资产（26 资产 × 96 行为）与四级证据标签
+
+- **SSOT 与双端生成**：[mathagent/resources/math-assets.json](mathagent/resources/math-assets.json) 收敛了 **26 项数学资产 × 96 项目录行为**（其中 22 项含可执行算子，4 项基础指导域：`math.proof` / `math.recurrence` / `math.topology` / `math.statistics`；82 项历史行为 E2E 门禁全部通过）。经 [scripts/build_math_assets.py](scripts/build_math_assets.py) 确定性生成 TS/Python 强类型视图，并由 [scripts/check_math_assets_frozen.py](scripts/check_math_assets_frozen.py) 做 SHA-256 冻结校验。协议层统一为 `{"action": "math_asset", "assetId": ..., "target": ..., "input": {...}}`，由 Host 唯一入口 `use_math_asset` 执行并复用收据。
+- **14 个高阶通用精确算子**（[generalized_math_operators.py](mathagent/core/generalized_math_operators.py)）：涵盖置换字与规范轮换、Laurent 矩阵 Fitting 理想子式 GCD、Berlekamp–Massey、常系数递推通解、压缩映射不动点、有限拓扑 $T_{0\text{–}4}$ 公理、单纯复形 Euler/同调、覆盖空间基本群交换化、MLE/Fisher 得分、抽样分布分位数、OLS/ANOVA 恒等式、Lean 4 义务核验、有界反例搜索与布尔 SAT/重言式判定；[symbolic_algebra.py](math_families/families/symbolic_algebra.py) 并为次数 ≤ 6 的单不可约有理多项式提供基于 `Poly.galois_group().order()` 的分裂域次数快速精确计算路径。
+- **四级证据分流**：每次算子回执强制标记 `EXACT_FOR_INPUT` / `EXHAUSTIVE` / `SAMPLE` / `HEURISTIC`。**`SAMPLE` 与 `HEURISTIC` 永不升级为全称证明**。
+- **6 类声明式 CAS 闭合契约**（[agent-answer-closure.ts](apps/stdio-runtime/src/agent-answer-closure.ts) `evaluateDeclarativeClosureContract`）：
+
+  | 契约 ID | 核验不变量 | 冲突处理 |
+  | :--- | :--- | :--- |
+  | `compare.algebraic-equivalence.v2` | 候选式与精确算子结果的符号及高精度等价性 | 抛出 `EXACT_VALUE_MISMATCH`，重开闭合修正 |
+  | `compare.polynomial-up-to-unit.v2` | 单变量/Laurent 多项式模单位因子 $\pm t^k$ 的规范型一致性 | 拦截真因子替代或首项反号 |
+  | `compare.solution-space-basis.v2` | 解空间维数与齐次/常数基是否完整 | 拦截漏掉常数基或仅写特解 |
+  | `compare.permutation-canonical-cycle.v1` | 置换求值结果经规范轮换分解后的一致性 | 抛出 `GROUP_STRUCTURE_MISMATCH` |
+  | `compare.measure-normalization.v2` | 概率密度/分布律的非负性与全支撑归一性 | 抛出 `NORMALIZATION` 缺陷 |
+  | `compare.option-proposition-truth.v2` / `verify.lean4-obligation.v1` | 多选/判断选项与机器反例（`REFUTED`）或形式化判定（`PROVED`）的一致性 | 抛出 `OPTION_VERDICT_CONTRADICTION`，剔除已证伪选项 |
+
+### 3.3 创新三：18 类缺陷校验、双锁可逆修复与链式哈希底座
+
+- **18 类结构化闭合缺陷逐条扫描**：覆盖代数与结构（次数守恒、分裂域次数、群结构、GF(2) 秩/零化度、线性系统解态）、分析与方程（实根数、解集完备性、恒等式残差、插值残差）、概率统计（测度归一、OLS、覆盖时间）及选项/精确值矛盾，每条缺陷强制附带溯源凭证（`OBSERVATION` / `CERTIFICATE` / `TEXT`）。
+- **两道防退化硬锁**：
+  1. **形式化证书保护锁**（[p4-session.ts](packages/math-review/src/p4-session.ts)）：已获 `EXACT_FOR_INPUT` / `EXHAUSTIVE` 算子回执或 Lean 4 / 符号判定器（`PROVED`）锁定的结论，禁止被无机器可验证反例的纯文本质疑推翻。
+  2. **单调修复门禁**（[p4-repair.ts](packages/math-audit/src/p4-repair.ts)）：有界修复生成的新候选必须覆盖触发修复的全部反例、且缺陷数严格递减（$\text{Defects}(C_{\text{new}}) < \text{Defects}(C_{\text{parent}})$）方能晋升为 `REVISED_CANDIDATE`；否则判为 `REVISE_REJECTED` 无损回退父候选，若父候选亦不达交付门槛则由 M5 裁决 `WITHHELD`（记为 `unsolved`）。
+- **Lean 4 五类可判定义务**（[python/astra_bridge/lean4_verifier.py](python/astra_bridge/lean4_verifier.py) / [mathagent/core/lean4_verifier.py](mathagent/core/lean4_verifier.py)）：支持 `finite_decidable`、`integer_linear_omega`、`algebraic_ring_identity`、`linear_inequality`、`counterexample_eval`；离线缺失 `lean` 时自动走精确符号判定并诚实标记 `SYMBOLIC_DECIDER_FALLBACK`。
+- **链式哈希日志、64KB 投影与 `STALE` 局部精确失效**（[packages/runtime-core](packages/runtime-core)）：只增日志支持无模型逐字节重放；调用上下文严格截取 64KB 最小活跃依赖闭包；中间节点重做时版本号 `+1`，历史字节完整保留，仅沿 DAG 有向边将传递下游标记为 `STALE`，无关分支保持 `ACTIVE`。
+
+---
+
+## 四、Web 实时观测驾驶舱
+
+项目内置基于 **React 19 + Vite + KaTeX + Starlette BFF** 的全链路观测与评测驾驶舱（[apps/web-demo](apps/web-demo) + [python/astra_web](python/astra_web)）：
+
+- **实时工作台（`/solve`、`/runs/:id`）**：
+  - **三大核心创新总览与子机理动图**：实时联动当次运行的契约 DAG、R0 审阅、5+2+1 票型、算子取证与审修计数；
+  - **四阶段宏观拓扑画布**（[MacroFlowCanvas.tsx](apps/web-demo/src/features/workspace/components/MacroFlowCanvas.tsx)）：由 [workspace_projector.py](python/astra_web/workspace_projector.py) 投影实时/历史事件，修复回流自动绘制紫色 `repair_loop` 边；
+  - **算子证据抽屉与红线交付卡片**：点击节点即可审计算子入参、精确返回值、四级证据标签与哈希回执；交付卡片恒定标注 `candidate_verified=false` 并列出未闭合义务。
+- **批量评测与样本明细总表（`/batch`）**：
+  - 挂载本地研究日志（`GET /api/runs`）与 `eval200` 实测单题日志（`GET /api/ablation/runs`），支持按配置、题组、人工复核判分与关键词筛选，并可钻取任意单题详情与 `L2` 时间轴回放；
+  - 内置 **JSONL 题目集导入**（`POST /api/problem-sets/import`，支持 `catalog` 入库浏览/`去求解` 跳转、`enqueue` 受控入队与 `replays` 历史归档导入）。
+- **时间胶囊回放与故障恢复（`/runs/:id/replay`）**：支持倍速播放与游标穿梭；支持 SSE `Last-Event-ID` 断线重连与 G7 Checkpoint 断点恢复。
+- **只写不回显（Write-Only）凭据保护**（[solver_config.py](python/astra_web/solver_config.py)）：仅白名单接入书生·浦语（`https://chat.intern-ai.org.cn/api/v1/chat/completions`）与书生·端砚（`https://discovery-api.intern-ai.org.cn/v1/chat/completions`），API Key 仅写入仓库外配置文件，前端与接口只返回 12 位 SHA-256 指纹；未配置时诚实返回 `SOLVER_NOT_CONFIGURED`。
+
+---
+
+## 五、实测表现、消融验证与能力边界
+
+### 5.1 判分原则：“三率分离”与全分母纪律
+
+- 同时区分并报告：**① 工程候选交付率**、**② 独立语义复核正确率**、**③ 候选池 Oracle 上限与兑现率**；所有 `unsolved`、超时与异常均 100% 计入分母，不剔除坏样本。
+- **口径说明**：候选交付率 $\neq$ 数学正确率；外部仿真器的 `ReferenceJudge` 仅做严格字面匹配（例如将 `2/π` 与 `\frac{2}{\pi}`、等价代数式、`No` 与“不是紧致的”判错），仅作下限对照，真实准确率以逐题数学语义复核为准。
+
+### 5.2 `test0` 100 题演进实测（连接书生 `intern-s2`）
+
+| 评测指标 | V8 基线（`fcbd311`） | V14 锚定投影（`3320212`，两段合并） | V15 规范键完整版（`7d4dfb5`，单次全量盲跑） | 说明 |
+| :--- | :---: | :---: | :---: | :--- |
+| **执行方式** | 单次全量 100 题 | front(70) + tail(30) 合并 | **单次连续盲跑 100 题**（`dev` 入口） | V14 为两段合并，非单次盲跑 |
+| **① 工程候选交付率** | 93 / 100 (93.0%) | **100 / 100 (100.0%)** | **100 / 100 (100.0%, 0 ERROR)** | 锚定投影彻底消除跨进程协议失败面 |
+| **终态停止分布** | 含 7 题未交付 | `REVIEWS_COMPLETE` 77 / `REVIEW_STOP` 8 / `REVISE_REJECTED` 15 | `REVIEWS_COMPLETE` 75 / `REVIEW_STOP` 12 / `REVISE_REJECTED` 13 | 全部在预算与门禁内收敛 |
+| **② 独立语义复核正确率** | 73 / 100 (73.0%) | **87 / 100 (87.0%)** | **83 / 100 (83.0%)** | 较基线提升 +10 ~ +14 个百分点 |
+| **③ 候选池穿透审计** | — | 跨段复核 | **1556 条候选**（去重 380 组，加权正确率 80.2%） | 覆盖 WORK/CONSENSUS/CLOSURE/REPAIR |
+| **Oracle 上限 / 兑现率** | — | 95/100（91.6%） | **92/100（90.2%）** | 共识与闭合机制稳定兑现 $>90\%$ 池潜力 |
+| **未答对归因（选错 / 真短板）** | — | 8 题 / 5 题 | **9 题 / 8 题** | 共性真短板：#11, #18, #47, #64, #83 |
+| **严格 ReferenceJudge（对照）** | — | 25 / 100 | 30 / 100 | 格式敏感下限，不代表真实准确率 |
+
+- **V15 规范键实证救回**：在离散二元关系复合（#45）、中英混排双命题真值（#48）、Sobolev 嵌入维数参数（#53）与充分统计量/Fisher 信息（#78）上消除同义异形散票并稳定选出正解。
+- **核心方法论结论**：定向实验表明，**单纯增加采样轮次无法稳定提升复杂代数/群论/统计分位数计算准确率；补充精确计算算子与声明式 CAS 闭合契约才是提分关键**。
+
+### 5.3 `eval200` 外部冻结题集消融快照（200 题 = A 组 100 课内 + B 组 100 竞赛）
+
+仓库 [python/astra_web/ablation_data/summary.json](python/astra_web/ablation_data/summary.json) 留存了 `eval200`（A 组 TheoremQA/UGMathBench/ProofNet + B 组 Omni-MATH/OlympiadBench/HLE）九组配置（外部 3 基线 + 内部 6 消融）的逐题人工语义复核汇总（`unsolved`/ERROR/空答均计入 200 分母）：
+
+| 配置 | 组别 | 工程交付率 | 按题全对正确率（A / B） | 分问得分率 | 系统失败率 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `MathChat-Python` | 外部基线 | 57.0% (114/200) | 48.5% (97/200 · 55/42) | 48.5% | 43.0% |
+| `MathAgent-PRER` | 外部基线 | 95.0% (190/200) | 70.5% (141/200 · 72/69) | 73.74% | 5.0% |
+| `MACM` | 外部基线 | 63.5% (127/200) | 32.0% (64/200 · 31/33) | 35.47% | 36.5% |
+| `full`（完整天轭） | 内部消融 | 82.5% (165/200) | 59.0% (118/200 · 60/58) | 60.54% | 17.5% |
+| `no_goal_dag`（契约消融） | 内部消融 | 88.5% (177/200) | 66.0% (132/200 · 69/63) | 67.25% | 11.5% |
+| `no_ballot`（盲解消融） | 内部消融 | 90.0% (180/200) | 58.0% (116/200 · 67/49) | 59.19% | 10.0% |
+| `no_assets_routing`（证据优选消融） | 内部消融 | 82.0% (164/200) | 58.5% (117/200 · 54/63) | 60.21% | 18.0% |
+| `no_review_repair`（有限修复消融） | 内部消融 | 80.0% (160/200) | 58.0% (116/200 · 52/64) | 60.38% | 20.0% |
+| `no_resume`（事件续推消融） | 内部消融 | 83.0% (166/200) | 62.0% (124/200 · 58/66) | 63.21% | 17.0% |
+
+> **消融口径 caveats（严格披露）**：
+> - 内部六组配置池 Oracle 上限为 **167/200（83.5%）**，`full` 兑现率 70.7%（另有 22 题有对选错、27 题有对未交付、33 题真短板）；
+> - 内部六组为 `fixv3 @ 7d4dfb5` 单重复、limit 旋钮近似配置，单次组间差异不作显著性夸大；
+> - 外部 `MACM` 的 73 例 ERROR 中含 39 例旧 Key 配额耗尽，主表仍严格按 200 题分母统计。
+
+### 5.4 已知边界与诚实约束
+
+1. **`candidate_verified=false` 硬约束**：任何情况下不把候选交付等同于形式化证明通过。
+2. **能力短板边界**：对于能规约为代数不变量、有限群、线性系统、常系数递推、标准统计推断及 5 类可判定形式化义务的问题，系统可闭环精确取证；对于尚缺专用算子的高阶连续随机过程、高维退化运筹与纯抽象概念辨析题，系统如实交付启发式候选。
+3. **`bundle` vs `dist` 同步**：`release/stdio-runtime.bundle.mjs` 若未随 TS 源码重新打包可能落后于 `dist/`；推荐显式设置 `ASTRA_STDIO_RUNTIME=dev`（Web 后端已自动设为默认），修改 TS 后需重新运行 `tsc -b` 并按需执行 `node scripts/build_stdio_runtime_bundle.mjs`。
+4. **凭据安全**：API Key 仅通过环境变量或宿主端仓库外配置文件注入，仓库内绝不保存真实凭据。
+
+---
+
+## 六、快速开始与运行方式
+
+### 6.1 环境要求
+
+| 依赖 | 要求 | 说明 |
+| :--- | :--- | :--- |
+| **Python** | `>= 3.10` | 核心依赖见 [requirements.txt](requirements.txt)，Web 服务见 [requirements-web.txt](requirements-web.txt) |
+| **Node.js** | 开发锁定 `24.7.0`（支持 24.x） | 运行 TypeScript AgentLoop 必需 |
+| **pnpm / TypeScript** | pnpm `11.7.0`、TS `6.0.3` | 修改/构建 TS 引擎与前端时必需 |
+| **Lean 4**（可选） | `lean` 可执行文件 | 缺失时自动走精确符号降级，不影响主流程 |
+
+### 6.2 获取源码与安装依赖
 
 ```bash
-git clone --branch feat/web-unified-math-integration https://github.com/3294682143-gif/astra-refactored.git
+# 拉取当前完整 Web 演示 + v15 后端核心分支（如需纯 v15 评测基线，可改为 --branch fix/closure-source-trust）
+git clone --branch feat/web-demo-v15 https://github.com/3294682143-gif/astra-refactored.git
 cd astra-refactored
-python -m venv .venv && . .venv/bin/activate
-python -m pip install -r requirements.txt
-python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json   # VERIFY_OK
+
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# Linux / macOS:      source .venv/bin/activate
+python -m pip install -r requirements.txt -r requirements-web.txt
+
+# 校验发布清单（期望输出 VERIFY_OK）
+python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
 ```
 
-### 官方接口
+如需从源码编译 TS 运行时或构建前端静态产物：
+
+```bash
+pnpm install --offline --frozen-lockfile --ignore-scripts
+node node_modules/typescript/bin/tsc -b
+pnpm --dir apps/web-demo build
+```
+
+### 6.3 启动 Web 驾驶舱
+
+**方式 A：一键启动脚本**
+- Windows：双击 [启动.py](启动.py) / [启动.pyw](启动.pyw) / [启动.vbs](启动.vbs)（无黑窗启动模式 A 免 Key 演示），或运行 [start.bat](start.bat) / [start.ps1](start.ps1) 在「模式 A 免 Key 演示」与「模式 B 真实大模型求解」间切换；
+- Linux / macOS：执行 `bash start.sh`。
+
+**方式 B：直接启动正式 BFF 服务（含静态前端托管）**
+
+```bash
+python -m uvicorn python.astra_web.app:app --host 127.0.0.1 --port 8018
+```
+
+打开 `http://127.0.0.1:8018/solve` 即可进入工作台；在 `/settings` 页面配置书生端点与 API Key 后即可发起真实 `engine="ts"` 求解，或访问 `/batch` 浏览实测样本明细与导入自定义 JSONL 题目集。
+
+### 6.4 官方编程接口（Python）
 
 ```python
+import os
 from user_agent import ReasoningAgent
-result = ReasoningAgent(client=client).solve(problem, metadata)  # 默认 engine="ts"
+
+# 推荐使用与最新源码同步的 dist 入口
+os.environ["ASTRA_STDIO_RUNTIME"] = "dev"
+
+# client.chat(messages=..., temperature=0.2, max_tokens=8192) 同步返回 OpenAI 兼容结构
+agent = ReasoningAgent(
+    client=client,
+    engine="ts",
+    # 满能力评估 Profile（可选；不传则使用 AgentRuntime 保守默认预算）
+    max_model_calls=200,
+    max_work_units=64,
+    max_effects=2,
+    max_reviews=2,
+    max_method_loads=2,
+    max_repairs=3,
+    max_consensus=8,
+    max_r0=1,
+    problem_seconds=1200,
+)
+result = agent.solve(problem, metadata={})
+# 返回字段包含: status ("candidate"|"unsolved"), final_response, stopReason,
+# candidate_verified (恒为 False), strictAcceptance ("NOT_PERFORMED"), metrics, trace
 ```
 
-- `client.chat(messages, temperature=0.2, max_tokens=8192)` 为唯一模型通道；密钥只从环境读取，Host 不另建请求通道。
-- 其他引擎：`engine="lite"`（实验轻量）、`engine="legacy"`（保留路径）；TS 失败不会静默切换引擎。
-- 主要 profile（跑分对照用，非默认值）：`max_model_calls=256, max_work_units=64, max_effects=2, max_reviews=2, max_method_loads=2, max_repairs=2, max_consensus=8, max_r0=1, problem_seconds=1800`。库默认是保守预览 profile（R0/修复/方法卡关闭）。
+> **预算配置说明**：
+> - 直接实例化 `ReasoningAgent(client=client)` 默认走保守预览预算（`max_model_calls=8, max_consensus=0, max_r0=0`）；
+> - Web 后端默认预算定义在 [python/astra_web/config.py](python/astra_web/config.py)（`max_model_calls=32, max_work_units=4, max_consensus=1, max_r0=1, problem_seconds=600`），前端请求可按需显式传入满能力参数；
+> - `ASTRA_DEBUG_TRACEBACK=1` 与 `ASTRA_DEBUG_GUARD=1` 可按需开启脱敏异常栈与 Host 守卫诊断日志。
 
-### 结果语义
-
-```json
-{"engine":"ts","status":"candidate","final_response":"4","candidate_verified":false,"strictAcceptance":"NOT_PERFORMED"}
-```
-
-- `status`：`candidate` / `unsolved`；未解、超时、异常在评测口径中计入分母。
-- `stopReason` / `code`：调度停止与固定失败码（`BUDGET`、`DEADLINE_EXCEEDED`、`FIELD_VALUE` 等）。
-- `trace` / `metrics`：脱敏控制事件与真实用量；**不是数学证明**。
-- `REVISED_CANDIDATE` 表示经修复门控替换，仍不等于已验证。
-- M5 终态裁决：受保护候选在未过期、预算/时限充足、非 STRICT 拒绝时交付 `candidate`（`submissionEligibility=BEST_EFFORT`），并附**逐义务覆盖表**；否则 `WITHHELD`（unsolved）并给固定原因 `NO_CANDIDATE / STALE_CANDIDATE / DEADLINE_EXCEEDED / STRICT_NOT_VERIFIED`。多选须 `CERT1|OPTIONS` 全覆盖，多问按 `MULTIPART` 覆盖所有 leaf 分问。
-
-## 运行控制与恢复
-
-- **事件溯源与确定性重放**：单一有序、append-only、链式哈希的事件日志是"模型看到什么"的唯一权威；每次调用的上下文是日志前缀的确定性投影，可无模型逐条重放（byte-identical）校验。
-- **产物版本与精确失效**：重做 version+1、旧字节保留；仅将受影响下游闭包（target＋传递后继）标 STALE，无关产物保持 ACTIVE——局部修订不牵动全局。
-- **单根预算**：模型调用、工具效应、方法加载、评审修复共享上限与截止时间（前台 25% / 尾部保留 10% 配额）；新增任务不刷新配额，只能收紧。
-- **未知终态责任**：缺完成信号或超时记 `OUTCOME_UNKNOWN`，停止等待 ≠ 远端停止，不重放未知请求；确定的超长输出按 TRUNCATED 容错而非误判未知。
-- **G7 checkpoint/resume**：校验题目、契约、事件序列与已用预算，预算只紧不松。
-- **Web 恢复（R1–R4）**：终态先落盘再提交、进程实例身份防 PID 复用、`dispatchState` 区分未发送/发送后未知、恢复绝不把系统故障冒充模型未解。
-- **执行边界**：问题、方法卡和工具输出作为数据处理，不能扩大模型或工具权限；本机测试、安装可复现性与比赛平台许可分别记录，互不冒充。
-
-## 开发与验证
+### 6.5 离线验证与测试门禁
 
 ```bash
 python -m pip install -r requirements-dev.txt
-pnpm install --offline --frozen-lockfile --ignore-scripts
-node node_modules/typescript/bin/tsc -b
+
+# 1) 清单与数学资产双端同步校验
+python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json
+python scripts/sync_web_release_manifest.py --check
+python scripts/build_math_assets.py --check
+python scripts/check_math_assets_frozen.py
+
+# 2) TypeScript 与前端领域单元测试
 node --test packages/protocol/dist/tests/*.test.js apps/stdio-runtime/dist/tests/*.test.js
-python -m pytest -q
+node --test --experimental-strip-types apps/web-demo/src/domain/__tests__/*.test.ts
+
+# 3) Python 后端、消融与资产 E2E 测试
+python -m pytest -q tests/test_ablation_summary.py tests/test_web_bff.py tests/test_web_solver_runtime.py
+python -m pytest -q tests/e2e/test_ts_math_assets_82_e2e.py tests/e2e/test_v6_targeted_regression_e2e.py
 ```
 
-**改 TS 后必须**：`tsc -b` → esbuild 重建 `release/stdio-runtime.bundle.mjs` → 重建 `BUILD_MANIFEST.json` → `--verify` → 全量测试。否则真实运行用的是旧 bundle。
+*(离线测试使用模拟模型响应 + 真实 Host / Node / 数学算子，仅用于证明工程正确性，不代表真实模型数学准确率。)*
 
-| 验证范围 | 命令 / 文件 |
-| --- | --- |
-| 资产视图同步 | `python scripts/build_math_assets.py --check` |
-| 冻结基线 | `python scripts/check_math_assets_frozen.py` |
-| 迁移与验收 | `python scripts/check_math_assets_migration.py`、`scripts/report_math_assets_acceptance.py` |
-| 82 行为 E2E | `python -m pytest tests/e2e/test_ts_math_assets_82_e2e.py` |
-| v6 靶向回归 | `python -m pytest tests/e2e/test_v6_targeted_regression_e2e.py` |
-| 声明式契约单测 | `apps/stdio-runtime/tests/agent-declarative-closure.test.ts` |
-| 入口与恢复 | `tests/e2e/test_ts_entry*.py`、`test_ts_binding_parity.py`、`test_ts_transport_recovery.py` |
-| 发布清单 | `python scripts/build_release_manifest.py --verify release/BUILD_MANIFEST.json` |
+---
 
-离线 E2E 用模拟模型响应 + 真实 Host/Node/受信工具，证明工程行为，**不提供真实模型准确率结论**。
+## 七、仓库目录导览与文档索引
 
-## 文档索引
+### 核心目录导览
 
-| 阅读目的 | 文档 |
-| --- | --- |
-| 项目架构图（全链路） | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| 交接与演进总账（最新实装） | [HANDOFF.md](HANDOFF.md) |
-| 贡献约定 | [AGENTS.md](AGENTS.md) |
-| 资产统一说明 | [MATH_ASSETS_UNIFIED.md](MATH_ASSETS_UNIFIED.md) |
-| 当前门槛与发布阻断 | [GATEBOARD](docs/GATEBOARD.md)、[RELEASE_BLOCKERS](docs/RELEASE_BLOCKERS.md) |
-| 主循环与 Host 接入 | [UNIFIED_TS_AGENT_LOOP](docs/UNIFIED_TS_AGENT_LOOP.md)、[TS_ENGINE_ENTRY](docs/TS_ENGINE_ENTRY.md) |
-| 动态任务与产物版本 | [G2_DYNAMIC_ROUTES](docs/G2_DYNAMIC_ROUTES.md)、[G2_ARTIFACT_REDO](docs/G2_ARTIFACT_REDO.md) |
-| 运行时机制 | [G4_RUNTIME_HARDENING](docs/G4_RUNTIME_HARDENING.md) |
-| 对照评测配置 | [RUN_CONFIG_LOCK](docs/RUN_CONFIG_LOCK.md)、[MATH_AB_REPORT](docs/MATH_AB_REPORT.md) |
-| 安装 | [INSTALL](INSTALL.md) |
-| 品牌与命名迁移 | [NAMING](docs/NAMING.md)、[RENAME_MIGRATION](docs/RENAME_MIGRATION.md) |
+| 路径 | 职责 |
+| :--- | :--- |
+| [user_agent.py](user_agent.py) | 官方唯一求解入口 `ReasoningAgent.solve()`（默认 `engine="ts"`） |
+| [python/astra_bridge](python/astra_bridge) | Python 受信 Host：协议校验、8 字段重绑、锚定投影、预算、工具执行与崩溃恢复 |
+| [apps/stdio-runtime](apps/stdio-runtime) | TS AgentLoop 主循环、三层结构路由、跨语言规范键、18 类闭合与 CAS 契约 |
+| [packages](packages) | `protocol` / `math-contract` (M1) / `math-gateway` (M2) / `math-workunit` (M3) / `math-review` (M4) / `math-audit` (M5) / `runtime-core` / `web-contract` |
+| [mathagent](mathagent) | 统一数学资产单一事实源 [math-assets.json](mathagent/resources/math-assets.json)（26×96）、14 个高阶通用算子、Lean 4 验证器与官方客户端 |
+| [math_families](math_families) | 受控数学族实现（含 Galois 群分裂域快速计算等） |
+| [python/astra_web](python/astra_web) | Starlette BFF、工作台事件投影、实测单题日志挂载、`ablation_data` 快照与 JSONL 题集导入 |
+| [apps/web-demo](apps/web-demo) | React 19 + Vite + KaTeX 实时观测驾驶舱、三大创新动图、回放与批量评测界面 |
+| [scripts](scripts) | 清单校验、资产双端生成、Bundle 打包与演示服务脚本 |
 
-## 品牌与贡献
+### 技术文档索引
 
-正式品牌 **Zygos（ZY，天轭）**；当前为阶段 A（品牌统一与内部整合），仓库/包名/环境变量仍用 `astra-*` / `@astra/*` / `ASTRA_*`，阶段 B 集中迁移（见 [ADR-011](docs/adr/ADR-011-zygos-brand-and-two-phase-migration.md)）。
+| 阅读目的 | 文档链接 |
+| :--- | :--- |
+| 系统全链路架构图 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| 交接与演进总账 | [HANDOFF.md](HANDOFF.md) |
+| 贡献与诚实性红线规范 | [AGENTS.md](AGENTS.md) |
+| 本地安装与使用文档 | [INSTALL.md](INSTALL.md)、[使用文档.md](使用文档.md) |
+| 统一数学资产设计 | [docs/MATH_ASSETS_UNIFIED.md](docs/MATH_ASSETS_UNIFIED.md) |
+| 门槛与发布阻断 | [docs/GATEBOARD.md](docs/GATEBOARD.md)、[docs/RELEASE_BLOCKERS.md](docs/RELEASE_BLOCKERS.md) |
+| TS 主循环与入口接入 | [docs/UNIFIED_TS_AGENT_LOOP.md](docs/UNIFIED_TS_AGENT_LOOP.md)、[docs/TS_ENGINE_ENTRY.md](docs/TS_ENGINE_ENTRY.md) |
+| 动态路由、产物修订与运行时加固 | [docs/G2_DYNAMIC_ROUTES.md](docs/G2_DYNAMIC_ROUTES.md)、[docs/G2_ARTIFACT_REDO.md](docs/G2_ARTIFACT_REDO.md)、[docs/G4_RUNTIME_HARDENING.md](docs/G4_RUNTIME_HARDENING.md) |
+| 对照评测配置与报告 | [docs/RUN_CONFIG_LOCK.md](docs/RUN_CONFIG_LOCK.md)、[docs/MATH_AB_REPORT.md](docs/MATH_AB_REPORT.md) |
+| 品牌与两阶段命名迁移 | [docs/NAMING.md](docs/NAMING.md)、[docs/RENAME_MIGRATION.md](docs/RENAME_MIGRATION.md)、[ADR-011](docs/adr/ADR-011-zygos-brand-and-two-phase-migration.md) |
 
-提交前阅读 [AGENTS.md](AGENTS.md)：保持官方接口、注入式模型访问、根预算、未知请求责任与执行隔离；仓库不接收凭据、个人安装配置、私有运行日志、标准答案或针对评测题制作的题卡。仓库当前未提供项目级 LICENSE 文件。
+---
+
+## 品牌与贡献说明
+
+- **品牌迁移**：正式品牌为 **Zygos（天轭）**；当前处于阶段 A（内部整合期），包名、目录与环境变量仍沿用 `astra-*` / `@astra/*` / `ASTRA_*`，详见 [ADR-011](docs/adr/ADR-011-zygos-brand-and-two-phase-migration.md)。
+- **贡献约束**：提交前请阅读 [AGENTS.md](AGENTS.md)，严格遵守注入式模型访问、单根预算、未知请求责任与执行隔离原则；仓库不接收密钥凭据、个人本地日志、标准答案或针对评测题制作的题卡。当前仓库未包含项目级 LICENSE 文件。
