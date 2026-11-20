@@ -39,3 +39,8 @@ datasets/
 
 # 预构建前端产物随仓（克隆即用，免 Node 构建）
 !apps/web-demo/dist/
+
+# 随仓示例运行记录与资产（克隆即可在 /runs、/assets 看到）
+!var/astra/
+!var/astra/**
+var/astra/**/*.log

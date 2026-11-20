@@ -1,0 +1,121 @@
+{
+  "events": [
+    {
+      "at": 1794629107726,
+      "content": {
+        "delivered": false,
+        "index": 0,
+        "late": false,
+        "transport_error": true,
+        "valid": false
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-fe1713709e41",
+      "seq": 1,
+      "sourceKind": "observed_archive",
+      "step": "model_call"
+    },
+    {
+      "at": 1794629107726,
+      "content": {
+        "candidate_verified": false,
+        "closeout": "incomplete_transport",
+        "engine": "lite",
+        "mathematical_verification": "not_performed",
+        "status": "unsolved"
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-fe1713709e41",
+      "seq": 2,
+      "sourceKind": "observed_archive",
+      "step": "lite_summary"
+    },
+    {
+      "at": 1794629107728,
+      "content": {
+        "dispatch_stopped": false,
+        "global_in_flight": null,
+        "global_remaining_calls": null,
+        "local_admissions": 1,
+        "local_calls_still_running": 1,
+        "public_calls_with_explicit_terminal_metadata": 0,
+        "public_client_calls": 1,
+        "remote_cancellation_confirmed": false,
+        "scope": "single_solve_invocation",
+        "sdk_attempts": null
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-fe1713709e41",
+      "seq": 3,
+      "sourceKind": "observed_archive",
+      "step": "local_invocation_summary"
+    },
+    {
+      "at": 1794629107728,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "childReaped": null,
+        "code": null,
+        "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+        "elapsedMs": 1727,
+        "executed": true,
+        "final_response": "在本题预算内未形成可提交答案。",
+        "metrics": null,
+        "mode": "TS_PREVIEW",
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "reason": "官方流水线终态（engine=lite）",
+        "sessionId": "",
+        "status": "error",
+        "stopReason": "ERROR",
+        "strictAcceptance": "NOT_PERFORMED",
+        "targetEnvironment": "TARGET_UNVERIFIED",
+        "terminalKind": "system_failure",
+        "unresolvedObligations": []
+      },
+      "runId": "run-fe1713709e41",
+      "seq": 4,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "",
+    "childReaped": null,
+    "code": null,
+    "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+    "elapsedMs": 1727,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "在本题预算内未形成可提交答案。",
+    "finishReason": null,
+    "max_consensus": 4,
+    "max_effects": 2,
+    "max_method_loads": 1,
+    "max_model_calls": 32,
+    "max_r0": 1,
+    "max_repairs": 1,
+    "max_reviews": 2,
+    "max_work_units": 4,
+    "metadata": {},
+    "mode": "TS_PREVIEW",
+    "modelEndpoint": "openai-compatible",
+    "nodeVersion": "v24.17.0",
+    "policy": "BEST_EFFORT",
+    "problem": "设三维透镜空间 $L(p,q)$（其中 $\\gcd(p,q)=1, p \\ge 2$）具有标准 CW 复形分解，在维度 $k=0,1,2,3$ 上各恰有一个 $k$-维胞腔 $e^k$，其胞腔链复形 $(C_*(L(p,q)), \\partial_*)$ 的边缘算子满足 $\\partial_1 = 0, \\partial_2(e^2) = p e^1, \\partial_3 = 0$。\n（1）计算 $L(p,q)$ 的整系数同调群 $H_k(L(p,q); \\mathbb{Z})$（$0 \\le k \\le 3$）；\n（2）利用上同调万有系数定理计算整系数上同调群 $H^k(L(p,q); \\mathbb{Z})$，并求模 $p$ 系数同调群 $H_k(L(p,q); \\mathbb{Z}_p)$。",
+    "problem_seconds": 600,
+    "reason": "官方流水线终态（engine=lite）",
+    "requestFingerprint": "506dc447331c079c426c27ad5ac1037dbc42f57a7381b369bab18c05318269b9",
+    "runId": "run-fe1713709e41",
+    "sessionId": "",
+    "status": "error",
+    "stopReason": "ERROR",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": "system_failure",
+    "trace": [],
+    "unresolvedObligations": []
+  }
+}

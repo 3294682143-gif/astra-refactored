@@ -1,0 +1,121 @@
+{
+  "events": [
+    {
+      "at": 1794629098114,
+      "content": {
+        "delivered": false,
+        "index": 0,
+        "late": false,
+        "transport_error": true,
+        "valid": false
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-079828372a2a",
+      "seq": 1,
+      "sourceKind": "observed_archive",
+      "step": "model_call"
+    },
+    {
+      "at": 1794629098116,
+      "content": {
+        "candidate_verified": false,
+        "closeout": "incomplete_transport",
+        "engine": "lite",
+        "mathematical_verification": "not_performed",
+        "status": "unsolved"
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-079828372a2a",
+      "seq": 2,
+      "sourceKind": "observed_archive",
+      "step": "lite_summary"
+    },
+    {
+      "at": 1794629098116,
+      "content": {
+        "dispatch_stopped": false,
+        "global_in_flight": null,
+        "global_remaining_calls": null,
+        "local_admissions": 1,
+        "local_calls_still_running": 1,
+        "public_calls_with_explicit_terminal_metadata": 0,
+        "public_client_calls": 1,
+        "remote_cancellation_confirmed": false,
+        "scope": "single_solve_invocation",
+        "sdk_attempts": null
+      },
+      "detailLevel": "partial_observed",
+      "runId": "run-079828372a2a",
+      "seq": 3,
+      "sourceKind": "observed_archive",
+      "step": "local_invocation_summary"
+    },
+    {
+      "at": 1794629098117,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "childReaped": null,
+        "code": null,
+        "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+        "elapsedMs": 3148,
+        "executed": true,
+        "final_response": "在本题预算内未形成可提交答案。",
+        "metrics": null,
+        "mode": "TS_PREVIEW",
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "reason": "官方流水线终态（engine=lite）",
+        "sessionId": "",
+        "status": "error",
+        "stopReason": "ERROR",
+        "strictAcceptance": "NOT_PERFORMED",
+        "targetEnvironment": "TARGET_UNVERIFIED",
+        "terminalKind": "system_failure",
+        "unresolvedObligations": []
+      },
+      "runId": "run-079828372a2a",
+      "seq": 4,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "",
+    "childReaped": null,
+    "code": null,
+    "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+    "elapsedMs": 3148,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "在本题预算内未形成可提交答案。",
+    "finishReason": null,
+    "max_consensus": 4,
+    "max_effects": 2,
+    "max_method_loads": 1,
+    "max_model_calls": 32,
+    "max_r0": 1,
+    "max_repairs": 1,
+    "max_reviews": 2,
+    "max_work_units": 4,
+    "metadata": {},
+    "mode": "TS_PREVIEW",
+    "modelEndpoint": "openai-compatible",
+    "nodeVersion": "v24.17.0",
+    "policy": "BEST_EFFORT",
+    "problem": "设整系数多项式 $P(x) = x^5 - x - 1 \\in \\mathbb{Z}[x]$，其五个复根记为 $\\alpha_1, \\alpha_2, \\alpha_3, \\alpha_4, \\alpha_5$。\n（1）通过模素数约化法，证明 $P(x)$ 在有理数域 $\\mathbb{Q}[x]$ 上不可约；\n（2）求对称有理分式 $\\sum_{i=1}^5 \\frac{1}{\\alpha_i^2 + 1}$ 的精确值。",
+    "problem_seconds": 600,
+    "reason": "官方流水线终态（engine=lite）",
+    "requestFingerprint": "f2b6c94b15750c33c6307cb79f3d8c37b33a768134df23088add52cd80eb75d2",
+    "runId": "run-079828372a2a",
+    "sessionId": "",
+    "status": "error",
+    "stopReason": "ERROR",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": "system_failure",
+    "trace": [],
+    "unresolvedObligations": []
+  }
+}

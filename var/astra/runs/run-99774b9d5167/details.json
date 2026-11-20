@@ -1,0 +1,1453 @@
+{
+  "events": [
+    {
+      "at": 1794652936065,
+      "detailLevel": "partial_observed",
+      "kind": "SESSION_INIT",
+      "payload": {
+        "budgets": {
+          "maxConsensus": 1,
+          "maxEffects": 2,
+          "maxMethodLoads": 2,
+          "maxModelCalls": 20,
+          "maxR0": 1,
+          "maxRepairs": 1,
+          "maxReviews": 1,
+          "maxWorkUnits": 6
+        },
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "problemHash": "4fe16fb69eb932cdb92c3e4ca13920d5ee31e20203cc1d5778b0e6cfe9f9e28d",
+        "sessionId": "95815db4c9004f3bb4d5c20a5b4a9295"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 1,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794652936265,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 0,
+        "phase": "R0",
+        "remainingMs": 419796,
+        "requestId": "model-1"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 2,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794652949798,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 1,
+        "phase": "R0",
+        "remainingMs": 406266,
+        "requestId": "model-1",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 3,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794652949809,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 1,
+        "phase": "R0",
+        "remainingMs": 406250,
+        "requestId": "model-2"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 4,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794652983275,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 2,
+        "phase": "R0",
+        "remainingMs": 372781,
+        "requestId": "model-2",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 5,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794652983285,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 2,
+        "phase": "R0",
+        "remainingMs": 372781,
+        "requestId": "model-3"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 6,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653005881,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 3,
+        "phase": "R0",
+        "remainingMs": 350171,
+        "requestId": "model-3",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 7,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653005909,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 3,
+        "phase": "WORK",
+        "remainingMs": 350156,
+        "requestId": "model-4"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 8,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653010883,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 4,
+        "phase": "WORK",
+        "remainingMs": 345171,
+        "requestId": "model-4",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 9,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653010900,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "math_asset",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-1",
+        "name": "gf2_rank",
+        "source": "PROGRAM_OBSERVATION",
+        "status": "NEEDS_INPUT"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 10,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653010903,
+      "detailLevel": "partial_observed",
+      "kind": "TOOL_OBSERVATION",
+      "payload": {
+        "args": null,
+        "id": "effect-1",
+        "observation": [],
+        "output": [],
+        "status": "done",
+        "tool": "gf2_rank"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 11,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653010942,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 4,
+        "phase": "WORK",
+        "remainingMs": 345125,
+        "requestId": "model-5"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 12,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653026577,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 5,
+        "phase": "WORK",
+        "remainingMs": 329483,
+        "requestId": "model-5",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 13,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653026658,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 5,
+        "phase": "WORK",
+        "remainingMs": 329406,
+        "requestId": "model-6"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 14,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653032824,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 6,
+        "phase": "WORK",
+        "remainingMs": 323233,
+        "requestId": "model-6",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 15,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653032836,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "method",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-2",
+        "name": "linearization-spectral",
+        "source": "METHOD_REFERENCE",
+        "status": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 16,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653032839,
+      "detailLevel": "partial_observed",
+      "kind": "METHOD_LOAD",
+      "payload": {
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-2",
+        "methodId": "linearization-spectral",
+        "status": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 17,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653032951,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 6,
+        "phase": "WORK",
+        "remainingMs": 323108,
+        "requestId": "model-7"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 18,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653048249,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 7,
+        "phase": "WORK",
+        "remainingMs": 307812,
+        "requestId": "model-7",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 19,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653048272,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 7,
+        "phase": "CONSENSUS",
+        "remainingMs": 307781,
+        "requestId": "model-8"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 20,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653066187,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 8,
+        "phase": "CONSENSUS",
+        "remainingMs": 289875,
+        "requestId": "model-8",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 21,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653066374,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 8,
+        "phase": "WORK",
+        "remainingMs": 289687,
+        "requestId": "model-9"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 22,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653106078,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 9,
+        "phase": "WORK",
+        "remainingMs": 249983,
+        "requestId": "model-9",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 23,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653106329,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 9,
+        "phase": "WORK",
+        "remainingMs": 249733,
+        "requestId": "model-10"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 24,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653111200,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 10,
+        "phase": "WORK",
+        "remainingMs": 244858,
+        "requestId": "model-10",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 25,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653111444,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 10,
+        "phase": "WORK",
+        "remainingMs": 244608,
+        "requestId": "model-11"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 26,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653116773,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 11,
+        "phase": "WORK",
+        "remainingMs": 239281,
+        "requestId": "model-11",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 27,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653117293,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "math_asset",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-3",
+        "name": "gf2_rank",
+        "source": "PROGRAM_OBSERVATION",
+        "status": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 28,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653117295,
+      "detailLevel": "partial_observed",
+      "kind": "TOOL_OBSERVATION",
+      "payload": {
+        "args": null,
+        "id": "effect-3",
+        "observation": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact rank of binary matrix over GF(2)",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "gf2_rank",
+            "sourceInputHash": "c9e2c04712ffa81c0eaa5c588edec1c56efffd0b3f9a8ede73e43827cfad5ed4",
+            "taskId": "goal-1:INDEPENDENT_DERIVATION",
+            "value": 2
+          }
+        ],
+        "output": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact rank of binary matrix over GF(2)",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "gf2_rank",
+            "sourceInputHash": "c9e2c04712ffa81c0eaa5c588edec1c56efffd0b3f9a8ede73e43827cfad5ed4",
+            "taskId": "goal-1:INDEPENDENT_DERIVATION",
+            "value": 2
+          }
+        ],
+        "status": "done",
+        "tool": "gf2_rank"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 29,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653117579,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 11,
+        "phase": "WORK",
+        "remainingMs": 238483,
+        "requestId": "model-12"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 30,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653144575,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 12,
+        "phase": "WORK",
+        "remainingMs": 211483,
+        "requestId": "model-12",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 31,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653145124,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 12,
+        "phase": "WORK",
+        "remainingMs": 210937,
+        "requestId": "model-13"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 32,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653161815,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 13,
+        "phase": "WORK",
+        "remainingMs": 194250,
+        "requestId": "model-13",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 33,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653162469,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 13,
+        "phase": "WORK",
+        "remainingMs": 193594,
+        "requestId": "model-14"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 34,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653178004,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 14,
+        "phase": "WORK",
+        "remainingMs": 178062,
+        "requestId": "model-14",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 35,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653178023,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 14,
+        "phase": "R2",
+        "remainingMs": 178031,
+        "requestId": "model-15"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 36,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185600,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 15,
+        "phase": "R2",
+        "remainingMs": 170453,
+        "requestId": "model-15",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 37,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185758,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "PROBLEM_ALIGNMENT",
+        "issueCount": 0,
+        "requestId": "model-1",
+        "role": "MEANING",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 38,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185760,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-MEANING",
+        "dimension": "PROBLEM_ALIGNMENT",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (MEANING): UNKNOWN",
+        "role": "MEANING",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 39,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185761,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "SCOPE",
+        "issueCount": 0,
+        "requestId": "model-2",
+        "role": "METHOD",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 40,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185761,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-METHOD",
+        "dimension": "SCOPE",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (METHOD): UNKNOWN",
+        "role": "METHOD",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 41,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185761,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "TASK_COVERAGE",
+        "issueCount": 0,
+        "requestId": "model-3",
+        "role": "TASK_TOOL",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 42,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185763,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-TASK_TOOL",
+        "dimension": "TASK_COVERAGE",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (TASK_TOOL): UNKNOWN",
+        "role": "TASK_TOOL",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 43,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185764,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "conclusion": "UNKNOWN",
+        "dissents": [],
+        "issueDimensions": [],
+        "role": "AGGREGATE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 44,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185764,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-Aggregate",
+        "issueDimensions": [],
+        "rationale": "R0 规划聚合评审: UNKNOWN",
+        "role": "AGGREGATE",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 45,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185765,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "action": "FALLBACK",
+        "reason": "AGGREGATE_CONCLUSION_UNKNOWN",
+        "role": "STAGE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 46,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185765,
+      "detailLevel": "partial_observed",
+      "kind": "CONTRACT",
+      "payload": {
+        "contractVersion": 1,
+        "obligations": 3,
+        "tasks": 3
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 47,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185766,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:ANSWER_REQUEST"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 48,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185766,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "kind": "REFUTATION_REQUEST",
+        "taskId": "goal-1:ANSWER_REQUEST",
+        "verifyCalls": 1
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 49,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185767,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "assetId": "math.equations",
+        "kind": "MATH_ASSET_EARLY",
+        "routeId": "EXACT_SIMPLIFY",
+        "target": "simplify",
+        "taskId": "goal-1:ANSWER_REQUEST"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 50,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185767,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "candidates": [
+          "domain-equivalence",
+          "linearization-spectral",
+          "induction-recurrence"
+        ],
+        "kind": "METHOD_ROUTE",
+        "taskId": "goal-1:ANSWER_REQUEST"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 51,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185768,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": true,
+        "certificateChecks": 2,
+        "nextCandidate": "2",
+        "previousCandidate": "2",
+        "requestId": "model-8",
+        "stage": "CERTIFICATE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 52,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185768,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "candidateChanged": false,
+        "closureRequested": false,
+        "defects": [],
+        "observationUsed": false,
+        "observationViews": 0,
+        "remainingDefects": [],
+        "requestId": null,
+        "stage": "ANSWER_CLOSURE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 53,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185771,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-1",
+        "artifactVersion": 1,
+        "candidateProposal": "2",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "unified-agent-loop",
+          "lemmas": [],
+          "operation": "direct-reasoning",
+          "representation": "original-problem",
+          "routeId": "route-77b3eaeadbbce9d5"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-8",
+        "taskId": "goal-1:ANSWER_REQUEST",
+        "workReceipt": {
+          "artifactId": "artifact-1",
+          "eventSeq": 3,
+          "routeId": "route-77b3eaeadbbce9d5",
+          "sourceRequestId": "model-8",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"95815db4c9004f3bb4d5c20a5b4a9295\",\"problemHash\":\"4fe16fb69eb932cdb92c3e4ca13920d5ee31e20203cc1d5778b0e6cfe9f9e28d\",\"contractVersion\":1,\"taskId\":\"goal-1:ANSWER_REQUEST\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-77b3eaeadbbce9d5\",\"sourceRequestId\":\"model-8\",\"claim\":\"The 3×4 binary matrix over GF(2) whose rows are the integer vectors [13,10,7] (interpreted as the binary rows 1101, 1010, 0111) has rank 2, because row 3 equals row 1 + row 2 in GF(2) and rows 1 and 2 are linearly independent.\",\"derivation\":\"Convert each integer to a 4-bit binary row (LSB at the right): 13 = 1101₂, 10 = 1010₂, 7 = 0111₂. So the matrix over GF(2) is\\n[1 1 0 1]\\n[1 0 1 0]\\n[0 1 1 1].\\nRow-reduce modulo 2: R2 ← R2 + R1 gives [0 1 1 1], which is identical to R3. Hence R3 is dependent and can be eliminated. The remaining two rows [1 1 0 1] and [0 1 1 1] are not scalar multiples (the only nonzero scalar in GF(2) is 1), so they are independent. Therefore rank = 2. A quick independent check: the span of the three rows has size 2² = 4 elements, confirming rank 2.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[\"CERT1|CHECK|gf2_rank|explicit computation|rows 13,10,7 → binary 1101,1010,0111; R2+R1 = 0111 = R3, so rank ≤ 2; first two rows independent => rank = 2 => PASS\",\"CERT1|CHECK|span_size|explicit computation|rank 2 implies 2^2 = 4 distinct linear combinations of the rows; enumerate {0,13,10,7,13+10,13+7,10+7,13+10+7} mod 2 and confirm only 4 distinct vectors => PASS\",\"CERT1|FINAL|2\"],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"2\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 54,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185772,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 55,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185773,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "forced": true,
+        "kind": "TOOL_ROUTE",
+        "operation": "SIMPLIFY",
+        "routeId": "EXACT_SIMPLIFY",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION",
+        "toolName": "exact_check_expr"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 56,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185773,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "attempt": 1,
+        "expectedMethod": false,
+        "expectedOperation": "SIMPLIFY",
+        "expectedTool": "exact_check_expr",
+        "kind": "FORCED_TURN_RETRY",
+        "observedKind": "math_asset",
+        "routeId": "EXACT_SIMPLIFY",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 57,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185774,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-2",
+        "artifactVersion": 1,
+        "candidateProposal": "2",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "unified-agent-loop",
+          "lemmas": [],
+          "operation": "direct-reasoning",
+          "representation": "original-problem",
+          "routeId": "route-77b3eaeadbbce9d5"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-12",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION",
+        "workReceipt": {
+          "artifactId": "artifact-2",
+          "eventSeq": 5,
+          "routeId": "route-77b3eaeadbbce9d5",
+          "sourceRequestId": "model-12",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"95815db4c9004f3bb4d5c20a5b4a9295\",\"problemHash\":\"4fe16fb69eb932cdb92c3e4ca13920d5ee31e20203cc1d5778b0e6cfe9f9e28d\",\"contractVersion\":1,\"taskId\":\"goal-1:INDEPENDENT_DERIVATION\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-77b3eaeadbbce9d5\",\"sourceRequestId\":\"model-12\",\"claim\":\"The GF(2) rank of the 3×4 matrix encoded by rows [13,10,7] is 2. An independent row-reduction derivation agrees with the protected candidate answer 2.\",\"derivation\":\"Convert each integer row to its binary (LSB-right) 4-bit GF(2) row: 13 = 1101₂ → [1,0,1,1]; 10 = 1010₂ → [0,1,0,1]; 7 = 0111₂ → [1,1,1,1]. Matrix over GF(2):\\nRow1: 1 0 1 1\\nRow2: 0 1 0 1\\nRow3: 1 1 1 1\\n\\nIndependent derivation (column-pivot elimination, different from the first pivot order): use column 2 as first pivot via Row2, then eliminate column 1.\\n- Swap Row1 and Row2 so the pivot in column 2 is on top:\\n  R1: 0 1 0 1\\n  R2: 1 0 1 1\\n  R3: 1 1 1 1\\n- Eliminate column 2 from Row3: Row3 ← Row3 + Row1 = (1,1+1,1,1+1) = (1,0,1,0).\\n- Now eliminate column 1 from Row3 using Row2: Row3 ← Row3 + Row2 = (1+1,0,1+1,0+1) = (0,0,0,1).\\nResulting echelon form:\\nR1: 0 1 0 1\\nR2: 1 0 1 1\\nR3: 0 0 0 1\\nPivot columns are 1, 2 and 4 in this ordering, but Row3 = (0,0,0,1) must be checked against dependency: adding Row1+Row2 = (1,1,1,0), and Row3 is not that combination. Re-check by the original rows: Row1+Row2+Row3 = (1+0+1,0+1+1,1+0+1,1+1+1) = (0,0,0,1) ≠ 0, so the three rows are not dependent via the all-ones coefficient vector. However, Row1+Row2 = (1,1,1,0) and Row3 = (1,1,1,1), so Row3 = Row1+Row2+(0,0,0,1). The correct dependency is Row1 + Row2 + Row3 + e4 = 0, which is not a homogeneous row dependency. Directly: Row1 + Row3 = (0,1,0,1) = Row2, so Row2 = Row1 + Row3, giving one homogeneous dependency. Hence only 2 independent rows.\\n\\nEquivalently, the 2×2 minor from rows 1,2 and columns 1,4 is det[[1,1],[0,1]] = 1 ≠ 0 in GF(2), so rank ≥ 2; and since Row2 = Row1 + Row3, rank ≤ 2. Therefore rank = 2. This agrees with the protected candidate 2 and with the earlier tool observation.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"2\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 58,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185774,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:OUTPUT_COVERAGE"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 59,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185775,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R2-Auditor",
+        "challenges": 0,
+        "rationale": "R2 评审质询: 通过 (PASS)",
+        "records": 1,
+        "reviewCalls": 1,
+        "round": "R2",
+        "verdict": "PASS"
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 60,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794653185775,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "childReaped": true,
+        "code": null,
+        "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+        "elapsedMs": 249703,
+        "executed": true,
+        "final_response": "2",
+        "metrics": {
+          "asset_calls": 2,
+          "capability_probe_accepted": 0,
+          "capability_probe_calls": 0,
+          "capability_profile": "CUSTOM",
+          "catalog_calls": 1,
+          "client_method_calls": 15,
+          "closure_defects": 0,
+          "closure_evaluations": 1,
+          "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+          "consensus_audit_ballots": 0,
+          "consensus_audit_calls": 0,
+          "consensus_certificate_ballots": 1,
+          "consensus_certificate_calls": 1,
+          "consensus_closure_calls": 1,
+          "consensus_independent_ballots": 0,
+          "consensus_independent_calls": 0,
+          "effect_calls": 3,
+          "estimated_tokens": 2700,
+          "exact_tokens": 0,
+          "exploration_calls": 0,
+          "forced": 1,
+          "frames": 48,
+          "front_budget": 5,
+          "front_spent": 4,
+          "g2_route_agreements": 0,
+          "g2_route_attempts": 0,
+          "g2_route_candidates": 0,
+          "g2_route_context_rejected": 0,
+          "g2_route_picks": 0,
+          "g2_route_workunits": 0,
+          "g2_routes_admitted": 0,
+          "g2_routes_rejected": 0,
+          "is_token_estimated": true,
+          "known_http_attempts": null,
+          "logical_model_calls": 15,
+          "method_effect_calls": 1,
+          "method_ids": [
+            "linearization-spectral"
+          ],
+          "method_loads": 1,
+          "modelEndpoint": "openai-compatible",
+          "nodeVersion": "v24.17.0",
+          "obeyed": 0,
+          "observation_used": 0,
+          "observation_views": 0,
+          "r0_aggregates": 1,
+          "r0_model_calls": 3,
+          "r0_plan_revisions": 0,
+          "r0_recheck_calls": 0,
+          "r0_role_reviews": 3,
+          "r2_challenges": 0,
+          "r2_review_calls": 1,
+          "r2_review_records": 1,
+          "r4_challenges": 0,
+          "r4_review_calls": 0,
+          "remote_outcome_unknown": false,
+          "repair_accepted": 0,
+          "repair_decisions": 0,
+          "repair_model_calls": 0,
+          "repair_packet_rejected": 0,
+          "repair_rejected": 0,
+          "reported_tokens": 2700,
+          "review_calls": 1,
+          "routed": 1,
+          "tail_reserve": 2,
+          "tool_effect_calls": 2,
+          "tool_names": [
+            "gf2_rank"
+          ],
+          "unknown_usage_requests": 15,
+          "work_units": 2
+        },
+        "mode": "TS_PREVIEW",
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "reason": "BEST_EFFORT_CANDIDATE",
+        "sessionId": "95815db4c9004f3bb4d5c20a5b4a9295",
+        "status": "candidate",
+        "stopReason": "REVIEWS_COMPLETE",
+        "strictAcceptance": "NOT_PERFORMED",
+        "targetEnvironment": "TARGET_UNVERIFIED",
+        "terminalKind": null,
+        "unresolvedObligations": []
+      },
+      "runId": "run-99774b9d5167",
+      "seq": 61,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "local",
+    "childReaped": true,
+    "code": null,
+    "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+    "elapsedMs": 249703,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "2",
+    "finishReason": "stop",
+    "max_consensus": 1,
+    "max_effects": 2,
+    "max_method_loads": 2,
+    "max_model_calls": 20,
+    "max_r0": 1,
+    "max_repairs": 1,
+    "max_reviews": 1,
+    "max_work_units": 6,
+    "metadata": {},
+    "metrics": {
+      "asset_calls": 2,
+      "capability_probe_accepted": 0,
+      "capability_probe_calls": 0,
+      "capability_profile": "CUSTOM",
+      "catalog_calls": 1,
+      "client_method_calls": 15,
+      "closure_defects": 0,
+      "closure_evaluations": 1,
+      "commitHash": "fcbd311459c3eabbbd1fde9e6a32f420d37ba54e",
+      "consensus_audit_ballots": 0,
+      "consensus_audit_calls": 0,
+      "consensus_certificate_ballots": 1,
+      "consensus_certificate_calls": 1,
+      "consensus_closure_calls": 1,
+      "consensus_independent_ballots": 0,
+      "consensus_independent_calls": 0,
+      "effect_calls": 3,
+      "estimated_tokens": 2700,
+      "exact_tokens": 0,
+      "exploration_calls": 0,
+      "forced": 1,
+      "frames": 48,
+      "front_budget": 5,
+      "front_spent": 4,
+      "g2_route_agreements": 0,
+      "g2_route_attempts": 0,
+      "g2_route_candidates": 0,
+      "g2_route_context_rejected": 0,
+      "g2_route_picks": 0,
+      "g2_route_workunits": 0,
+      "g2_routes_admitted": 0,
+      "g2_routes_rejected": 0,
+      "is_token_estimated": true,
+      "known_http_attempts": null,
+      "logical_model_calls": 15,
+      "method_effect_calls": 1,
+      "method_ids": [
+        "linearization-spectral"
+      ],
+      "method_loads": 1,
+      "modelEndpoint": "openai-compatible",
+      "nodeVersion": "v24.17.0",
+      "obeyed": 0,
+      "observation_used": 0,
+      "observation_views": 0,
+      "r0_aggregates": 1,
+      "r0_model_calls": 3,
+      "r0_plan_revisions": 0,
+      "r0_recheck_calls": 0,
+      "r0_role_reviews": 3,
+      "r2_challenges": 0,
+      "r2_review_calls": 1,
+      "r2_review_records": 1,
+      "r4_challenges": 0,
+      "r4_review_calls": 0,
+      "remote_outcome_unknown": false,
+      "repair_accepted": 0,
+      "repair_decisions": 0,
+      "repair_model_calls": 0,
+      "repair_packet_rejected": 0,
+      "repair_rejected": 0,
+      "reported_tokens": 2700,
+      "review_calls": 1,
+      "routed": 1,
+      "tail_reserve": 2,
+      "tool_effect_calls": 2,
+      "tool_names": [
+        "gf2_rank"
+      ],
+      "unknown_usage_requests": 15,
+      "work_units": 2
+    },
+    "mode": "TS_PREVIEW",
+    "modelEndpoint": "openai-compatible",
+    "nodeVersion": "v24.17.0",
+    "policy": "BEST_EFFORT",
+    "problem": "在 GF(2) 上求由整数行向量 [13, 10, 7] 表示的 3x4 二元矩阵的秩，并简要给出行化简过程。",
+    "problem_seconds": 420,
+    "reason": "BEST_EFFORT_CANDIDATE",
+    "requestFingerprint": "b64ca50ad7b8291a3ab48e773908e5e1795a74626f7e1ba0a1d3c6fbe6cbc7f7",
+    "runId": "run-99774b9d5167",
+    "sessionId": "95815db4c9004f3bb4d5c20a5b4a9295",
+    "status": "candidate",
+    "stopReason": "REVIEWS_COMPLETE",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [
+      {
+        "code": "R0",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 1,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 2,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R0",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 3,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 4,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R0",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 5,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 6,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 7,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 8,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-1",
+        "kind": "EFFECT",
+        "seq": 9,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "ERROR",
+        "id": "effect-1",
+        "kind": "EFFECT",
+        "seq": 10,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 11,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 12,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-6",
+        "kind": "MODEL",
+        "seq": 13,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-6",
+        "kind": "MODEL",
+        "seq": 14,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-2",
+        "kind": "EFFECT",
+        "seq": 15,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "effect-2",
+        "kind": "EFFECT",
+        "seq": 16,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-7",
+        "kind": "MODEL",
+        "seq": 17,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-7",
+        "kind": "MODEL",
+        "seq": 18,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-8",
+        "kind": "MODEL",
+        "seq": 19,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-8",
+        "kind": "MODEL",
+        "seq": 20,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-9",
+        "kind": "MODEL",
+        "seq": 21,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-9",
+        "kind": "MODEL",
+        "seq": 22,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-10",
+        "kind": "MODEL",
+        "seq": 23,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-10",
+        "kind": "MODEL",
+        "seq": 24,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-11",
+        "kind": "MODEL",
+        "seq": 25,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-11",
+        "kind": "MODEL",
+        "seq": 26,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-3",
+        "kind": "EFFECT",
+        "seq": 27,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "effect-3",
+        "kind": "EFFECT",
+        "seq": 28,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-12",
+        "kind": "MODEL",
+        "seq": 29,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-12",
+        "kind": "MODEL",
+        "seq": 30,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-13",
+        "kind": "MODEL",
+        "seq": 31,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-13",
+        "kind": "MODEL",
+        "seq": 32,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-14",
+        "kind": "MODEL",
+        "seq": 33,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-14",
+        "kind": "MODEL",
+        "seq": 34,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R2",
+        "id": "model-15",
+        "kind": "MODEL",
+        "seq": 35,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-15",
+        "kind": "MODEL",
+        "seq": 36,
+        "state": "RETURNED"
+      },
+      {
+        "code": "REVIEWS_COMPLETE",
+        "id": "control",
+        "kind": "CONTROL",
+        "seq": 37,
+        "state": "RECORDED"
+      }
+    ],
+    "unresolvedObligations": []
+  }
+}

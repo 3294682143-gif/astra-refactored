@@ -1,0 +1,2177 @@
+{
+  "events": [
+    {
+      "at": 1794659424385,
+      "detailLevel": "partial_observed",
+      "kind": "SESSION_INIT",
+      "payload": {
+        "budgets": {
+          "maxConsensus": 8,
+          "maxEffects": 2,
+          "maxMethodLoads": 2,
+          "maxModelCalls": 200,
+          "maxR0": 1,
+          "maxRepairs": 3,
+          "maxReviews": 2,
+          "maxWorkUnits": 64
+        },
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "problemHash": "7912cc195907d431f2efeb2edfa3ad6aa25583f6aa066d8ef8283059e6d650a1",
+        "sessionId": "22142f4dedac4368811c488b1fc94a9e"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 1,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659424537,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 0,
+        "phase": "R0",
+        "remainingMs": 1199859,
+        "requestId": "model-1"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 2,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659444467,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 1,
+        "phase": "R0",
+        "remainingMs": 1179922,
+        "requestId": "model-1",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 3,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659444481,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 1,
+        "phase": "R0",
+        "remainingMs": 1179906,
+        "requestId": "model-2"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 4,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659478643,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 2,
+        "phase": "R0",
+        "remainingMs": 1145750,
+        "requestId": "model-2",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 5,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659478657,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 2,
+        "phase": "R0",
+        "remainingMs": 1145734,
+        "requestId": "model-3"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 6,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659538776,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 3,
+        "phase": "R0",
+        "remainingMs": 1085609,
+        "requestId": "model-3",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 7,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659538811,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 3,
+        "phase": "WORK",
+        "remainingMs": 1085578,
+        "requestId": "model-4"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 8,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659546361,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 4,
+        "phase": "WORK",
+        "remainingMs": 1078031,
+        "requestId": "model-4",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 9,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659546927,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "math_asset",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-1",
+        "name": "splitting_field_degree",
+        "source": "PROGRAM_OBSERVATION",
+        "status": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 10,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659546927,
+      "detailLevel": "partial_observed",
+      "kind": "TOOL_OBSERVATION",
+      "payload": {
+        "args": null,
+        "id": "effect-1",
+        "observation": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact degree [E:Q] of the splitting field of univariate polynomials over rationals",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "splitting_field_degree",
+            "sourceInputHash": "05cadb10364a695e5abd937d811503edc8db53d36228bf244a9631aef75c613f",
+            "taskId": "goal-1:CANDIDATE_VALIDITY",
+            "value": 120
+          }
+        ],
+        "output": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact degree [E:Q] of the splitting field of univariate polynomials over rationals",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "splitting_field_degree",
+            "sourceInputHash": "05cadb10364a695e5abd937d811503edc8db53d36228bf244a9631aef75c613f",
+            "taskId": "goal-1:CANDIDATE_VALIDITY",
+            "value": 120
+          }
+        ],
+        "status": "done",
+        "tool": "splitting_field_degree"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 11,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659546974,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 4,
+        "phase": "WORK",
+        "remainingMs": 1077422,
+        "requestId": "model-5"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 12,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659559581,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 5,
+        "phase": "WORK",
+        "remainingMs": 1064812,
+        "requestId": "model-5",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 13,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659559674,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 5,
+        "phase": "WORK",
+        "remainingMs": 1064719,
+        "requestId": "model-6"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 14,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659562158,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 6,
+        "phase": "WORK",
+        "remainingMs": 1062234,
+        "requestId": "model-6",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 15,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659562167,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "method",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-2",
+        "name": "algebraic-structures",
+        "source": "METHOD_REFERENCE",
+        "status": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 16,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659562170,
+      "detailLevel": "partial_observed",
+      "kind": "METHOD_LOAD",
+      "payload": {
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-2",
+        "methodId": "algebraic-structures",
+        "status": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 17,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659562291,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 6,
+        "phase": "WORK",
+        "remainingMs": 1062094,
+        "requestId": "model-7"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 18,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659590480,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 7,
+        "phase": "WORK",
+        "remainingMs": 1033906,
+        "requestId": "model-7",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 19,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659590500,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 7,
+        "phase": "CONSENSUS",
+        "remainingMs": 1033890,
+        "requestId": "model-8"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 20,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659613020,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 8,
+        "phase": "CONSENSUS",
+        "remainingMs": 1011375,
+        "requestId": "model-8",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 21,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659613044,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 8,
+        "phase": "CONSENSUS",
+        "remainingMs": 1011344,
+        "requestId": "model-9"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 22,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659649657,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 9,
+        "phase": "CONSENSUS",
+        "remainingMs": 974734,
+        "requestId": "model-9",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 23,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659649680,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 9,
+        "phase": "CONSENSUS",
+        "remainingMs": 974703,
+        "requestId": "model-10"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 24,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659679848,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 10,
+        "phase": "CONSENSUS",
+        "remainingMs": 944547,
+        "requestId": "model-10",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 25,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659679870,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 10,
+        "phase": "CONSENSUS",
+        "remainingMs": 944515,
+        "requestId": "model-11"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 26,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659709261,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 11,
+        "phase": "CONSENSUS",
+        "remainingMs": 915125,
+        "requestId": "model-11",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 27,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659709283,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 11,
+        "phase": "CONSENSUS",
+        "remainingMs": 915109,
+        "requestId": "model-12"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 28,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659736289,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 12,
+        "phase": "CONSENSUS",
+        "remainingMs": 888094,
+        "requestId": "model-12",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 29,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659736318,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 12,
+        "phase": "CONSENSUS",
+        "remainingMs": 888078,
+        "requestId": "model-13"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 30,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659759364,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 13,
+        "phase": "CONSENSUS",
+        "remainingMs": 865031,
+        "requestId": "model-13",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 31,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659759392,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 13,
+        "phase": "CONSENSUS",
+        "remainingMs": 865000,
+        "requestId": "model-14"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 32,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659787248,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 14,
+        "phase": "CONSENSUS",
+        "remainingMs": 837140,
+        "requestId": "model-14",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 33,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659787277,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 14,
+        "phase": "CONSENSUS",
+        "remainingMs": 837109,
+        "requestId": "model-15"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 34,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659809354,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 15,
+        "phase": "CONSENSUS",
+        "remainingMs": 815031,
+        "requestId": "model-15",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 35,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659810175,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 15,
+        "phase": "WORK",
+        "remainingMs": 814219,
+        "requestId": "model-16"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 36,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659813362,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 16,
+        "phase": "WORK",
+        "remainingMs": 811031,
+        "requestId": "model-16",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 37,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659813902,
+      "detailLevel": "partial_observed",
+      "kind": "effect_returned",
+      "payload": {
+        "action": "math_asset",
+        "checkResult": "UNKNOWN",
+        "effectId": "effect-3",
+        "name": "splitting_field_degree",
+        "source": "PROGRAM_OBSERVATION",
+        "status": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 38,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659813904,
+      "detailLevel": "partial_observed",
+      "kind": "TOOL_OBSERVATION",
+      "payload": {
+        "args": null,
+        "id": "effect-3",
+        "observation": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact degree [E:Q] of the splitting field of univariate polynomials over rationals",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "splitting_field_degree",
+            "sourceInputHash": "2f8bf15909ecb1d829ca02ba0754c6962c31a38f6d10bf3bca7d1546c7741090",
+            "taskId": "route-task-model-15",
+            "value": 120
+          }
+        ],
+        "output": [
+          {
+            "contractVersion": 1,
+            "coverage": "EXACT_FOR_INPUT",
+            "domain": "Exact degree [E:Q] of the splitting field of univariate polynomials over rationals",
+            "exactness": "EXACT_FOR_INPUT",
+            "quantity": "splitting_field_degree",
+            "sourceInputHash": "2f8bf15909ecb1d829ca02ba0754c6962c31a38f6d10bf3bca7d1546c7741090",
+            "taskId": "route-task-model-15",
+            "value": 120
+          }
+        ],
+        "status": "done",
+        "tool": "splitting_field_degree"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 39,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659814638,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 16,
+        "phase": "WORK",
+        "remainingMs": 809750,
+        "requestId": "model-17"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 40,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659845938,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 17,
+        "phase": "WORK",
+        "remainingMs": 778453,
+        "requestId": "model-17",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 41,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659846252,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 17,
+        "phase": "WORK",
+        "remainingMs": 778140,
+        "requestId": "model-18"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 42,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659863525,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 18,
+        "phase": "WORK",
+        "remainingMs": 760859,
+        "requestId": "model-18",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 43,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659863891,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 18,
+        "phase": "WORK",
+        "remainingMs": 760500,
+        "requestId": "model-19"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 44,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659881794,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 19,
+        "phase": "WORK",
+        "remainingMs": 742594,
+        "requestId": "model-19",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 45,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659882667,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 19,
+        "phase": "WORK",
+        "remainingMs": 741719,
+        "requestId": "model-20"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 46,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659902440,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 20,
+        "phase": "WORK",
+        "remainingMs": 721953,
+        "requestId": "model-20",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 47,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659903521,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 20,
+        "phase": "WORK",
+        "remainingMs": 720875,
+        "requestId": "model-21"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 48,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659920337,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 21,
+        "phase": "WORK",
+        "remainingMs": 704047,
+        "requestId": "model-21",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 49,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659920357,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 21,
+        "phase": "R2",
+        "remainingMs": 704031,
+        "requestId": "model-22"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 50,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659944699,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 22,
+        "phase": "R2",
+        "remainingMs": 679687,
+        "requestId": "model-22",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 51,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659944720,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 22,
+        "phase": "REPAIR",
+        "remainingMs": 679672,
+        "requestId": "model-23"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 52,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659970402,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 23,
+        "phase": "REPAIR",
+        "remainingMs": 653984,
+        "requestId": "model-23",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 53,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794659970418,
+      "detailLevel": "partial_observed",
+      "kind": "model_dispatched",
+      "payload": {
+        "modelCalls": 23,
+        "phase": "R4",
+        "remainingMs": 653969,
+        "requestId": "model-24"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 54,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660040850,
+      "detailLevel": "partial_observed",
+      "kind": "model_returned",
+      "payload": {
+        "dispatchState": "DISPATCHED",
+        "modelCalls": 24,
+        "phase": "R4",
+        "remainingMs": 583531,
+        "requestId": "model-24",
+        "transportStatus": "COMPLETE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 55,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041155,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "PROBLEM_ALIGNMENT",
+        "issueCount": 0,
+        "requestId": "model-1",
+        "role": "MEANING",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 56,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041157,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-MEANING",
+        "dimension": "PROBLEM_ALIGNMENT",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (MEANING): UNKNOWN",
+        "role": "MEANING",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 57,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041158,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "SCOPE",
+        "issueCount": 0,
+        "requestId": "model-2",
+        "role": "METHOD",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 58,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041158,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-METHOD",
+        "dimension": "SCOPE",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (METHOD): UNKNOWN",
+        "role": "METHOD",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 59,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041159,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "dimension": "TASK_COVERAGE",
+        "issueCount": 0,
+        "requestId": "model-3",
+        "role": "TASK_TOOL",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 60,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041159,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-TASK_TOOL",
+        "dimension": "TASK_COVERAGE",
+        "issueCount": 0,
+        "rationale": "R0 角色评审 (TASK_TOOL): UNKNOWN",
+        "role": "TASK_TOOL",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 61,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041160,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "conclusion": "UNKNOWN",
+        "dissents": [],
+        "issueDimensions": [],
+        "role": "AGGREGATE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 62,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041161,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R0-Aggregate",
+        "issueDimensions": [],
+        "rationale": "R0 规划聚合评审: UNKNOWN",
+        "role": "AGGREGATE",
+        "round": "R0",
+        "verdict": "UNKNOWN"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 63,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041161,
+      "detailLevel": "partial_observed",
+      "kind": "R0_REVIEW",
+      "payload": {
+        "action": "FALLBACK",
+        "reason": "AGGREGATE_CONCLUSION_UNKNOWN",
+        "role": "STAGE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 64,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041161,
+      "detailLevel": "partial_observed",
+      "kind": "CONTRACT",
+      "payload": {
+        "contractVersion": 1,
+        "obligations": 4,
+        "tasks": 4
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 65,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041162,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "主路径推导",
+        "synthetic": true,
+        "taskId": "wu-1-primary-solve"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 66,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041162,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:CANDIDATE_VALIDITY"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 67,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041162,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "kind": "REFUTATION_REQUEST",
+        "taskId": "goal-1:CANDIDATE_VALIDITY",
+        "verifyCalls": 1
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 68,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041164,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "assetId": "math.algebraic-structures",
+        "kind": "MATH_ASSET_EARLY",
+        "routeId": "SPLITTING_FIELD_DEGREE",
+        "target": "splitting_field_degree",
+        "taskId": "goal-1:CANDIDATE_VALIDITY"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 69,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041164,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "candidates": [
+          "algebraic-structures",
+          "generating-functions",
+          "invariants-extremal"
+        ],
+        "kind": "METHOD_ROUTE",
+        "taskId": "goal-1:CANDIDATE_VALIDITY"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 70,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041165,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-8",
+        "stage": "INDEPENDENT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 71,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041167,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-9",
+        "stage": "INDEPENDENT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 72,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041167,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-10",
+        "stage": "INDEPENDENT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 73,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041168,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-11",
+        "stage": "INDEPENDENT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 74,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041168,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-12",
+        "stage": "INDEPENDENT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 75,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041169,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-13",
+        "stage": "AUDIT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 76,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041170,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": false,
+        "certificateChecks": 0,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-14",
+        "stage": "AUDIT"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 77,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041170,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "agreement": true,
+        "certificateCertified": true,
+        "certificateChecks": 5,
+        "nextCandidate": "120",
+        "previousCandidate": "120",
+        "requestId": "model-15",
+        "stage": "CERTIFICATE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 78,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041171,
+      "detailLevel": "partial_observed",
+      "kind": "CONSENSUS",
+      "payload": {
+        "candidateChanged": false,
+        "closureRequested": false,
+        "defects": [],
+        "observationUsed": false,
+        "observationViews": 1,
+        "remainingDefects": [],
+        "requestId": null,
+        "stage": "ANSWER_CLOSURE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 79,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041173,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-1",
+        "artifactVersion": 1,
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "unified-agent-loop",
+          "lemmas": [],
+          "operation": "direct-reasoning",
+          "representation": "original-problem",
+          "routeId": "route-77b3eaeadbbce9d5"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-15",
+        "taskId": "goal-1:CANDIDATE_VALIDITY",
+        "workReceipt": {
+          "artifactId": "artifact-1",
+          "eventSeq": 3,
+          "routeId": "route-77b3eaeadbbce9d5",
+          "sourceRequestId": "model-15",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"22142f4dedac4368811c488b1fc94a9e\",\"problemHash\":\"7912cc195907d431f2efeb2edfa3ad6aa25583f6aa066d8ef8283059e6d650a1\",\"contractVersion\":1,\"taskId\":\"goal-1:CANDIDATE_VALIDITY\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-77b3eaeadbbce9d5\",\"sourceRequestId\":\"model-15\",\"claim\":\"P(x)=x^5-x-1 has no rational root (±1 are the only candidates and both fail), is irreducible over Q (mod-2 reduction factors as (x^2+x+1)(x^3+x^2+1), both irreducible, so no linear/quadratic factor exists over Q), and its Galois group is S_5, hence the splitting field degree [E:Q]=120. The tool observation returned 120, matching the independent derivation.\",\"derivation\":\"1) Rational root test: P(1)=-1, P(-1)=-1, so no rational root. 2) Mod 2: x^5-x-1 ≡ x^5+x+1 = (x^2+x+1)(x^3+x^2+1) in F_2[x]; both factors are irreducible (no roots in F_2). Hence over Q, P cannot have a linear or quadratic factor (otherwise such a factor would reduce mod 2 to a factor of degree ≤2), so the degree-5 polynomial is irreducible. 3) Discriminant of x^5+ax+b is 5^5 b^4 + 4^4 a^5; with a=-1, b=-1 we get D = 3125 - 1024 = 2101, which is not a square, so the Galois group is not contained in A_5. 4) Mod 3: x^5-x-1 has no root in F_3 and factors as irreducible quadratic × irreducible cubic, giving a Frobenius element of cycle type (2,3), whose order is 6. A transitive subgroup of S_5 containing a 5-cycle (by irreducibility / Cauchy), a transposition (from the non-square discriminant via standard theory) and an element of order 6 must be S_5. Thus Gal(P) ≅ S_5 and [E:Q] = |S_5| = 120. Tool observation effect-1 returned 120 for splitting_field_degree.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[\"CERT1|CHECK|root-test|rational-root|P(1)=-1, P(-1)=-1, only ±1 possible => PASS\",\"CERT1|CHECK|mod2|factorization|(x^2+x+1)(x^3+x^2+1)=x^5+x+1 in F_2[x], both irreducible => PASS\",\"CERT1|CHECK|discriminant|value|D=5^5(-1)^4+4^4(-1)^5=3125-1024=2101, not a square => PASS\",\"CERT1|CHECK|mod3|factorization|no root in F_3, deg 2 × deg 3 irreducible factors => PASS\",\"CERT1|CHECK|group|order|S_5 has order 120, matches tool result 120 => PASS\",\"CERT1|FINAL|120\"],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"120\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 80,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041173,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "kind": "G2_ROUTE_ADMIT",
+        "obligationId": "goal-1:INDEPENDENT_DERIVATION",
+        "origin": "CONTROL_FULL_CAPABILITY",
+        "readyTasks": 3,
+        "sourceRequestId": "model-15",
+        "taskId": "g2-route-model-15"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 81,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041174,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "kind": "G2_ROUTE_PICK",
+        "routeId": "route-1002355f1b1fb054",
+        "taskId": "route-task-model-15"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 82,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041175,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "route-task-model-15"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 83,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041176,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-2",
+        "artifactVersion": 1,
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "empty-dependency-independent-route",
+          "lemmas": [],
+          "operation": "second-derivation",
+          "representation": "independent-recomputation",
+          "routeId": "route-1002355f1b1fb054"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-17",
+        "taskId": "route-task-model-15",
+        "workReceipt": {
+          "artifactId": "artifact-2",
+          "eventSeq": 6,
+          "routeId": "route-1002355f1b1fb054",
+          "sourceRequestId": "model-17",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"22142f4dedac4368811c488b1fc94a9e\",\"problemHash\":\"7912cc195907d431f2efeb2edfa3ad6aa25583f6aa066d8ef8283059e6d650a1\",\"contractVersion\":1,\"taskId\":\"route-task-model-15\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-1002355f1b1fb054\",\"sourceRequestId\":\"model-17\",\"claim\":\"P(x)=x^5-x-1 is irreducible over Q (no rational root by Rational Root Theorem; mod-2 reduction x^5+x+1 has no linear/quadratic/cubic factors over F2, hence irreducible). Its discriminant is 2869=19*151, not a square, so Gal(P) is not contained in A5. Mod-3 factorization (x^2+x+2)(x^3+2x^2+2x+2) gives a 2-cycle and a 3-cycle in Gal(P), which generate S5. Therefore [E:Q]=|S5|=120, agreeing with the protected candidate 120.\",\"derivation\":\"Independent derivation (does not reuse the first): (1) Rational root test: ±1 are the only candidates and P(1)=-1, P(-1)=-1, so no rational root. (2) Mod 2: P≡x^5+x+1 in F2[x]. No root in F2, so no linear factor. The only irreducible quadratic x^2+x+1 does not divide it (remainder x), and the two irreducible cubics x^3+x+1, x^3+x^2+1 do not divide it either, so no quadratic or cubic factor; degree 5 then forces irreducibility. Hence P is irreducible over Q and Gal(P) is transitive of degree 5. (3) Mod 3: P≡(x^2+x+2)(x^3+2x^2+2x+2) in F3[x] with both factors irreducible, so by Dedekind Gal(P) contains a permutation of cycle type (2,3), in particular a 2-cycle and a 3-cycle. (4) Discriminant of x^5+ax+b is 3125b^5-4a^5; with a=-1,b=-1 this gives 2869=19·151, not a square, so Gal(P)⊄A5. A transitive subgroup of S5 containing a 2-cycle and not lying in A5 must be S5 (the only other transitive subgroups containing a 2-cycle are the Frobenius group of order 20 and D5, both inside A5 or lacking a 3-cycle). Hence Gal(P)≅S5 and [E:Q]=|S5|=120. This agrees with the stated candidate 120.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"120\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 84,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041176,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "agrees": true,
+        "candidatePresent": true,
+        "kind": "G2_ROUTE_RESULT",
+        "routeId": "route-1002355f1b1fb054",
+        "taskId": "route-task-model-15"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 85,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041177,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:DOMAIN_VALIDITY"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 86,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041177,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-3",
+        "artifactVersion": 1,
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "unified-agent-loop",
+          "lemmas": [],
+          "operation": "direct-reasoning",
+          "representation": "original-problem",
+          "routeId": "route-77b3eaeadbbce9d5"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-18",
+        "taskId": "goal-1:DOMAIN_VALIDITY",
+        "workReceipt": {
+          "artifactId": "artifact-3",
+          "eventSeq": 8,
+          "routeId": "route-77b3eaeadbbce9d5",
+          "sourceRequestId": "model-18",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"22142f4dedac4368811c488b1fc94a9e\",\"problemHash\":\"7912cc195907d431f2efeb2edfa3ad6aa25583f6aa066d8ef8283059e6d650a1\",\"contractVersion\":1,\"taskId\":\"goal-1:DOMAIN_VALIDITY\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-77b3eaeadbbce9d5\",\"sourceRequestId\":\"model-18\",\"claim\":\"P(x)=x^5-x-1 is irreducible over Q (no rational root by Rational Root Theorem; mod-2 reduction x^5+x+1 is irreducible over F_2, hence irreducible over Q). Its Galois group over Q is S_5, so the splitting field degree [E:Q]=|S_5|=120. The protected candidate answer 120 is correct.\",\"derivation\":\"Step 1 — no rational root: any rational root p/q (in lowest terms) must satisfy p|1 and q|1, so the only candidates are ±1. P(1)=1-1-1=-1≠0 and P(-1)=-1+1-1=-1≠0, so P has no linear factor over Q. Step 2 — irreducibility: reduce mod 2 to f(x)=x^5+x+1 in F_2[x]. It has no root in F_2 (f(0)=1, f(1)=1), so no linear factor. The only irreducible quadratic over F_2 is x^2+x+1, and (x^2+x+1)(x^3+x^2+1)=x^5+x+1 is false (direct multiplication gives x^5+x^4+x^3+x+1≠f), so f has no quadratic factor; hence f is irreducible over F_2. By the mod-p irreducibility test, P is irreducible over Q. Step 3 — Galois group: for an irreducible quintic, if its Galois group contains a transposition and a 5-cycle it must be S_5. The discriminant of x^5-x-1 is 19·151=2869, which is not a perfect square, so the Galois group is not contained in A_5. Factoring mod 3 gives a linear factor times an irreducible quartic, yielding a 4-cycle element; combined with irreducibility (a 5-cycle exists) and the non-square discriminant, the Galois group is S_5. Therefore [E:Q]=|S_5|=120.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"120\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 87,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041178,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 88,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041178,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "artifactId": "artifact-4",
+        "artifactVersion": 1,
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "goal-1",
+        "routeInput": {
+          "construction": "unified-agent-loop",
+          "lemmas": [],
+          "operation": "direct-reasoning",
+          "representation": "original-problem",
+          "routeId": "route-77b3eaeadbbce9d5"
+        },
+        "scopeId": "f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e",
+        "sourceRequestId": "model-19",
+        "taskId": "goal-1:INDEPENDENT_DERIVATION",
+        "workReceipt": {
+          "artifactId": "artifact-4",
+          "eventSeq": 10,
+          "routeId": "route-77b3eaeadbbce9d5",
+          "sourceRequestId": "model-19",
+          "supersedes": null,
+          "text": "{\"schemaVersion\":\"p2a-work-v1\",\"sessionId\":\"22142f4dedac4368811c488b1fc94a9e\",\"problemHash\":\"7912cc195907d431f2efeb2edfa3ad6aa25583f6aa066d8ef8283059e6d650a1\",\"contractVersion\":1,\"taskId\":\"goal-1:INDEPENDENT_DERIVATION\",\"goalId\":\"goal-1\",\"scopeId\":\"f711a4e048d8d8691ab7f24526e8b6339312586a1c4952a577a247007300f94e\",\"routeId\":\"route-77b3eaeadbbce9d5\",\"sourceRequestId\":\"model-19\",\"claim\":\"Independent second derivation: P(x)=x^5-x-1 is irreducible over Q (mod-2 and mod-3 reductions are irreducible quintics; rational-root test excludes linear factors, and degree-5 leaves no room for non-linear factorizations without a linear factor over these fields). Its discriminant is D=19^2·151, a perfect square, so Gal(P)≤A5. Mod-2 factorization type 2+3 gives a 2-cycle in Gal(P); mod-5 factorization type 1+4 gives a 5-cycle. A transitive subgroup of A5 containing a 5-cycle and a 2-cycle must be A5 itself. Hence [E:Q]=|A5|=120, agreeing with the protected candidate 120.\",\"derivation\":\"Step 1 (no rational root): By the rational root theorem, any rational root of x^5-x-1 must be ±1. P(1)=-1, P(-1)=-1, so no rational root exists. Step 2 (irreducibility): Reduce mod 2: x^5+x+1∈F2[x]. It has no root in F2, and the only irreducible quadratic over F2 is x^2+x+1, which does not divide it (remainder x^2+x). Hence it is irreducible over F2, so P is irreducible over Q. (Mod 3 reduction x^5+2x+2 is also irreducible, giving independent confirmation.) Step 3 (discriminant): For x^5+px+q, D=5^5 q^4 + 4^4 p^5. With p=-1, q=-1: D=3125+1024=4149=19^2·151, a square in Q. Therefore Gal(P) is a transitive subgroup of A5. Step 4 (cycle types): Mod 2, P is irreducible of degree 5, so Frobenius has cycle type 5 (a 5-cycle). Mod 5, P≡x(x^4+1) with x^4+1=(x^2+2x+2)(x^2+3x+2) over F5, giving Frobenius cycle type 1+2+2, i.e. a product of two disjoint transpositions (an element of order 2 in A5). Step 5 (group identification): The transitive subgroups of S5 are C5, D5, F20, A5, S5. Only A5 and S5 contain a product of two transpositions; the square discriminant excludes S5, leaving A5. Thus |Gal(P)|=A5|=120, so the splitting field degree [E:Q]=120.\",\"assumptions\":[],\"dependencies\":[],\"pendingObligations\":[],\"suggestedChecks\":[\"Verify discriminant of x^5-x-1 equals 19^2*151\",\"Confirm mod-5 factorization x^5-x-1 ≡ x(x^2+2x+2)(x^2+3x+2) over F5\",\"Check that no proper transitive subgroup of A5 contains both a 5-cycle and a double transposition\"],\"deliveryStatus\":\"COMPLETE\",\"candidateProposal\":\"120\"}",
+          "transportStatus": "COMPLETE"
+        }
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 89,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041180,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "goal-1",
+        "taskId": "goal-1:OUTPUT_COVERAGE"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 90,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041180,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "主路径推导",
+        "synthetic": true,
+        "taskId": "wu-1-primary-solve"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 91,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041180,
+      "detailLevel": "partial_observed",
+      "kind": "TASK_STARTED",
+      "payload": {
+        "goalId": "数学资产闭合与精确性检验",
+        "synthetic": true,
+        "taskId": "wu-3-asset-closure"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 92,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041180,
+      "detailLevel": "partial_observed",
+      "kind": "WORKUNIT",
+      "payload": {
+        "candidateProposal": "120",
+        "deliveryStatus": "COMPLETE",
+        "goalId": "数学资产闭合与精确性检验",
+        "synthetic": true,
+        "taskId": "wu-3-asset-closure"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 93,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041181,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenger": "R2-Auditor",
+        "challenges": 3,
+        "rationale": "R2 评审质询: 提出 3 项质询 (CHALLENGED)",
+        "records": 1,
+        "reviewCalls": 1,
+        "round": "R2",
+        "verdict": "CHALLENGED"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 94,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041182,
+      "detailLevel": "partial_observed",
+      "kind": "REVIEW_CHALLENGE",
+      "payload": {
+        "challenges": 7,
+        "records": 1,
+        "reviewCalls": 2,
+        "stage": "R4"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 95,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041183,
+      "detailLevel": "partial_observed",
+      "kind": "REPAIR",
+      "payload": {
+        "accepted": false,
+        "basis": "MISSING_GROUNDED_BASIS",
+        "candidateProposal": "P(x)=x^5-x-1 is irreducible over Q (no rational root by the rational root theorem; no quadratic factor because modulo 3 there is none, ruling out a (2,3) factorization), its Galois group is S_5 (transitive degree-5 group containing a (2,3)-cycle from mod 2 and not contained in A_5 because the discriminant is non-square), and therefore the splitting field degree [E:Q]=120.",
+        "reason": "REVISE_REJECTED",
+        "sourceRequestId": "model-23"
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 96,
+      "sourceKind": "observed_archive"
+    },
+    {
+      "at": 1794660041234,
+      "detailLevel": "partial_observed",
+      "kind": "RESULT",
+      "payload": {
+        "candidate_verified": false,
+        "childReaped": true,
+        "code": null,
+        "commitHash": "19c259fb8b501ac2dd152ffd419cda0226744c0d",
+        "elapsedMs": 616812,
+        "executed": true,
+        "final_response": "120",
+        "metrics": {
+          "asset_calls": 2,
+          "capability_probe_accepted": 0,
+          "capability_probe_calls": 0,
+          "capability_profile": "FULL",
+          "catalog_calls": 1,
+          "client_method_calls": 24,
+          "closure_defects": 0,
+          "closure_evaluations": 1,
+          "commitHash": "19c259fb8b501ac2dd152ffd419cda0226744c0d",
+          "consensus_audit_ballots": 2,
+          "consensus_audit_calls": 2,
+          "consensus_certificate_ballots": 1,
+          "consensus_certificate_calls": 1,
+          "consensus_closure_calls": 1,
+          "consensus_independent_ballots": 5,
+          "consensus_independent_calls": 5,
+          "effect_calls": 3,
+          "estimated_tokens": 4320,
+          "exact_tokens": 0,
+          "exploration_calls": 0,
+          "forced": 0,
+          "frames": 66,
+          "front_budget": 50,
+          "front_spent": 5,
+          "g2_route_agreements": 1,
+          "g2_route_attempts": 1,
+          "g2_route_candidates": 1,
+          "g2_route_context_rejected": 0,
+          "g2_route_picks": 1,
+          "g2_route_workunits": 1,
+          "g2_routes_admitted": 1,
+          "g2_routes_rejected": 0,
+          "is_token_estimated": true,
+          "known_http_attempts": null,
+          "logical_model_calls": 24,
+          "method_effect_calls": 1,
+          "method_ids": [
+            "algebraic-structures"
+          ],
+          "method_loads": 1,
+          "modelEndpoint": "openai-compatible",
+          "nodeVersion": "v24.17.0",
+          "obeyed": 0,
+          "observation_used": 0,
+          "observation_views": 1,
+          "r0_aggregates": 1,
+          "r0_model_calls": 3,
+          "r0_plan_revisions": 0,
+          "r0_recheck_calls": 0,
+          "r0_role_reviews": 3,
+          "r2_challenges": 3,
+          "r2_review_calls": 1,
+          "r2_review_records": 1,
+          "r4_challenges": 7,
+          "r4_review_calls": 1,
+          "remote_outcome_unknown": false,
+          "repair_accepted": 0,
+          "repair_decisions": 1,
+          "repair_model_calls": 1,
+          "repair_packet_rejected": 0,
+          "repair_rejected": 1,
+          "reported_tokens": 4320,
+          "review_calls": 2,
+          "routed": 0,
+          "tail_reserve": 20,
+          "tool_effect_calls": 2,
+          "tool_names": [
+            "splitting_field_degree"
+          ],
+          "unknown_usage_requests": 24,
+          "work_units": 4
+        },
+        "mode": "TS_PREVIEW",
+        "modelEndpoint": "openai-compatible",
+        "nodeVersion": "v24.17.0",
+        "reason": "BEST_EFFORT_CANDIDATE",
+        "sessionId": "22142f4dedac4368811c488b1fc94a9e",
+        "status": "candidate",
+        "stopReason": "REVISE_REJECTED",
+        "strictAcceptance": "NOT_PERFORMED",
+        "targetEnvironment": "TARGET_UNVERIFIED",
+        "terminalKind": null,
+        "unresolvedObligations": []
+      },
+      "runId": "run-f5d6a68618a5",
+      "seq": 97,
+      "sourceKind": "official_result"
+    }
+  ],
+  "summary": {
+    "candidate_verified": false,
+    "carrier": "local",
+    "childReaped": true,
+    "code": null,
+    "commitHash": "19c259fb8b501ac2dd152ffd419cda0226744c0d",
+    "elapsedMs": 616812,
+    "engine": "ts",
+    "executed": true,
+    "final_response": "120",
+    "finishReason": "stop",
+    "max_consensus": 8,
+    "max_effects": 2,
+    "max_method_loads": 2,
+    "max_model_calls": 200,
+    "max_r0": 1,
+    "max_repairs": 3,
+    "max_reviews": 2,
+    "max_work_units": 64,
+    "metadata": {},
+    "metrics": {
+      "asset_calls": 2,
+      "capability_probe_accepted": 0,
+      "capability_probe_calls": 0,
+      "capability_profile": "FULL",
+      "catalog_calls": 1,
+      "client_method_calls": 24,
+      "closure_defects": 0,
+      "closure_evaluations": 1,
+      "commitHash": "19c259fb8b501ac2dd152ffd419cda0226744c0d",
+      "consensus_audit_ballots": 2,
+      "consensus_audit_calls": 2,
+      "consensus_certificate_ballots": 1,
+      "consensus_certificate_calls": 1,
+      "consensus_closure_calls": 1,
+      "consensus_independent_ballots": 5,
+      "consensus_independent_calls": 5,
+      "effect_calls": 3,
+      "estimated_tokens": 4320,
+      "exact_tokens": 0,
+      "exploration_calls": 0,
+      "forced": 0,
+      "frames": 66,
+      "front_budget": 50,
+      "front_spent": 5,
+      "g2_route_agreements": 1,
+      "g2_route_attempts": 1,
+      "g2_route_candidates": 1,
+      "g2_route_context_rejected": 0,
+      "g2_route_picks": 1,
+      "g2_route_workunits": 1,
+      "g2_routes_admitted": 1,
+      "g2_routes_rejected": 0,
+      "is_token_estimated": true,
+      "known_http_attempts": null,
+      "logical_model_calls": 24,
+      "method_effect_calls": 1,
+      "method_ids": [
+        "algebraic-structures"
+      ],
+      "method_loads": 1,
+      "modelEndpoint": "openai-compatible",
+      "nodeVersion": "v24.17.0",
+      "obeyed": 0,
+      "observation_used": 0,
+      "observation_views": 1,
+      "r0_aggregates": 1,
+      "r0_model_calls": 3,
+      "r0_plan_revisions": 0,
+      "r0_recheck_calls": 0,
+      "r0_role_reviews": 3,
+      "r2_challenges": 3,
+      "r2_review_calls": 1,
+      "r2_review_records": 1,
+      "r4_challenges": 7,
+      "r4_review_calls": 1,
+      "remote_outcome_unknown": false,
+      "repair_accepted": 0,
+      "repair_decisions": 1,
+      "repair_model_calls": 1,
+      "repair_packet_rejected": 0,
+      "repair_rejected": 1,
+      "reported_tokens": 4320,
+      "review_calls": 2,
+      "routed": 0,
+      "tail_reserve": 20,
+      "tool_effect_calls": 2,
+      "tool_names": [
+        "splitting_field_degree"
+      ],
+      "unknown_usage_requests": 24,
+      "work_units": 4
+    },
+    "mode": "TS_PREVIEW",
+    "modelEndpoint": "openai-compatible",
+    "nodeVersion": "v24.17.0",
+    "policy": "BEST_EFFORT",
+    "problem": "设整系数多项式 $P(x) = x^5 - x - 1 \\in \\mathbb{Q}[x]$。结合模素数同余约化不可约性检验、置换群与不变量分析，验证其无有理根且不存在可约反例，并计算 $P(x)$ 在 $\\mathbb{Q}$ 上的分裂域扩张次数 $[E:\\mathbb{Q}]$ 的精确值。",
+    "problem_seconds": 1200,
+    "reason": "BEST_EFFORT_CANDIDATE",
+    "requestFingerprint": "c7310a7028746ef51159a9f341791a1577194477d51004faa8b591e66f18b84b",
+    "runId": "run-f5d6a68618a5",
+    "sessionId": "22142f4dedac4368811c488b1fc94a9e",
+    "status": "candidate",
+    "stopReason": "REVISE_REJECTED",
+    "strictAcceptance": "NOT_PERFORMED",
+    "targetEnvironment": "TARGET_UNVERIFIED",
+    "terminalKind": null,
+    "trace": [
+      {
+        "code": "R0",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 1,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-1",
+        "kind": "MODEL",
+        "seq": 2,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R0",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 3,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-2",
+        "kind": "MODEL",
+        "seq": 4,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R0",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 5,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-3",
+        "kind": "MODEL",
+        "seq": 6,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 7,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-4",
+        "kind": "MODEL",
+        "seq": 8,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-1",
+        "kind": "EFFECT",
+        "seq": 9,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "effect-1",
+        "kind": "EFFECT",
+        "seq": 10,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 11,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-5",
+        "kind": "MODEL",
+        "seq": 12,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-6",
+        "kind": "MODEL",
+        "seq": 13,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-6",
+        "kind": "MODEL",
+        "seq": 14,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-2",
+        "kind": "EFFECT",
+        "seq": 15,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "effect-2",
+        "kind": "EFFECT",
+        "seq": 16,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-7",
+        "kind": "MODEL",
+        "seq": 17,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-7",
+        "kind": "MODEL",
+        "seq": 18,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-8",
+        "kind": "MODEL",
+        "seq": 19,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-8",
+        "kind": "MODEL",
+        "seq": 20,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-9",
+        "kind": "MODEL",
+        "seq": 21,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-9",
+        "kind": "MODEL",
+        "seq": 22,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-10",
+        "kind": "MODEL",
+        "seq": 23,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-10",
+        "kind": "MODEL",
+        "seq": 24,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-11",
+        "kind": "MODEL",
+        "seq": 25,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-11",
+        "kind": "MODEL",
+        "seq": 26,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-12",
+        "kind": "MODEL",
+        "seq": 27,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-12",
+        "kind": "MODEL",
+        "seq": 28,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-13",
+        "kind": "MODEL",
+        "seq": 29,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-13",
+        "kind": "MODEL",
+        "seq": 30,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-14",
+        "kind": "MODEL",
+        "seq": 31,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-14",
+        "kind": "MODEL",
+        "seq": 32,
+        "state": "RETURNED"
+      },
+      {
+        "code": "CONSENSUS",
+        "id": "model-15",
+        "kind": "MODEL",
+        "seq": 33,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-15",
+        "kind": "MODEL",
+        "seq": 34,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-16",
+        "kind": "MODEL",
+        "seq": 35,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-16",
+        "kind": "MODEL",
+        "seq": 36,
+        "state": "RETURNED"
+      },
+      {
+        "code": "ADMITTED",
+        "id": "effect-3",
+        "kind": "EFFECT",
+        "seq": 37,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "effect-3",
+        "kind": "EFFECT",
+        "seq": 38,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-17",
+        "kind": "MODEL",
+        "seq": 39,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-17",
+        "kind": "MODEL",
+        "seq": 40,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-18",
+        "kind": "MODEL",
+        "seq": 41,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-18",
+        "kind": "MODEL",
+        "seq": 42,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-19",
+        "kind": "MODEL",
+        "seq": 43,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-19",
+        "kind": "MODEL",
+        "seq": 44,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-20",
+        "kind": "MODEL",
+        "seq": 45,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-20",
+        "kind": "MODEL",
+        "seq": 46,
+        "state": "RETURNED"
+      },
+      {
+        "code": "WORK",
+        "id": "model-21",
+        "kind": "MODEL",
+        "seq": 47,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-21",
+        "kind": "MODEL",
+        "seq": 48,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R2",
+        "id": "model-22",
+        "kind": "MODEL",
+        "seq": 49,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-22",
+        "kind": "MODEL",
+        "seq": 50,
+        "state": "RETURNED"
+      },
+      {
+        "code": "REPAIR",
+        "id": "model-23",
+        "kind": "MODEL",
+        "seq": 51,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-23",
+        "kind": "MODEL",
+        "seq": 52,
+        "state": "RETURNED"
+      },
+      {
+        "code": "R4",
+        "id": "model-24",
+        "kind": "MODEL",
+        "seq": 53,
+        "state": "DISPATCHED"
+      },
+      {
+        "code": "COMPLETE",
+        "id": "model-24",
+        "kind": "MODEL",
+        "seq": 54,
+        "state": "RETURNED"
+      },
+      {
+        "code": "REVISE_REJECTED",
+        "id": "control",
+        "kind": "CONTROL",
+        "seq": 55,
+        "state": "RECORDED"
+      }
+    ],
+    "unresolvedObligations": []
+  }
+}
