@@ -53,49 +53,37 @@ def _venv_py():
 
 
 def _find_python():
-    import glob
     cands = []
-    def add(p):
-        if p and os.path.isfile(p):
-            cands.append(p)
-    for p in (r"C:\Python312\python.exe", r"C:\Python311\python.exe", r"C:\Python310\python.exe"):
-        add(p)
-    bases = []
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        bases.append(os.path.join(appdata, "uv", "python"))
-    bases.append(os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "uv", "python"))
-    for base in bases:
-        if base and os.path.isdir(base):
-            for minor in ("3.12", "3.11", "3.10"):
-                for d in sorted(glob.glob(os.path.join(base, "cpython-%s*-windows-*-none" % minor)), reverse=True):
-                    add(os.path.join(d, "python.exe"))
-    for name in ("python3.12", "python3.11", "python3.10", "python"):
+    v = _py_ver(sys.executable)
+    if v and v >= MIN_PY:
+        cands.append(sys.executable)
+    if IS_NT:
+        py = shutil.which("py")
+        if py:
+            for ver in ("3.13", "3.12", "3.11", "3.10"):
+                try:
+                    o = subprocess.check_output([py, "-" + ver, "-c", "import sys;sys.stdout.write(sys.executable)"], stderr=subprocess.DEVNULL, timeout=15)
+                    p = o.decode().strip()
+                    if p and os.path.isfile(p):
+                        cands.append(p)
+                except Exception:
+                    pass
+        for p in (r"C:\Python313\python.exe", r"C:\Python312\python.exe", r"C:\Python311\python.exe", r"C:\Python310\python.exe"):
+            if os.path.isfile(p):
+                cands.append(p)
+    for name in ("python3.13", "python3.12", "python3.11", "python3.10", "python3"):
         w = shutil.which(name)
-        add(w)
-    py = shutil.which("py")
-    if py:
-        for ver in ("3.12", "3.11", "3.10"):
-            try:
-                o = subprocess.check_output([py, "-" + ver, "-c", "import sys;sys.stdout.write(sys.executable)"], stderr=subprocess.DEVNULL, timeout=10)
-                add(o.decode().strip())
-            except Exception:
-                pass
-    if sys.executable:
-        add(sys.executable)
-    seen, pref, other = set(), [], []
+        if w:
+            cands.append(w)
+    seen, out = set(), []
     for c in cands:
         k = os.path.normcase(os.path.abspath(c))
         if k in seen:
             continue
         seen.add(k)
-        v = _py_ver(c)
-        if not v or v < MIN_PY:
-            continue
-        (pref if v[1] in (10, 11, 12) else other).append((v, c))
-    pref.sort(key=lambda x: -x[0][1])
-    other.sort(key=lambda x: -x[0][1])
-    return [c for _, c in pref] + [c for _, c in other]
+        if _py_ver(c) and _py_ver(c) >= MIN_PY:
+            out.append(c)
+    return out
 
 
 def _deps_ok(vp):
@@ -107,20 +95,14 @@ def ensure_env():
     vp = _venv_py()
     if os.path.isfile(vp):
         v = _py_ver(vp)
-        if v and v >= MIN_PY and v[1] in (10, 11, 12):
+        if v and v >= MIN_PY:
             print("[1-2/6] 复用现有 .venv (Python %d.%d)" % v)
             return vp
-        print("[2/6] 现有 .venv 的 Python 版本(%s)不理想，将用 3.10-3.12 重建 ..." % (("%d.%d" % v) if v else "未知"))
     bases = _find_python()
     if not bases:
         print("[错误] 未找到 Python >= 3.10。请安装后重试： https://www.python.org/downloads/")
         sys.exit(2)
     base = bases[0]
-    if (_py_ver(base) or (0, 0))[1] not in (10, 11, 12):
-        print("[错误] 未找到 Python 3.10-3.12（只检测到 %s）。" % ("%d.%d" % _py_ver(base)))
-        print("        numpy/scipy 目前没有 3.13/3.14 的安装轮子，必须用 3.10-3.12。")
-        print("        安装：https://www.python.org/downloads/ 装 3.12；或执行  uv python install 3.12  再重跑。")
-        sys.exit(2)
     print("[1/6] 使用 Python: " + base)
     if os.path.isdir(os.path.join(ROOT, ".venv")):
         shutil.rmtree(os.path.join(ROOT, ".venv"), ignore_errors=True)
